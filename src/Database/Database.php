@@ -1,39 +1,17 @@
 <?php
 
-namespace Appwrite\Database;
+namespace Utopia\Database;
 
 use Exception;
-use Appwrite\Database\Validator\Authorization;
-use Appwrite\Database\Validator\Structure;
-use Appwrite\Database\Exception\Authorization as AuthorizationException;
-use Appwrite\Database\Exception\Structure as StructureException;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Structure;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Structure as StructureException;
 
 class Database
 {
     static public $cache = [];
 
-    // System Core
-    const COLLECTION_COLLECTIONS = 'collections';
-    const COLLECTION_RULES = 'rules';
-    const COLLECTION_INDEXES = 'indexes';
-    const COLLECTION_RESERVED = 'reserved';
-    const COLLECTION_PROJECTS = 'projects';
-    const COLLECTION_WEBHOOKS = 'webhooks';
-    const COLLECTION_KEYS = 'keys';
-    const COLLECTION_TASKS = 'tasks';
-    const COLLECTION_PLATFORMS = 'platforms';
-    const COLLECTION_USAGES = 'usages'; //TODO add structure
-    const COLLECTION_DOMAINS = 'domains';
-    const COLLECTION_CERTIFICATES = 'certificates';
-    const COLLECTION_USERS = 'users';
-    const COLLECTION_TOKENS = 'tokens';
-    const COLLECTION_MEMBERSHIPS = 'memberships';
-    const COLLECTION_TEAMS = 'teams';
-    const COLLECTION_FILES = 'files';
-    const COLLECTION_FUNCTIONS = 'functions';
-    const COLLECTION_TAGS = 'tags';
-    const COLLECTION_EXECUTIONS = 'executions';
-    
     // Var Types
     const VAR_TEXT = 'text';
     const VAR_INTEGER = 'integer';

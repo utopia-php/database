@@ -1,9 +1,9 @@
 <?php
 
-namespace Appwrite\Tests;
+namespace Utopia\Tests;
 
-use Appwrite\Database\Document;
-use Appwrite\Database\Validator\Authorization;
+use Utopia\Database\Document;
+use Utopia\Database\Validator\Authorization;
 use PHPUnit\Framework\TestCase;
 
 class AuthorizationTest extends TestCase

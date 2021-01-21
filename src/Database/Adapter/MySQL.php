@@ -1,12 +1,12 @@
 <?php
 
-namespace Appwrite\Database\Adapter;
+namespace Utopia\Database\Adapter;
 
 use Utopia\Registry\Registry;
-use Appwrite\Database\Adapter;
-use Appwrite\Database\Document;
-use Appwrite\Database\Exception\Duplicate;
-use Appwrite\Database\Validator\Authorization;
+use Utopia\Database\Adapter;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Validator\Authorization;
 use Exception;
 use PDO;
 use Redis as Client;

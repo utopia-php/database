@@ -1,10 +1,10 @@
 <?php
 
-namespace Appwrite\Database\Adapter;
+namespace Utopia\Database\Adapter;
 
 use Utopia\Registry\Registry;
-use Appwrite\Database\Adapter;
-use Appwrite\Database\Document;
+use Utopia\Database\Adapter;
+use Utopia\Database\Document;
 use Exception;
 use Redis as Client;
 

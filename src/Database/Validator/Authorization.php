@@ -1,8 +1,8 @@
 <?php
 
-namespace Appwrite\Database\Validator;
+namespace Utopia\Database\Validator;
 
-use Appwrite\Database\Document;
+use Utopia\Database\Document;
 use Utopia\Validator;
 
 class Authorization extends Validator

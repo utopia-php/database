@@ -1,9 +1,9 @@
 <?php
 
-namespace Appwrite\Tests;
+namespace Utopia\Tests;
 
-use Appwrite\Database\Document;
-use Appwrite\Database\Validator\Permissions;
+use Utopia\Database\Document;
+use Utopia\Database\Validator\Permissions;
 use PHPUnit\Framework\TestCase;
 
 class PermissionsTest extends TestCase

@@ -1,13 +1,13 @@
 <?php
 
-namespace Appwrite\Tests;
+namespace Utopia\Tests;
 
 use PDO;
 use Exception;
-use Appwrite\Database\Adapter\Relational;
-use Appwrite\Database\Database;
-use Appwrite\Database\Document;
-use Appwrite\Database\Validator\Authorization;
+use Utopia\Database\Adapter\Relational;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Validator\Authorization;
 use PHPUnit\Framework\TestCase;
 
 class DatabaseTest extends TestCase

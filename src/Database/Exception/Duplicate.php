@@ -1,6 +1,6 @@
 <?php
 
-namespace Appwrite\Database\Exception;
+namespace Utopia\Database\Exception;
 
 class Duplicate extends \Exception
 {

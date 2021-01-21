@@ -1,6 +1,6 @@
 <?php
 
-namespace Appwrite\Database;
+namespace Utopia\Database;
 
 use Exception;
 

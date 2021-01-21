@@ -1,9 +1,9 @@
 <?php
 
-namespace Appwrite\Database\Validator;
+namespace Utopia\Database\Validator;
 
-use Appwrite\Database\Database;
-use Appwrite\Database\Document;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Validator;
 
 class Structure extends Validator

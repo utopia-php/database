@@ -1,8 +1,8 @@
 <?php
 
-namespace Appwrite\Tests;
+namespace Utopia\Tests;
 
-use Appwrite\Database\Validator\Key;
+use Utopia\Database\Validator\Key;
 use PHPUnit\Framework\TestCase;
 
 class KeyTest extends TestCase

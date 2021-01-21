@@ -1,6 +1,6 @@
 <?php
 
-namespace Appwrite\Database\Validator;
+namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
 

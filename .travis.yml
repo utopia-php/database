@@ -12,6 +12,8 @@ notifications:
   email:
   - team@appwrite.io
 
+before_script: composer install --ignore-platform-reqs
+
 install:
 - docker-compose up -d
 - sleep 10

@@ -1,0 +1,28 @@
+version: '3.1'
+
+services:
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    ports:
+      - "8700:8080"
+    environment:
+      POSTGRES_PASSWORD: password
+
+  mariadb:
+    image: mariadb:10.5
+    container_name: mariadb
+    ports:
+      - "8701:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+  
+  mongo:
+    image: mongo:3.6
+    container_name: mongo
+    ports:
+      - "8702:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example

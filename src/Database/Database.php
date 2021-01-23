@@ -10,20 +10,16 @@ use Utopia\Database\Exception\Structure as StructureException;
 
 class Database
 {
-    static public $cache = [];
-
-    // Var Types
+    // Simple Types
     const VAR_TEXT = 'text';
-    const VAR_INTEGER = 'integer';
-    const VAR_FLOAT = 'float';
-    const VAR_NUMERIC = 'numeric';
+    const VAR_NUMBER = 'integer';
     const VAR_BOOLEAN = 'boolean';
+    const VAR_NULL = 'null';
+    const VAR_ARRAY = 'array';
+    const VAR_OBJECT = 'object';
+    
+    // Relationships Types
     const VAR_DOCUMENT = 'document';
-    const VAR_EMAIL = 'email';
-    const VAR_URL = 'url';
-    const VAR_IPV4 = 'ipv4';
-    const VAR_IPV6 = 'ipv6';
-    const VAR_KEY = 'key';
     
     // Index Types
     const INDEX_KEY = 'text';
@@ -31,15 +27,8 @@ class Database
     const INDEX_UNIQUE = 'unique';
     const INDEX_SPATIAL = 'spatial';
 
-    /**
-     * @var array
-     */
-    static protected $filters = [];
-
-    /**
-     * @var array
-     */
-    protected $mocks = [];
+    // Collections
+    const COLLECTION_COLLECTIONS = 'collections';
 
     /**
      * @var Adapter
@@ -47,33 +36,22 @@ class Database
     protected $adapter;
 
     /**
-     * Set Adapter.
-     *
-     * @param Adapter $adapter
-     *
-     * @return $this
+     * @var array
      */
-    public function setAdapter(Adapter $adapter)
-    {
-        $this->adapter = $adapter;
-
-        $this->adapter->setDatabase($this);
-
-        return $this;
-    }
+    static public $filters = [];
 
     /**
      * Set Namespace.
      *
      * Set namespace to divide different scope of data sets
      *
-     * @param $namespace
+     * @param string $namespace
      *
      * @return $this
      *
      * @throws Exception
      */
-    public function setNamespace($namespace)
+    public function setNamespace(string $namespace): self
     {
         $this->adapter->setNamespace($namespace);
 
@@ -89,33 +67,33 @@ class Database
      *
      * @throws Exception
      */
-    public function getNamespace()
+    public function getNamespace(): string
     {
         return $this->adapter->getNamespace();
     }
 
     /**
-     * Create Namespace.
+     * Create Database.
      *
-     * @param string $namespace
+     * @param string $name
      *
      * @return bool
      */
-    public function createNamespace($namespace)
+    public function create(string $name): bool
     {
-        return $this->adapter->createNamespace($namespace);
+        return $this->adapter->create($name);
     }
 
     /**
-     * Delete Namespace.
+     * Delete Database.
      *
-     * @param string $namespace
+     * @param string $name
      *
      * @return bool
      */
-    public function deleteNamespace($namespace)
+    public function delete(string $name): bool
     {
-        return $this->adapter->deleteNamespace($namespace);
+        return $this->adapter->delete($name);
     }
 
     /**
@@ -282,13 +260,6 @@ class Database
     {
         if (\is_null($id)) {
             return new Document([]);
-        }
-
-        if(isset(self::$cache[$this->getNamespace().'/'.$collection.'/'.$id])) {
-            self::$cache[$this->getNamespace().'/'.$collection.'/'.$id]++;
-        }
-        else {
-            self::$cache[$this->getNamespace().'/'.$collection.'/'.$id] = 0;
         }
 
         if($mock === true
@@ -460,18 +431,6 @@ class Database
     }
 
     /**
-     * @param int $key
-     *
-     * @return Document|false
-     *
-     * @throws AuthorizationException
-     */
-    public function deleteUniqueKey($key)
-    {
-        return new Document($this->adapter->deleteUniqueKey($key));
-    }
-
-    /**
      * @return array
      */
     public function getDebug()
@@ -487,43 +446,6 @@ class Database
         $debug = $this->getDebug();
 
         return (isset($debug['sum'])) ? $debug['sum'] : 0;
-    }
-
-    /**
-     * @param string $key
-     * @param string $value
-     *
-     * @return self
-     */
-    public function setMock($key, $value): self
-    {
-        $this->mocks[$key] = $value;
-
-        return $this;
-    }
-
-    /**
-     * @param array $mocks
-     *
-     * @return self
-     */
-    public function setMocks(array $mocks): self
-    {
-        foreach ($mocks as $key => $mock) {
-            $this->mocks[$key] = new Document($mock);
-        }
-
-        $this->adapter->setMocks($this->mocks);
-
-        return $this;
-    }
-
-    /**
-     * @return array
-     */
-    public function getMocks()
-    {
-        return $this->mocks;
     }
 
     /**

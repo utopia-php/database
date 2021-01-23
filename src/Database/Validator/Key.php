@@ -37,6 +37,10 @@ class Key extends Validator
         if (!\is_string($value)) {
             return false;
         }
+
+        if(mb_substr($value, 0, 1) === '_') {
+            return false;
+        }
         
         if (\preg_match('/[^A-Za-z0-9\-\_]/', $value)) {
             return false;

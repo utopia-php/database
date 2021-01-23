@@ -43,23 +43,23 @@ class Document extends ArrayObject
     /**
      * @return string|null
      */
-    public function getId()
+    public function getId(): string
     {
-        return $this->getAttribute('$id', null);
+        return $this->getAttribute('$id', '');
     }
 
     /**
      * @return string
      */
-    public function getCollection()
+    public function getCollection(): string
     {
-        return $this->getAttribute('$collection', null);
+        return $this->getAttribute('$collection', '');
     }
 
     /**
      * @return array
      */
-    public function getPermissions()
+    public function getPermissions(): array
     {
         return $this->getAttribute('$permissions', []);
     }
@@ -74,7 +74,7 @@ class Document extends ArrayObject
      *
      * @return mixed
      */
-    public function getAttribute($name, $default = null)
+    public function getAttribute(string $name, $default = null)
     {
         $name = \explode('.', $name);
 
@@ -100,9 +100,9 @@ class Document extends ArrayObject
      * @param mixed  $value
      * @param string $type
      *
-     * @return mixed
+     * @return self
      */
-    public function setAttribute($key, $value, $type = self::SET_TYPE_ASSIGN)
+    public function setAttribute(string $key, $value, string $type = self::SET_TYPE_ASSIGN): self
     {
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
@@ -127,12 +127,10 @@ class Document extends ArrayObject
      * Method for removing a specific field attribute
      *
      * @param string $key
-     * @param mixed  $value
-     * @param string $type
      *
-     * @return mixed
+     * @return self
      */
-    public function removeAttribute($key)
+    public function removeAttribute(string $key): self
     {
         if (isset($this[$key])) {
             unset($this[$key]);
@@ -146,13 +144,13 @@ class Document extends ArrayObject
      *
      * Get array child by key and value match
      *
-     * @param $key
-     * @param $value
+     * @param string $key
+     * @param mixed $value
      * @param array|null $scope
      *
      * @return Document|Document[]|mixed|null|array
      */
-    public function search($key, $value, $scope = null)
+    public function search(string $key, $value, $scope = null)
     {
         $array = (!\is_null($scope)) ? $scope : $this;
 
@@ -188,7 +186,7 @@ class Document extends ArrayObject
      *
      * @return bool
      */
-    public function isEmpty()
+    public function isEmpty(): bool
     {
         return empty($this->getId());
     }
@@ -200,7 +198,7 @@ class Document extends ArrayObject
      *
      * @return bool
      */
-    public function isSet($key)
+    public function isSet($key): bool
     {
         return isset($this[$key]);
     }
@@ -210,32 +208,32 @@ class Document extends ArrayObject
      *
      * Outputs entity as a PHP array
      *
-     * @param array $whitelist
-     * @param array $blacklist
+     * @param array $allow
+     * @param array $disallow
      *
      * @return array
      */
-    public function getArrayCopy(array $whitelist = [], array $blacklist = [])
+    public function getArrayCopy(array $allow = [], array $disallow = []): array
     {
         $array = parent::getArrayCopy();
 
         $output = [];
 
         foreach ($array as $key => &$value) {
-            if (!empty($whitelist) && !\in_array($key, $whitelist)) { // Export only whitelisted fields
+            if (!empty($allow) && !\in_array($key, $allow)) { // Export only allow fields
                 continue;
             }
 
-            if (!empty($blacklist) && \in_array($key, $blacklist)) { // Don't export blacklisted fields
+            if (!empty($disallow) && \in_array($key, $disallow)) { // Don't export disallowed fields
                 continue;
             }
 
             if ($value instanceof self) {
-                $output[$key] = $value->getArrayCopy($whitelist, $blacklist);
+                $output[$key] = $value->getArrayCopy($allow, $disallow);
             } elseif (\is_array($value)) {
                 foreach ($value as $childKey => &$child) {
                     if ($child instanceof self) {
-                        $output[$key][$childKey] = $child->getArrayCopy($whitelist, $blacklist);
+                        $output[$key][$childKey] = $child->getArrayCopy($allow, $disallow);
                     } else {
                         $output[$key][$childKey] = $child;
                     }

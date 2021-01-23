@@ -12,7 +12,7 @@
         }
     ],
     "autoload": {
-        "psr-4": {"Utopia\\Abuse\\": "src/Database"}
+        "psr-4": {"Utopia\\Database\\": "src/Database"}
     },
     "require": {
         "php": ">=7.1",

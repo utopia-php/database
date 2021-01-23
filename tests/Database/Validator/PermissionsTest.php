@@ -58,14 +58,6 @@ class PermissionsTest extends TestCase
         $document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
-            '$permissions' => 'test',
-        ]);
-        
-        $this->assertEquals($object->isValid($document->getPermissions()), false);
-
-        $document = new Document([
-            '$id' => uniqid(),
-            '$collection' => uniqid(),
             '$permissions' => [
                 'read' => 'unknown',
                 'write' => ['*'],

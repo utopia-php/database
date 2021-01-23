@@ -17,22 +17,12 @@ abstract class Adapter
     protected $debug = [];
 
     /**
-     * @var array
-     */
-    protected $mocks = [];
-
-    /**
-     * @var Database
-     */
-    protected $database = null;
-
-    /**
      * @param string $key
      * @param mixed $value
      *
      * @return $this
      */
-    public function setDebug(string $key, $value)
+    public function setDebug(string $key, $value): self
     {
         $this->debug[$key] = $value;
 
@@ -42,7 +32,7 @@ abstract class Adapter
     /**
      * @return array
      */
-    public function getDebug()
+    public function getDebug(): array
     {
         return $this->debug;
     }
@@ -50,9 +40,11 @@ abstract class Adapter
     /**
      * return $this
      */
-    public function resetDebug()
+    public function resetDebug(): self
     {
         $this->debug = [];
+
+        return $this;
     }
 
     /**
@@ -66,7 +58,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    public function setNamespace($namespace)
+    public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
             throw new Exception('Missing namespace');
@@ -86,7 +78,7 @@ abstract class Adapter
      *
      * @return string
      */
-    public function getNamespace()
+    public function getNamespace(): string
     {
         if (empty($this->namespace)) {
             throw new Exception('Missing namespace');
@@ -94,6 +86,24 @@ abstract class Adapter
 
         return $this->namespace;
     }
+
+    /**
+     * Create Database.
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    abstract public function create(string $name): bool;
+
+    /**
+     * Delete Database.
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    abstract public function delete(string $name): bool;
 
     /**
      * Create Collection
@@ -201,36 +211,9 @@ abstract class Adapter
     abstract public function deleteDocument(Document $collection, string $id);
 
     /**
-     * Delete Unique Key.
+     * Find.
      *
-     * @param int $key
-     *
-     * @return array
-     */
-    abstract public function deleteUniqueKey($key);
-
-    /**
-     * Create Namespace.
-     *
-     * @param string $namespace
-     *
-     * @return bool
-     */
-    abstract public function createNamespace($namespace);
-
-    /**
-     * Delete Namespace.
-     *
-     * @param string $namespace
-     *
-     * @return bool
-     */
-    abstract public function deleteNamespace($namespace);
-
-    /**
-     * Filter.
-     *
-     * Filter data sets using chosen queries
+     * Find data sets using chosen queries
      *
      * @param Document $collection
      * @param array $options
@@ -247,50 +230,10 @@ abstract class Adapter
     abstract public function count(array $options);
 
     /**
-     * Get Unique Document ID.
+     * Get Unique ID.
      */
     public function getId()
     {
         return \uniqid();
-    }
-
-    /**
-     * @param Database $database
-     *
-     * @return $this
-     */
-    public function setDatabase(Database $database)
-    {
-        $this->database = $database;
-        
-        return $this;
-    }
-
-    /**
-     * @return Database
-     */
-    public function getDatabase()
-    {
-        return $this->database;
-    }
-
-    /**
-     * @param string $mocks
-     *
-     * @return $this
-     */
-    public function setMocks(array $mocks)
-    {
-        $this->mocks = $mocks;
-        
-        return $this;
-    }
-
-    /**
-     * @return array
-     */
-    public function getMocks()
-    {
-        return $this->mocks;
     }
 }

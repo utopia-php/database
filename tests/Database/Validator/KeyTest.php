@@ -25,6 +25,9 @@ class KeyTest extends TestCase
     {
         $this->assertEquals($this->object->isValid('dasda asdasd'), false);
         $this->assertEquals($this->object->isValid('asdasdasdas'), true);
+        $this->assertEquals($this->object->isValid('_asdasdasdas'), false);
+        $this->assertEquals($this->object->isValid('asd"asdasdas'), false);
+        $this->assertEquals($this->object->isValid('asd\'asdasdas'), false);
         $this->assertEquals($this->object->isValid('as$$5dasdasdas'), false);
         $this->assertEquals($this->object->isValid(false), false);
         $this->assertEquals($this->object->isValid(null), false);

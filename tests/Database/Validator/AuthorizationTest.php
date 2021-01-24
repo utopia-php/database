@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Tests;
+namespace Utopia\Tests\Validator;
 
 use Utopia\Database\Document;
 use Utopia\Database\Validator\Authorization;

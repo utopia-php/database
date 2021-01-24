@@ -2,17 +2,31 @@ version: '3.1'
 
 services:
 
+  tests:
+    container_name: tests
+    build:
+      context: .
+    networks:
+      - database
+    volumes:
+      - ./:/usr/src/code
+
   postgres:
     image: postgres:13
     container_name: postgres
+    networks:
+      - database
     ports:
-      - "8700:8080"
+      - "8700:5432"
     environment:
+      POSTGRES_USER: root
       POSTGRES_PASSWORD: password
 
   mariadb:
     image: mariadb:10.5
     container_name: mariadb
+    networks:
+      - database
     ports:
       - "8701:3306"
     environment:
@@ -21,8 +35,13 @@ services:
   mongo:
     image: mongo:3.6
     container_name: mongo
+    networks:
+      - database
     ports:
       - "8702:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
+
+networks:
+  database:

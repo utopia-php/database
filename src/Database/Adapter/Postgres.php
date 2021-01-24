@@ -3,10 +3,14 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Validator\Authorization;
 use Exception;
 use PDO;
 
-class MariaDB extends Adapter
+class Postgres extends Adapter
 {
     /**
      * @var PDO
@@ -39,7 +43,7 @@ class MariaDB extends Adapter
     public function create(string $name): bool
     {
         return $this->getPDO()
-            ->prepare('CREATE DATABASE `'.$this->getNamespace().'_'.$name.'` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;')
+            ->prepare('CREATE DATABASE '.$this->getNamespace().'_'.$name.' /*!40100 DEFAULT CHARACTER SET utf8mb4 */;')
             ->execute();
     }
 
@@ -52,7 +56,7 @@ class MariaDB extends Adapter
     public function delete(string $name): bool
     {
         return $this->getPDO()
-            ->prepare('DROP DATABASE `'.$this->getNamespace().'_'.$name.'`;')
+            ->prepare('DROP DATABASE '.$this->getNamespace().'_'.$name.';')
             ->execute();
     }
 

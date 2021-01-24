@@ -105,129 +105,129 @@ abstract class Adapter
      */
     abstract public function delete(string $name): bool;
 
-    /**
-     * Create Collection
-     * 
-     * @param Document $collection
-     * @param string $id
-     * 
-     * @return bool
-     */
-    abstract public function createCollection(Document $collection, string $id): bool;
+    // /**
+    //  * Create Collection
+    //  * 
+    //  * @param Document $collection
+    //  * @param string $id
+    //  * 
+    //  * @return bool
+    //  */
+    // abstract public function createCollection(Document $collection, string $id): bool;
 
-    /**
-     * Delete Collection
-     * 
-     * @param Document $collection
-     * 
-     * @return bool
-     */
-    abstract public function deleteCollection(Document $collection): bool;
+    // /**
+    //  * Delete Collection
+    //  * 
+    //  * @param Document $collection
+    //  * 
+    //  * @return bool
+    //  */
+    // abstract public function deleteCollection(Document $collection): bool;
 
-    /**
-     * Create Attribute
-     * 
-     * @param Document $collection
-     * @param string $id
-     * @param string $type
-     * @param bool $array
-     * 
-     * @return bool
-     */
-    abstract public function createAttribute(Document $collection, string $id, string $type, bool $array = false): bool;
+    // /**
+    //  * Create Attribute
+    //  * 
+    //  * @param Document $collection
+    //  * @param string $id
+    //  * @param string $type
+    //  * @param bool $array
+    //  * 
+    //  * @return bool
+    //  */
+    // abstract public function createAttribute(Document $collection, string $id, string $type, bool $array = false): bool;
 
-    /**
-     * Delete Attribute
-     * 
-     * @param Document $collection
-     * @param string $id
-     * @param bool $array
-     * 
-     * @return bool
-     */
-    abstract public function deleteAttribute(Document $collection, string $id, bool $array = false): bool;
+    // /**
+    //  * Delete Attribute
+    //  * 
+    //  * @param Document $collection
+    //  * @param string $id
+    //  * @param bool $array
+    //  * 
+    //  * @return bool
+    //  */
+    // abstract public function deleteAttribute(Document $collection, string $id, bool $array = false): bool;
 
-    /**
-     * Create Index
-     *
-     * @param Document $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     *
-     * @return bool
-     */
-    abstract public function createIndex(Document $collection, string $id, string $type, array $attributes): bool;
+    // /**
+    //  * Create Index
+    //  *
+    //  * @param Document $collection
+    //  * @param string $id
+    //  * @param string $type
+    //  * @param array $attributes
+    //  *
+    //  * @return bool
+    //  */
+    // abstract public function createIndex(Document $collection, string $id, string $type, array $attributes): bool;
 
-    /**
-     * Delete Index
-     *
-     * @param Document $collection
-     * @param string $id
-     *
-     * @return bool
-     */
-    abstract public function deleteIndex(Document $collection, string $id): bool;
+    // /**
+    //  * Delete Index
+    //  *
+    //  * @param Document $collection
+    //  * @param string $id
+    //  *
+    //  * @return bool
+    //  */
+    // abstract public function deleteIndex(Document $collection, string $id): bool;
 
-    /**
-     * Get Document.
-     *
-     * @param Document $collection
-     * @param string $id
-     *
-     * @return array
-     */
-    abstract public function getDocument(Document $collection, $id);
+    // /**
+    //  * Get Document.
+    //  *
+    //  * @param Document $collection
+    //  * @param string $id
+    //  *
+    //  * @return array
+    //  */
+    // abstract public function getDocument(Document $collection, $id);
 
-    /**
-     * Create Document
-     *
-     * @param Document $collection
-     * @param array $data
-     * @param array $unique
-     *
-     * @return array
-     */
-    abstract public function createDocument(Document $collection, array $data, array $unique = []);
+    // /**
+    //  * Create Document
+    //  *
+    //  * @param Document $collection
+    //  * @param array $data
+    //  * @param array $unique
+    //  *
+    //  * @return array
+    //  */
+    // abstract public function createDocument(Document $collection, array $data, array $unique = []);
 
-    /**
-     * Update Document.
-     *
-     * @param Document $collection
-     * @param array $data
-     *
-     * @return array
-     */
-    abstract public function updateDocument(Document $collection, string $id, array $data);
+    // /**
+    //  * Update Document.
+    //  *
+    //  * @param Document $collection
+    //  * @param array $data
+    //  *
+    //  * @return array
+    //  */
+    // abstract public function updateDocument(Document $collection, string $id, array $data);
 
-    /**
-     * Delete Node.
-     *
-     * @param Document $collection
-     * @param string $id
-     *
-     * @return array
-     */
-    abstract public function deleteDocument(Document $collection, string $id);
+    // /**
+    //  * Delete Node.
+    //  *
+    //  * @param Document $collection
+    //  * @param string $id
+    //  *
+    //  * @return array
+    //  */
+    // abstract public function deleteDocument(Document $collection, string $id);
 
-    /**
-     * Find.
-     *
-     * Find data sets using chosen queries
-     *
-     * @param Document $collection
-     * @param array $options
-     *
-     * @return array
-     */
-    abstract public function find(Document $collection, array $options);
+    // /**
+    //  * Find.
+    //  *
+    //  * Find data sets using chosen queries
+    //  *
+    //  * @param Document $collection
+    //  * @param array $options
+    //  *
+    //  * @return array
+    //  */
+    // abstract public function find(Document $collection, array $options);
 
-    /**
-     * @param array $options
-     *
-     * @return int
-     */
-    abstract public function count(array $options);
+    // /**
+    //  * @param array $options
+    //  *
+    //  * @return int
+    //  */
+    // abstract public function count(array $options);
 
     /**
      * Get Unique ID.

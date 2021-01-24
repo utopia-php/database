@@ -11,7 +11,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 class Database
 {
     // Simple Types
-    const VAR_TEXT = 'text';
+    const VAR_STRING = 'text';
     const VAR_NUMBER = 'integer';
     const VAR_BOOLEAN = 'boolean';
     const VAR_NULL = 'null';
@@ -39,6 +39,14 @@ class Database
      * @var array
      */
     static public $filters = [];
+
+    /**
+     * @param Adapter $adapter
+     */
+    public function __construct(Adapter $adapter)
+    {
+        $this->adapter = $adapter;
+    }
 
     /**
      * Set Namespace.

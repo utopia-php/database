@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Tests;
+namespace Utopia\Tests\Validator;
 
 use Utopia\Database\Validator\UID;
 use PHPUnit\Framework\TestCase;

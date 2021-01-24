@@ -173,7 +173,7 @@ class Structure extends Validator
                 case Database::VAR_KEY:
                     $validator = new Key();
                     break;
-                case Database::VAR_TEXT:
+                case Database::VAR_STRING:
                 case self::RULE_TYPE_MARKDOWN:
                     $validator = new Validator\Text(0);
                     break;

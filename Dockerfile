@@ -19,7 +19,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN \
   apk update \
-  && apk add --no-cache postgresql-libs postgresql-dev \
+  && apk add --no-cache postgresql-libs postgresql-dev make automake autoconf gcc g++ \
+  && pecl install mongodb \ 
+  && docker-php-ext-enable mongodb \
   && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
   && rm -rf /var/cache/apk/*
 

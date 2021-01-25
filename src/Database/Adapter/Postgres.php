@@ -2,13 +2,9 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Adapter;
-use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Validator\Authorization;
-use Exception;
 use PDO;
+use Exception;
+use Utopia\Database\Adapter;
 
 class Postgres extends Adapter
 {
@@ -27,7 +23,7 @@ class Postgres extends Adapter
      *
      * Set connection and settings
      *
-     * @param Registry $register
+     * @param PDO $pdo
      */
     public function __construct(PDO $pdo)
     {

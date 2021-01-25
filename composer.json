@@ -20,7 +20,8 @@
     "require": {
         "php": ">=7.1",
         "ext-pdo": "*",
-        "utopia-php/framework": "0.*.*"
+        "utopia-php/framework": "0.*.*",
+        "mongodb/mongodb": "1.8.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.4",

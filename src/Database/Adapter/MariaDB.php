@@ -2,9 +2,9 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Adapter;
-use Exception;
 use PDO;
+use Exception;
+use Utopia\Database\Adapter;
 
 class MariaDB extends Adapter
 {
@@ -23,7 +23,7 @@ class MariaDB extends Adapter
      *
      * Set connection and settings
      *
-     * @param Registry $register
+     * @param PDO $pdo
      */
     public function __construct(PDO $pdo)
     {

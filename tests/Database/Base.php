@@ -24,56 +24,28 @@ abstract class Base extends TestCase
         Authorization::reset();
     }
 
-    public function testCreate()
+    public function testCreateAndDelete()
     {
-        $this->assertEquals(true, static::getDatabase()->create('test_database'));
+        $this->assertEquals(true, static::getDatabase()->create());
+        $this->assertEquals(true, static::getDatabase()->delete());
+        $this->assertEquals(true, static::getDatabase()->create());
     }
 
-    public function testDelete()
+    /**
+     * @depends testCreateAndDelete
+     */
+    public function testCreateCollection()
     {
-        $this->assertEquals(true, static::getDatabase()->delete('test_database'));
+        $this->assertEquals(true, static::getDatabase()->createCollection('actors'));
     }
 
-    // public function testCreateCollection()
-    // {
-    //     $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
-    //         '$permissions' => ['read' => ['*']],
-    //         'name' => 'Create',
-    //     ]);
-
-    //     $this->assertEquals(true, self::$database->createCollection($collection->getId(), [], []));
-        
-    //     try {
-    //         self::$database->createCollection($collection->getId(), [], []);
-    //     }
-    //     catch (\Throwable $th) {
-    //         return $this->assertEquals('42S01', $th->getCode());
-    //     }
-
-    //     throw new Exception('Expected exception');
-    // }
-
-    // public function testDeleteCollection()
-    // {
-    //     $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
-    //         '$permissions' => ['read' => ['*']],
-    //         'name' => 'Delete',
-    //     ]);
-
-    //     $this->assertEquals(true, self::$database->createCollection($collection->getId(), [], []));
-    //     $this->assertEquals(true, self::$database->deleteCollection($collection->getId()));
-        
-    //     try {
-    //         self::$database->deleteCollection($collection->getId());
-    //     }
-    //     catch (\Throwable $th) {
-    //         return $this->assertEquals('42S02', $th->getCode());
-    //     }
-
-    //     throw new Exception('Expected exception');
-    // }
+    /**
+     * @depends testCreateCollection
+     */
+    public function testDeleteCollection()
+    {
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
+    }
 
     // public function testCreateAttribute()
     // {

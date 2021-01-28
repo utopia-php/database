@@ -14,11 +14,6 @@ class Postgres extends Adapter
     protected $pdo;
 
     /**
-     * @var bool
-     */
-    protected $transaction = false;
-
-    /**
      * Constructor.
      *
      * Set connection and settings
@@ -30,29 +25,65 @@ class Postgres extends Adapter
         $this->pdo = $pdo;
     }
 
+    
     /**
      * Create Database
      * 
-     * @param string $name
      * @return bool
      */
-    public function create(string $name): bool
+    public function create(): bool
     {
+        $name = $this->getNamespace();
+
         return $this->getPDO()
-            ->prepare('CREATE DATABASE '.$this->getNamespace().'_'.$name.' /*!40100 DEFAULT CHARACTER SET utf8mb4 */;')
+            ->prepare("CREATE SCHEMA {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
             ->execute();
     }
 
     /**
      * Delete Database
      * 
+     * @return bool
+     */
+    public function delete(): bool
+    {
+        $name = $this->getNamespace();
+
+        return $this->getPDO()
+            ->prepare("DROP SCHEMA {$name};")
+            ->execute();
+    }
+
+    /**
+     * Create Collection
+     * 
      * @param string $name
      * @return bool
      */
-    public function delete(string $name): bool
+    public function createCollection(string $name): bool
     {
+        $name = $this->filter($name).'_documents';
+
         return $this->getPDO()
-            ->prepare('DROP DATABASE '.$this->getNamespace().'_'.$name.';')
+            ->prepare("CREATE TABLE {$this->getNamespace()}.{$name}(
+                _id     INT         PRIMARY KEY     NOT NULL,
+                _uid    CHAR(50)                    NOT NULL
+             );")
+            ->execute();
+    }
+
+    /**
+     * Delete Collection
+     * 
+     * @param string $name
+     * @return bool
+     */
+    public function deleteCollection(string $name): bool
+    {
+        $name = $this->filter($name).'_documents';
+
+        return $this->getPDO()
+            ->prepare("DROP TABLE {$this->getNamespace()}.{$name};")
             ->execute();
     }
 

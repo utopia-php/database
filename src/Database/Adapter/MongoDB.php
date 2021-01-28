@@ -34,21 +34,42 @@ class MongoDB extends Adapter
     /**
      * Create Database
      * 
-     * @param string $name
      * @return bool
      */
-    public function create(string $name): bool
+    public function create(): bool
     {
-        return (!!$this->getDatabase()->createCollection($name));
+        $namespace = $this->getNamespace();
+        return (!!$this->client->$namespace);
     }
 
     /**
      * Delete Database
      * 
+     * @return bool
+     */
+    public function delete(): bool
+    {
+        return (!!$this->getDatabase()->dropCollection($this->getNamespace()));
+    }
+
+    /**
+     * Create Collection
+     * 
      * @param string $name
      * @return bool
      */
-    public function delete(string $name): bool
+    public function createCollection(string $name): bool
+    {
+        return (!!$this->getDatabase()->createCollection($name));
+    }
+
+    /**
+     * Delete Collection
+     * 
+     * @param string $name
+     * @return bool
+     */
+    public function deleteCollection(string $name): bool
     {
         return (!!$this->getDatabase()->dropCollection($name));
     }

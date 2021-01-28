@@ -64,7 +64,7 @@ abstract class Adapter
             throw new Exception('Missing namespace');
         }
 
-        $this->namespace = $namespace;
+        $this->namespace = $this->filter($namespace);
 
         return true;
     }
@@ -90,39 +90,34 @@ abstract class Adapter
     /**
      * Create Database.
      *
-     * @param string $name
-     *
      * @return bool
      */
-    abstract public function create(string $name): bool;
+    abstract public function create(): bool;
 
     /**
      * Delete Database.
      *
-     * @param string $name
-     *
      * @return bool
      */
-    abstract public function delete(string $name): bool;
+    abstract public function delete(): bool;
 
-    // /**
-    //  * Create Collection
-    //  * 
-    //  * @param Document $collection
-    //  * @param string $id
-    //  * 
-    //  * @return bool
-    //  */
-    // abstract public function createCollection(Document $collection, string $id): bool;
+    /**
+     * Create Collection
+     * 
+     * @param string $name
+     * 
+     * @return bool
+     */
+    abstract public function createCollection(string $name): bool;
 
-    // /**
-    //  * Delete Collection
-    //  * 
-    //  * @param Document $collection
-    //  * 
-    //  * @return bool
-    //  */
-    // abstract public function deleteCollection(Document $collection): bool;
+    /**
+     * Delete Collection
+     * 
+     * @param string $name
+     * 
+     * @return bool
+     */
+    abstract public function deleteCollection(string $name): bool;
 
     // /**
     //  * Create Attribute
@@ -228,6 +223,11 @@ abstract class Adapter
     //  * @return int
     //  */
     // abstract public function count(array $options);
+
+    public function filter($value)
+    {
+        return preg_replace("/[^A-Za-z0-9 _]/", '', $value);
+    }
 
     /**
      * Get Unique ID.

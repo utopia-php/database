@@ -83,25 +83,21 @@ class Database
     /**
      * Create Database.
      *
-     * @param string $name
-     *
      * @return bool
      */
-    public function create(string $name): bool
+    public function create(): bool
     {
-        return $this->adapter->create($name);
+        return $this->adapter->create();
     }
 
     /**
      * Delete Database.
      *
-     * @param string $name
-     *
      * @return bool
      */
-    public function delete(string $name): bool
+    public function delete(): bool
     {
-        return $this->adapter->delete($name);
+        return $this->adapter->delete();
     }
 
     /**
@@ -175,25 +171,25 @@ class Database
     /**
      * Create Collection
      * 
-     * @param string $id
+     * @param string $name
      * 
      * @return bool
      */
-    public function createCollection(string $id): bool
+    public function createCollection(string $name): bool
     {
-        return $this->adapter->createCollection($this->getDocument(self::COLLECTION_COLLECTIONS, $id), $id);
+        return $this->adapter->createCollection($name);
     }
 
     /**
      * Delete Collection
      * 
-     * @param string $id
+     * @param string $name
      * 
      * @return bool
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $name): bool
     {
-        return $this->adapter->deleteCollection($this->getDocument(self::COLLECTION_COLLECTIONS, $id));
+        return $this->adapter->deleteCollection($name);
     }
 
     /**

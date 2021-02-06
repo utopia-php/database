@@ -1,62 +1,62 @@
 <?php
 
-namespace Utopia\Database\Validator;
+// namespace Utopia\Database\Validator;
 
-use Utopia\Database\Database;
-use Utopia\Database\Document;
+// use Utopia\Database\Database;
+// use Utopia\Database\Document;
 
-class Collection extends Structure
-{
-    /**
-     * @var array
-     */
-    protected $collections = [];
+// class Collection extends Structure
+// {
+//     /**
+//      * @var array
+//      */
+//     protected $collections = [];
 
-    /**
-     * @var array
-     */
-    protected $merge = [];
+//     /**
+//      * @var array
+//      */
+//     protected $merge = [];
 
-    /**
-     * @param Database $database
-     * @param array    $collections
-     * @param array    $merge
-     */
-    public function __construct(Database $database, array $collections, array $merge = [])
-    {
-        $this->collections = $collections;
-        $this->merge = $merge;
+//     /**
+//      * @param Database $database
+//      * @param array    $collections
+//      * @param array    $merge
+//      */
+//     public function __construct(Database $database, array $collections, array $merge = [])
+//     {
+//         $this->collections = $collections;
+//         $this->merge = $merge;
 
-        return parent::__construct($database);
-    }
+//         return parent::__construct($database);
+//     }
 
-    /**
-     * Is valid.
-     *
-     * Returns true if valid or false if not.
-     * 
-     * @param mixed $document
-     *
-     * @return bool
-     */
-    public function isValid($document)
-    {
-        $document = new Document(
-            \array_merge($this->merge, ($document instanceof Document) ? $document->getArrayCopy() : $document)
-        );
+//     /**
+//      * Is valid.
+//      *
+//      * Returns true if valid or false if not.
+//      * 
+//      * @param mixed $document
+//      *
+//      * @return bool
+//      */
+//     public function isValid($document)
+//     {
+//         $document = new Document(
+//             \array_merge($this->merge, ($document instanceof Document) ? $document->getArrayCopy() : $document)
+//         );
 
-        if (\is_null($document->getCollection())) {
-            $this->message = 'Missing collection attribute $collection';
+//         if (\is_null($document->getCollection())) {
+//             $this->message = 'Missing collection attribute $collection';
 
-            return false;
-        }
+//             return false;
+//         }
 
-        if (!\in_array($document->getCollection(), $this->collections)) {
-            $this->message = 'Collection is not allowed';
+//         if (!\in_array($document->getCollection(), $this->collections)) {
+//             $this->message = 'Collection is not allowed';
 
-            return false;
-        }
+//             return false;
+//         }
 
-        return parent::isValid($document);
-    }
-}
+//         return parent::isValid($document);
+//     }
+// }

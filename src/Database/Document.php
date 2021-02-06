@@ -21,11 +21,11 @@ class Document extends ArrayObject
      * @param int    $flags
      * @param string $iterator_class
      */
-    public function __construct($input = [], $flags = 0, $iterator_class = 'ArrayIterator')
+    public function __construct(array $input = [])
     {
         foreach ($input as $key => &$value) {
             if (\is_array($value)) {
-                if ((isset($value['$id']) || isset($value['$collection'])) && (!$value instanceof self)) {
+                if ((isset($value['$id']) || isset($value['$collection']))) {
                     $input[$key] = new self($value);
                 } else {
                     foreach ($value as $childKey => $child) {
@@ -37,11 +37,11 @@ class Document extends ArrayObject
             }
         }
 
-        parent::__construct($input, $flags, $iterator_class);
+        parent::__construct($input);
     }
 
     /**
-     * @return string|null
+     * @return string
      */
     public function getId(): string
     {
@@ -146,9 +146,9 @@ class Document extends ArrayObject
      *
      * @param string $key
      * @param mixed $value
-     * @param array|null $scope
+     * @param mixed $scope
      *
-     * @return Document|Document[]|mixed|null|array
+     * @return mixed
      */
     public function search(string $key, $value, $scope = null)
     {

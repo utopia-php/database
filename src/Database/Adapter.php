@@ -224,15 +224,29 @@ abstract class Adapter
     //  */
     // abstract public function count(array $options);
 
-    public function filter($value)
+    /**
+     * Filter Keys
+     * 
+     * @throws Exception
+     * @return string
+     */
+    public function filter(string $value):string
     {
-        return preg_replace("/[^A-Za-z0-9 _]/", '', $value);
+        $value = preg_replace("/[^A-Za-z0-9 _]/", '', $value);
+
+        if(\is_null($value)) {
+            throw new Exception('Failed to filter key');
+        }
+        
+        return $value;
     }
 
     /**
      * Get Unique ID.
+     * 
+     * @return string
      */
-    public function getId()
+    public function getId(): string
     {
         return \uniqid();
     }

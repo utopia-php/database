@@ -148,9 +148,10 @@ class Authorization extends Validator
      * This will be used for the
      *  value set on the self::reset() method
      * 
+     * @param bool $status
      * @return void
      */
-    public static function setDefaultStatus($status): void
+    public static function setDefaultStatus(bool $status): void
     {
         self::$statusDefault = $status;
         self::$status = $status;

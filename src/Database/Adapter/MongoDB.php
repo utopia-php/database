@@ -15,7 +15,7 @@ class MongoDB extends Adapter
     protected $client;
 
     /**
-     * @var Database
+     * @var Database|null
      */
     protected $database;
 

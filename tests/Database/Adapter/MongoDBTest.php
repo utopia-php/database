@@ -5,8 +5,6 @@ namespace Utopia\Tests\Adapter;
 use MongoDB\Client;
 use PDO;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter;
-use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Tests\Base;
 

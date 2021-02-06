@@ -1,8 +1,8 @@
 language: php
 
 php:
-- 7.3
 - 7.4
+- 8.0
 - nightly
 
 services:
@@ -20,5 +20,5 @@ install:
 
 script:
 - docker ps
-- vendor/bin/phpunit --configuration phpunit.xml
+- vendor/bin/phpunit --configuration phpunit.xml tests
 - vendor/bin/psalm --show-info=true

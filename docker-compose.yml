@@ -43,5 +43,17 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
 
+  mysql:
+    image: mysql:5.7
+    container_name: mysql
+    ports:
+      - "8703:3307"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: default
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_TCP_PORT: 3307
+
 networks:
   database:

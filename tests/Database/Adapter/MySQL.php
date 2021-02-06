@@ -4,10 +4,10 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Tests\Base;
 
-class MariaDBTest extends Base
+class MySQLTest extends Base
 {
     /**
      * @var Database
@@ -23,8 +23,8 @@ class MariaDBTest extends Base
             return self::$database;
         }
 
-        $dbHost = 'mariadb';
-        $dbPort = '3306';
+        $dbHost = 'mysql';
+        $dbPort = '3307';
         $dbUser = 'root';
         $dbPass = 'password';
 
@@ -38,7 +38,7 @@ class MariaDBTest extends Base
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);   // Return arrays
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);        // Handle all errors with exceptions
 
-        $database = new Database(new MariaDB($pdo));
+        $database = new Database(new MySQL($pdo));
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;

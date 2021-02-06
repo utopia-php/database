@@ -1,9 +1,11 @@
-language: php
+dist: xenial
 
-php:
-- 7.4
-- 8.0
-- nightly
+arch:
+  - amd64
+
+os: linux
+
+language: shell
 
 services:
 - docker
@@ -12,7 +14,7 @@ notifications:
   email:
   - team@appwrite.io
 
-before_script: composer install --ignore-platform-reqs
+before_script: docker run --rm --interactive --tty --volume "$(pwd)":/app composer update --ignore-platform-reqs --optimize-autoloader --no-plugins --no-scripts --prefer-dist
 
 install:
 - docker-compose up -d

@@ -25,8 +25,8 @@ class CockroachTest extends Base
 
         $dbHost = 'cockroach';
         $dbPort = '26257';
-        $dbUser = '';
-        $dbPass = '';
+        $dbUser = null;
+        $dbPass = null;
 
         $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, array(
             PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',

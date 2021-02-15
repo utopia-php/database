@@ -22,6 +22,16 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
 
+  cockroach:
+    image: cockroachdb/cockroach:v20.1.1
+    container_name: cockroach
+    command: start --insecure
+    ports:
+      - "8704:26257"
+      - "8705:8080"
+    networks:
+      - database
+
   mariadb:
     image: mariadb:10.5
     container_name: mariadb

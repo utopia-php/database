@@ -28,6 +28,19 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 Utopia Framework requires PHP 7.3 or later. We recommend using the latest PHP version whenever possible.
 
+## Tests
+
+To run all unit tests, use the following Docker command:
+
+```bash
+docker-compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+```
+
+To run static code analysis, use the following Psalm command:
+
+```bash
+- docker-compose exec tests vendor/bin/psalm --show-info=true
+```
 ## Authors
 
 **Eldad Fux**

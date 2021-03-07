@@ -17,7 +17,8 @@ This library will support storing and fetching of all common JSON simple and com
 ### Simple Types
 
 * String
-* Number
+* Integer
+* Float
 * Boolean
 * Null
 

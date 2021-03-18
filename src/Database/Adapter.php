@@ -88,14 +88,21 @@ abstract class Adapter
     }
 
     /**
-     * Create Database.
+     * Create Database
      *
      * @return bool
      */
     abstract public function create(): bool;
 
     /**
-     * Delete Database.
+     * List Database
+     *
+     * @return bool
+     */
+    abstract public function list(): array;
+
+    /**
+     * Delete Database
      *
      * @return bool
      */

@@ -43,6 +43,22 @@ class MongoDB extends Adapter
     }
 
     /**
+     * List Database
+     * 
+     * @return bool
+     */
+    public function list(): array
+    {
+        $list = [];
+
+        foreach ($this->client->listDatabaseNames() as $key => $value) {
+            $list[] = $value;
+        }
+        
+        return $list;
+    }
+
+    /**
      * Delete Database
      * 
      * @return bool

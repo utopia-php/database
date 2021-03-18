@@ -45,6 +45,27 @@ class MariaDB extends Adapter
     }
 
     /**
+     * List Database
+     * 
+     * @return bool
+     */
+    public function list(): array
+    {
+        $stmt = $this->getPDO()
+            ->prepare("SHOW DATABASES;");
+        
+        $stmt->execute();
+
+        $list = [];
+
+        foreach ($stmt->fetchAll() as $key => $value) {
+            $list[] = $value['Database'] ?? '';
+        }
+
+        return $list;
+    }
+
+    /**
      * Delete Database
      * 
      * @return bool

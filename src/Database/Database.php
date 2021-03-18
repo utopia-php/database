@@ -81,7 +81,7 @@ class Database
     }
 
     /**
-     * Create Database.
+     * Create Database
      *
      * @return bool
      */
@@ -91,7 +91,17 @@ class Database
     }
 
     /**
-     * Delete Database.
+     * List Databases
+     *
+     * @return bool
+     */
+    public function list(): array
+    {
+        return $this->adapter->list();
+    }
+
+    /**
+     * Delete Database
      *
      * @return bool
      */

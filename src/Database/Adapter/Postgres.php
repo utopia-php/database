@@ -41,6 +41,27 @@ class Postgres extends Adapter
     }
 
     /**
+     * List Database
+     * 
+     * @return bool
+     */
+    public function list(): array
+    {
+        $stmt = $this->getPDO()
+            ->prepare("SELECT datname FROM pg_database;");
+
+        $stmt->execute();
+        
+        $list = [];
+
+        foreach ($stmt->fetchAll() as $key => $value) {
+            $list[] = $value['datname'] ?? '';
+        }
+
+        return $list;
+    }
+
+    /**
      * Delete Database
      * 
      * @return bool

@@ -31,6 +31,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    public function testList()
+    {
+        $list = static::getDatabase()->list();
+        
+        $this->assertNotEmpty($list);
+        $this->assertIsArray($list);
+    }
+
     /**
      * @depends testCreateAndDelete
      */

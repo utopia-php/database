@@ -1,7 +1,7 @@
 # Utopia Database
 
-[![Build Status](https://travis-ci.org/utopia-php/abuse.svg?branch=master)](https://travis-ci.com/utopia-php/abuse)
-![Total Downloads](https://img.shields.io/packagist/dt/utopia-php/abuse.svg)
+[![Build Status](https://travis-ci.org/utopia-php/abuse.svg?branch=master)](https://travis-ci.com/utopia-php/database)
+![Total Downloads](https://img.shields.io/packagist/dt/utopia-php/database.svg)
 [![Discord](https://img.shields.io/discord/564160730845151244)](https://appwrite.io/discord)
 
 Utopia framework database library is simple and lite library for managing application persistency using multiple database adapters. This library is aiming to be as simple and easy to learn and use. This library is maintained by the [Appwrite team](https://appwrite.io).
@@ -39,7 +39,7 @@ docker-compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
 To run static code analysis, use the following Psalm command:
 
 ```bash
-- docker-compose exec tests vendor/bin/psalm --show-info=true
+docker-compose exec tests vendor/bin/psalm --show-info=true
 ```
 ## Authors
 

@@ -65,6 +65,26 @@ class Document extends ArrayObject
     }
 
     /**
+     * Get Document Attributes
+     * 
+     * @return array
+     */
+    public function getAttributes(): array
+    {
+        $attributes = [];
+
+        foreach ($this as $attribute => $value) {
+            if(array_key_exists($attribute, ['$id' => true, '$collection' => true, '$permissions' => true])) {
+                continue;
+            }
+
+            $attributes[$attribute] = $value;
+        }
+
+        return $attributes;
+    }
+
+    /**
      * Get Attribute.
      *
      * Method for getting a specific fields attribute. If $name is not found $default value will be returned.

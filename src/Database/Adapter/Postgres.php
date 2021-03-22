@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use PDO;
 use Exception;
+use phpDocumentor\Reflection\DocBlock\Tags\Var_;
 use Utopia\Database\Adapter;
 
 class Postgres extends Adapter
@@ -24,7 +25,6 @@ class Postgres extends Adapter
     {
         $this->pdo = $pdo;
     }
-
     
     /**
      * Create Database
@@ -41,9 +41,9 @@ class Postgres extends Adapter
     }
 
     /**
-     * List Database
+     * List Databases
      * 
-     * @return bool
+     * @return array
      */
     public function list(): array
     {
@@ -88,9 +88,18 @@ class Postgres extends Adapter
         return $this->getPDO()
             ->prepare("CREATE TABLE {$this->getNamespace()}.{$name}(
                 _id     INT         PRIMARY KEY     NOT NULL,
-                _uid    CHAR(50)                    NOT NULL
+                _uid    CHAR(13)                    NOT NULL
              );")
             ->execute();
+    }
+
+    /**
+     * List Collections
+     * 
+     * @return array
+     */
+    public function listCollections(): array
+    {
     }
 
     /**

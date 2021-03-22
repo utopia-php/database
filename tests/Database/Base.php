@@ -2,16 +2,15 @@
 
 namespace Utopia\Tests;
 
-use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter;
+use Utopia\Database\Document;
 use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
     /**
-     * @reture Adapter
+     * @return Adapter
      */
     abstract static protected function getDatabase(): Database;
 
@@ -24,140 +23,136 @@ abstract class Base extends TestCase
         Authorization::reset();
     }
 
-    public function testCreateAndDelete()
+    public function testCreateDelete()
     {
         $this->assertEquals(true, static::getDatabase()->create());
         $this->assertEquals(true, static::getDatabase()->delete());
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
-    public function testList()
-    {
-        $list = static::getDatabase()->list();
-        
-        $this->assertNotEmpty($list);
-        $this->assertIsArray($list);
-    }
-
     /**
-     * @depends testCreateAndDelete
+     * @depends testCreateDelete
      */
-    public function testCreateCollection()
+    public function testCreateDeleteCollection()
     {
         $this->assertEquals(true, static::getDatabase()->createCollection('actors'));
-    }
-
-    /**
-     * @depends testCreateCollection
-     */
-    public function testDeleteCollection()
-    {
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
     }
 
-    // public function testCreateAttribute()
-    // {
-    //     $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
-    //         '$permissions' => ['read' => ['*']],
-    //         'name' => 'Create Attribute',
-    //         'rules' => [],
-    //     ]);
+    public function testCreateDeleteAttribute()
+    {
+        static::getDatabase()->createCollection('attributes');
 
-    //     $this->assertEquals(true, self::$database->createCollection($collection->getId(), [], []));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'title', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'description', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'numeric', Database::VAR_NUMBER));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'integer', Database::VAR_NUMBER));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'float', Database::VAR_NUMBER));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'boolean', Database::VAR_BOOLEAN));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'document', Database::VAR_DOCUMENT));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'email', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'url', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'ipv4', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'ipv6', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'key', Database::VAR_STRING));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16383+1));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535+1));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215+1));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0));
+
+        // Array
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string', Database::VAR_STRING, 128, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true, true));
+
+        // Delete
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string2'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string3'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string4'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
+
+        // Delete Array
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string', true));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer', true));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float', true));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean', true));
+
+        static::getDatabase()->deleteCollection('attributes');
+    }
+
+    public function testCreateDeleteIndex()
+    {
+        static::getDatabase()->createCollection('indexes');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'string', Database::VAR_STRING, 128));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0));
         
-    //     // arrays
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'titles', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'descriptions', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'numerics', Database::VAR_NUMBER, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'integers', Database::VAR_NUMBER, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'floats', Database::VAR_NUMBER, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'booleans', Database::VAR_BOOLEAN, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'documents', Database::VAR_DOCUMENT, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'emails', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'urls', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'ipv4s', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'ipv6s', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'keys', Database::VAR_STRING, true));
-    // }
-
-    // public function testDeleteAttribute()
-    // {
-    //     $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
-    //         '$permissions' => ['read' => ['*']],
-    //         'name' => 'Delete Attribute',
-    //         'rules' => [],
-    //     ]);
-
-    //     $this->assertEquals(true, self::$database->createCollection($collection->getId(), [], []));
+        // Indexes
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
         
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'title', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'description', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'value', Database::VAR_NUMBER));
+        // Delete Indexes
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
 
-    //     $this->assertEquals(true, self::$database->deleteAttribute($collection->getId(), 'title', false));
-    //     $this->assertEquals(true, self::$database->deleteAttribute($collection->getId(), 'description', false));
-    //     $this->assertEquals(true, self::$database->deleteAttribute($collection->getId(), 'value', false));
+        static::getDatabase()->deleteCollection('indexes');
+    }
 
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'titles', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'descriptions', Database::VAR_STRING, true));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'values', Database::VAR_NUMBER, true));
+    public function testCreateDocument()
+    {
+        static::getDatabase()->createCollection('documents');
 
-    //     $this->assertEquals(true, self::$database->deleteAttribute($collection->getId(), 'titles', true));
-    //     $this->assertEquals(true, self::$database->deleteAttribute($collection->getId(), 'descriptions', true));
-    //     $this->assertEquals(true, self::$database->deleteAttribute($collection->getId(), 'values', true));
-    // }
-
-    // public function testCreateIndex()
-    // {
-    //     $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
-    //         '$permissions' => ['read' => ['*']],
-    //         'name' => 'Create Index',
-    //         'rules' => [],
-    //     ]);
-
-    //     $this->assertEquals(true, self::$database->createCollection($collection->getId(), [], []));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'title', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'description', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createIndex($collection->getId(), 'x', Database::INDEX_KEY, ['title']));
-    //     $this->assertEquals(true, self::$database->createIndex($collection->getId(), 'y', Database::INDEX_KEY, ['description']));
-    //     $this->assertEquals(true, self::$database->createIndex($collection->getId(), 'z', Database::INDEX_KEY, ['title', 'description']));
-    // }
-
-    // public function testDeleteIndex()
-    // {
-    //     $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
-    //         '$permissions' => ['read' => ['*']],
-    //         'name' => 'Delete Index',
-    //         'rules' => [],
-    //     ]);
-
-    //     $this->assertEquals(true, self::$database->createCollection($collection->getId(), [], []));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'title', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createAttribute($collection->getId(), 'description', Database::VAR_STRING));
-    //     $this->assertEquals(true, self::$database->createIndex($collection->getId(), 'x', Database::INDEX_KEY, ['title']));
-    //     $this->assertEquals(true, self::$database->createIndex($collection->getId(), 'y', Database::INDEX_KEY, ['description']));
-    //     $this->assertEquals(true, self::$database->createIndex($collection->getId(), 'z', Database::INDEX_KEY, ['title', 'description']));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, true));
         
-    //     $this->assertEquals(true, self::$database->deleteIndex($collection->getId(), 'x'));
-    //     $this->assertEquals(true, self::$database->deleteIndex($collection->getId(), 'y'));
-    //     $this->assertEquals(true, self::$database->deleteIndex($collection->getId(), 'z'));
-    // }
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$permissions' => [
+                'read' => ['user1', 'user2'],
+                'write' => ['user1x', 'user2x'],
+            ],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertIsString($document->getAttribute('string'));
+        $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertIsInt($document->getAttribute('integer'));
+        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(5.55, $document->getAttribute('float'));
+        $this->assertIsBool($document->getAttribute('boolean'));
+        $this->assertEquals(true, $document->getAttribute('boolean'));
+        $this->assertIsArray($document->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+
+        return $document;
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testGetDocument($document)
+    {
+        $document = static::getDatabase()->getDocument('documents', $document->getId());
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertIsString($document->getAttribute('string'));
+        $this->assertEquals('text📝', $document->getAttribute('string'));
+        $this->assertIsInt($document->getAttribute('integer'));
+        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(5.55, $document->getAttribute('float'));
+        $this->assertIsBool($document->getAttribute('boolean'));
+        $this->assertEquals(true, $document->getAttribute('boolean'));
+        $this->assertIsArray($document->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+    }
 
     // public function testCreateDocument()
     // {

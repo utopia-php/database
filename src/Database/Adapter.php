@@ -6,6 +6,8 @@ use Exception;
 
 abstract class Adapter
 {
+    const METADATA = 'metadata';
+
     /**
      * @var string
      */
@@ -64,7 +66,7 @@ abstract class Adapter
             throw new Exception('Missing namespace');
         }
 
-        $this->namespace = $this->filter($namespace);
+        $this->namespace = $namespace;
 
         return true;
     }
@@ -95,9 +97,9 @@ abstract class Adapter
     abstract public function create(): bool;
 
     /**
-     * List Database
+     * List Databases
      *
-     * @return bool
+     * @return array
      */
     abstract public function list(): array;
 
@@ -118,6 +120,13 @@ abstract class Adapter
     abstract public function createCollection(string $name): bool;
 
     /**
+     * List Collections
+     * 
+     * @return array
+     */
+    abstract public function listCollections(): array;
+
+    /**
      * Delete Collection
      * 
      * @param string $name
@@ -126,71 +135,73 @@ abstract class Adapter
      */
     abstract public function deleteCollection(string $name): bool;
 
-    // /**
-    //  * Create Attribute
-    //  * 
-    //  * @param Document $collection
-    //  * @param string $id
-    //  * @param string $type
-    //  * @param bool $array
-    //  * 
-    //  * @return bool
-    //  */
-    // abstract public function createAttribute(Document $collection, string $id, string $type, bool $array = false): bool;
+    /**
+     * Create Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
-    // /**
-    //  * Delete Attribute
-    //  * 
-    //  * @param Document $collection
-    //  * @param string $id
-    //  * @param bool $array
-    //  * 
-    //  * @return bool
-    //  */
-    // abstract public function deleteAttribute(Document $collection, string $id, bool $array = false): bool;
+    /**
+     * Delete Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    abstract public function deleteAttribute(string $collection, string $id, bool $array = false): bool;
 
-    // /**
-    //  * Create Index
-    //  *
-    //  * @param Document $collection
-    //  * @param string $id
-    //  * @param string $type
-    //  * @param array $attributes
-    //  *
-    //  * @return bool
-    //  */
-    // abstract public function createIndex(Document $collection, string $id, string $type, array $attributes): bool;
+    /**
+     * Create Index
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param array $attributes
+     * @param array $lengths
+     * @param array $orders
+     *
+     * @return bool
+     */
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool;
 
-    // /**
-    //  * Delete Index
-    //  *
-    //  * @param Document $collection
-    //  * @param string $id
-    //  *
-    //  * @return bool
-    //  */
-    // abstract public function deleteIndex(Document $collection, string $id): bool;
+    /**
+     * Delete Index
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    abstract public function deleteIndex(string $collection, string $id): bool;
 
-    // /**
-    //  * Get Document.
-    //  *
-    //  * @param Document $collection
-    //  * @param string $id
-    //  *
-    //  * @return array
-    //  */
-    // abstract public function getDocument(Document $collection, $id);
+    /**
+     * Get Document
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return array
+     */
+    abstract public function getDocument(string $collection, string $id): Document;
 
-    // /**
-    //  * Create Document
-    //  *
-    //  * @param Document $collection
-    //  * @param array $data
-    //  * @param array $unique
-    //  *
-    //  * @return array
-    //  */
-    // abstract public function createDocument(Document $collection, array $data, array $unique = []);
+    /**
+     * Create Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    abstract public function createDocument(string $collection, Document $document): Document;
 
     // /**
     //  * Update Document.
@@ -200,7 +211,7 @@ abstract class Adapter
     //  *
     //  * @return array
     //  */
-    // abstract public function updateDocument(Document $collection, string $id, array $data);
+    // abstract public function updateDocument(Document $collection, string $id, array $data): array;
 
     // /**
     //  * Delete Node.
@@ -210,7 +221,7 @@ abstract class Adapter
     //  *
     //  * @return array
     //  */
-    // abstract public function deleteDocument(Document $collection, string $id);
+    // abstract public function deleteDocument(Document $collection, string $id): bool;
 
     // /**
     //  * Find.
@@ -232,6 +243,41 @@ abstract class Adapter
     // abstract public function count(array $options);
 
     /**
+     * Get max STRING limit
+     * 
+     * @return int
+     */
+    abstract public function getStringLimit(): int;
+
+    /**
+     * Get max INT limit
+     * 
+     * @return int
+     */
+    abstract public function getIntLimit(): int;
+
+    /**
+     * Is index supported?
+     * 
+     * @return bool
+     */
+    abstract public function getIndexSupport(): bool;
+
+    /**
+     * Is unique index supported?
+     * 
+     * @return bool
+     */
+    abstract public function getUniqueIndexSupport(): bool;
+
+    /**
+     * Is fulltext index supported?
+     * 
+     * @return bool
+     */
+    abstract public function getFulltextIndexSupport(): bool;
+
+    /**
      * Filter Keys
      * 
      * @throws Exception
@@ -239,22 +285,12 @@ abstract class Adapter
      */
     public function filter(string $value):string
     {
-        $value = preg_replace("/[^A-Za-z0-9 _]/", '', $value);
+        $value = preg_replace("/[^A-Za-z0-9]_/", '', $value);
 
         if(\is_null($value)) {
             throw new Exception('Failed to filter key');
         }
         
         return $value;
-    }
-
-    /**
-     * Get Unique ID.
-     * 
-     * @return string
-     */
-    public function getId(): string
-    {
-        return \uniqid();
     }
 }

@@ -43,9 +43,9 @@ class MongoDB extends Adapter
     }
 
     /**
-     * List Database
+     * List Databases
      * 
-     * @return bool
+     * @return array
      */
     public function list(): array
     {
@@ -77,6 +77,22 @@ class MongoDB extends Adapter
     public function createCollection(string $name): bool
     {
         return (!!$this->getDatabase()->createCollection($name));
+    }
+
+    /**
+     * List Collections
+     * 
+     * @return array
+     */
+    public function listCollections(): array
+    {
+        $list = [];
+
+        foreach ($this->getDatabase()->listCollectionNames() as $key => $value) {
+            $list[] = $value;
+        }
+        
+        return $list;
     }
 
     /**

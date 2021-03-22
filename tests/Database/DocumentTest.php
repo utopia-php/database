@@ -83,6 +83,21 @@ class DocumentTest extends TestCase
         $this->assertEquals([], $this->empty->getPermissions());
     }
 
+    public function testGetAttributes()
+    {
+        $this->assertEquals([
+            'title' => 'This is a test.',
+            'list' => [
+                'one'
+            ],
+            'children' => [
+                new Document(['name' => 'x']),
+                new Document(['name' => 'y']),
+                new Document(['name' => 'z']),
+            ]
+        ], $this->document->getAttributes());
+    }
+
     public function testGetAttribute()
     {
         $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));

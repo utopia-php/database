@@ -400,7 +400,7 @@ class MariaDB extends Adapter
      * 
      * @return bool
      */
-    public function getIndexSupport(): bool
+    public function getSupportForIndex(): bool
     {
         return true;
     }
@@ -410,7 +410,7 @@ class MariaDB extends Adapter
      * 
      * @return bool
      */
-    public function getUniqueIndexSupport(): bool
+    public function getSupportForUniqueIndex(): bool
     {
         return true;
     }
@@ -420,7 +420,7 @@ class MariaDB extends Adapter
      * 
      * @return bool
      */
-    public function getFulltextIndexSupport(): bool
+    public function getSupportForFulltextIndex(): bool
     {
         return true;
     }

@@ -248,19 +248,19 @@ class Database
 
         switch ($type) {
             case self::INDEX_KEY:
-                if(!$this->adapter->getIndexSupport()) {
+                if(!$this->adapter->getSupportForIndex()) {
                     throw new Exception('Key index is not supported');
                 }
                 break;
 
             case self::INDEX_UNIQUE:
-                if(!$this->adapter->getUniqueIndexSupport()) {
+                if(!$this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Unique index is not supported');
                 }
                 break;
 
             case self::INDEX_FULLTEXT:
-                if(!$this->adapter->getUniqueIndexSupport()) {
+                if(!$this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;

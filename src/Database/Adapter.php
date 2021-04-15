@@ -261,21 +261,21 @@ abstract class Adapter
      * 
      * @return bool
      */
-    abstract public function getIndexSupport(): bool;
+    abstract public function getSupportForIndex(): bool;
 
     /**
      * Is unique index supported?
      * 
      * @return bool
      */
-    abstract public function getUniqueIndexSupport(): bool;
+    abstract public function getSupportForUniqueIndex(): bool;
 
     /**
      * Is fulltext index supported?
      * 
      * @return bool
      */
-    abstract public function getFulltextIndexSupport(): bool;
+    abstract public function getSupportForFulltextIndex(): bool;
 
     /**
      * Filter Keys

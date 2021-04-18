@@ -320,7 +320,7 @@ class MariaDB extends Adapter
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate();
+                    throw new Duplicate(); // TODO add test for catching this exception
                     break;
                 
                 default:
@@ -332,6 +332,80 @@ class MariaDB extends Adapter
         /**
          * Insert Permissions
          */
+        $stmt = $this->getPDO()
+            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}_permissions
+                SET _uid = :_uid, _action = :_action, _role = :_role");
+
+        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        foreach ($document->getPermissions() as $action => $roles) {
+            foreach ($roles as $key => $role) {
+                $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
+                $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
+
+                if(!$stmt->execute()) {
+                    throw new Exception('Failed to save permission');
+                }
+            }
+        }
+        
+        return $document;
+    }
+
+    /**
+     * Create Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    public function updateDocument(string $collection, Document $document): Document
+    {
+        $attributes = $document->getAttributes();
+        $name = $this->filter($collection);
+        $columns = '';
+
+        /**
+         * Update Attributes
+         */
+        foreach ($attributes as $attribute => $value) { // Parse statement
+            $column = $this->filter($attribute);
+            $columns .= "`{$column}`" . '=:' . $column . ',';
+        }
+
+        $stmt = $this->getPDO()
+            ->prepare("UPDATE {$this->getNamespace()}.{$name}
+                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+
+        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        foreach ($attributes as $attribute => $value) {
+            if(is_array($value)) { // arrays & objects should be saved as strings
+                $value = json_encode($value);
+            }
+
+            $attribute = $this->filter($attribute);
+            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+        }
+
+        if(!empty($attributes)) {
+            $stmt->execute();
+        }
+
+        /**
+         * Update Permissions
+         */
+        $stmt = $this->getPDO()
+            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}_permissions
+                WHERE _uid = :_uid");
+
+        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        if(!$stmt->execute()) {
+            throw new Exception('Failed to clean permissions');
+        }
+
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getNamespace()}.{$name}_permissions
                 SET _uid = :_uid, _action = :_action, _role = :_role");

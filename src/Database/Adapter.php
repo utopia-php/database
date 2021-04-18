@@ -202,15 +202,15 @@ abstract class Adapter
      */
     abstract public function createDocument(string $collection, Document $document): Document;
 
-    // /**
-    //  * Update Document.
-    //  *
-    //  * @param Document $collection
-    //  * @param array $data
-    //  *
-    //  * @return array
-    //  */
-    // abstract public function updateDocument(Document $collection, string $id, array $data): array;
+    /**
+     * Update Document.
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    abstract public function updateDocument(string $collection, Document $document): Document;
 
     // /**
     //  * Delete Node.

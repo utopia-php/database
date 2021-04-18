@@ -52,40 +52,72 @@ class Database
         'name' => 'collections',
         'attributes' => [
             [
-                '$id' => 'type',
+                '$id' => 'name',
                 'type' => self::VAR_STRING,
-                'size' => 64,
+                'size' => 256,
                 'signed' => true,
                 'array' => false,
                 'filters' => [],
             ],
             [
-                '$id' => 'size',
-                'type' => self::VAR_INTEGER,
-                'size' => 0,
+                '$id' => 'attributes',
+                'type' => self::VAR_STRING,
+                'size' => 1000000,
                 'signed' => true,
-                'array' => false,
+                'array' => true,
                 'filters' => [],
             ],
             [
-                '$id' => 'signed',
-                'type' => self::VAR_BOOLEAN,
-                'size' => 0,
+                '$id' => 'indexes',
+                'type' => self::VAR_STRING,
+                'size' => 1000000,
                 'signed' => true,
-                'array' => false,
+                'array' => true,
                 'filters' => [],
             ],
-            [
-                '$id' => 'array',
-                'type' => self::VAR_BOOLEAN,
-                'size' => 0,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]
         ],
         'indexes' => [],
     ];
+
+    // protected $collection = [
+    //     '$id' => 'collections',
+    //     'name' => 'collections',
+    //     'attributes' => [
+    //         [
+    //             '$id' => 'type',
+    //             'type' => self::VAR_STRING,
+    //             'size' => 64,
+    //             'signed' => true,
+    //             'array' => false,
+    //             'filters' => [],
+    //         ],
+    //         [
+    //             '$id' => 'size',
+    //             'type' => self::VAR_INTEGER,
+    //             'size' => 0,
+    //             'signed' => true,
+    //             'array' => false,
+    //             'filters' => [],
+    //         ],
+    //         [
+    //             '$id' => 'signed',
+    //             'type' => self::VAR_BOOLEAN,
+    //             'size' => 0,
+    //             'signed' => true,
+    //             'array' => false,
+    //             'filters' => [],
+    //         ],
+    //         [
+    //             '$id' => 'array',
+    //             'type' => self::VAR_BOOLEAN,
+    //             'size' => 0,
+    //             'signed' => true,
+    //             'array' => false,
+    //             'filters' => [],
+    //         ]
+    //     ],
+    //     'indexes' => [],
+    // ];
 
     /**
      * @var array
@@ -253,9 +285,11 @@ class Database
             'array' => $array,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
-
-        //$this->updateDocument();
-
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection);
+        }
+ 
         switch ($type) {
             case self::VAR_STRING:
                 if($size > $this->adapter->getStringLimit()) {
@@ -374,7 +408,7 @@ class Database
         //     return new Document();
         // }
 
-        // $document = $this->decode($document);
+        $document = $this->decode($collection, $document);
 
         return $document;
     }
@@ -419,51 +453,48 @@ class Database
     /**
      * Update Document
      * 
-     * @param array $collection
-     * @param array $id
-     * @param array $data
+     * @param string $collection
+     * @param array $document
      *
-     * @return Document|false
+     * @return Document
      *
      * @throws Exception
      */
-    public function updateDocument(string $collection, string $id, array $data): Document
+    public function updateDocument(string $collection, Document $document): Document
     {
-        if (!isset($data['$id'])) {
+        if (!$document->getId()) {
             throw new Exception('Must define $id attribute');
         }
 
-        $document = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
+        $old = $this->getDocument($collection, $document->getId()); // TODO make sure user don\'t need read permission for write operations
 
         // Make sure reserved keys stay constant
-        $data['$id'] = $document->getId();
-        $data['$collection'] = $document->getCollection();
+        // $data['$id'] = $old->getId();
+        // $data['$collection'] = $old->getCollection();
 
-        // $validator = new Authorization($document, 'write');
+        // $validator = new Authorization($old, 'write');
+
+        // if (!$validator->isValid($old->getPermissions())) { // Check if user has write access to this document
+        //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+        // }
 
         // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
         //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
         // }
 
-        $new = new Document($data);
-
-        // if (!$validator->isValid($new->getPermissions())) { // Check if user has write access to this document
-        //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-        // }
-
-        // $new = $this->encode($new);
+        // $document = $this->encode($document);
 
         // $validator = new Structure($this);
 
-        // if (!$validator->isValid($new)) { // Make sure updated structure still apply collection rules (if any)
+        // if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
         //     throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
         // }
 
-        // $new = new Document($this->adapter->updateDocument($collection, $new->getArrayCopy()));
+        $document = $this->adapter->updateDocument($collection, $document);
         
         // $new = $this->decode($new);
 
-        return $new;
+        return $document;
     }
 
     /**
@@ -599,164 +630,130 @@ class Database
     //     return $new;
     // }
 
-    // /**
-    //  * @return array
-    //  */
-    // public function getDebug()
-    // {
-    //     return $this->adapter->getDebug();
-    // }
+    /**
+     * Add Attribute Filter
+     *
+     * @param string $name
+     * @param callable $encode
+     * @param callable $decode
+     *
+     * @return void
+     */
+    static public function addFilter(string $name, callable $encode, callable $decode): void
+    {
+        self::$filters[$name] = [
+            'encode' => $encode,
+            'decode' => $decode,
+        ];
+    }
 
-    // /**
-    //  * @return int
-    //  */
-    // public function getSum()
-    // {
-    //     $debug = $this->getDebug();
+    public function encode(Document $collection, Document $document):Document
+    {
+        $rules = $collection->getAttribute('rules', []);
 
-    //     return (isset($debug['sum'])) ? $debug['sum'] : 0;
-    // }
+        foreach ($rules as $key => $rule) {
+            $key = $rule->getAttribute('key', null);
+            $type = $rule->getAttribute('type', null);
+            $array = $rule->getAttribute('array', false);
+            $filters = $rule->getAttribute('filter', []);
+            $value = $document->getAttribute($key, null);
 
-    // /**
-    //  * Add Attribute Filter
-    //  *
-    //  * @param string $name
-    //  * @param callable $encode
-    //  * @param callable $decode
-    //  *
-    //  * @return void
-    //  */
-    // static public function addFilter(string $name, callable $encode, callable $decode): void
-    // {
-    //     self::$filters[$name] = [
-    //         'encode' => $encode,
-    //         'decode' => $decode,
-    //     ];
-    // }
+            if (($value !== null)) {
+                foreach ($filters as $filter) {
+                    $value = $this->encodeAttribute($filter, $value);
+                    $document->setAttribute($key, $value);
+                }
+            }
+        }
 
-    // public function encode(Document $document):Document
-    // {
-    //     if($document->getCollection() === null) {
-    //         return $document;
-    //     }
+        return $document;
+    }
 
-    //     $collection = $this->getDocument(self::COLLECTIONS, $document->getCollection(), true , false);
-    //     $rules = $collection->getAttribute('rules', []);
+    public function decode(Document $collection, Document $document):Document
+    {
+        $rules = $collection->getAttribute('attributes', []);
 
-    //     foreach ($rules as $key => $rule) {
-    //         $key = $rule->getAttribute('key', null);
-    //         $type = $rule->getAttribute('type', null);
-    //         $array = $rule->getAttribute('array', false);
-    //         $filters = $rule->getAttribute('filter', []);
-    //         $value = $document->getAttribute($key, null);
+        foreach ($rules as $rule) {
+            $key = $rule['$id'] ?? '';
+            $type = $rule['type'] ?? '';
+            $array = $rule['array'] ?? false;
+            $filters = $rule['filters'] ?? [];
+            $value = $document->getAttribute($key, null);
 
-    //         if (($value !== null)) {
-    //             if ($type === self::VAR_DOCUMENT) {
-    //                 if($array) {
-    //                     $list = [];
-    //                     foreach ($value as $child) {
-    //                         $list[] = $this->encode($child);
-    //                     }
+            if($array) {
+                $value = json_decode($value, true);
+            }
+            else {
+                $value = [$value];
+            }
 
-    //                     $document->setAttribute($key, $list);
-    //                 } else {
-    //                     $document->setAttribute($key, $this->encode($value));
-    //                 }
-    //             } else {
-    //                 foreach ($filters as $filter) {
-    //                     $value = $this->encodeAttribute($filter, $value);
-    //                     $document->setAttribute($key, $value);
-    //                 }
-    //             }
-    //         }
-    //     }
+            foreach ($value as &$node) {
+                switch ($type) {
+                    case self::VAR_BOOLEAN:
+                        $node = (bool)$node;
+                        break;
+                    case self::VAR_INTEGER:
+                        $node = (int)$node;
+                        break;
+                    case self::VAR_FLOAT:
+                        $node = (float)$node;
+                        break;
+                    
+                    default:
+                        # code...
+                        break;
+                }
+            }
+            
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
+        }
 
-    //     return $document;
-    // }
+        return $document;
+    }
 
-    // public function decode(Document $document):Document
-    // {
-    //     if($document->getCollection() === null) {
-    //         return $document;
-    //     }
+    /**
+     * Encode Attribute
+     * 
+     * @param string $name
+     * @param mixed $value
+     */
+    static protected function encodeAttribute(string $name, $value)
+    {
+        if (!isset(self::$filters[$name])) {
+            return $value;
+            throw new Exception('Filter not found');
+        }
 
-    //     $collection = $this->getDocument(self::COLLECTIONS, $document->getCollection(), true , false);
-    //     $rules = $collection->getAttribute('rules', []);
+        try {
+            $value = self::$filters[$name]['encode']($value);
+        } catch (\Throwable $th) {
+            $value = null;
+        }
 
-    //     foreach ($rules as $key => $rule) {
-    //         $key = $rule->getAttribute('key', null);
-    //         $type = $rule->getAttribute('type', null);
-    //         $array = $rule->getAttribute('array', false);
-    //         $filters = $rule->getAttribute('filter', []);
-    //         $value = $document->getAttribute($key, null);
+        return $value;
+    }
 
-    //         if (($value !== null)) {
-    //             if ($type === self::VAR_DOCUMENT) {
-    //                 if($array) {
-    //                     $list = [];
-    //                     foreach ($value as $child) {
-    //                         $list[] = $this->decode($child);
-    //                     }
+    /**
+     * Decode Attribute
+     * 
+     * @param string $name
+     * @param mixed $value
+     */
+    static protected function decodeAttribute(string $name, $value)
+    {
+        if (!isset(self::$filters[$name])) {
+            return $value;
+            throw new Exception('Filter not found');
+        }
 
-    //                     $document->setAttribute($key, $list);
-    //                 } else {
-    //                     $document->setAttribute($key, $this->decode($value));
-    //                 }
-    //             } else {
-    //                 foreach (array_reverse($filters) as $filter) {
-    //                     $value = $this->decodeAttribute($filter, $value);
-    //                     $document->setAttribute($key, $value);
-    //                 }
-    //             }
-    //         }
-    //     }
+        try {
+            $value = self::$filters[$name]['decode']($value);
+        } catch (\Throwable $th) {
+            $value = null;
+        }
 
-    //     return $document;
-    // }
-
-    // /**
-    //  * Encode Attribute
-    //  * 
-    //  * @param string $name
-    //  * @param mixed $value
-    //  */
-    // static protected function encodeAttribute(string $name, $value)
-    // {
-    //     if (!isset(self::$filters[$name])) {
-    //         return $value;
-    //         throw new Exception('Filter not found');
-    //     }
-
-    //     try {
-    //         $value = self::$filters[$name]['encode']($value);
-    //     } catch (\Throwable $th) {
-    //         $value = null;
-    //     }
-
-    //     return $value;
-    // }
-
-    // /**
-    //  * Decode Attribute
-    //  * 
-    //  * @param string $name
-    //  * @param mixed $value
-    //  */
-    // static protected function decodeAttribute(string $name, $value)
-    // {
-    //     if (!isset(self::$filters[$name])) {
-    //         return $value;
-    //         throw new Exception('Filter not found');
-    //     }
-
-    //     try {
-    //         $value = self::$filters[$name]['decode']($value);
-    //     } catch (\Throwable $th) {
-    //         $value = null;
-    //     }
-
-    //     return $value;
-    // }
+        return $value;
+    }
 
     /**
      * Get 13 Chars Unique ID.

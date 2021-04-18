@@ -4,9 +4,11 @@ namespace Utopia\Database\Adapter;
 
 use PDO;
 use Exception;
+use PDOException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate;
 
 class MariaDB extends Adapter
 {
@@ -152,17 +154,7 @@ class MariaDB extends Adapter
         $type = $this->getSQLType($type, $size, $signed);
 
         if($array) {
-            return $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$name}_arrays_{$id} (
-                    `_id` INT(11) unsigned NOT NULL AUTO_INCREMENT,
-                    `_uid` CHAR(13) NOT NULL,
-                    `_order` INT(11) unsigned NOT NULL,
-                    `{$id}` {$type},
-                    PRIMARY KEY (`_id`),
-                    INDEX `_index1` (`_uid`),
-                    INDEX `_index2` (`_uid` ASC, `_order` ASC)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-                ->execute();
+            $type = 'LONGTEXT';
         }
 
         return $this->getPDO()
@@ -184,12 +176,6 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-
-        if($array) {
-            return $this->getPDO()
-                ->prepare("DROP TABLE {$this->getNamespace()}.{$name}_arrays_{$id};")
-                ->execute();
-        }
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
@@ -301,8 +287,47 @@ class MariaDB extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        $attributes = $document->getAttributes();
         $name = $this->filter($collection);
         $columns = '';
+
+        /**
+         * Insert Attributes
+         */
+        foreach ($attributes as $attribute => $value) { // Parse statement
+            $column = $this->filter($attribute);
+            $columns .= "`{$column}`" . '=:' . $column . ',';
+        }
+
+        $stmt = $this->getPDO()
+            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
+                SET {$columns} _uid = :_uid");
+
+        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        foreach ($attributes as $attribute => $value) {
+            if(is_array($value)) { // arrays & objects should be saved as strings
+                $value = json_encode($value);
+            }
+
+            $attribute = $this->filter($attribute);
+            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+        }
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    throw new Duplicate();
+                    break;
+                
+                default:
+                    throw $e;
+                    break;
+            }
+        }
 
         /**
          * Insert Permissions
@@ -321,54 +346,6 @@ class MariaDB extends Adapter
                 if(!$stmt->execute()) {
                     throw new Exception('Failed to save permission');
                 }
-            }
-        }
-
-        $arrays = [];
-        $attributes = $document->getAttributes();
-
-        /**
-         * Insert Attributes
-         */
-        foreach ($attributes as $attribute => $value) { // Parse statement
-            if(is_array($value)) { // arrays should be saved on dedicated table
-                $arrays[$attribute] = $value;
-                unset($attributes[$attribute]);
-                continue;
-            }
-
-            $column = $this->filter($attribute);
-            $columns .= "`{$column}`" . '=:' . $column . ',';
-        }
-
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid");
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        foreach ($attributes as $attribute => $value) {
-            $attribute = $this->filter($attribute);
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
-        }
-        
-        $stmt->execute();
-
-        /**
-         * Insert Arrays
-         */
-        foreach ($arrays as $attribute => $array) {
-            $attribute = $this->filter($attribute);
-
-            $stmt = $this->getPDO()
-                ->prepare("INSERT INTO {$this->getNamespace()}.{$name}_arrays_{$attribute}
-                    SET _uid = :_uid, _order = :_order, {$attribute} = :{$attribute}");
-
-            foreach ($array as $order => $value) {
-                $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-                $stmt->bindValue(':_order', $order, PDO::PARAM_INT);
-                $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
-                $stmt->execute();
             }
         }
         

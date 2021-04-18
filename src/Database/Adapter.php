@@ -153,11 +153,10 @@ abstract class Adapter
      * 
      * @param string $collection
      * @param string $id
-     * @param bool $array
      * 
      * @return bool
      */
-    abstract public function deleteAttribute(string $collection, string $id, bool $array = false): bool;
+    abstract public function deleteAttribute(string $collection, string $id): bool;
 
     /**
      * Create Index

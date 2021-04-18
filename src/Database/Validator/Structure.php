@@ -135,9 +135,9 @@
 //             return false;
 //         }
 
-//         $collection = $this->getCollection(Database::COLLECTION_COLLECTIONS, $document->getCollection());
+//         $collection = $this->getCollection(Database::COLLECTIONS, $document->getCollection());
 
-//         if (\is_null($collection->getId()) || Database::COLLECTION_COLLECTIONS != $collection->getCollection()) {
+//         if (\is_null($collection->getId()) || Database::COLLECTIONS != $collection->getCollection()) {
 //             $this->message = 'Collection "'.$collection->getCollection().'" not found';
 //             return false;
 //         }

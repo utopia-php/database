@@ -36,7 +36,7 @@ class Database
     const PERMISSION_WRITE = 'write';
 
     // Collections
-    const COLLECTION_COLLECTIONS = 'collections';
+    const COLLECTIONS = 'collections';
 
     /**
      * @var Adapter
@@ -141,11 +141,11 @@ class Database
     {
         $this->adapter->create();
 
-        $this->createCollection(self::COLLECTION_COLLECTIONS);
-        $this->createAttribute(self::COLLECTION_COLLECTIONS, 'name', self::VAR_STRING, 128);
-        $this->createAttribute(self::COLLECTION_COLLECTIONS, 'attributes', self::VAR_STRING, 8064);
-        $this->createAttribute(self::COLLECTION_COLLECTIONS, 'indexes', self::VAR_STRING, 8064);
-        $this->createIndex(self::COLLECTION_COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
+        $this->createCollection(self::COLLECTIONS);
+        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 128);
+        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 8064);
+        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 8064);
+        $this->createIndex(self::COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
 
         return true;
     }
@@ -181,11 +181,11 @@ class Database
     {
         $this->adapter->createCollection($id);
 
-        if($id === self::COLLECTION_COLLECTIONS) {
+        if($id === self::COLLECTIONS) {
             return new Document($this->collection);
         }
 
-        return $this->createDocument(Database::COLLECTION_COLLECTIONS, new Document([
+        return $this->createDocument(Database::COLLECTIONS, new Document([
             '$id' => $id,
             'name' => $id,
             'attributes' => [],
@@ -203,7 +203,7 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        return $this->getDocument(self::COLLECTION_COLLECTIONS, $id);
+        return $this->getDocument(self::COLLECTIONS, $id);
     }
 
     /**
@@ -241,7 +241,7 @@ class Database
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -251,6 +251,7 @@ class Database
             'size' => $size,
             'signed' => $signed,
             'array' => $array,
+            'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
 
         //$this->updateDocument();
@@ -284,13 +285,12 @@ class Database
      * 
      * @param string $collection
      * @param string $id
-     * @param bool $array
      * 
      * @return bool
      */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->adapter->deleteAttribute($collection, $id, $array);
+        return $this->adapter->deleteAttribute($collection, $id);
     }
 
     /**
@@ -361,11 +361,11 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
-        if($collection === self::COLLECTION_COLLECTIONS && $id === self::COLLECTION_COLLECTIONS) {
+        if($collection === self::COLLECTIONS && $id === self::COLLECTIONS) {
             return new Document($this->collection);
         }
 
-        $collection = $this->getDocument(self::COLLECTION_COLLECTIONS, $collection);
+        $collection = $this->getDocument(self::COLLECTIONS, $collection);
         $document   = $this->adapter->getDocument($collection->getId(), $id);
 
         // $validator = new Authorization($document, self::PERMISSION_READ);
@@ -508,7 +508,7 @@ class Database
     //         'filters' => [],
     //     ], $options);
 
-    //     $results = $this->adapter->find($this->getDocument(self::COLLECTION_COLLECTIONS, $collection), $options);
+    //     $results = $this->adapter->find($this->getDocument(self::COLLECTIONS, $collection), $options);
 
     //     foreach ($results as &$node) {
     //         $node = $this->decode(new Document($node));
@@ -592,7 +592,7 @@ class Database
     //         throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
     //     }
 
-    //     $new = new Document($this->adapter->updateDocument($this->getDocument(self::COLLECTION_COLLECTIONS, $new->getCollection()), $new->getId(), $new->getArrayCopy()));
+    //     $new = new Document($this->adapter->updateDocument($this->getDocument(self::COLLECTIONS, $new->getCollection()), $new->getId(), $new->getArrayCopy()));
 
     //     $new = $this->decode($new);
 
@@ -640,7 +640,7 @@ class Database
     //         return $document;
     //     }
 
-    //     $collection = $this->getDocument(self::COLLECTION_COLLECTIONS, $document->getCollection(), true , false);
+    //     $collection = $this->getDocument(self::COLLECTIONS, $document->getCollection(), true , false);
     //     $rules = $collection->getAttribute('rules', []);
 
     //     foreach ($rules as $key => $rule) {
@@ -680,7 +680,7 @@ class Database
     //         return $document;
     //     }
 
-    //     $collection = $this->getDocument(self::COLLECTION_COLLECTIONS, $document->getCollection(), true , false);
+    //     $collection = $this->getDocument(self::COLLECTIONS, $document->getCollection(), true , false);
     //     $rules = $collection->getAttribute('rules', []);
 
     //     foreach ($rules as $key => $rule) {

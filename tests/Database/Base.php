@@ -52,10 +52,10 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0));
 
         // Array
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string', Database::VAR_STRING, 128, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_list', Database::VAR_INTEGER, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_list', Database::VAR_FLOAT, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, true));
 
         // Delete
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
@@ -67,10 +67,10 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
 
         // Delete Array
-        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string', true));
-        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer', true));
-        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float', true));
-        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean', true));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_list'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer_list'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float_list'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_list'));
 
         static::getDatabase()->deleteCollection('attributes');
     }
@@ -156,8 +156,8 @@ abstract class Base extends TestCase
 
     // public function testCreateDocument()
     // {
-    //     $collection1 = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
+    //     $collection1 = self::$database->createDocument(Database::COLLECTIONS, [
+    //         '$collection' => Database::COLLECTIONS,
     //         '$permissions' => ['read' => ['*']],
     //         'name' => 'Create Documents',
     //         'rules' => [
@@ -326,8 +326,8 @@ abstract class Base extends TestCase
     //         'list' => [$collection1->getId()],
     //     ];
 
-    //     $collection2 = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
+    //     $collection2 = self::$database->createDocument(Database::COLLECTIONS, [
+    //         '$collection' => Database::COLLECTIONS,
     //         '$permissions' => ['read' => ['*']],
     //         'name' => 'Create Documents',
     //         'rules' => $rules,
@@ -562,13 +562,13 @@ abstract class Base extends TestCase
     // public function testGetDocument()
     // {
     //     // Mocked document
-    //     $document = self::$database->getDocument(Database::COLLECTION_COLLECTIONS, Database::COLLECTION_USERS);
+    //     $document = self::$database->getDocument(Database::COLLECTIONS, Database::COLLECTION_USERS);
 
     //     $this->assertEquals(Database::COLLECTION_USERS, $document->getId());
-    //     $this->assertEquals(Database::COLLECTION_COLLECTIONS, $document->getCollection());
+    //     $this->assertEquals(Database::COLLECTIONS, $document->getCollection());
 
-    //     $collection1 = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
+    //     $collection1 = self::$database->createDocument(Database::COLLECTIONS, [
+    //         '$collection' => Database::COLLECTIONS,
     //         '$permissions' => ['read' => ['*']],
     //         'name' => 'Create Documents',
     //         'rules' => [
@@ -637,8 +637,8 @@ abstract class Base extends TestCase
 
     // public function testUpdateDocument()
     // {
-    //     $collection1 = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
+    //     $collection1 = self::$database->createDocument(Database::COLLECTIONS, [
+    //         '$collection' => Database::COLLECTIONS,
     //         '$permissions' => ['read' => ['*']],
     //         'name' => 'Create Documents',
     //         'rules' => [
@@ -901,8 +901,8 @@ abstract class Base extends TestCase
     //         'list' => [$collection1->getId()],
     //     ];
 
-    //     $collection2 = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
+    //     $collection2 = self::$database->createDocument(Database::COLLECTIONS, [
+    //         '$collection' => Database::COLLECTIONS,
     //         '$permissions' => ['read' => ['*']],
     //         'name' => 'Create Documents',
     //         'rules' => $rules,
@@ -1360,8 +1360,8 @@ abstract class Base extends TestCase
 
     // public function testDeleteDocument()
     // {
-    //     $collection1 = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, [
-    //         '$collection' => Database::COLLECTION_COLLECTIONS,
+    //     $collection1 = self::$database->createDocument(Database::COLLECTIONS, [
+    //         '$collection' => Database::COLLECTIONS,
     //         '$permissions' => ['read' => ['*']],
     //         'name' => 'Create Documents',
     //         'rules' => [
@@ -1448,7 +1448,7 @@ abstract class Base extends TestCase
     //     $movies = $data['movies'];
 
     //     foreach ($collections as $key => &$collection) {
-    //         $collection = self::$database->createDocument(Database::COLLECTION_COLLECTIONS, $collection);
+    //         $collection = self::$database->createDocument(Database::COLLECTIONS, $collection);
     //         self::$database->createCollection($collection->getId(), [], []);
     //     }
 

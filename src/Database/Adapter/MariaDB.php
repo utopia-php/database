@@ -74,15 +74,15 @@ class MariaDB extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $name
+     * @param string $id
      * @return bool
      */
-    public function createCollection(string $name): bool
+    public function createCollection(string $id): bool
     {
-        $name = $this->filter($name);
+        $id = $this->filter($id);
 
         $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$name}_permissions (
+            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id}_permissions (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(13) NOT NULL,
                 `_action` CHAR(128) NOT NULL,
@@ -94,7 +94,7 @@ class MariaDB extends Adapter
             ->execute();
 
         return $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$name} (
+            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(13) NOT NULL,
                 PRIMARY KEY (`_id`),
@@ -118,19 +118,19 @@ class MariaDB extends Adapter
     /**
      * Delete Collection
      * 
-     * @param string $name
+     * @param string $id
      * @return bool
      */
-    public function deleteCollection(string $name): bool
+    public function deleteCollection(string $id): bool
     {
-        $name = $this->filter($name);
+        $id = $this->filter($id);
         
         $this->getPDO()
-            ->prepare("DROP TABLE {$this->getNamespace()}.{$name}_permissions;")
+            ->prepare("DROP TABLE {$this->getNamespace()}.{$id}_permissions;")
             ->execute();
 
         return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getNamespace()}.{$name};")
+            ->prepare("DROP TABLE {$this->getNamespace()}.{$id};")
             ->execute();
     }
 
@@ -267,7 +267,7 @@ class MariaDB extends Adapter
 
         $document = $stmt->fetch();
 
-        $document['$uid'] = $document['_uid'];
+        $document['$id'] = $document['_uid'];
         $document['$permissions'] = [Database::PERMISSION_READ => [], Database::PERMISSION_WRITE => []];
         unset($document['_id']);
         unset($document['_uid']);

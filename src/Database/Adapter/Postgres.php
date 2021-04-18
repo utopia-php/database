@@ -78,12 +78,12 @@ class Postgres extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $name
+     * @param string $id
      * @return bool
      */
-    public function createCollection(string $name): bool
+    public function createCollection(string $id): bool
     {
-        $name = $this->filter($name).'_documents';
+        $name = $this->filter($id).'_documents';
 
         return $this->getPDO()
             ->prepare("CREATE TABLE {$this->getNamespace()}.{$name}(
@@ -105,12 +105,12 @@ class Postgres extends Adapter
     /**
      * Delete Collection
      * 
-     * @param string $name
+     * @param string $id
      * @return bool
      */
-    public function deleteCollection(string $name): bool
+    public function deleteCollection(string $id): bool
     {
-        $name = $this->filter($name).'_documents';
+        $name = $this->filter($id).'_documents';
 
         return $this->getPDO()
             ->prepare("DROP TABLE {$this->getNamespace()}.{$name};")

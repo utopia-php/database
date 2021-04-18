@@ -35,7 +35,7 @@ abstract class Base extends TestCase
      */
     public function testCreateDeleteCollection()
     {
-        $this->assertEquals(true, static::getDatabase()->createCollection('actors'));
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
     }
 

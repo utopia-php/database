@@ -44,6 +44,50 @@ class Database
     protected $adapter;
 
     /**
+     * Parent Collection
+     * Defines the structure for both system and custom collections
+     */
+    protected $collection = [
+        '$id' => 'collections',
+        'name' => 'collections',
+        'attributes' => [
+            [
+                '$id' => 'type',
+                'type' => self::VAR_STRING,
+                'size' => 64,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'size',
+                'type' => self::VAR_INTEGER,
+                'size' => 0,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'signed',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'array',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]
+        ],
+        'indexes' => [],
+    ];
+
+    /**
      * @var array
      */
     static public $filters = [];
@@ -97,28 +141,11 @@ class Database
     {
         $this->adapter->create();
 
-        $this->createCollection(self::METADATA.'_collections');
-        $this->createAttribute(self::METADATA.'_collections', 'name', self::VAR_STRING, 128);
-        $this->createIndex(self::METADATA.'_collections', '_key_1', self::INDEX_UNIQUE, ['name']);
-        
-        $this->createCollection(self::METADATA.'_collections_attrubutes');
-        $this->createAttribute(self::METADATA.'_collections_attrubutes', 'collection', self::VAR_STRING, 128);
-        $this->createAttribute(self::METADATA.'_collections_attrubutes', 'id', self::VAR_STRING, 128);
-        $this->createAttribute(self::METADATA.'_collections_attrubutes', 'type', self::VAR_STRING, 128);
-        $this->createAttribute(self::METADATA.'_collections_attrubutes', 'size', self::VAR_INTEGER, 0, false);
-        $this->createAttribute(self::METADATA.'_collections_attrubutes', 'array', self::VAR_BOOLEAN, 0);
-        $this->createIndex(self::METADATA.'_collections_attrubutes', '_key_1', self::INDEX_KEY, ['collection']);
-        $this->createIndex(self::METADATA.'_collections_attrubutes', '_key_2', self::INDEX_KEY, ['id']);
-
-        $this->createCollection(self::METADATA.'_collections_indexes');
-        $this->createAttribute(self::METADATA.'_collections_indexes', 'collection', self::VAR_STRING, 128);
-        $this->createAttribute(self::METADATA.'_collections_indexes', 'id', self::VAR_STRING, 128);
-        $this->createAttribute(self::METADATA.'_collections_indexes', 'type', self::VAR_STRING, 128);
-        $this->createAttribute(self::METADATA.'_collections_indexes', 'attributes', self::VAR_STRING, 128, true, true);
-        $this->createAttribute(self::METADATA.'_collections_indexes', 'lengths', self::VAR_INTEGER, 11, true, true);
-        $this->createAttribute(self::METADATA.'_collections_indexes', 'orders', self::VAR_STRING, 4, true, true);
-        $this->createIndex(self::METADATA.'_collections_indexes', '_key_1', self::INDEX_KEY, ['collection']);
-        $this->createIndex(self::METADATA.'_collections_indexes', '_key_2', self::INDEX_KEY, ['id']);
+        $this->createCollection(self::COLLECTION_COLLECTIONS);
+        $this->createAttribute(self::COLLECTION_COLLECTIONS, 'name', self::VAR_STRING, 128);
+        $this->createAttribute(self::COLLECTION_COLLECTIONS, 'attributes', self::VAR_STRING, 8064);
+        $this->createAttribute(self::COLLECTION_COLLECTIONS, 'indexes', self::VAR_STRING, 8064);
+        $this->createIndex(self::COLLECTION_COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
 
         return true;
     }
@@ -146,13 +173,37 @@ class Database
     /**
      * Create Collection
      * 
-     * @param string $name
+     * @param string $id
      * 
-     * @return bool
+     * @return Document
      */
-    public function createCollection(string $name): bool
+    public function createCollection(string $id): Document
     {
-        return $this->adapter->createCollection($name);
+        $this->adapter->createCollection($id);
+
+        if($id === self::COLLECTION_COLLECTIONS) {
+            return new Document($this->collection);
+        }
+
+        return $this->createDocument(Database::COLLECTION_COLLECTIONS, new Document([
+            '$id' => $id,
+            'name' => $id,
+            'attributes' => [],
+            'indexes' => [],
+        ]));
+    }
+
+    /**
+     * Get Collection
+     * 
+     * @param string $collection
+     * @param string $id
+     *
+     * @return Document
+     */
+    public function getCollection(string $id): Document
+    {
+        return $this->getDocument(self::COLLECTION_COLLECTIONS, $id);
     }
 
     /**
@@ -168,13 +219,15 @@ class Database
     /**
      * Delete Collection
      * 
-     * @param string $name
+     * @param string $id
      * 
      * @return bool
      */
-    public function deleteCollection(string $name): bool
+    public function deleteCollection(string $id): bool
     {
-        return $this->adapter->deleteCollection($name);
+        // TODO Delete collection document first
+
+        return $this->adapter->deleteCollection($id);
     }
 
     /**
@@ -190,6 +243,18 @@ class Database
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
+        $collection = $this->getCollection($collection);
+
+        $collection->setAttribute('attributes', new Document([
+            '$id' => $id,
+            'type' => $type,
+            'size' => $size,
+            'signed' => $signed,
+            'array' => $array,
+        ]), Document::SET_TYPE_APPEND);
+
+        //$this->updateDocument();
+
         switch ($type) {
             case self::VAR_STRING:
                 if($size > $this->adapter->getStringLimit()) {
@@ -211,7 +276,7 @@ class Database
                 break;
         }
 
-        return $this->adapter->createAttribute($collection, $id, $type, $size, $signed, $array);
+        return $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
     }
 
     /**
@@ -296,7 +361,12 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
-        $document = $this->adapter->getDocument($collection, $id);
+        if($collection === self::COLLECTION_COLLECTIONS && $id === self::COLLECTION_COLLECTIONS) {
+            return new Document($this->collection);
+        }
+
+        $collection = $this->getDocument(self::COLLECTION_COLLECTIONS, $collection);
+        $document   = $this->adapter->getDocument($collection->getId(), $id);
 
         // $validator = new Authorization($document, self::PERMISSION_READ);
 
@@ -322,10 +392,6 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        if(!empty($document->getId())) {
-            throw new Exception('Use update method instead of create');
-        }
-
         // $validator = new Authorization($document, self::PERMISSION_WRITE);
 
         // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
@@ -338,9 +404,9 @@ class Database
         // if (!$validator->isValid($document)) {
         //     throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
         // }
-        
+
         $document
-            ->setAttribute('$id', $this->getId())
+            ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
         ;
         
         $document = $this->adapter->createDocument($collection, $document);
@@ -348,6 +414,79 @@ class Database
         // $document = $this->decode($document);
 
         return $document;
+    }
+
+    /**
+     * Update Document
+     * 
+     * @param array $collection
+     * @param array $id
+     * @param array $data
+     *
+     * @return Document|false
+     *
+     * @throws Exception
+     */
+    public function updateDocument(string $collection, string $id, array $data): Document
+    {
+        if (!isset($data['$id'])) {
+            throw new Exception('Must define $id attribute');
+        }
+
+        $document = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
+
+        // Make sure reserved keys stay constant
+        $data['$id'] = $document->getId();
+        $data['$collection'] = $document->getCollection();
+
+        // $validator = new Authorization($document, 'write');
+
+        // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
+        //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+        // }
+
+        $new = new Document($data);
+
+        // if (!$validator->isValid($new->getPermissions())) { // Check if user has write access to this document
+        //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+        // }
+
+        // $new = $this->encode($new);
+
+        // $validator = new Structure($this);
+
+        // if (!$validator->isValid($new)) { // Make sure updated structure still apply collection rules (if any)
+        //     throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+        // }
+
+        // $new = new Document($this->adapter->updateDocument($collection, $new->getArrayCopy()));
+        
+        // $new = $this->decode($new);
+
+        return $new;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $id
+     *
+     * @return Document|false
+     *
+     * @throws AuthorizationException
+     */
+    public function deleteDocument(string $collection, string $id): bool
+    {
+        // $document = $this->getDocument($collection, $id);
+
+        // $validator = new Authorization($document, 'write');
+
+        // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
+        //     throw new AuthorizationException($validator->getDescription());
+        // }
+
+        // return new Document($this->adapter->deleteDocument($collection, $id));
+
+        return false;
     }
 
     // /**
@@ -419,87 +558,6 @@ class Database
     // }
 
     // /**
-    //  * @param string $collection
-    //  * @param string $id
-    //  * @param bool $mock is mocked data allowed?
-    //  * @param bool $decode
-    //  *
-    //  * @return Document
-    //  */
-    // public function getDocument($collection, $id, bool $mock = true, bool $decode = true)
-    // {
-    //     if (\is_null($id)) {
-    //         return new Document([]);
-    //     }
-
-    //     if($mock === true
-    //         && isset($this->mocks[$id])) {
-    //         $document = $this->mocks[$id];
-    //     }
-    //     else {
-    //         $document = new Document($this->adapter->getDocument($this->getDocument(self::COLLECTION_COLLECTIONS, $collection), $id));
-    //     }
-
-    //     $validator = new Authorization($document, 'read');
-
-    //     if (!$validator->isValid($document->getPermissions())) { // Check if user has read access to this document
-    //         return new Document();
-    //     }
-
-    //     $document = ($decode) ? $this->decode($document) : $document;
-
-    //     return $document;
-    // }
-
-    // /**
-    //  * @param array $collection
-    //  * @param array $id
-    //  * @param array $data
-    //  *
-    //  * @return Document|false
-    //  *
-    //  * @throws Exception
-    //  */
-    // public function updateDocument(string $collection, string $id, array $data)
-    // {
-    //     if (!isset($data['$id'])) {
-    //         throw new Exception('Must define $id attribute');
-    //     }
-
-    //     $document = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
-
-    //     // Make sure reserved keys stay constant
-    //     $data['$id'] = $document->getId();
-    //     $data['$collection'] = $document->getCollection();
-
-    //     $validator = new Authorization($document, 'write');
-
-    //     if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-    //     }
-
-    //     $new = new Document($data);
-
-    //     if (!$validator->isValid($new->getPermissions())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-    //     }
-
-    //     $new = $this->encode($new);
-
-    //     $validator = new Structure($this);
-
-    //     if (!$validator->isValid($new)) { // Make sure updated structure still apply collection rules (if any)
-    //         throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-    //     }
-
-    //     $new = new Document($this->adapter->updateDocument($this->getDocument(self::COLLECTION_COLLECTIONS, $collection), $id, $new->getArrayCopy()));
-        
-    //     $new = $this->decode($new);
-
-    //     return $new;
-    // }
-
-    // /**
     //  * @param array $data
     //  *
     //  * @return Document|false
@@ -539,27 +597,6 @@ class Database
     //     $new = $this->decode($new);
 
     //     return $new;
-    // }
-
-    // /**
-    //  * @param string $collection
-    //  * @param string $id
-    //  *
-    //  * @return Document|false
-    //  *
-    //  * @throws AuthorizationException
-    //  */
-    // public function deleteDocument(string $collection, string $id)
-    // {
-    //     $document = $this->getDocument($collection, $id);
-
-    //     $validator = new Authorization($document, 'write');
-
-    //     if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription());
-    //     }
-
-    //     return new Document($this->adapter->deleteDocument($this->getDocument(self::COLLECTION_COLLECTIONS, $collection), $id));
     // }
 
     // /**

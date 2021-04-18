@@ -71,12 +71,12 @@ class MongoDB extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $name
+     * @param string $id
      * @return bool
      */
-    public function createCollection(string $name): bool
+    public function createCollection(string $id): bool
     {
-        return (!!$this->getDatabase()->createCollection($name));
+        return (!!$this->getDatabase()->createCollection($id));
     }
 
     /**
@@ -98,12 +98,12 @@ class MongoDB extends Adapter
     /**
      * Delete Collection
      * 
-     * @param string $name
+     * @param string $id
      * @return bool
      */
-    public function deleteCollection(string $name): bool
+    public function deleteCollection(string $id): bool
     {
-        return (!!$this->getDatabase()->dropCollection($name));
+        return (!!$this->getDatabase()->dropCollection($id));
     }
 
     /**

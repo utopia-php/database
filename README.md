@@ -24,6 +24,12 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 ```
 
+## TODOS
+
+- [ ] Validate original document before editing `$id`
+- [ ] Test duplicated document exception
+- [ ] Delete / Update documents before cleaning cache
+
 ## System Requirements
 
 Utopia Framework requires PHP 7.3 or later. We recommend using the latest PHP version whenever possible.
@@ -47,6 +53,11 @@ docker-compose exec tests vendor/bin/psalm --show-info=true
 
 + [https://twitter.com/eldadfux](https://twitter.com/eldadfux)
 + [https://github.com/eldadfux](https://github.com/eldadfux)
+
+**Brandon Leckemby**
+
++ [https://github.com/kodumbeats](https://github.com/kodumbeats)
++ [blog.leckemby.me](blog.leckemby.me)
 
 ## Copyright and license
 

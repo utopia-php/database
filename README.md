@@ -28,7 +28,9 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 - [ ] Validate original document before editing `$id`
 - [ ] Test duplicated document exception
+- [ ] Test no one can overwrite exciting documents/collections without permission
 - [ ] Delete / Update documents before cleaning cache
+- [ ] Test for query timeout limits
 
 ## System Requirements
 

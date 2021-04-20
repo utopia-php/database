@@ -533,9 +533,9 @@ class MariaDB extends Adapter
      * @param string $type
      * @param int $size
      * 
-     * @return string
+     * @return int
      */
-    protected function getPDOType($value): string
+    protected function getPDOType($value): int
     {
         switch (gettype($value)) {
             case 'string':
@@ -550,7 +550,7 @@ class MariaDB extends Adapter
                 return PDO::PARAM_INT;
             break;
 
-            case 'float':
+            // case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
             case 'double':
                 return PDO::PARAM_STR;
             break;

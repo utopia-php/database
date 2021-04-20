@@ -79,46 +79,6 @@ class Database
         'indexes' => [],
     ];
 
-    // protected $collection = [
-    //     '$id' => 'collections',
-    //     'name' => 'collections',
-    //     'attributes' => [
-    //         [
-    //             '$id' => 'type',
-    //             'type' => self::VAR_STRING,
-    //             'size' => 64,
-    //             'signed' => true,
-    //             'array' => false,
-    //             'filters' => [],
-    //         ],
-    //         [
-    //             '$id' => 'size',
-    //             'type' => self::VAR_INTEGER,
-    //             'size' => 0,
-    //             'signed' => true,
-    //             'array' => false,
-    //             'filters' => [],
-    //         ],
-    //         [
-    //             '$id' => 'signed',
-    //             'type' => self::VAR_BOOLEAN,
-    //             'size' => 0,
-    //             'signed' => true,
-    //             'array' => false,
-    //             'filters' => [],
-    //         ],
-    //         [
-    //             '$id' => 'array',
-    //             'type' => self::VAR_BOOLEAN,
-    //             'size' => 0,
-    //             'signed' => true,
-    //             'array' => false,
-    //             'filters' => [],
-    //         ]
-    //     ],
-    //     'indexes' => [],
-    // ];
-
     /**
      * @var array
      */
@@ -287,7 +247,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
     
         if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection);
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
  
         switch ($type) {
@@ -454,19 +414,20 @@ class Database
      * Update Document
      * 
      * @param string $collection
-     * @param array $document
+     * @param string $id
+     * @param Document $document
      *
      * @return Document
      *
      * @throws Exception
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if (!$document->getId()) {
+        if (!$document->getId() || !$id) {
             throw new Exception('Must define $id attribute');
         }
 
-        $old = $this->getDocument($collection, $document->getId()); // TODO make sure user don\'t need read permission for write operations
+        $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
 
         // Make sure reserved keys stay constant
         // $data['$id'] = $old->getId();

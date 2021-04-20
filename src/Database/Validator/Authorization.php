@@ -70,7 +70,7 @@ class Authorization extends Validator
             return false;
         }
 
-        $permission = null;
+        $permission = '';
 
         foreach ($permissions[$this->action] as $permission) {
             $permission = \str_replace(':{self}', ':'.$this->document->getId(), $permission);

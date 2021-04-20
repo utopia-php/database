@@ -189,7 +189,9 @@ class MariaDB extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param int $size
+     * @param array $attributes
+     * @param array $lengths
+     * @param array $orders
      * 
      * @return bool
      */
@@ -237,7 +239,7 @@ class MariaDB extends Adapter
      * @param string $collection
      * @param string $id
      *
-     * @return array
+     * @return Document
      */
     public function getDocument(string $collection, string $id): Document
     {
@@ -530,12 +532,11 @@ class MariaDB extends Adapter
     /**
      * Get PDO Type
      * 
-     * @param string $type
-     * @param int $size
+     * @param string $value
      * 
      * @return int
      */
-    protected function getPDOType($value): int
+    protected function getPDOType(string $value): int
     {
         switch (gettype($value)) {
             case 'string':

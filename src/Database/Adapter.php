@@ -188,7 +188,7 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      *
-     * @return array
+     * @return Document
      */
     abstract public function getDocument(string $collection, string $id): Document;
 

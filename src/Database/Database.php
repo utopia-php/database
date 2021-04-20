@@ -46,6 +46,8 @@ class Database
     /**
      * Parent Collection
      * Defines the structure for both system and custom collections
+     * 
+     * @var array
      */
     protected $collection = [
         '$id' => 'collections',
@@ -462,7 +464,7 @@ class Database
      * @param string $collection
      * @param string $id
      *
-     * @return Document|false
+     * @return false
      *
      * @throws AuthorizationException
      */
@@ -677,6 +679,8 @@ class Database
      * 
      * @param string $name
      * @param mixed $value
+     * 
+     * @return mixed
      */
     static protected function encodeAttribute(string $name, $value)
     {
@@ -699,6 +703,8 @@ class Database
      * 
      * @param string $name
      * @param mixed $value
+     * 
+     * @return mixed
      */
     static protected function decodeAttribute(string $name, $value)
     {

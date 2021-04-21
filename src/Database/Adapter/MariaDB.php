@@ -313,6 +313,7 @@ class MariaDB extends Adapter
             }
 
             $attribute = $this->filter($attribute);
+            $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
         }
 
@@ -355,7 +356,7 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Create Document
+     * Update Document
      *
      * @param string $collection
      * @param Document $document
@@ -388,6 +389,7 @@ class MariaDB extends Adapter
             }
 
             $attribute = $this->filter($attribute);
+            $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
         }
 
@@ -426,6 +428,41 @@ class MariaDB extends Adapter
         }
         
         return $document;
+    }
+
+    /**
+     * Delete Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    public function deleteDocument(string $collection, string $id): bool
+    {
+        $name = $this->filter($collection);
+
+        $stmt = $this->getPDO()
+            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}
+                WHERE _uid = :_uid LIMIT 1");
+
+        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+
+        if(!$stmt->execute()) {
+            throw new Exception('Failed to clean document');
+        }
+
+        $stmt = $this->getPDO()
+            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}_permissions
+                WHERE _uid = :_uid");
+
+        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+
+        if(!$stmt->execute()) {
+            throw new Exception('Failed to clean permissions');
+        }
+        
+        return true;
     }
 
     /**
@@ -544,7 +581,7 @@ class MariaDB extends Adapter
             break;
 
             case 'boolean':
-                return PDO::PARAM_BOOL;
+                return PDO::PARAM_INT;
             break;
 
             case 'integer':

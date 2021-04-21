@@ -137,7 +137,7 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testGetDocument($document)
+    public function testGetDocument(Document $document)
     {
         $document = static::getDatabase()->getDocument('documents', $document->getId());
 
@@ -152,6 +152,50 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+
+        return $document;
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testUpdateDocument(Document $document)
+    {
+        $document
+            ->setAttribute('string', 'text📝 updated')
+            ->setAttribute('integer', 6)
+            ->setAttribute('float', 5.56)
+            ->setAttribute('boolean', false)
+            ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+        ;
+
+        $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+
+        $this->assertNotEmpty(true, $new->getId());
+        $this->assertIsString($new->getAttribute('string'));
+        $this->assertEquals('text📝 updated', $new->getAttribute('string'));
+        $this->assertIsInt($new->getAttribute('integer'));
+        $this->assertEquals(6, $new->getAttribute('integer'));
+        $this->assertIsFloat($new->getAttribute('float'));
+        $this->assertEquals(5.56, $new->getAttribute('float'));
+        $this->assertIsBool($new->getAttribute('boolean'));
+        $this->assertEquals(false, $new->getAttribute('boolean'));
+        $this->assertIsArray($new->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+
+        return $document;
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testDeleteDocument(Document $document)
+    {
+        $result = $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
+        $document = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
+
+        $this->assertEquals(true, $result);
+        $this->assertEquals(true, $document->isEmpty());
     }
 
     // public function testCreateDocument()

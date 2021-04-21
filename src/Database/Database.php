@@ -364,11 +364,17 @@ class Database
         $collection = $this->getDocument(self::COLLECTIONS, $collection);
         $document   = $this->adapter->getDocument($collection->getId(), $id);
 
+        $document->setAttribute('$collection', $collection->getId());
+
         // $validator = new Authorization($document, self::PERMISSION_READ);
 
         // if (!$validator->isValid($document->getPermissions())) { // Check if user has read access to this document
         //     return new Document();
         // }
+
+        if($document->isEmpty()) {
+            return $document;
+        }
 
         $document = $this->decode($collection, $document);
 
@@ -403,6 +409,7 @@ class Database
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
+            ->setAttribute('$collection', $collection)
         ;
         
         $document = $this->adapter->createDocument($collection, $document);
@@ -478,9 +485,7 @@ class Database
         //     throw new AuthorizationException($validator->getDescription());
         // }
 
-        // return new Document($this->adapter->deleteDocument($collection, $id));
-
-        return false;
+        return $this->adapter->deleteDocument($collection, $id);
     }
 
     // /**

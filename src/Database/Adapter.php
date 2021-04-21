@@ -212,15 +212,15 @@ abstract class Adapter
      */
     abstract public function updateDocument(string $collection, Document $document): Document;
 
-    // /**
-    //  * Delete Node.
-    //  *
-    //  * @param Document $collection
-    //  * @param string $id
-    //  *
-    //  * @return array
-    //  */
-    // abstract public function deleteDocument(Document $collection, string $id): bool;
+    /**
+     * Delete Document.
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return array
+     */
+    abstract public function deleteDocument(string $collection, string $id): bool;
 
     // /**
     //  * Find.

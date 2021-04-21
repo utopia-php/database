@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "3f6639dbd84b14f560220fff38fcde12",
+    "content-hash": "dea2465791a58ea901b688ea9eae5b72",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -284,6 +284,59 @@
                 }
             ],
             "time": "2021-01-07T16:49:33+00:00"
+        },
+        {
+            "name": "utopia-php/cache",
+            "version": "0.3.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/cache.git",
+                "reference": "e6b8b99d445c4bba5f51857e3d2a3c39a42d73a2"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/e6b8b99d445c4bba5f51857e3d2a3c39a42d73a2",
+                "reference": "e6b8b99d445c4bba5f51857e3d2a3c39a42d73a2",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-redis": "*",
+                "php": ">=7.4"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^9.3",
+                "vimeo/psalm": "4.0.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Cache\\": "src/Cache"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Eldad Fux",
+                    "email": "eldad@appwrite.io"
+                }
+            ],
+            "description": "A simple cache library to manage application cache storing, loading and purging",
+            "keywords": [
+                "cache",
+                "framework",
+                "php",
+                "upf",
+                "utopia"
+            ],
+            "support": {
+                "issues": "https://github.com/utopia-php/cache/issues",
+                "source": "https://github.com/utopia-php/cache/tree/0.3.0"
+            },
+            "time": "2021-04-20T21:37:21+00:00"
         },
         {
             "name": "utopia-php/framework",

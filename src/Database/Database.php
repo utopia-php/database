@@ -178,16 +178,7 @@ class Database
         if($id === self::COLLECTIONS) {
             return new Document($this->collection);
         }
-
-        return $this->createDocument(Database::COLLECTIONS, new Document([
-            '$id' => $id,
-            '$read' => ['*'],
-            '$write' => ['*'],
-            'name' => $id,
-            'attributes' => [],
-            'indexes' => [],
-        ]));
-
+        
         return $this->createDocument(Database::COLLECTIONS, new Document([
             '$id' => $id,
             '$read' => ['*'],
@@ -218,7 +209,8 @@ class Database
      */
     public function listCollections(): array
     {
-        return $this->adapter->listCollections();
+        // TODO add a search here
+        return [];
     }
 
     /**
@@ -230,9 +222,9 @@ class Database
      */
     public function deleteCollection(string $id): bool
     {
-        // TODO Delete collection document first
+        $this->adapter->deleteCollection($id);
 
-        return $this->adapter->deleteCollection($id);
+        return $this->deleteDocument(self::COLLECTIONS, $id);
     }
 
     /**
@@ -297,7 +289,23 @@ class Database
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->adapter->deleteAttribute($collection, $id);
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $key => $value) {
+            if(isset($value['$id']) && $value['$id'] === $id) {
+                unset($attributes[$key]);
+            }
+        }
+
+        $collection->setAttribute('attributes', $attributes);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return $this->adapter->deleteAttribute($collection->getId(), $id);
     }
 
     /**
@@ -316,6 +324,20 @@ class Database
     {
         if(empty($attributes)) {
             throw new Exception('Missing attributes');
+        }
+
+        $collection = $this->getCollection($collection);
+
+        $collection->setAttribute('indexes', new Document([
+            '$id' => $id,
+            'type' => $type,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders,
+        ]), Document::SET_TYPE_APPEND);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
 
         switch ($type) {
@@ -342,7 +364,7 @@ class Database
                 break;
         }
 
-        return $this->adapter->createIndex($collection, $id, $type, $attributes, $lengths, $orders);
+        return $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
     }
 
     /**
@@ -355,7 +377,23 @@ class Database
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->adapter->deleteIndex($collection, $id);
+        $collection = $this->getCollection($collection);
+
+        $indexes = $collection->getAttribute('indexes', []);
+
+        foreach ($indexes as $key => $value) {
+            if(isset($value['$id']) && $value['$id'] === $id) {
+                unset($indexes[$key]);
+            }
+        }
+
+        $collection->setAttribute('indexes', $indexes);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return $this->adapter->deleteIndex($collection->getId(), $id);
     }
 
     /**

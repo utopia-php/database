@@ -815,4 +815,68 @@ class Database
         return [$method, $query];
     }
 
+    /**
+     * Parse query filters
+     *
+     * @param string $collection Collection name
+     * @param array $filters Array of document filters
+     *
+     * @return array
+     * */
+    public function parseQueries(string $collection, array $filters): array
+    {
+        $collection = $this->getCollection($collection);
+        $schema = $collection->getAttribute('attributes', []);
+
+        $output = [];
+        foreach ($filters as &$filter)
+        {
+            $stanzas = mb_substr_count($filter, ".") + 1;
+    
+            switch ($stanzas):
+                case 2:
+                    $input = explode('.', $filter);
+    
+                    $attribute = $input[0];
+                    $expression = $input[1];
+                    [$method, $query] = $this->parseExpression($expression);
+                    // $attributeType = $schema[\array_search($attribute, $schema)]['type'];
+                    $attributeType = $schema[array_search($attribute, array_column($schema, '$id'))]['type'];
+                    array_push($output, [
+                        'collection' => $collection->getId(),
+                        'attribute' => $attribute,
+                        'method' => $method,
+                        'query' => $query,
+                        'queryType' => $attributeType,
+                    ]);
+                    break;
+
+                // Copypasta code - remove/refactor when collection relations work
+                //
+                // case 3:
+                //     $input = explode('.', $filter);
+    
+                //     $attribute = $input[0];
+                //     $childAttribute = $input[1];
+                //     $expression = $input[2];
+                //     [$method, $query] = pickAttribute($expression);
+                //     $attributeType = checkType($schema, $collection, $attribute, $childAttribute);
+                //     array_push($output, [
+                //         'input' => $filter,
+                //         'output' => [
+                //             [
+                //                 'collection' => $collection,
+                //                 'attribute' => $attribute,
+                //                 'childAttribute' => $childAttribute,
+                //                 'method' => $method,
+                //                 'query' => $query,
+                //                 'queryType' => $attributeType, 
+                //             ]
+                //         ],
+                //     ]);
+                //     break;
+            endswitch;
+        }
+        return $output;
+    }
 }

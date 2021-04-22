@@ -436,9 +436,9 @@ class MariaDB extends Adapter
      * Delete Document
      *
      * @param string $collection
-     * @param Document $document
+     * @param string $id
      *
-     * @return Document
+     * @return bool
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -571,11 +571,11 @@ class MariaDB extends Adapter
     /**
      * Get PDO Type
      * 
-     * @param string $value
+     * @param mixed $value
      * 
      * @return int
      */
-    protected function getPDOType(string $value): int
+    protected function getPDOType($value): int
     {
         switch (gettype($value)) {
             case 'string':

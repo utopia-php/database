@@ -525,7 +525,7 @@ class Database
      * @param string $collection
      * @param string $id
      *
-     * @return false
+     * @return bool
      *
      * @throws AuthorizationException
      */

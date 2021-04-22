@@ -218,7 +218,7 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      *
-     * @return array
+     * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
 

@@ -32,7 +32,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 - [x] Updated collection on index creation
 - [x] Updated collection on index deletion
 - [ ] Validate original document before editing `$id`
-- [ ] Test duplicated document exception is being thrown
+- [x] Test duplicated document exception is being thrown
 - [ ] Test no one can overwrite exciting documents/collections without permission
 - [ ] Delete / Update documents before cleaning cache
 - [ ] Test for query timeout limits

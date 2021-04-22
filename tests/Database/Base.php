@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
@@ -172,129 +173,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-
-        return $document;
-    }
-
-    /**
-     * @depends testCreateDocument
-     */
-    public function testReadPermissionsSuccess(Document $document)
-    {
-        $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['*'],
-            '$write' => ['*'],
-            'string' => 'text📝',
-            'integer' => 5,
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));
-
-        $this->assertEquals(false, $document->isEmpty());
-
-        Authorization::cleanRoles();
-
-        $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
-
-        $this->assertEquals(true, $document->isEmpty());
-        
-        Authorization::setRole('*');
-
-        return $document;
-    }
-
-    /**
-     * @depends testCreateDocument
-     */
-    public function testReadPermissionsFailure(Document $document)
-    {
-        $this->expectException(ExceptionAuthorization::class);
-
-        $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['user1'],
-            '$write' => ['user1'],
-            'string' => 'text📝',
-            'integer' => 5,
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));           
-
-        return $document;
-    }
-
-    /**
-     * @depends testCreateDocument
-     */
-    public function testWritePermissionsSuccess(Document $document)
-    {
-        $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['*'],
-            '$write' => ['*'],
-            'string' => 'text📝',
-            'integer' => 5,
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));
-
-        $this->assertEquals(false, $document->isEmpty());
-
-        return $document;
-    }
-
-    /**
-     * @depends testCreateDocument
-     */
-    public function testWritePermissionsFailure(Document $document)
-    {
-        $this->expectException(ExceptionAuthorization::class);
-
-        Authorization::cleanRoles();
-
-        $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['*'],
-            '$write' => ['*'],
-            'string' => 'text📝',
-            'integer' => 5,
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));
-
-        return $document;
-    }
-
-    /**
-     * @depends testCreateDocument
-     */
-    public function testWritePermissionsUpdateFailure(Document $document)
-    {
-        $this->expectException(ExceptionAuthorization::class);
-
-        $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['*'],
-            '$write' => ['*'],
-            'string' => 'text📝',
-            'integer' => 5,
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));
-
-        Authorization::cleanRoles();
-
-        $document = static::getDatabase()->updateDocument('documents', $document->getId(), new Document([
-            '$id' => $document->getId(),
-            '$read' => ['*'],
-            '$write' => ['*'],
-            'string' => 'text📝',
-            'integer' => 5,
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));
 
         return $document;
     }
@@ -1684,5 +1562,144 @@ abstract class Base extends TestCase
     public function decodeTest()
     {
         $this->assertEquals('1', '1');
+    }
+
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testReadPermissionsSuccess(Document $document)
+    {
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['*'],
+            '$write' => ['*'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        $this->assertEquals(false, $document->isEmpty());
+
+        Authorization::cleanRoles();
+
+        $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
+
+        $this->assertEquals(true, $document->isEmpty());
+        
+        Authorization::setRole('*');
+
+        return $document;
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testReadPermissionsFailure(Document $document)
+    {
+        $this->expectException(ExceptionAuthorization::class);
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['user1'],
+            '$write' => ['user1'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));           
+
+        return $document;
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testWritePermissionsSuccess(Document $document)
+    {
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['*'],
+            '$write' => ['*'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        $this->assertEquals(false, $document->isEmpty());
+
+        return $document;
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testWritePermissionsFailure(Document $document)
+    {
+        $this->expectException(ExceptionAuthorization::class);
+
+        Authorization::cleanRoles();
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['*'],
+            '$write' => ['*'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        return $document;
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testWritePermissionsUpdateFailure(Document $document)
+    {
+        $this->expectException(ExceptionAuthorization::class);
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['*'],
+            '$write' => ['*'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        Authorization::cleanRoles();
+
+        $document = static::getDatabase()->updateDocument('documents', $document->getId(), new Document([
+            '$id' => $document->getId(),
+            '$read' => ['*'],
+            '$write' => ['*'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        return $document;
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionDuplicate(Document $document)
+    {
+        $this->expectException(Duplicate::class);
+
+        $document->setAttribute('$id', 'duplicated');
+        
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+        
+        return $document;
     }
 }

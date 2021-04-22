@@ -244,13 +244,14 @@ class MariaDB extends Adapter
     public function getDocument(string $collection, string $id): Document
     {
         $name = $this->filter($collection);
-
+        
         $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}
             WHERE _uid = :_uid
             LIMIT 1;
         ");
 
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+
         $stmt->execute();
 
         $document = $stmt->fetch();
@@ -342,7 +343,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
-        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {
+        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
             foreach ($roles as $key => $role) {
                 $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
                 $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
@@ -401,7 +402,7 @@ class MariaDB extends Adapter
         /**
          * Update Permissions
          */
-        $stmt = $this->getPDO()
+        $stmt = $this->getPDO() // Clean all old permissions to avoid any duplications
             ->prepare("DELETE FROM {$this->getNamespace()}.{$name}_permissions
                 WHERE _uid = :_uid");
 
@@ -417,7 +418,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
-        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {
+        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) { // Insert all permissions
             foreach ($roles as $key => $role) {
                 $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
                 $stmt->bindValue(':_role', $role, PDO::PARAM_STR);

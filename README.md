@@ -26,18 +26,18 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 ## TODOS
 
-- [ ] Updated collection on deletion
+- [x] Updated collection on deletion
 - [x] Updated collection on attribute creation
-- [ ] Updated collection on attribute deletion
-- [ ] Updated collection on index creation
-- [ ] Updated collection on index deletion
+- [x] Updated collection on attribute deletion
+- [x] Updated collection on index creation
+- [x] Updated collection on index deletion
 - [ ] Validate original document before editing `$id`
 - [ ] Test duplicated document exception is being thrown
 - [ ] Test no one can overwrite exciting documents/collections without permission
 - [ ] Delete / Update documents before cleaning cache
 - [ ] Test for query timeout limits
+- [x] Add autorization validation layer
 - [ ] Add strcture validation layer (based on new collection structure)
-- [ ] Add autorization validation layer
 - [ ] Add cache layer
 - [ ] Implement find method
 - [ ] Merge new filter syntax parser

@@ -23,10 +23,8 @@ class AuthorizationTest extends TestCase
         $this->document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
-            '$permissions' => [
-                'read' => ['user:123', 'team:123'],
-                'write' => ['*'],
-            ],
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['*'],
         ]);
         $this->object = new Authorization($this->document, 'read');
     }
@@ -37,7 +35,7 @@ class AuthorizationTest extends TestCase
 
     public function testValues()
     {
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), false);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
         
         Authorization::setRole('user:456');
         Authorization::setRole('user:123');
@@ -47,37 +45,37 @@ class AuthorizationTest extends TestCase
         $this->assertEquals(Authorization::isRole(''), false);
         $this->assertEquals(Authorization::isRole('*'), true);
 
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), true);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
         
         Authorization::cleanRoles();
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), false);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
 
         Authorization::setRole('team:123');
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), true);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
         
         Authorization::cleanRoles();
         Authorization::disable();
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), true);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
 
         Authorization::reset();
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), false);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
 
         Authorization::setDefaultStatus(false);
         Authorization::disable();
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), true);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
 
         Authorization::reset();
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), true);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
 
         Authorization::enable();
         
-        $this->assertEquals($this->object->isValid($this->document->getPermissions()), false);
+        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
 
         Authorization::setRole('textX');
 

@@ -256,7 +256,8 @@ class MariaDB extends Adapter
         $document = $stmt->fetch();
 
         $document['$id'] = $document['_uid'];
-        $document['$permissions'] = [Database::PERMISSION_READ => [], Database::PERMISSION_WRITE => []];
+        $document['$read'] = [];
+        $document['$write'] = [];
         unset($document['_id']);
         unset($document['_uid']);
 
@@ -273,7 +274,7 @@ class MariaDB extends Adapter
         foreach ($permissions as $permission) {
             $action = $permission['_action'] ?? '';
             $role = $permission['_role'] ?? '';
-            $document['$permissions'][$action][] = $role;
+            $document['$'.$action][] = $role;
         }
 
         return new Document($document);
@@ -341,7 +342,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
-        foreach ($document->getPermissions() as $action => $roles) {
+        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {
             foreach ($roles as $key => $role) {
                 $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
                 $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
@@ -416,7 +417,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
-        foreach ($document->getPermissions() as $action => $roles) {
+        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {
             foreach ($roles as $key => $role) {
                 $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
                 $stmt->bindValue(':_role', $role, PDO::PARAM_STR);

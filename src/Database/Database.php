@@ -181,6 +181,17 @@ class Database
 
         return $this->createDocument(Database::COLLECTIONS, new Document([
             '$id' => $id,
+            '$read' => ['*'],
+            '$write' => ['*'],
+            'name' => $id,
+            'attributes' => [],
+            'indexes' => [],
+        ]));
+
+        return $this->createDocument(Database::COLLECTIONS, new Document([
+            '$id' => $id,
+            '$read' => ['*'],
+            '$write' => ['*'],
             'name' => $id,
             'attributes' => [],
             'indexes' => [],
@@ -366,11 +377,11 @@ class Database
 
         $document->setAttribute('$collection', $collection->getId());
 
-        // $validator = new Authorization($document, self::PERMISSION_READ);
+        $validator = new Authorization($document, self::PERMISSION_READ);
 
-        // if (!$validator->isValid($document->getPermissions())) { // Check if user has read access to this document
-        //     return new Document();
-        // }
+        if (!$validator->isValid($document->getRead())) { // Check if user has read access to this document
+            return new Document();
+        }
 
         if($document->isEmpty()) {
             return $document;
@@ -396,7 +407,7 @@ class Database
     {
         // $validator = new Authorization($document, self::PERMISSION_WRITE);
 
-        // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
+        // if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
         //     throw new AuthorizationException($validator->getDescription());
         // }
 
@@ -444,11 +455,11 @@ class Database
 
         // $validator = new Authorization($old, 'write');
 
-        // if (!$validator->isValid($old->getPermissions())) { // Check if user has write access to this document
+        // if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
         //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
         // }
 
-        // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
+        // if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
         //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
         // }
 
@@ -481,7 +492,7 @@ class Database
 
         // $validator = new Authorization($document, 'write');
 
-        // if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
+        // if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
         //     throw new AuthorizationException($validator->getDescription());
         // }
 
@@ -573,13 +584,13 @@ class Database
 
     //     $validator = new Authorization($document, 'write');
 
-    //     if (!$validator->isValid($document->getPermissions())) { // Check if user has write access to this document
+    //     if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
     //         throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
     //     }
 
     //     $new = new Document($data);
 
-    //     if (!$validator->isValid($new->getPermissions())) { // Check if user has write access to this document
+    //     if (!$validator->isValid($new->getWrite())) { // Check if user has write access to this document
     //         throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
     //     }
 

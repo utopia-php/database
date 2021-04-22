@@ -32,32 +32,18 @@ class Permissions extends Validator
      *
      * @return bool
      */
-    public function isValid($value)
+    public function isValid($roles)
     {
-        if (!\is_array($value) && !empty($value)) {
-            $this->message = 'Invalid permissions data structure';
-
+        if(!is_array($roles)) {
+            $this->message = 'Permissions roles must be an array of strings';
             return false;
         }
 
-        foreach ($value as $action => $roles) {
-            if (!\in_array($action, ['read', 'write', 'execute'])) {
-                $this->message = 'Unknown action ("'.$action.'")';
+        foreach ($roles as $role) {
+            if (!\is_string($role)) {
+                $this->message = 'Permissions role must be of type string.';
 
                 return false;
-            }
-
-            if(!is_array($roles)) {
-                $this->message = 'Permissions roles must be an array of strings';
-                return false;
-            }
-
-            foreach ($roles as $role) {
-                if (!\is_string($role)) {
-                    $this->message = 'Permissions role must be of type string.';
-
-                    return false;
-                }
             }
         }
 

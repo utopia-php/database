@@ -25,46 +25,20 @@ class PermissionsTest extends TestCase
         $document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
-            '$permissions' => [
-                'read' => ['user:123', 'team:123'],
-                'write' => ['*'],
-            ],
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['*'],
         ]);
         
-        $this->assertEquals($object->isValid($document->getPermissions()), true);
+        $this->assertEquals($object->isValid($document->getRead()), true);
         
         $document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
-            '$permissions' => [
-                'read' => ['user:123', 'team:123'],
-            ],
+            '$read' => ['user:123', 'team:123'],
         ]);
         
-        $this->assertEquals($object->isValid($document->getPermissions()), true);
-        
-        $document = new Document([
-            '$id' => uniqid(),
-            '$collection' => uniqid(),
-            '$permissions' => [
-                'read' => ['user:123', 'team:123'],
-                'write' => ['*'],
-                'unknown' => ['*'],
-            ],
-        ]);
-        
-        $this->assertEquals($object->isValid($document->getPermissions()), false);
-        
-        $document = new Document([
-            '$id' => uniqid(),
-            '$collection' => uniqid(),
-            '$permissions' => [
-                'read' => 'unknown',
-                'write' => ['*'],
-            ],
-        ]);
-        
-        $this->assertEquals($object->isValid($document->getPermissions()), false);
+        $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid('sting'), false);
         
     }
 }

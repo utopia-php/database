@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use ArrayObject;
+use Exception;
 
 class Document extends ArrayObject
 {
@@ -23,6 +24,14 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
+        if(isset($input['$read']) && !is_array($input['$read'])) {
+            throw new Exception('$read permission must be of type array');
+        }
+        
+        if(isset($input['$write']) && !is_array($input['$write'])) {
+            throw new Exception('$write permission must be of type array');
+        }
+
         foreach ($input as $key => &$value) {
             if (\is_array($value)) {
                 if ((isset($value['$id']) || isset($value['$collection']))) {
@@ -59,9 +68,17 @@ class Document extends ArrayObject
     /**
      * @return array
      */
-    public function getPermissions(): array
+    public function getRead(): array
     {
-        return $this->getAttribute('$permissions', []);
+        return $this->getAttribute('$read', []);
+    }
+
+    /**
+     * @return array
+     */
+    public function getWrite(): array
+    {
+        return $this->getAttribute('$write', []);
     }
 
     /**
@@ -74,7 +91,7 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if(array_key_exists($attribute, ['$id' => true, '$collection' => true, '$permissions' => true])) {
+            if(array_key_exists($attribute, ['$id' => true, '$collection' => true, '$read' => true, '$write' => []])) {
                 continue;
             }
 

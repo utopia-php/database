@@ -108,10 +108,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, true));
         
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$permissions' => [
-                'read' => ['user1', 'user2'],
-                'write' => ['user1x', 'user2x'],
-            ],
+            '$read' => ['*', 'user1', 'user2'],
+            '$write' => ['*', 'user1x', 'user2x'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,

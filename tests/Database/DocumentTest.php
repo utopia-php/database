@@ -26,11 +26,6 @@ class DocumentTest extends TestCase
      * @var string
      */
     protected $collection = null;
-    
-    /**
-     * @var string
-     */
-    protected $permissions = [];
 
     public function setUp(): void
     {
@@ -38,15 +33,11 @@ class DocumentTest extends TestCase
         
         $this->collection = uniqid();
 
-        $this->permissions = [
-            'read' => ['user:123', 'team:123'],
-            'write' => ['*'],
-        ];
-        
         $this->document = new Document([
             '$id' => $this->id,
             '$collection' => $this->collection,
-            '$permissions' => $this->permissions,
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['*'],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -79,8 +70,8 @@ class DocumentTest extends TestCase
 
     public function testPermissions()
     {
-        $this->assertEquals($this->permissions, $this->document->getPermissions());
-        $this->assertEquals([], $this->empty->getPermissions());
+        $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
+        $this->assertEquals(['*'], $this->document->getWrite());
     }
 
     public function testGetAttributes()
@@ -165,7 +156,8 @@ class DocumentTest extends TestCase
         $this->assertEquals([
             '$id' => $this->id,
             '$collection' => $this->collection,
-            '$permissions' => $this->permissions,
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['*'],
             'title' => 'This is a test.',
             'list' => [
                 'one'

@@ -64,15 +64,9 @@ class Authorization extends Validator
             return true;
         }
 
-        if (!isset($permissions[$this->action])) {
-            $this->message = 'Missing action key: "'.$this->action.'"';
-
-            return false;
-        }
-
         $permission = '';
 
-        foreach ($permissions[$this->action] as $permission) {
+        foreach ($permissions as $permission) {
             $permission = \str_replace(':{self}', ':'.$this->document->getId(), $permission);
 
             if (\array_key_exists($permission, self::$roles)) {
@@ -80,7 +74,7 @@ class Authorization extends Validator
             }
         }
 
-        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only this scopes "'.\json_encode(self::getRoles()).'" are given and only this are allowed "'.\json_encode($permissions[$this->action]).'".';
+        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only this scopes "'.\json_encode(self::getRoles()).'" are given and only this are allowed "'.\json_encode($permissions).'".';
 
         return false;
     }

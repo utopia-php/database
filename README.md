@@ -34,12 +34,11 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 - [ ] Validate original document before editing `$id`
 - [x] Test duplicated document exception is being thrown
 - [ ] Test no one can overwrite exciting documents/collections without permission
-- [ ] Delete / Update documents before cleaning cache
-- [ ] Test for query timeout limits
 - [x] Add autorization validation layer
 - [ ] Add strcture validation layer (based on new collection structure)
-- [ ] Add cache layer
+- [ ] Add cache layer (Delete / Update documents before cleaning cache)
 - [ ] Implement find method
+- [ ] Test for find timeout limits
 - [ ] Merge new filter syntax parser
 
 ## System Requirements

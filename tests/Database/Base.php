@@ -51,11 +51,17 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0));
 
+        $collection = static::getDatabase()->getCollection('attributes');
+        $this->assertCount(7, $collection->getAttribute('attributes'));
+
         // Array
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_list', Database::VAR_INTEGER, 0, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_list', Database::VAR_FLOAT, 0, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, true));
+
+        $collection = static::getDatabase()->getCollection('attributes');
+        $this->assertCount(11, $collection->getAttribute('attributes'));
 
         // Delete
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
@@ -66,11 +72,17 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
 
+        $collection = static::getDatabase()->getCollection('attributes');
+        $this->assertCount(4, $collection->getAttribute('attributes'));
+
         // Delete Array
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_list'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer_list'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float_list'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_list'));
+
+        $collection = static::getDatabase()->getCollection('attributes');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
 
         static::getDatabase()->deleteCollection('attributes');
     }
@@ -83,16 +95,22 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0));
-        
+
         // Indexes
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
         
+        $collection = static::getDatabase()->getCollection('indexes');
+        $this->assertCount(3, $collection->getAttribute('indexes'));
+
         // Delete Indexes
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
+
+        $collection = static::getDatabase()->getCollection('indexes');
+        $this->assertCount(0, $collection->getAttribute('indexes'));
 
         static::getDatabase()->deleteCollection('indexes');
     }

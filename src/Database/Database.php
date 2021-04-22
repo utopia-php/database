@@ -785,4 +785,34 @@ class Database
     {
         return \uniqid();
     }
+
+    /**
+     * Get attribute key-value from query expression
+     *
+     * @param string $expression
+     *
+     * @return array
+     */
+    public function parseExpression(string $expression): array
+    {
+        //find location of parentheses in expression
+        $start = mb_strpos($expression, '(');
+        $end = mb_strpos($expression, ')');
+
+        //extract the query method
+        $method = mb_substr($expression, 0, $start);
+
+        //grab everything inside parentheses
+        $query = mb_substr($expression, 
+            ($start + 1), /* exclude open paren*/ 
+            ($end - $start - 1) /* exclude closed paren*/
+        );
+
+        //strip quotes from queries of type string
+        $query = str_replace('"', "", $query);
+        $query = str_replace("'", "", $query);
+
+        return [$method, $query];
+    }
+
 }

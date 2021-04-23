@@ -22,12 +22,12 @@ class QueryTest extends TestCase
 
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('equal', $query->getOperator());
-        $this->assertEquals('Iron Man', $query->getOperand());
+        $this->assertEquals('Iron Man', $query->getValue());
         
         $query = Query::parse('year.lesser(2001)'); 
         $this->assertEquals('year', $query->getAttribute());
         $this->assertEquals('lesser', $query->getOperator());
-        $this->assertEquals(2001, $query->getOperand());
+        $this->assertEquals(2001, $query->getValue());
     }
 
     public function testParseExpression()
@@ -37,9 +37,9 @@ class QueryTest extends TestCase
         $this->assertEquals('Spiderman', $operand);
 
 
-        [$operator, $operand] = Query::parseExpression('lesser(2001)'); 
+        [$operator, $value] = Query::parseExpression('lesser(2001)'); 
         $this->assertEquals('lesser', $operator);
-        $this->assertEquals(2001, $operand);
+        $this->assertEquals(2001, $value);
     }
 
 }

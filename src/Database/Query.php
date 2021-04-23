@@ -60,9 +60,9 @@ class Query
      *
      * @return mixed
      */
-    public function getOperand()
+    public function getValue()
     {
-        return $this->operand;
+        return $this->value;
     }
 
     /**

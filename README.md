@@ -95,6 +95,18 @@ $document = static::getDatabase()->createDocument('documents', new Document([
 ]));
 ```
 
+### Adapters
+
+Below is a list of supported adapters, and thier compatibly tested versions alongside a list of supported features and relevant limits.
+
+| Adapter | Status | Version |  |  |
+|---------|---------|---|---|---|
+| MariaDB | ✅ | 10.5 |   |   |
+| MySQL | ✅ | 8.0 |   |   |
+| MongoDB | 🛠 | 3.6 |   |   |
+
+` ✅  - supported, 🛠  - work in progress`
+
 ## TODOS
 
 - [x] Updated collection on deletion

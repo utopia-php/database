@@ -92,7 +92,7 @@ class Query
             case 2:
                 $input = explode('.', $filter);
                 $attribute = $input[0];
-                [$operator, $operand] = $this->parseExpression($input[1]);
+                [$operator, $operand] = Query::parseExpression($input[1]);
                 break;
         endswitch;
 
@@ -107,7 +107,7 @@ class Query
      *
      * @return array
      */
-    protected function parseExpression(string $expression): array
+    public static function parseExpression(string $expression): array
     {
         //find location of parentheses in expression
         $start = mb_strpos($expression, '(');

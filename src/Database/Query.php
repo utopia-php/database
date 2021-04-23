@@ -4,7 +4,6 @@ namespace Utopia\Database;
 
 use Utopia\Database\Database;
 
-
 class Query
 {
     /**
@@ -65,6 +64,20 @@ class Query
     }
 
     /**
+     * Get all query details as array
+     *
+     * @return array
+     */
+    public function getQuery()
+    {
+        return [
+            'attribute' => $this->attribute,
+            'operator' => $this->operator,
+            'operand' => $this->operand,
+        ];
+    }
+
+    /**
      * Parse query filter
      *
      * @param string $filter 
@@ -80,7 +93,6 @@ class Query
         switch ($stanzas):
             case 2:
                 $input = explode('.', $filter);
-
                 $attribute = $input[0];
                 [$operator, $operand] = $this->parseExpression($input[1]);
                 break;

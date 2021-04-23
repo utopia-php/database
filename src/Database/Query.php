@@ -25,14 +25,13 @@ class Query
      * Construct a new query object
      *
      * @param string $attribute
-     * @param string $operator
+     * @param array $expression
      * @param mixed $value
      */
-    public function __construct(string $attribute, string $operator, $value)
+    public function __construct(string $attribute, array $expression)
     {
         $this->attribute = $attribute;
-        $this->operator = $operator;
-        $this->value = $value;
+        [$this->operator, $this->value] = $expression;
     }
 
     /**
@@ -60,9 +59,9 @@ class Query
      *
      * @return mixed
      */
-    public function getOperand()
+    public function getValue()
     {
-        return $this->operand;
+        return $this->value;
     }
 
     /**
@@ -96,11 +95,11 @@ class Query
             case 2:
                 $input = explode('.', $filter);
                 $attribute = $input[0];
-                [$operator, $value] = Query::parseExpression($input[1]);
+                $expression  = Query::parseExpression($input[1]);
                 break;
         }
 
-        return new Query($attribute, $operator, $value);
+        return new Query($attribute, $expression);
     }
 
     /**
@@ -137,7 +136,7 @@ class Query
         $value = str_replace('"', "", $value);
         $value = str_replace("'", "", $value);
 
-        return [$operator, $value];
+        return [$operator => $value];
     }
 
     // /**

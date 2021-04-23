@@ -2,8 +2,6 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Database;
-
 class Query
 {
     /**
@@ -87,7 +85,7 @@ class Query
     public static function parse(string $filter): Query
     {
         // TODO@kodumbeats handle '.' in expression value 
-        $stanzas = mb_substr_count(mb_substr($filter, ".") + 1;
+        $stanzas = mb_substr_count($filter, ".") + 1;
 
         // TODO@kodumbeats handle relations between collections, e.g. if($stanzas > 2)
         switch ($stanzas):

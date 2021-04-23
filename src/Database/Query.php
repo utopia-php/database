@@ -74,7 +74,7 @@ class Query
         return [
             'attribute' => $this->attribute,
             'operator' => $this->operator,
-            'operand' => $this->operand,
+            'operand' => $this->value,
         ];
     }
 
@@ -104,7 +104,6 @@ class Query
 
     /**
      * Get attribute key-value from query expression
-     * $expression: string with format 'operator(operand)'
      * $expression: string with format 'operator(value)'
      *
      * @param string $expression

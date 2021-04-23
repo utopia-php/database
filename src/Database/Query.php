@@ -38,7 +38,7 @@ class Query
      *
      * @return string
      */
-    public function getAttribute()
+    public function getAttribute(): string
     {
         return $this->attribute;
     }
@@ -48,7 +48,7 @@ class Query
      *
      * @return string
      */
-    public function getOperator()
+    public function getOperator(): string
     {
         return $this->operator;
     }
@@ -56,7 +56,7 @@ class Query
     /**
      * Get operand
      *
-     * @return string
+     * @return mixed
      */
     public function getOperand()
     {
@@ -68,7 +68,7 @@ class Query
      *
      * @return array
      */
-    public function getQuery()
+    public function getQuery(): array
     {
         return [
             'attribute' => $this->attribute,
@@ -84,7 +84,7 @@ class Query
      *
      * @return Query
      * */
-    public static function parse(string $filter)
+    public static function parse(string $filter): Query
     {
         // TODO@kodumbeats handle '.' in expression value 
         $stanzas = mb_substr_count(mb_substr($filter, ".") + 1;

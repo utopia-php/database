@@ -52,6 +52,7 @@ class Key extends Validator
 
         return true;
     }
+    
     /**
      * Is array
      *

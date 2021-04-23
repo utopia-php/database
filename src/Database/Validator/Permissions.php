@@ -49,6 +49,7 @@ class Permissions extends Validator
 
         return true;
     }
+    
     /**
      * Is array
      *

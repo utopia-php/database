@@ -29,7 +29,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 A list of the utopia/php concepts and their relevant equivalent using the different adapters
 
 - **Database** - An instance of the utopia/database library that abstracts one of the supported adapters and provides a unified API for CRUD operation and queries on a specific schema or isolated scope inside the underlining database.
-- ** Adapter** - An implementation of an underline database engine that this library can support, below is a list of [supported adapters](#supported-adapters) and supported capabilities for each Adapter.
+- **Adapter** - An implementation of an underlying database engine that this library can support - below is a list of [supported adapters](#supported-adapters) and supported capabilities for each Adapter.
 - **Collection** - A set of documents stored on the same adapter scope. For SQL-based adapters, this will be equivalent to a table. For a No-SQL adapter, this will equivalent to a native collection.
 - **Document** - A simple JSON object that will be stored in one of the utopia/database collections. For SQL-based adapters, this will be equivalent to a row. For a No-SQL adapter, this will equivalent to a native document.
 - **Attribute** - A simple document attribute. For SQL-based adapters, this will be equivalent to a column. For a No-SQL adapter, this will equivalent to a native document field.
@@ -96,7 +96,7 @@ $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'int
 **Create a document:**
 
 ```php
-$document = static::getDatabase()->createDocument('documents', new Document([
+$document = $database->createDocument('documents', new Document([
     '$read' => ['*', 'user1', 'user2'],
     '$write' => ['*', 'user1', 'user2'],
     'string' => 'text📝',

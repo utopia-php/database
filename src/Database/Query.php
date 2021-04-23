@@ -92,13 +92,13 @@ class Query
         $stanzas = mb_substr_count($filter, ".") + 1;
 
         // TODO@kodumbeats handle relations between collections, e.g. if($stanzas > 2)
-        switch ($stanzas):
+        switch ($stanzas) {
             case 2:
                 $input = explode('.', $filter);
                 $attribute = $input[0];
                 [$operator, $value] = Query::parseExpression($input[1]);
                 break;
-        endswitch;
+        }
 
         return new Query($attribute, $operator, $value);
     }

@@ -35,6 +35,36 @@ class Query
     }
 
     /**
+     * Get attribute
+     *
+     * @return string
+     */
+    public function getAttribute()
+    {
+        return $this->attribute;
+    }
+
+    /**
+     * Get operator
+     *
+     * @return string
+     */
+    public function getOperator()
+    {
+        return $this->operator;
+    }
+
+    /**
+     * Get operand
+     *
+     * @return string
+     */
+    public function getOperand()
+    {
+        return $this->operand;
+    }
+
+    /**
      * Parse query filter
      *
      * @param string $filter 

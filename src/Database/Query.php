@@ -28,7 +28,7 @@ class Query
      * @param string $operator
      * @param mixed $operand
      */
-    public function __construct($attribute, $operator, $operand)
+    public function __construct(string $attribute, string $operator, $operand)
     {
         $this->attribute = $attribute;
         $this->operator = $operator;

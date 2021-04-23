@@ -22,24 +22,24 @@ class QueryTest extends TestCase
 
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('equal', $query->getOperator());
-        $this->assertEquals('Iron Man', $query->getValue());
+        $this->assertContains('Iron Man', $query->getValues());
         
         $query = Query::parse('year.lesser(2001)'); 
         $this->assertEquals('year', $query->getAttribute());
         $this->assertEquals('lesser', $query->getOperator());
-        $this->assertEquals(2001, $query->getValue());
+        $this->assertContains('2001', $query->getValues());
     }
 
     public function testParseExpression()
     {
-        [$operator, $value] = Query::parseExpression('equal("Spiderman")'); 
+        [$operator, $values] = Query::parseExpression('equal("Spiderman")'); 
         $this->assertEquals('equal', $operator);
-        $this->assertEquals('Spiderman', $value);
+        $this->assertContains('Spiderman', $values);
 
 
-        [$operator, $value] = Query::parseExpression('lesser(2001)'); 
+        [$operator, $values] = Query::parseExpression('lesser(2001)'); 
         $this->assertEquals('lesser', $operator);
-        $this->assertEquals(2001, $value);
+        $this->assertContains('2001', $values);
     }
 
     public function testGetAttribute()
@@ -60,7 +60,7 @@ class QueryTest extends TestCase
     {
         $query = Query::parse('title.equal("Iron Man")');
 
-        $this->assertEquals('Iron Man', $query->getValue());
+        $this->assertContains('Iron Man', $query->getValues());
     }
 
     public function testGetQuery()
@@ -70,7 +70,7 @@ class QueryTest extends TestCase
 
         $this->assertEquals('title', $query['attribute']);
         $this->assertEquals('equal', $query['operator']);
-        $this->assertEquals('Iron Man', $query['value']);
+        $this->assertContains('Iron Man', $query['values']);
     }
 
 }

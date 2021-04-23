@@ -15,9 +15,9 @@ class Query
     protected $operator = '';
 
     /**
-     * @var mixed
+     * @var (mixed)[]
      */
-    protected $value;
+    protected $values;
 
     /**
      * Construct.
@@ -26,13 +26,13 @@ class Query
      *
      * @param string $attribute
      * @param string $operator
-     * @param mixed $value
+     * @param array $values
      */
-    public function __construct(string $attribute, string $operator, $value)
+    public function __construct(string $attribute, string $operator, array $values)
     {
         $this->attribute = $attribute;
         $this->operator = $operator;
-        $this->value = $value;
+        $this->values = $values;
     }
 
     /**
@@ -60,9 +60,9 @@ class Query
      *
      * @return mixed
      */
-    public function getValue()
+    public function getValues()
     {
-        return $this->value;
+        return $this->values;
     }
 
     /**
@@ -75,7 +75,7 @@ class Query
         return [
             'attribute' => $this->attribute,
             'operator' => $this->operator,
-            'value' => $this->value,
+            'values' => $this->values,
         ];
     }
 
@@ -97,11 +97,11 @@ class Query
                 $input = explode('.', $filter);
                 $attribute = $input[0];
                 $expression = $input[1];
-                [$operator, $value] = self::parseExpression($expression);
+                [$operator, $values] = self::parseExpression($expression);
                 break;
         }
 
-        return new Query($attribute, $operator, $value);
+        return new Query($attribute, $operator, $values);
     }
 
     /**
@@ -110,7 +110,7 @@ class Query
      *
      * @param string $expression
      *
-     * @return (string|mixed)[]
+     * @return (string|array)[]
      */
     public static function parseExpression(string $expression): array
     {
@@ -137,6 +137,12 @@ class Query
         //strip quotes from queries of type string
         $value = str_replace('"', "", $value);
         $value = str_replace("'", "", $value);
+
+        // if $value is not array, return array with single $value
+        // TODO@kodumbeats appropriately cast type of ints, floats, bools
+        if (gettype($value) !== 'array') {
+            $value = [$value];
+        }
 
         return [$operator, $value];
     }

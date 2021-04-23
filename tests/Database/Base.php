@@ -1559,44 +1559,4 @@ abstract class Base extends TestCase
         $this->assertEquals('1', '1');
     }
 
-
-    public function testParseQueries()
-    {
-        // Set up mock collections
-        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('Movie'));
-        // $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('Director'));
-        // $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('Actor'));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('Movie', 'title', Database::VAR_STRING, 256));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('Movie', 'year', Database::VAR_INTEGER, 0));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('Movie', 'published', Database::VAR_BOOLEAN, 0));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('Movie', 'director', Database::VAR_STRING, 256));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('Movie', 'actors', Database::VAR_STRING, 256, true, true));
-
-        // test parser
-        $query = static::getDatabase()->parseQueries('Movie', ['title.equal("Iron Man")']); 
-        $this->assertEquals('Movie', $query[0]['collection']);
-        $this->assertEquals('title', $query[0]['attribute']);
-        $this->assertEquals('equal', $query[0]['method']);
-        $this->assertEquals('Iron Man', $query[0]['query']);
-        $this->assertEquals(Database::VAR_STRING, $query[0]['queryType']);
-        
-        $query = static::getDatabase()->parseQueries('Movie', ['year.lesser(2001)']); 
-        $this->assertEquals('Movie', $query[0]['collection']);
-        $this->assertEquals('year', $query[0]['attribute']);
-        $this->assertEquals('lesser', $query[0]['method']);
-        $this->assertEquals(2001, $query[0]['query']);
-        $this->assertEquals(Database::VAR_INTEGER, $query[0]['queryType']);
-    }
-
-    public function testParseExpression()
-    {
-        [$method, $query] = static::getDatabase()->parseExpression('equal("Spiderman")'); 
-        $this->assertEquals('equal', $method);
-        $this->assertEquals('Spiderman', $query);
-
-
-        [$method, $query] = static::getDatabase()->parseExpression('lesser(2001)'); 
-        $this->assertEquals('lesser', $method);
-        $this->assertEquals(2001, $query);
-    }
 }

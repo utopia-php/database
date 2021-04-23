@@ -96,7 +96,8 @@ class Query
             case 2:
                 $input = explode('.', $filter);
                 $attribute = $input[0];
-                [$operator, $value] = Query::parseExpression($input[1]);
+                $expression = $input[1];
+                [$operator, $value] = self::parseExpression($expression);
                 break;
         }
 
@@ -111,7 +112,7 @@ class Query
      *
      * @return (string|mixed)[]
      */
-    public static function parseExpression(string $expression): array
+    protected static function parseExpression(string $expression): array
     {
         //find location of parentheses in expression
 

@@ -50,7 +50,8 @@ class Database
      * @var array
      */
     protected $collection = [
-        '$id' => 'collections',
+        '$id' => self::COLLECTIONS,
+        '$collection' => self::COLLECTIONS,
         'name' => 'collections',
         'attributes' => [
             [
@@ -410,14 +411,19 @@ class Database
             return new Document($this->collection);
         }
 
-        $collection = $this->getDocument(self::COLLECTIONS, $collection);
+        if(empty($collection)) {
+            throw new Exception('test exception: '.$collection .':'. $id);
+        }
+
+        $collection = $this->getCollection($collection);
+
         $document   = $this->adapter->getDocument($collection->getId(), $id);
 
         $document->setAttribute('$collection', $collection->getId());
 
         $validator = new Authorization($document, self::PERMISSION_READ);
 
-        if (!$validator->isValid($document->getRead())) { // Check if user has read access to this document
+        if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
             return new Document();
         }
 
@@ -443,11 +449,11 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        // $validator = new Authorization($document, self::PERMISSION_WRITE);
+        $validator = new Authorization($document, self::PERMISSION_WRITE);
 
-        // if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-        //     throw new AuthorizationException($validator->getDescription());
-        // }
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription());
+        }
 
         // $document = $this->encode($document);
         // $validator = new Structure($this);
@@ -456,12 +462,11 @@ class Database
         //     throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
         // }
 
-        $document
-            ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
-            ->setAttribute('$collection', $collection)
-        ;
+        $document->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId());
         
         $document = $this->adapter->createDocument($collection, $document);
+
+        $document->setAttribute('$collection', $collection);
         
         // $document = $this->decode($document);
 
@@ -491,15 +496,15 @@ class Database
         // $data['$id'] = $old->getId();
         // $data['$collection'] = $old->getCollection();
 
-        // $validator = new Authorization($old, 'write');
+        $validator = new Authorization($old, 'write');
 
-        // if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
-        //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-        // }
+        if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+        }
 
-        // if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-        //     throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-        // }
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+        }
 
         // $document = $this->encode($document);
 
@@ -520,19 +525,19 @@ class Database
      * @param string $collection
      * @param string $id
      *
-     * @return false
+     * @return bool
      *
      * @throws AuthorizationException
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        // $document = $this->getDocument($collection, $id);
+        $document = $this->getDocument($collection, $id);
 
-        // $validator = new Authorization($document, 'write');
+        $validator = new Authorization($document, 'write');
 
-        // if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-        //     throw new AuthorizationException($validator->getDescription());
-        // }
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription());
+        }
 
         return $this->adapter->deleteDocument($collection, $id);
     }
@@ -556,7 +561,7 @@ class Database
     //         'filters' => [],
     //     ], $options);
 
-    //     $results = $this->adapter->find($this->getDocument(self::COLLECTIONS, $collection), $options);
+    //     $results = $this->adapter->find($this->getCollection($collection), $options);
 
     //     foreach ($results as &$node) {
     //         $node = $this->decode(new Document($node));
@@ -640,7 +645,7 @@ class Database
     //         throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
     //     }
 
-    //     $new = new Document($this->adapter->updateDocument($this->getDocument(self::COLLECTIONS, $new->getCollection()), $new->getId(), $new->getArrayCopy()));
+    //     $new = new Document($this->adapter->updateDocument($this->getCollection($new->getCollection()), $new->getId(), $new->getArrayCopy()));
 
     //     $new = $this->decode($new);
 

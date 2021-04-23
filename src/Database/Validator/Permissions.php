@@ -28,7 +28,7 @@ class Permissions extends Validator
      *
      * Returns true if valid or false if not.
      *
-     * @param mixed $value
+     * @param mixed $roles
      *
      * @return bool
      */

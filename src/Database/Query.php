@@ -111,7 +111,7 @@ class Query
      *
      * @return (string|mixed)[]
      */
-    public static function parseExpression(string $expression): array
+    protected static function parseExpression(string $expression): array
     {
         //find location of parentheses in expression
 

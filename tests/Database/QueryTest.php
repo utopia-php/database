@@ -30,18 +30,6 @@ class QueryTest extends TestCase
         $this->assertContains('2001', $query->getValues());
     }
 
-    public function testParseExpression()
-    {
-        [$operator, $values] = Query::parseExpression('equal("Spiderman")'); 
-        $this->assertEquals('equal', $operator);
-        $this->assertContains('Spiderman', $values);
-
-
-        [$operator, $values] = Query::parseExpression('lesser(2001)'); 
-        $this->assertEquals('lesser', $operator);
-        $this->assertContains('2001', $values);
-    }
-
     public function testGetAttribute()
     {
         $query = Query::parse('title.equal("Iron Man")');

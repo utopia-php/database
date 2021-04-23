@@ -17,7 +17,7 @@ class Query
     /**
      * @var mixed
      */
-    protected $operand;
+    protected $value;
 
     /**
      * Construct.
@@ -26,13 +26,13 @@ class Query
      *
      * @param string $attribute
      * @param string $operator
-     * @param mixed $operand
+     * @param mixed $value
      */
-    public function __construct(string $attribute, string $operator, $operand)
+    public function __construct(string $attribute, string $operator, $value)
     {
         $this->attribute = $attribute;
         $this->operator = $operator;
-        $this->operand = $operand;
+        $this->value = $value;
     }
 
     /**
@@ -96,11 +96,11 @@ class Query
             case 2:
                 $input = explode('.', $filter);
                 $attribute = $input[0];
-                [$operator, $operand] = Query::parseExpression($input[1]);
+                [$operator, $value] = Query::parseExpression($input[1]);
                 break;
         endswitch;
 
-        return new Query($attribute, $operator, $operand);
+        return new Query($attribute, $operator, $value);
     }
 
     /**
@@ -128,16 +128,16 @@ class Query
         //grab everything inside parentheses
 
         /** @var mixed */
-        $operand = mb_substr($expression, 
+        $value = mb_substr($expression, 
             ($start + 1), /* exclude open paren*/ 
             ($end - $start - 1) /* exclude closed paren*/
         );
 
         //strip quotes from queries of type string
-        $operand = str_replace('"', "", $operand);
-        $operand = str_replace("'", "", $operand);
+        $value = str_replace('"', "", $value);
+        $value = str_replace("'", "", $value);
 
-        return [$operator, $operand];
+        return [$operator, $value];
     }
 
     // /**

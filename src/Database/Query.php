@@ -23,8 +23,12 @@ class Query
      * Construct.
      *
      * Construct a new query object
+     *
+     * @param string $attribute
+     * @param string $operator
+     * @param mixed $operand
      */
-    public function __construct($attribute, $operator,  $operand)
+    public function __construct($attribute, $operator, $operand)
     {
         $this->attribute = $attribute;
         $this->operator = $operator;
@@ -105,18 +109,25 @@ class Query
      *
      * @param string $expression
      *
-     * @return array
+     * @return (string|mixed)[]
      */
     public static function parseExpression(string $expression): array
     {
         //find location of parentheses in expression
+
+        /** @var int */
         $start = mb_strpos($expression, '(');
+        /** @var int */
         $end = mb_strpos($expression, ')');
 
         //extract the query method
+
+        /** @var string */
         $operator = mb_substr($expression, 0, $start);
 
         //grab everything inside parentheses
+
+        /** @var mixed */
         $operand = mb_substr($expression, 
             ($start + 1), /* exclude open paren*/ 
             ($end - $start - 1) /* exclude closed paren*/

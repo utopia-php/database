@@ -96,7 +96,7 @@ $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'int
 **Create a document:**
 
 ```php
-$document = static::getDatabase()->createDocument('documents', new Document([
+$document = $database->createDocument('documents', new Document([
     '$read' => ['*', 'user1', 'user2'],
     '$write' => ['*', 'user1', 'user2'],
     'string' => 'text📝',

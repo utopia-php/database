@@ -105,6 +105,7 @@ class Query
     /**
      * Get attribute key-value from query expression
      * $expression: string with format 'operator(operand)'
+     * $expression: string with format 'operator(value)'
      *
      * @param string $expression
      *
@@ -138,16 +139,4 @@ class Query
 
         return [$operator => $value];
     }
-
-    // /**
-    //  * Validate query against collection schema
-    //  *
-    //  * @param array $schema Structured array of collection attributes
-    //  *
-    //  * @return bool
-    //  */
-    // protected function isValid($schema): bool
-    // {
-    //     $attributeType = $schema[array_search($attribute, array_column($schema, '$id'))]['type'];
-    // }
 }

@@ -32,14 +32,45 @@ class QueryTest extends TestCase
 
     public function testParseExpression()
     {
-        [$operator, $operand] = Query::parseExpression('equal("Spiderman")'); 
+        [$operator, $value] = Query::parseExpression('equal("Spiderman")'); 
         $this->assertEquals('equal', $operator);
-        $this->assertEquals('Spiderman', $operand);
+        $this->assertEquals('Spiderman', $value);
 
 
         [$operator, $value] = Query::parseExpression('lesser(2001)'); 
         $this->assertEquals('lesser', $operator);
         $this->assertEquals(2001, $value);
+    }
+
+    public function testGetAttribute()
+    {
+        $query = Query::parse('title.equal("Iron Man")');
+
+        $this->assertEquals('title', $query->getAttribute());
+    }
+
+    public function testGetOperator()
+    {
+        $query = Query::parse('title.equal("Iron Man")');
+
+        $this->assertEquals('equal', $query->getOperator());
+    }
+
+    public function testGetValue()
+    {
+        $query = Query::parse('title.equal("Iron Man")');
+
+        $this->assertEquals('Iron Man', $query->getValue());
+    }
+
+    public function testGetQuery()
+    {
+        $parsed = Query::parse('title.equal("Iron Man")');
+        $query = $parsed->getQuery();
+
+        $this->assertEquals('title', $query['attribute']);
+        $this->assertEquals('equal', $query['operator']);
+        $this->assertEquals('Iron Man', $query['value']);
     }
 
 }

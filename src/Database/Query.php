@@ -75,7 +75,7 @@ class Query
         return [
             'attribute' => $this->attribute,
             'operator' => $this->operator,
-            'operand' => $this->value,
+            'value' => $this->value,
         ];
     }
 
@@ -112,7 +112,7 @@ class Query
      *
      * @return (string|mixed)[]
      */
-    protected static function parseExpression(string $expression): array
+    public static function parseExpression(string $expression): array
     {
         //find location of parentheses in expression
 

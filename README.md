@@ -24,6 +24,77 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 ```
 
+### Concepts
+
+A list of the utopia/php concepts and their relevant equivalent using the different adapters
+
+- **Database** - An instance of the utopia/database library that abstracts one of the supported adapters and provides a unified API for CRUD operation and queries on a specific schema or isolated scope inside the underlining database.
+- ** Adapter** - An implementation of an underline database engine that this library can support, below is a list of [supported adapters](#supported-adapters) and supported capabilities for each Adapter.
+- **Collection** - A set of documents stored on the same adapter scope. For SQL-based adapters, this will be equivalent to a table. For a No-SQL adapter, this will equivalent to a native collection.
+- **Document** - A simple JSON object that will be stored in one of the utopia/database collections. For SQL-based adapters, this will be equivalent to a row. For a No-SQL adapter, this will equivalent to a native document.
+- **Attribute** A simple document attribute. For SQL-based adapters, this will be equivalent to a column. For a No-SQL adapter, this will equivalent to a native document field.
+- **Index** A simple collection index used to improve the performance of your database queries.
+
+### Examples
+
+Some examples to help you get started.
+
+**Creating a database:**
+
+```php
+use PDO;
+use Utopia\Database\Database;
+use Utopia\Database\Adapter\MariaDB;
+
+$dbHost = 'mariadb';
+$dbPort = '3306';
+$dbUser = 'root';
+$dbPass = 'password';
+
+$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+    PDO::ATTR_TIMEOUT => 3, // Seconds
+    PDO::ATTR_PERSISTENT => true,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+]);
+
+$database = new Database(new MariaDB($pdo));
+$database->setNamespace('myscope');
+
+$database->create(); // Creates a new schema named `myscope`
+```
+
+**Creating a collection:**
+
+```php
+$database->createCollection('documents');
+
+// Add attributes
+$database->createAttribute('documents', 'string', Database::VAR_STRING, 128);
+$database->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0);
+$database->createAttribute('documents', 'float', Database::VAR_FLOAT, 0);
+$database->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0);
+$database->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true,  true);
+
+// Create an Index
+$database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]);
+```
+
+**Create a document:**
+
+```php
+$document = static::getDatabase()->createDocument('documents', new Document([
+    '$read' => ['*', 'user1', 'user2'],
+    '$write' => ['*', 'user1', 'user2'],
+    'string' => 'text📝',
+    'integer' => 5,
+    'float' => 5.55,
+    'boolean' => true,
+    'colors' => ['pink', 'green', 'blue'],
+]));
+```
+
 ## TODOS
 
 - [x] Updated collection on deletion

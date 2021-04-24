@@ -10,8 +10,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 
 class Database
 {
-    const METADATA = 'metadata';
-
     // Simple Types
     const VAR_STRING = 'string';
     const VAR_INTEGER = 'integer';
@@ -58,6 +56,7 @@ class Database
                 '$id' => 'name',
                 'type' => self::VAR_STRING,
                 'size' => 256,
+                'required' => true,
                 'signed' => true,
                 'array' => false,
                 'filters' => [],
@@ -66,17 +65,19 @@ class Database
                 '$id' => 'attributes',
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
+                'required' => false,
                 'signed' => true,
                 'array' => true,
-                'filters' => [],
+                'filters' => ['json'],
             ],
             [
                 '$id' => 'indexes',
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
+                'required' => false,
                 'signed' => true,
                 'array' => true,
-                'filters' => [],
+                'filters' => ['json'],
             ],
         ],
         'indexes' => [],
@@ -85,7 +86,7 @@ class Database
     /**
      * @var array
      */
-    static public $filters = [];
+    static protected $filters = [];
 
     /**
      * @param Adapter $adapter
@@ -93,6 +94,25 @@ class Database
     public function __construct(Adapter $adapter)
     {
         $this->adapter = $adapter;
+
+        self::addFilter('json',
+            function($value) {
+                $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
+
+                if(!is_array($value)) {
+                    throw new Exception('Can\'t encode to JSON');
+                }
+
+                return json_encode($value);
+            },
+            function($value) {
+                if(!is_string($value)) {
+                    throw new Exception('Can\'t decode from JSON');
+                }
+
+                return json_decode($value, true);
+            }
+        );
     }
 
     /**
@@ -137,9 +157,9 @@ class Database
         $this->adapter->create();
 
         $this->createCollection(self::COLLECTIONS);
-        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 128);
-        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 8064);
-        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 8064);
+        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 128, true);
+        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 8064, false);
+        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 8064, false);
         $this->createIndex(self::COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
 
         return true;
@@ -234,12 +254,15 @@ class Database
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param int $size
+     * @param int $size utf8mb4 chars length
+     * @param bool $required
+     * @param bool $signed
      * @param bool $array
+     * @param array $filters
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -247,6 +270,7 @@ class Database
             '$id' => $id,
             'type' => $type,
             'size' => $size,
+            'required' => $required,
             'signed' => $signed,
             'array' => $array,
             'filters' => $filters,
@@ -416,7 +440,6 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-
         $document   = $this->adapter->getDocument($collection->getId(), $id);
 
         $document->setAttribute('$collection', $collection->getId());
@@ -431,6 +454,7 @@ class Database
             return $document;
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         return $document;
@@ -455,20 +479,24 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        // $document = $this->encode($document);
-        // $validator = new Structure($this);
+        $collection = $this->getCollection($collection);
 
-        // if (!$validator->isValid($document)) {
-        //     throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-        // }
+        $document
+            ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
+            ->setAttribute('$collection', $collection->getId())
+        ;
 
-        $document->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId());
+        $document = $this->encode($collection, $document);
+
+        $validator = new Structure($collection);
+
+        if (!$validator->isValid($document)) {
+            throw new StructureException($validator->getDescription());
+        }
+
+        $document = $this->adapter->createDocument($collection->getId(), $document);
         
-        $document = $this->adapter->createDocument($collection, $document);
-
-        $document->setAttribute('$collection', $collection);
-        
-        // $document = $this->decode($document);
+        $document = $this->decode($collection, $document);
 
         return $document;
     }
@@ -491,6 +519,7 @@ class Database
         }
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
+        $collection = $this->getCollection($collection);
 
         // Make sure reserved keys stay constant
         // $data['$id'] = $old->getId();
@@ -499,24 +528,24 @@ class Database
         $validator = new Authorization($old, 'write');
 
         if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
-            throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+            throw new AuthorizationException($validator->getDescription());
         }
 
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-            throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+            throw new AuthorizationException($validator->getDescription());
         }
 
-        // $document = $this->encode($document);
+        $document = $this->encode($collection, $document);
 
-        // $validator = new Structure($this);
+        $validator = new Structure($collection);
 
-        // if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
-        //     throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
-        // }
+        if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+            throw new StructureException($validator->getDescription());
+        }
 
-        $document = $this->adapter->updateDocument($collection, $document);
+        $document = $this->adapter->updateDocument($collection->getId(), $document);
         
-        // $new = $this->decode($new);
+        $document = $this->decode($collection, $document);
 
         return $document;
     }
@@ -628,13 +657,13 @@ class Database
     //     $validator = new Authorization($document, 'write');
 
     //     if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+    //         throw new AuthorizationException($validator->getDescription());
     //     }
 
     //     $new = new Document($data);
 
     //     if (!$validator->isValid($new->getWrite())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+    //         throw new AuthorizationException($validator->getDescription());
     //     }
 
     //     $new = $this->encode($new);
@@ -642,7 +671,7 @@ class Database
     //     $validator = new Structure($this);
 
     //     if (!$validator->isValid($new)) { // Make sure updated structure still apply collection rules (if any)
-    //         throw new StructureException($validator->getDescription()); // var_dump($validator->getDescription()); return false;
+    //         throw new StructureException($validator->getDescription());
     //     }
 
     //     $new = new Document($this->adapter->updateDocument($this->getCollection($new->getCollection()), $new->getId(), $new->getArrayCopy()));
@@ -669,37 +698,94 @@ class Database
         ];
     }
 
+    /**
+     * Encode Document
+     * 
+     * @param Document $collection
+     * @param Document $document
+     * 
+     * @return Document
+     */
     public function encode(Document $collection, Document $document):Document
     {
-        $rules = $collection->getAttribute('rules', []);
+        $attributes = $collection->getAttribute('attributes', []);
 
-        foreach ($rules as $key => $rule) {
-            $key = $rule->getAttribute('key', null);
-            $type = $rule->getAttribute('type', null);
-            $array = $rule->getAttribute('array', false);
-            $filters = $rule->getAttribute('filter', []);
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $array = $attribute['array'] ?? false;
+            $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
 
-            if (($value !== null)) {
-                foreach ($filters as $filter) {
-                    $value = $this->encodeAttribute($filter, $value);
-                    $document->setAttribute($key, $value);
+            $value = ($array) ? $value : [$value];
+
+            foreach ($value as &$node) {
+                if (($node !== null)) {
+                    foreach ($filters as $filter) {
+                        $node = $this->encodeAttribute($filter, $node);
+                    }
                 }
             }
+
+            if(!$array) {
+                $value = $value[0];
+            }
+
+            $document->setAttribute($key, $value);
         }
 
         return $document;
     }
 
+    /**
+     * Decode Document
+     * 
+     * @param Document $collection
+     * @param Document $document
+     * 
+     * @return Document
+     */
     public function decode(Document $collection, Document $document):Document
     {
-        $rules = $collection->getAttribute('attributes', []);
+        $attributes = $collection->getAttribute('attributes', []);
 
-        foreach ($rules as $rule) {
-            $key = $rule['$id'] ?? '';
-            $type = $rule['type'] ?? '';
-            $array = $rule['array'] ?? false;
-            $filters = $rule['filters'] ?? [];
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $array = $attribute['array'] ?? false;
+            $filters = $attribute['filters'] ?? [];
+            $value = $document->getAttribute($key, null);
+
+            $value = ($array) ? $value : [$value];
+
+            foreach ($value as &$node) {
+                if (($node !== null)) {
+                    foreach ($filters as $filter) {
+                        $node = $this->decodeAttribute($filter, $node);
+                    }
+                }
+            }
+            
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
+        }
+
+        return $document;
+    }
+
+    /**
+     * Casting
+     * 
+     * @param Document $collection
+     * @param Document $document
+     * 
+     * @return Document
+     */
+    public function casting(Document $collection, Document $document):Document
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
 
             if($array) {
@@ -741,17 +827,16 @@ class Database
      * 
      * @return mixed
      */
-    static protected function encodeAttribute(string $name, $value)
+    protected function encodeAttribute(string $name, $value)
     {
         if (!isset(self::$filters[$name])) {
-            return $value;
             throw new Exception('Filter not found');
         }
 
         try {
             $value = self::$filters[$name]['encode']($value);
         } catch (\Throwable $th) {
-            $value = null;
+            throw $th;
         }
 
         return $value;
@@ -765,17 +850,16 @@ class Database
      * 
      * @return mixed
      */
-    static protected function decodeAttribute(string $name, $value)
+    protected function decodeAttribute(string $name, $value)
     {
         if (!isset(self::$filters[$name])) {
-            return $value;
             throw new Exception('Filter not found');
         }
 
         try {
             $value = self::$filters[$name]['decode']($value);
         } catch (\Throwable $th) {
-            $value = null;
+            throw $th;
         }
 
         return $value;

@@ -136,7 +136,7 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 - [ ] Add cache layer (Delete / Update documents before cleaning cache)
 - [ ] Implement find method
 - [ ] Test for find timeout limits
-- [ ] Merge new filter syntax parser
+- [ ] Merge new query syntax parser
 
 ## System Requirements
 

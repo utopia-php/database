@@ -521,7 +521,7 @@ class MariaDB extends Adapter
      * Get SQL Type
      * 
      * @param string $type
-     * @param int $size
+     * @param int $size in chars
      * 
      * @return string
      */
@@ -529,6 +529,7 @@ class MariaDB extends Adapter
     {
         switch ($type) {
             case Database::VAR_STRING:
+                // $size = $size * 4; // Convert utf8mb4 size to bytes
                 if($size > 16777215) {
                     return 'LONGTEXT';
                 }

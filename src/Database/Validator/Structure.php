@@ -1,294 +1,255 @@
 <?php
 
-// namespace Utopia\Database\Validator;
+namespace Utopia\Database\Validator;
 
-// use Utopia\Database\Database;
-// use Utopia\Database\Document;
-// use Utopia\Validator;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Validator;
+use Utopia\Validator\Boolean;
+use Utopia\Validator\FloatValidator;
+use Utopia\Validator\Integer;
+use Utopia\Validator\Text;
 
-// class Structure extends Validator
-// {
-//     // const RULE_TYPE_ID = 'id';
-//     // const RULE_TYPE_KEY = 'key';
-//     // const RULE_TYPE_TEXT = 'text';
-//     // const RULE_TYPE_INTEGER = 'integer';
-//     // const RULE_TYPE_FLOAT = 'float';
-//     // const RULE_TYPE_NUMERIC = 'numeric';
-//     // const RULE_TYPE_BOOLEAN = 'boolean';
-//     // const RULE_TYPE_EMAIL = 'email';
-//     // const RULE_TYPE_URL = 'url';
-//     // const RULE_TYPE_DOCUMENT = 'document';
-//     const RULE_TYPE_PERMISSIONS = 'permissions';
-//     const RULE_TYPE_MARKDOWN = 'markdown';
-//     const RULE_TYPE_IP = 'ip';
-//     const RULE_TYPE_DOCUMENTID = 'documentId';
-//     const RULE_TYPE_FILEID = 'fileId';
+class Structure extends Validator
+{
+    /**
+     * @var Document
+     */
+    protected $collection;
 
-//     /**
-//      * @var Database
-//      */
-//     protected $database;
+    /**
+     * @var array
+     */
+    protected $attributes = [
+        [
+            '$id' => '$id',
+            'type' => Database::VAR_STRING,
+            'size' => 64,
+            'required' => false,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$collection',
+            'type' => Database::VAR_STRING,
+            'size' => 64,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$read',
+            'type' => Database::VAR_STRING,
+            'size' => 64,
+            'required' => false,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$write',
+            'type' => Database::VAR_STRING,
+            'size' => 64,
+            'required' => false,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ],
+    ];
 
-//     /**
-//      * @var string
-//      */
-//     protected $id = '';
+    /**
+     * @var Validator[]
+     */
+    static protected $validators = [];
 
-//     /**
-//      * Basic rules to apply on all documents.
-//      *
-//      * @var array
-//      */
-//     protected $rules = [
-//         [
-//             'label' => '$id',
-//             '$collection' => Database::COLLECTION_RULES,
-//             'key' => '$id',
-//             'type' => Database::VAR_KEY,
-//             'default' => null,
-//             'required' => false,
-//             'array' => false,
-//         ],
-//         [
-//             'label' => '$collection',
-//             '$collection' => Database::COLLECTION_RULES,
-//             'key' => '$collection',
-//             'type' => Database::VAR_KEY,
-//             'default' => null,
-//             'required' => true,
-//             'array' => false,
-//         ],
-//         [
-//             'label' => '$permissions',
-//             '$collection' => Database::COLLECTION_RULES,
-//             'key' => '$permissions',
-//             'type' => 'permissions',
-//             'default' => null,
-//             'required' => true,
-//             'array' => false,
-//         ],
-//         [
-//             'label' => '$createdAt',
-//             '$collection' => Database::COLLECTION_RULES,
-//             'key' => '$createdAt',
-//             'type' => Database::VAR_INTEGER,
-//             'default' => null,
-//             'required' => false,
-//             'array' => false,
-//         ],
-//         [
-//             'label' => '$updatedAt',
-//             '$collection' => Database::COLLECTION_RULES,
-//             'key' => '$updatedAt',
-//             'type' => Database::VAR_INTEGER,
-//             'default' => null,
-//             'required' => false,
-//             'array' => false,
-//         ],
-//     ];
+    /**
+     * @var string
+     */
+    protected $message = 'General Error';
 
-//     /**
-//      * @var string
-//      */
-//     protected $message = 'General Error';
+    /**
+     * Structure constructor.
+     *
+     * @param Document $collection
+     */
+    public function __construct(Document $collection)
+    {
+        $this->collection = $collection;
+    }
 
-//     /**
-//      * Structure constructor.
-//      *
-//      * @param Database $database
-//      */
-//     public function __construct(Database $database)
-//     {
-//         $this->database = $database;
-//     }
+    /**
+     * Remove a Validator
+     * 
+     * @param string $name
+     */
+    static public function getValidators()
+    {
+        return self::$validators;
+    }
 
-//     /**
-//      * Get Description.
-//      *
-//      * Returns validator description
-//      *
-//      * @return string
-//      */
-//     public function getDescription()
-//     {
-//         return 'Invalid document structure: '.$this->message;
-//     }
+    /**
+     * Add a new Validator
+     * 
+     * @param string $name
+     * @param Validator $validator
+     * @param string $type
+     */
+    static public function addValidator(string $name, Validator $validator, string $type)
+    {
+        self::$validators[$name] = [
+            'validator' => $validator,
+            'type' => $type,
+        ];
+    }
 
-//     /**
-//      * Is valid.
-//      *
-//      * Returns true if valid or false if not.
-//      *
-//      * @param mixed $document
-//      *
-//      * @return bool
-//      */
-//     public function isValid($document)
-//     {
-//         $document = (\is_array($document)) ? new Document($document) : $document;
+    /**
+     * Remove a Validator
+     * 
+     * @param string $name
+     */
+    static public function removeValidator(string $name)
+    {
+        unset(self::$validators[$name]);
+    }
 
-//         $this->id = $document->getId();
+    /**
+     * Get Description.
+     *
+     * Returns validator description
+     *
+     * @return string
+     */
+    public function getDescription()
+    {
+        return 'Invalid document structure: '.$this->message;
+    }
 
-//         if (\is_null($document->getCollection())) {
-//             $this->message = 'Missing collection attribute $collection';
+    /**
+     * Is valid.
+     *
+     * Returns true if valid or false if not.
+     *
+     * @param Document $document
+     *
+     * @return bool
+     */
+    public function isValid($document)
+    {
+        if(!$document instanceof Document) {
+            $this->message = 'Value must be an instance of Document';
+            return false;
+        }
+        
+        if (empty($document->getCollection())) {
+            $this->message = 'Missing collection attribute $collection';
+            return false;
+        }
+        
+        if (empty($this->collection->getId()) || Database::COLLECTIONS !== $this->collection->getCollection()) {
+            $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
+            return false;
+        }
+        
+        $keys = [];
+        $structure = $document->getArrayCopy();
+        $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
-//             return false;
-//         }
+        foreach ($attributes as $key => $attribute) { // Check all required attributes are set
+            $name = $attribute['$id'] ?? '';
+            $required = $attribute['required'] ?? false;
 
-//         $collection = $this->getCollection(Database::COLLECTIONS, $document->getCollection());
+            $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
 
-//         if (\is_null($collection->getId()) || Database::COLLECTIONS != $collection->getCollection()) {
-//             $this->message = 'Collection "'.$collection->getCollection().'" not found';
-//             return false;
-//         }
+            if($required && !isset($structure[$name])) {
+                $this->message = 'Missing required attribute "'.$name.'"';
+                return false;
+            }
+        }
 
-//         $array = $document->getArrayCopy();
-//         $rules = \array_merge($this->rules, $collection->getAttribute('rules', []));
+        foreach ($structure as $key => $value) {
+            if(!array_key_exists($key, $keys)) { // Check no unknown attributes are set
+                $this->message = 'Unknown attribute: "'. '"'.$key.'"';
+                return false;
+            }
 
-//         foreach ($rules as $rule) { // Check all required keys are set
-//             if (isset($rule['key']) && !isset($array[$rule['key']])
-//             && isset($rule['required']) && true == $rule['required']) {
-//                 $this->message = 'Missing required key "'.$rule['key'].'"';
+            $attribute = $keys[$key] ?? [];
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
 
-//                 return false;
-//             }
-//         }
+            switch ($type) {
+                case Database::VAR_STRING:
+                    $validator = new Text(0);
+                    break;
+                
+                case Database::VAR_INTEGER:
+                    $validator = new Integer();
+                    break;
+                
+                case Database::VAR_FLOAT:
+                    $validator = new FloatValidator();
+                    break;
+                
+                
+                case Database::VAR_BOOLEAN:
+                    $validator = new Boolean();
+                    break;
+                
+                default:
+                    $this->message = 'Unknown attribute type "'.$type.'"';
+                    return false;
+                    break;
+            }
 
-//         foreach ($array as $key => $value) {
-//             $rule = $collection->search('key', $key, $rules);
-            
-//             if (!$rule) {
-//                 continue;
-//             }
+            if($array) { // Validate attribute type
+                if(!is_array($value)) {
+                    $this->message = 'Attribute "'.$key.'" must be an array';
+                    return false;
+                }
 
-//             $ruleType = $rule['type'] ?? '';
-//             $ruleRequired = $rule['required'] ?? true;
-//             $ruleArray = $rule['array'] ?? false;
-//             $validator = null;
+                foreach ($value as $x => $child) {
+                    if(!$validator->isValid($child)) {
+                        $this->message = 'Attribute "'.$key.'"["'.$x.'"] has invalid type. '.$validator->getDescription();
+                        return false;
+                    }
+                }
+            }
+            else {
+                if(!$validator->isValid($value)) {
+                    $this->message = 'Attribute "'.$key.'" has invalid type. '.$validator->getDescription();
+                    return false;
+                }
+            }
 
-//             switch ($ruleType) {
-//                 case self::RULE_TYPE_PERMISSIONS:
-//                     $validator = new Permissions();
-//                     break;
-//                 case Database::VAR_KEY:
-//                     $validator = new Key();
-//                     break;
-//                 case Database::VAR_STRING:
-//                 case self::RULE_TYPE_MARKDOWN:
-//                     $validator = new Validator\Text(0);
-//                     break;
-//                 case Database::VAR_NUMERIC:
-//                     $validator = new Validator\Numeric();
-//                     break;
-//                 case Database::VAR_INTEGER:
-//                     $validator = new Validator\Integer();
-//                     break;
-//                 case Database::VAR_FLOAT:
-//                     $validator = new Validator\FloatValidator();
-//                     break;
-//                     case Database::VAR_BOOLEAN:
-//                     $validator = new Validator\Boolean();
-//                     break;
-//                 case Database::VAR_EMAIL:
-//                     $validator = new Validator\Email();
-//                     break;
-//                 case Database::VAR_URL:
-//                     $validator = new Validator\URL();
-//                     break;
-//                 case self::RULE_TYPE_IP:
-//                     $validator = new Validator\IP();
-//                     break;
-//                 case Database::VAR_IPV4:
-//                     $validator = new Validator\IP(Validator\IP::V4);
-//                     break;
-//                 case Database::VAR_IPV6:
-//                     $validator = new Validator\IP(Validator\IP::V6);
-//                     break;
-//                 case Database::VAR_DOCUMENT:
-//                     $validator = new Collection($this->database, (isset($rule['list'])) ? $rule['list'] : []);
-//                     $value = $document->getAttribute($key);
-//                     break;
-//                 case self::RULE_TYPE_DOCUMENTID:
-//                     $validator = new DocumentId($this->database, (isset($rule['list']) && isset($rule['list'][0])) ? $rule['list'][0] : '');
-//                     $value = $document->getAttribute($key);
-//                     break;
-//                 case self::RULE_TYPE_FILEID:
-//                     $validator = new DocumentId($this->database, Database::COLLECTION_FILES);
-//                     $value = $document->getAttribute($key);
-//                     break;
-//             }
+            // TODO check for length / size
+            // TODO check for specific validation
+        }
 
-//             if (empty($validator)) { // Error creating validator for property
-//                 $this->message = 'Unknown rule type "'.$ruleType.'" for property "'.\htmlspecialchars($key, ENT_QUOTES, 'UTF-8').'"';
+        return true;
+    }
 
-//                 if (empty($ruleType)) {
-//                     $this->message = 'Unknown property "'.$key.'" type'.
-//                         '. Make sure to follow '.\strtolower($collection->getAttribute('name', 'unknown')).' collection structure';
-//                 }
+    /**
+     * Is array
+     *
+     * Function will return true if object is array.
+     *
+     * @return bool
+     */
+    public function isArray(): bool
+    {
+        return false;
+    }
 
-//                 return false;
-//             }
-
-//             if ($ruleRequired && ('' === $value || null === $value)) {
-//                 $this->message = 'Required property "'.$key.'" has no value';
-
-//                 return false;
-//             }
-
-//             if (!$ruleRequired && empty($value)) {
-//                 unset($array[$key]);
-//                 unset($rule);
-
-//                 continue;
-//             }
-
-//             if ($ruleArray) { // Array of values validation
-//                 if (!\is_array($value)) {
-//                     $this->message = 'Property "'.$key.'" must be an array';
-
-//                     return false;
-//                 }
-
-//                 // TODO add is required check here
-
-//                 foreach ($value as $node) {
-//                     if (!$validator->isValid($node)) { // Check if property is valid, if not required can also be empty
-//                         $this->message = 'Property "'.$key.'" has invalid input. '.$validator->getDescription();
-
-//                         return false;
-//                     }
-//                 }
-//             } else { // Single value validation
-//                 if ((!$validator->isValid($value)) && !('' === $value && !$ruleRequired)) {  // Error when value is not valid, and is not optional and empty
-//                     $this->message = 'Property "'.$key.'" has invalid input. '.$validator->getDescription();
-
-//                     return false;
-//                 }
-//             }
-
-//             unset($array[$key]);
-//             unset($rule);
-//         }
-
-//         if (!empty($array)) { // No fields should be left unvalidated
-//             $this->message = 'Unknown properties are not allowed ('.\implode(', ', \array_keys($array)).') for this collection'.
-//                 '. Make sure to follow '.\strtolower($collection->getAttribute('name', 'unknown')).' collection structure';
-
-//             return false;
-//         }
-
-//         return true;
-//     }
-
-//     /**
-//      * Get Collection
-//      * 
-//      * Get Collection by unique ID
-//      * 
-//      * @return Document
-//      */
-//     protected function getCollection(string $collection, string $id): Document
-//     {
-//         return $this->database->getDocument($collection, $id);
-//     }
-// }
+    /**
+     * Get Type
+     *
+     * Returns validator type.
+     *
+     * @return string
+     */
+    public function getType(): string
+    {
+        return self::TYPE_ARRAY;
+    }
+}

@@ -6,8 +6,6 @@ use Exception;
 
 abstract class Adapter
 {
-    const METADATA = 'metadata';
-
     /**
      * @var string
      */

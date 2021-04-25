@@ -45,12 +45,30 @@ class StructureTest extends TestCase
                 'filters' => [],
             ],
             [
+                '$id' => 'price',
+                'type' => Database::VAR_FLOAT,
+                'size' => 5,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
                 '$id' => 'published',
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
                 'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'tags',
+                'type' => Database::VAR_STRING,
+                'size' => 55,
+                'required' => true,
+                'signed' => true,
+                'array' => true,
                 'filters' => [],
             ],
         ],
@@ -95,7 +113,9 @@ class StructureTest extends TestCase
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
+            'price' => 1.99,
             'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
         ])));
 
         $this->assertEquals('Invalid document structure: Collection "" not found', $validator->getDescription());
@@ -109,10 +129,12 @@ class StructureTest extends TestCase
             '$collection' => 'posts',
             'description' => 'Demo description',
             'rating' => 5,
+            'price' => 1.99,
             'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
         ])));
 
-        $this->assertEquals('Invalid document structure: Missing required key "title"', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
     
     public function testUnknownKeys()
@@ -125,17 +147,170 @@ class StructureTest extends TestCase
             'titlex' => 'Unknown Attribute',
             'description' => 'Demo description',
             'rating' => 5,
+            'price' => 1.99,
             'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
         ])));
 
-        $this->assertEquals('Invalid document structure: Unknown property: ""titlex"', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Unknown attribute: ""titlex"', $validator->getDescription());
+    }  
+            
+    public function testValidDocument()
+    { 
+        $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => 'posts',
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
+            'price' => 1.99,
             'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
         ])));
+
+    }
+
+    public function testStringValidation()
+    { 
+        $validator = new Structure(new Document($this->collection));
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 5,
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a string', $validator->getDescription());
+    }
+
+    public function testArrayOfStringsValidation()
+    { 
+        $validator = new Structure(new Document($this->collection));
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => [1, 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a string', $validator->getDescription());
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => [true],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a string', $validator->getDescription());
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => [],
+        ])));
+    }
+
+    public function testIntegerValidation()
+    { 
+        $validator = new Structure(new Document($this->collection));
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => true,
+            'price' => 1.99,
+            'published' => false,
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => '',
+            'price' => 1.99,
+            'published' => false,
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
+    }
+
+    public function testFloatValidation()
+    { 
+        $validator = new Structure(new Document($this->collection));
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 2,
+            'published' => false,
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => '',
+            'published' => false,
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
+    }
+
+    public function testBooleanValidation()
+    { 
+        $validator = new Structure(new Document($this->collection));
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => 1,
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a boolean', $validator->getDescription());
+        
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => '',
+            'tags' => ['dog', 'cat', 'mouse'],
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a boolean', $validator->getDescription());
     }
 }

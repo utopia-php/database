@@ -210,7 +210,7 @@ class Structure extends Validator
 
                 foreach ($value as $x => $child) {
                     if(!$validator->isValid($child)) {
-                        $this->message = 'Attribute "'.$key.'"["'.$x.'"] has invalid type. '.$validator->getDescription();
+                        $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid type. '.$validator->getDescription();
                         return false;
                     }
                 }

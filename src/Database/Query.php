@@ -144,8 +144,6 @@ class Query
         // Cast $value type
 
         $values = array_map(function ($value) {
-            // trim whitespace
-            $value = trim($value);
 
             switch (true) {
                 // type casted to int or float by "+" operator
@@ -163,9 +161,11 @@ class Query
                 case $value === 'null':
                     return null;
 
-                // strip quotes from queries of type string
                 default:
-                    return str_replace(['"',"'"], "", $value);
+                    // strip escape characters
+                    $value = stripslashes($value);
+                    // trim leading and tailing quotes and whitespace
+                    return trim($value, '\'" ');
             }
 
         }, $values);

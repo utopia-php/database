@@ -1564,7 +1564,6 @@ abstract class Base extends TestCase
         $this->assertEquals('1', '1');
     }
 
-
     /**
      * @depends testCreateDocument
      */

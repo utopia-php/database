@@ -122,7 +122,7 @@ class Query
         /** @var int */
         $start = mb_strpos($expression, '(');
         /** @var int */
-        $end = mb_strpos($expression, ')');
+        $end = mb_strrpos($expression, ')');
 
         //extract the query method
 

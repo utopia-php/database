@@ -134,16 +134,32 @@ class Query
             ($end - $start - 1) /* exclude closed paren*/
         );
 
-        //strip quotes from queries of type string
-        $value = str_replace('"', "", $value);
-        $value = str_replace("'", "", $value);
+        // Explode comma-separated values and trim whitespace
 
-        // if $value is not array, return array with single $value
-        // TODO@kodumbeats appropriately cast type of ints, floats, bools
-        if (gettype($value) !== 'array') {
-            $value = [$value];
-        }
+        $values = array_map('trim', explode(',', $value));
 
-        return [$operator, $value];
+        // strip quotes from queries of type string
+
+        $values = array_map(function ($str) {
+            return str_replace(['"',"'"], "", $str);
+        }, $values); 
+
+        // type cast ints, floats, and bools
+
+        $values = array_map(function ($value) {
+            // type casted to int or float by "+" operator
+            if (is_numeric($value)) {
+                return $value + 0;
+            // since (bool)"false" returns true, check bools manually
+            } elseif ($value === 'true') {
+                return true;
+            } elseif ($value === 'false') {
+                return false;
+            } else {
+                return $value;
+            }
+        }, $values);
+
+        return [$operator, $values];
     }
 }

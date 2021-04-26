@@ -28,6 +28,16 @@ class QueryTest extends TestCase
         $this->assertEquals('year', $query->getAttribute());
         $this->assertEquals('lesser', $query->getOperator());
         $this->assertContains(2001, $query->getValues());
+
+        $query = Query::parse('published.equal(true)');
+        $this->assertEquals('published', $query->getAttribute());
+        $this->assertEquals('equal', $query->getOperator());
+        $this->assertContains(true, $query->getValues());
+
+        $query = Query::parse('published.equal(false)');
+        $this->assertEquals('published', $query->getAttribute());
+        $this->assertEquals('equal', $query->getOperator());
+        $this->assertContains(false, $query->getValues());
     }
 
     public function testGetAttribute()

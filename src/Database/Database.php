@@ -7,6 +7,7 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Cache\Cache;
 
 class Database
 {
@@ -36,10 +37,18 @@ class Database
     // Collections
     const COLLECTIONS = 'collections';
 
+    // Cache
+    const TTL = 60 * 60 * 24; // 24 hours
+
     /**
      * @var Adapter
      */
     protected $adapter;
+
+    /**
+     * @var Cache
+     */
+    protected $cache;
 
     /**
      * Parent Collection
@@ -90,10 +99,12 @@ class Database
 
     /**
      * @param Adapter $adapter
+     * @param Cache $cache (optional)
      */
-    public function __construct(Adapter $adapter)
+    public function __construct(Adapter $adapter, Cache $cache = null)
     {
         $this->adapter = $adapter;
+        $this->cache = $cache;
 
         self::addFilter('json',
             function($value) {
@@ -440,7 +451,16 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-        $document   = $this->adapter->getDocument($collection->getId(), $id);
+
+        if ($cache) {
+            $document = $this->cache->load($id, self::TTL);
+        }
+
+        if (!$document) {
+            $document   = $this->adapter->getDocument($collection->getId(), $id);
+            
+            $this->cache->save($id, $document); // save to cache after fetching from db
+        }
 
         $document->setAttribute('$collection', $collection->getId());
 

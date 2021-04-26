@@ -67,5 +67,11 @@ services:
       MYSQL_PASSWORD: password
       MYSQL_TCP_PORT: 3307
 
+  redis:
+    image: redis:6.0-alpine
+    container_name: redis
+    networks:
+      - database
+
 networks:
   database:

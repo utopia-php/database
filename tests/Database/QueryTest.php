@@ -54,6 +54,18 @@ class QueryTest extends TestCase
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals('greater', $query->getOperator());
         $this->assertContains(8.5, $query->getValues());
+
+        $query = Query::parse('director.notEqual("null")');
+
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals('notEqual', $query->getOperator());
+        $this->assertContains('null', $query->getValues());
+
+        $query = Query::parse('director.notEqual(null)');
+
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals('notEqual', $query->getOperator());
+        $this->assertContains(null, $query->getValues());
     }
 
     public function testGetAttribute()

@@ -141,25 +141,25 @@ class Query
 
         $values = array_map('trim', explode(',', $value));
 
-        // strip quotes from queries of type string
-
-        $values = array_map(function ($str) {
-            return str_replace(['"',"'"], "", $str);
-        }, $values); 
-
-        // type cast ints, floats, and bools
+        // type cast ints, floats, bools, and null
 
         $values = array_map(function ($value) {
-            // type casted to int or float by "+" operator
             if (is_numeric($value)) {
+                // type casted to int or float by "+" operator
                 return $value + 0;
-            // since (bool)"false" returns true, check bools manually
             } elseif ($value === 'true') {
+                // since (bool)"false" returns true, check bools manually
                 return true;
             } elseif ($value === 'false') {
                 return false;
+            } elseif ($value === '"null"') {
+                // need special case to handle null with or without quotes
+                return 'null';
+            } elseif ($value === 'null') {
+                return null;
             } else {
-                return $value;
+                // strip quotes from queries of type string
+                return str_replace(['"',"'"], "", $value);
             }
         }, $values);
 

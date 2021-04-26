@@ -51,11 +51,13 @@ class QueryTest extends TestCase
         $this->assertEquals('equal', $query->getOperator());
         $this->assertContains(false, $query->getValues());
 
-        $query = Query::parse('actors.notContains("      Johnny Depp  ")');
+        $query = Query::parse('actors.notContains( " Johnny Depp ",  " Brad Pitt" , "Al Pacino")');
 
         $this->assertEquals('actors', $query->getAttribute());
         $this->assertEquals('notContains', $query->getOperator());
-        $this->assertContains('Johnny Depp', $query->getValues());
+        $this->assertContains(' Johnny Depp ', $query->getValues());
+        $this->assertContains(' Brad Pitt', $query->getValues());
+        $this->assertContains('Al Pacino', $query->getValues());
 
         $query = Query::parse('actors.equal("Brad Pitt", "Johnny Depp")');
 

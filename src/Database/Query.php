@@ -145,6 +145,10 @@ class Query
 
         $values = array_map(function ($value) {
 
+            // Trim whitespace from around $value
+
+            $value = trim($value);
+
             switch (true) {
                 // type casted to int or float by "+" operator
                 case is_numeric($value):
@@ -164,8 +168,8 @@ class Query
                 default:
                     // strip escape characters
                     $value = stripslashes($value);
-                    // trim leading and tailing quotes and whitespace
-                    return trim($value, '\'" ');
+                    // trim leading and tailing quotes
+                    return trim($value, '\'"');
             }
 
         }, $values);

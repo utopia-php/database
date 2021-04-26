@@ -27,7 +27,7 @@ class QueryTest extends TestCase
         $query = Query::parse('year.lesser(2001)'); 
         $this->assertEquals('year', $query->getAttribute());
         $this->assertEquals('lesser', $query->getOperator());
-        $this->assertContains('2001', $query->getValues());
+        $this->assertContains(2001, $query->getValues());
     }
 
     public function testGetAttribute()

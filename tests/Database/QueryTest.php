@@ -16,6 +16,15 @@ class QueryTest extends TestCase
     {
     }
 
+    public function testCreate(): void
+    {
+        $query = new Query('title', 'equal', ['Iron Man']);
+
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals('equal', $query->getOperator());
+        $this->assertContains('Iron Man', $query->getValues());
+    }
+
     public function testParse()
     {
         $query = Query::parse('title.equal("Iron Man")');

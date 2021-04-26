@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "dea2465791a58ea901b688ea9eae5b72",
+    "content-hash": "fa7d9c6d206e196d739c246ce67aac67",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -287,16 +287,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.3.0",
+            "version": "0.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "e6b8b99d445c4bba5f51857e3d2a3c39a42d73a2"
+                "reference": "81c7806e13091a9d585ad9bba57fae625a2cf26c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/e6b8b99d445c4bba5f51857e3d2a3c39a42d73a2",
-                "reference": "e6b8b99d445c4bba5f51857e3d2a3c39a42d73a2",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/81c7806e13091a9d585ad9bba57fae625a2cf26c",
+                "reference": "81c7806e13091a9d585ad9bba57fae625a2cf26c",
                 "shasum": ""
             },
             "require": {
@@ -334,9 +334,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.3.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.4.0"
             },
-            "time": "2021-04-20T21:37:21+00:00"
+            "time": "2021-04-22T14:28:14+00:00"
         },
         {
             "name": "utopia-php/framework",

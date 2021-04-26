@@ -159,9 +159,6 @@ class Query
                 case $value === 'false':
                     return false;
 
-                case $value === '"null"':
-                    return 'null';
-
                 // need special case to handle null with or without quotes
                 case $value === 'null':
                     return null;

@@ -137,13 +137,16 @@ class Query
             ($end - $start - 1) /* exclude closed paren*/
         );
 
-        // Explode comma-separated values and trim whitespace
+        // Explode comma-separated values
 
-        $values = array_map('trim', explode(',', $value));
+        $values = explode(',', $value);
 
         // Cast $value type
 
         $values = array_map(function ($value) {
+            // trim whitespace
+            $value = trim($value);
+
             switch (true) {
                 // type casted to int or float by "+" operator
                 case is_numeric($value):
@@ -156,10 +159,10 @@ class Query
                 case $value === 'false':
                     return false;
 
-                // need special case to handle null with or without quotes
                 case $value === '"null"':
                     return 'null';
 
+                // need special case to handle null with or without quotes
                 case $value === 'null':
                     return null;
 
@@ -167,6 +170,7 @@ class Query
                 default:
                     return str_replace(['"',"'"], "", $value);
             }
+
         }, $values);
 
         return [$operator, $values];

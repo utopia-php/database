@@ -38,6 +38,13 @@ class QueryTest extends TestCase
         $this->assertEquals('published', $query->getAttribute());
         $this->assertEquals('equal', $query->getOperator());
         $this->assertContains(false, $query->getValues());
+
+        $query = Query::parse('actors.equal("Brad Pitt", "Johnny Depp")');
+
+        $this->assertEquals('actors', $query->getAttribute());
+        $this->assertEquals('equal', $query->getOperator());
+        $this->assertContains('Brad Pitt', $query->getValues());
+        $this->assertContains('Johnny Depp', $query->getValues());
     }
 
     public function testGetAttribute()

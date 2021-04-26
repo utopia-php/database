@@ -48,6 +48,12 @@ class QueryTest extends TestCase
         $this->assertEquals('equal', $query->getOperator());
         $this->assertContains('Brad Pitt', $query->getValues());
         $this->assertContains('Johnny Depp', $query->getValues());
+
+        $query = Query::parse('score.greater(8.5)');
+
+        $this->assertEquals('score', $query->getAttribute());
+        $this->assertEquals('greater', $query->getOperator());
+        $this->assertContains(8.5, $query->getValues());
     }
 
     public function testGetAttribute()

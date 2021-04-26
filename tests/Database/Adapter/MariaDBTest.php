@@ -15,7 +15,7 @@ class MariaDBTest extends Base
     static $database = null;
 
     /**
-     * @reture Adapter
+     * @return Adapter
      */
     static function getDatabase(): Database
     {

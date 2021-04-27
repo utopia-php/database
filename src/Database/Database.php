@@ -456,18 +456,13 @@ class Database
 
         if ($this->cache) {
             $cache = json_decode($this->cache->load($id, self::TTL), true);
-            $document = ($cache) ? new Document() : null;
-
-            if (!$document) {
-                foreach ($cache as $key => $value) $document->{$key} = $value;
-            }
+            $document = new Document($cache ?? []);
         }
 
-        if (!$document) {
+        if ($document->isEmpty()) {
             $document = $this->adapter->getDocument($collection->getId(), $id);
         }
 
-        // $document   = $this->adapter->getDocument($collection->getId(), $id);
         $document->setAttribute('$collection', $collection->getId());
 
         $validator = new Authorization($document, self::PERMISSION_READ);

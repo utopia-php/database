@@ -454,12 +454,12 @@ class Database
         $document = null;
         $cache = null;
 
-        if ($this->cache) {
-            $cache = json_decode($this->cache->load($id, self::TTL), true);
-            $document = new Document($cache ?? []);
+        // TODO@kodumbeats Check if returned cache id matches request
+        if ($cache = $this->cache->load($id, self::TTL)) {
+            $document = new Document($cache);
         }
 
-        if ($document->isEmpty()) {
+        if (!$document) {
             $document = $this->adapter->getDocument($collection->getId(), $id);
         }
 
@@ -475,9 +475,7 @@ class Database
             return $document;
         }
 
-        if($cache) {
-            $this->cache->save($id, json_encode($document->getArrayCopy())); // save to cache after fetching from db
-        }
+        // $this->cache->save($id, $document->getArrayCopy()); // save to cache after fetching from db
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);

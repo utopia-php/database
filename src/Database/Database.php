@@ -480,6 +480,8 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
+        // var_dump($document, new Document($document->getArrayCopy()));
+
         return $document;
     }
 

@@ -452,7 +452,7 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($cache) {
+        if ($this->cache) {
             $document = $this->cache->load($id, self::TTL);
         }
 
@@ -564,6 +564,11 @@ class Database
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
+ 
+        if ($this->cache) {
+            $this->cache->purge($id);
+            $this->cache->save($id, $document);
+        }
         
         $document = $this->decode($collection, $document);
 
@@ -586,6 +591,10 @@ class Database
 
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
+        }
+
+        if ($this->cache) {
+            $this->cache->purge($id);
         }
 
         return $this->adapter->deleteDocument($collection, $id);

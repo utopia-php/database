@@ -451,6 +451,7 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+        $document = null;
 
         if ($this->cache) {
             $document = $this->cache->load($id, self::TTL);

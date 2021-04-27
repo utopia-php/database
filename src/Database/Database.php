@@ -476,7 +476,7 @@ class Database
         }
 
         if($cache) {
-            $this->cache->save($id, json_encode($document)); // save to cache after fetching from db
+            $this->cache->save($id, json_encode($document->getArrayCopy())); // save to cache after fetching from db
         }
 
         $document = $this->casting($collection, $document);
@@ -573,7 +573,7 @@ class Database
 
         if ($this->cache) {
             $this->cache->purge($id);
-            $this->cache->save($id, json_encode($document));
+            $this->cache->save($id, json_encode($document->getArrayCopy()));
         }
 
         return $document;

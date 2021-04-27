@@ -452,17 +452,22 @@ class Database
 
         $collection = $this->getCollection($collection);
         $document = null;
+        $cache = null;
 
         if ($this->cache) {
-            $document = $this->cache->load($id, self::TTL);
+            $cache = json_decode($this->cache->load($id, self::TTL), true);
+            $document = ($cache) ? new Document() : null;
+
+            if (!$document) {
+                foreach ($cache as $key => $value) $document->{$key} = $value;
+            }
         }
 
         if (!$document) {
-            $document   = $this->adapter->getDocument($collection->getId(), $id);
-            
-            $this->cache->save($id, $document); // save to cache after fetching from db
+            $document = $this->adapter->getDocument($collection->getId(), $id);
         }
 
+        // $document   = $this->adapter->getDocument($collection->getId(), $id);
         $document->setAttribute('$collection', $collection->getId());
 
         $validator = new Authorization($document, self::PERMISSION_READ);
@@ -473,6 +478,10 @@ class Database
 
         if($document->isEmpty()) {
             return $document;
+        }
+
+        if($cache) {
+            $this->cache->save($id, json_encode($document)); // save to cache after fetching from db
         }
 
         $document = $this->casting($collection, $document);
@@ -565,13 +574,12 @@ class Database
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
- 
+        $document = $this->decode($collection, $document);
+
         if ($this->cache) {
             $this->cache->purge($id);
-            $this->cache->save($id, $document);
+            $this->cache->save($id, json_encode($document));
         }
-        
-        $document = $this->decode($collection, $document);
 
         return $document;
     }

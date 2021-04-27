@@ -99,9 +99,9 @@ class Database
 
     /**
      * @param Adapter $adapter
-     * @param Cache $cache (optional)
+     * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache = null)
+    public function __construct(Adapter $adapter, Cache $cache)
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
@@ -571,10 +571,8 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        if ($this->cache) {
-            $this->cache->purge($id);
-            $this->cache->save($id, json_encode($document->getArrayCopy()));
-        }
+        // $this->cache->purge($id);
+        // $this->cache->save($id, $document->getArrayCopy());
 
         return $document;
     }
@@ -597,9 +595,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        if ($this->cache) {
-            $this->cache->purge($id);
-        }
+        // $this->cache->purge($id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }

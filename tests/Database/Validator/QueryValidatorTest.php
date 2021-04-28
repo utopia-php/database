@@ -81,9 +81,11 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $query = Query::parse('title.equal("Iron Man")');
+        $this->assertEquals(true, $validator->isValid(Query::parse('title.equal("Iron Man")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('title.equal("Iron Man", "Ant Man")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('rating.greater(4)')));
+    }
 
-        $this->assertEquals(true, $validator->isValid($query));
     public function testInvalidOperator()
     {
         $validator = new QueryValidator($this->schema);

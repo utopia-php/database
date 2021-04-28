@@ -132,11 +132,13 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 - [x] Test duplicated document exception is being thrown
 - [ ] Test no one can overwrite exciting documents/collections without permission
 - [x] Add autorization validation layer
-- [ ] Add strcture validation layer (based on new collection structure)
+- [x] Add strcture validation layer (based on new collection structure)
 - [ ] Add cache layer (Delete / Update documents before cleaning cache)
-- [ ] Implement find method
+- [x] Implement find method
+- [ ] Implement or conditions for the find method
 - [ ] Test for find timeout limits
 - [ ] Merge new query syntax parser
+- [ ] Limit queries to indexed attaributes only?
 
 ## System Requirements
 

@@ -3,7 +3,6 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
-use Utopia\Database\Database;
 use Utopia\Database\Query;
 
 class Query extends Validator

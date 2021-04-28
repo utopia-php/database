@@ -457,11 +457,20 @@ class Database
         // TODO@kodumbeats Check if returned cache id matches request
         if ($cache = $this->cache->load($id, self::TTL)) {
             $document = new Document($cache);
+            $validator = new Authorization($document, self::PERMISSION_READ);
+
+            if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
+                return new Document();
+            }
+
+            if($document->isEmpty()) {
+                return $document;
+            }
+
+            return $document;
         }
 
-        if (!$document) {
-            $document = $this->adapter->getDocument($collection->getId(), $id);
-        }
+        $document = $this->adapter->getDocument($collection->getId(), $id);
 
         $document->setAttribute('$collection', $collection->getId());
 
@@ -475,12 +484,10 @@ class Database
             return $document;
         }
 
-        // $this->cache->save($id, $document->getArrayCopy()); // save to cache after fetching from db
-
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        // var_dump($document, new Document($document->getArrayCopy()));
+        $this->cache->save($id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -571,8 +578,8 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        // $this->cache->purge($id);
-        // $this->cache->save($id, $document->getArrayCopy());
+        $this->cache->purge($id);
+        $this->cache->save($id, $document->getArrayCopy());
 
         return $document;
     }
@@ -595,7 +602,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        // $this->cache->purge($id);
+        $this->cache->purge($id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }

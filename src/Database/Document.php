@@ -32,19 +32,19 @@ class Document extends ArrayObject
             throw new Exception('$write permission must be of type array');
         }
 
-        foreach ($input as $key => &$value) {
-            if (\is_array($value)) {
-                if ((isset($value['$id']) || isset($value['$collection']))) {
-                    $input[$key] = new self($value);
-                } else {
-                    foreach ($value as $childKey => $child) {
-                        if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
-                            $value[$childKey] = new self($child);
-                        }
-                    }
-                }
-            }
-        }
+        // foreach ($input as $key => &$value) {
+        //     if (\is_array($value)) {
+        //         if ((isset($value['$id']) || isset($value['$collection']))) {
+        //             $input[$key] = new self($value);
+        //         } else {
+        //             foreach ($value as $childKey => $child) {
+        //                 if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
+        //                     $value[$childKey] = new self($child);
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         parent::__construct($input);
     }

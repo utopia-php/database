@@ -70,7 +70,7 @@ class QueryValidator extends Validator
     {
         // Validate operator
         if (!in_array($query->getOperator(), $this->operators)) {
-            $this->message = 'Query operator invalid';
+            $this->message = 'Query operator invalid: ' . $query->getOperator();
             return false;
         }
 
@@ -86,8 +86,8 @@ class QueryValidator extends Validator
         $attributeType = $this->schema[array_search($query->getAttribute(), array_column($this->schema, '$id'))]['type'];
 
         foreach ($query->getValues() as $value) {
-            if (gettype($value) ==! $attributeType) {
-                $this->message = 'Query type does not match expected' . $attributeType;
+            if (gettype($value) !== $attributeType) {
+                $this->message = 'Query type does not match expected: ' . $attributeType;
                 return false;
             }
         }

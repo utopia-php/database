@@ -92,11 +92,6 @@ class QueryValidator extends Validator
             }
         }
 
-        // Ensure values are array
-        if (!is_array($query->getValues())) {
-            return false;
-        }
-
         return true;
     }
     /**

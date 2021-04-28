@@ -82,7 +82,6 @@ class QueryValidatorTest extends TestCase
         $validator = new QueryValidator($this->schema);
 
         $query = Query::parse('title.equal("Iron Man")');
-        var_dump($query);
 
         $this->assertEquals(true, $validator->isValid($query));
     }

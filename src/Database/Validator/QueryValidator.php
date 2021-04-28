@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator;
 use Utopia\Validator;
 use Utopia\Database\Query;
 
-class Query extends Validator
+class QueryValidator extends Validator
 {
     /**
      * @var string
@@ -62,11 +62,11 @@ class Query extends Validator
      *
      * Returns true if query typed according to schema.
      *
-     * @param Query $query
+     * @param $query
      *
      * @return bool
      */
-    public function isValid(Query $query)
+    public function isValid($query)
     {
         // Validate operator
         if (!in_array($query->getOperator(), $this->operators)) {
@@ -74,28 +74,30 @@ class Query extends Validator
             return false;
         }
 
-        // Validate attribute by name and type
-        $attributes = $this->schema['attributes'];
+        // Search for attribute in schema
+        $attributeIndex = array_search($query->getAttribute(), array_column($this->schema, '$id'));
 
-        if (!in_array($query->getAttribute(), $attributes)) {
-            $this->message = 'Attribute not found in schema';
+        if ($attributeIndex === false) {
+            $this->message = 'Attribute not found in schema: ' . $query->getAttribute();
             return false;
         }
 
         // Extract the type of desired attribute from collection $schema
         $attributeType = $this->schema[array_search($query->getAttribute(), array_column($this->schema, '$id'))]['type'];
 
-        if ($attributeType !== gettype($query->getValue())) {
-            $this->message = 'Query type does not match schema';
-            return false;
+        foreach ($query->getValues() as $value) {
+            if (gettype($value) ==! $attributeType) {
+                $this->message = 'Query type does not match expected' . $attributeType;
+                return false;
+            }
         }
 
         // Ensure values are array
-        if (is_array($query->getValues())) {
-            return true;
+        if (!is_array($query->getValues())) {
+            return false;
         }
 
-        return false;
+        return true;
     }
     /**
      * Is array

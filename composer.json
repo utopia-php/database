@@ -9,6 +9,10 @@
         {
             "name": "Eldad Fux",
             "email": "eldad@appwrite.io"
+        },
+        {
+            "name": "Brandon Leckemby",
+            "email": "brandon@appwrite.io"
         }
     ],
     "autoload": {
@@ -20,6 +24,8 @@
     "require": {
         "php": ">=7.1",
         "ext-pdo": "*",
+        "ext-redis": "*",
+        "ext-mongodb": "*",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.4.0",
         "mongodb/mongodb": "1.8.0"

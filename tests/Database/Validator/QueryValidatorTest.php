@@ -85,11 +85,6 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(Query::parse('description.equal("Best movie ever")')));
         $this->assertEquals(true, $validator->isValid(Query::parse('rating.greater(4)')));
 
-        // Debugging floats
-        // $query = Query::parse('price.lesserEqual(6.50)');
-        // $validator->isValid(Query::parse('price.lesserEqual(6.50)'));
-        // var_dump($validator->getDescription());
-
         $this->assertEquals(true, $validator->isValid(Query::parse('price.lesserEqual(6.50)')));
     }
 

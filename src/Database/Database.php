@@ -579,7 +579,7 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->cache->purge($id);
-        $this->cache->save($id, $document->getArrayCopy());
+        $this->cache->save($document->getId(), $document->getArrayCopy());
 
         return $document;
     }

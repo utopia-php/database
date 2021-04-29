@@ -3,8 +3,11 @@
 namespace Utopia\Tests\Adapter;
 
 use PDO;
+use Redis;
+use Utopia\Cache\Cache;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Tests\Base;
 
 class MySQLTest extends Base
@@ -38,7 +41,12 @@ class MySQLTest extends Base
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);   // Return arrays
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);        // Handle all errors with exceptions
 
-        $database = new Database(new MySQL($pdo));
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
+        $cache = new Cache(new RedisAdapter($redis));
+
+        $database = new Database(new MySQL($pdo), $cache);
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;

@@ -9,6 +9,8 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends Adapter
 {
@@ -468,6 +470,60 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return Document[]
+     */
+    public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+
+        foreach($roles as &$role) {
+            $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
+        }
+
+        foreach($queries as $query) {
+            $where[] = 'table_main.'.$query->getAttribute().$this->getSQLOperator($query->getOperator()).':attribute_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+        }
+
+        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
+            INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
+                ON table_main._uid = table_permissions._uid
+                AND table_permissions._action = 'read'
+                AND table_permissions._role IN (".implode(',', $roles).")
+            WHERE ".implode(' AND ', $where)."
+            LIMIT :offset, :limit;
+        ");
+        
+        foreach($queries as $query) {
+            $stmt->bindValue(':attribute_'.$query->getAttribute(), $query->getValues()[0], $this->getPDOType($query->getValues()[0]));
+        }
+
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $results = $stmt->fetchAll();
+
+        foreach ($results as &$value) {
+            $value = new Document($value);
+        }
+
+        return $results;
+    }
+
+    /**
      * Get max STRING limit
      * 
      * @return int
@@ -570,6 +626,30 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get SQL Operator
+     * 
+     * @param string $operator
+     * 
+     * @return string
+     */
+    protected function getSQLOperator(string $operator): string
+    {
+        switch ($operator) {
+            case Query::TYPE_EQUAL:
+                return '=';
+            break;
+
+            case Query::TYPE_NOTEQUAL:
+                return '!=';
+            break;
+
+            default:
+                throw new Exception('Unknown Operator:' . $operator);
+            break;
+        }
+    }
+
+    /**
      * Get PDO Type
      * 
      * @param mixed $value
@@ -587,13 +667,13 @@ class MariaDB extends Adapter
                 return PDO::PARAM_INT;
             break;
 
-            case 'integer':
-                return PDO::PARAM_INT;
-            break;
-
-            // case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
+            case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
             case 'double':
                 return PDO::PARAM_STR;
+            break;
+
+            case 'integer':
+                return PDO::PARAM_INT;
             break;
             
             default:

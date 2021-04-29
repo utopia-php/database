@@ -4,6 +4,9 @@ namespace Utopia\Database;
 
 class Query
 {
+    const TYPE_EQUAL = 'equal';
+    const TYPE_NOTEQUAL = 'notEqual';
+    
     /**
      * @var string
      */

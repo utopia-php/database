@@ -571,33 +571,31 @@ class Database
         return $this->adapter->deleteDocument($collection, $id);
     }
 
-    // /**
-    //  * @param string $collection
-    //  * @param array $options
-    //  *
-    //  * @return Document[]
-    //  */
-    // public function find(string $collection, array $options)
-    // {
-    //     $options = \array_merge([
-    //         'offset' => 0,
-    //         'limit' => 15,
-    //         'search' => '',
-    //         'relations' => true,
-    //         'orderField' => '',
-    //         'orderType' => 'ASC',
-    //         'orderCast' => 'int',
-    //         'filters' => [],
-    //     ], $options);
+    /**
+     * Find Documents
+     * 
+     * @param string $collection
+     * @param Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return Document[]
+     */
+    public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array
+    {
+        $collection = $this->getCollection($collection);
 
-    //     $results = $this->adapter->find($this->getCollection($collection), $options);
+        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes);
 
-    //     foreach ($results as &$node) {
-    //         $node = $this->decode(new Document($node));
-    //     }
+        foreach ($results as &$node) {
+            $node = $this->casting($collection, $node);
+            $node = $this->decode($collection, $node);
+        }
 
-    //     return $results;
-    // }
+        return $results;
+    }
 
     // /**
     //  * @param string $collection

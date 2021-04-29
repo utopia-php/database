@@ -667,7 +667,7 @@ class MariaDB extends Adapter
                 return PDO::PARAM_INT;
             break;
 
-            case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
+            //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
             case 'double':
                 return PDO::PARAM_STR;
             break;

@@ -107,20 +107,10 @@ class Database
         $this->cache = $cache;
 
         self::addFilter('json',
-            function($value) {
-                $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
-
-                if(!is_array($value)) {
-                    throw new Exception('Can\'t encode to JSON');
-                }
-
-                return json_encode($value);
+            function(Document $value): string {
+                return json_encode($value->getArrayCopy());
             },
-            function($value) {
-                if(!is_string($value)) {
-                    throw new Exception('Can\'t decode from JSON');
-                }
-
+            function(string $value): array {
                 return json_decode($value, true);
             }
         );

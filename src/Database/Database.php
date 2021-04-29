@@ -107,10 +107,18 @@ class Database
         $this->cache = $cache;
 
         self::addFilter('json',
-            function(Document $value): string {
-                return json_encode($value->getArrayCopy());
+            /**
+             * @param mixed $value
+             * @return string
+             */
+            function($value): string {
+                return json_encode($value);
             },
-            function(string $value): array {
+            /**
+             * @param mixed $value
+             * @return array
+             */
+            function($value): array {
                 return json_decode($value, true);
             }
         );

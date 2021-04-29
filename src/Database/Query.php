@@ -110,7 +110,7 @@ class Query
                 $input = explode('.', $filter, $stanzas);
                 $attribute = $input[0];
                 $expression = $input[1];
-                [(string)$operator, (array)$values] = self::parseExpression($expression);
+                [$operator, $values] = self::parseExpression($expression);
                 break;
         }
 
@@ -123,7 +123,7 @@ class Query
      *
      * @param string $expression
      *
-     * @return (string|array)[]
+     * @return array
      */
     protected static function parseExpression(string $expression): array
     {
@@ -153,6 +153,7 @@ class Query
 
         // Cast $value type
 
+        /** @var mixed */
         $values = array_map(function ($value) {
 
             // Trim whitespace from around $value

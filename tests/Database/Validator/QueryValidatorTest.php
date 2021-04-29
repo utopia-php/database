@@ -97,8 +97,9 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $validator->isValid(Query::parse('title.eqqual("Iron Man")'));
+        $response = $validator->isValid(Query::parse('title.eqqual("Iron Man")'));
 
+        $this->assertEquals(false, $response);
         $this->assertEquals('Query operator invalid: eqqual', $validator->getDescription());
     }
 
@@ -106,8 +107,9 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $validator->isValid(Query::parse('name.equal("Iron Man")'));
+        $response = $validator->isValid(Query::parse('name.equal("Iron Man")'));
 
+        $this->assertEquals(false, $response);
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
     }
 
@@ -115,9 +117,9 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $query = Query::parse('title.equal(1776)');
-        $validator->isValid($query);
+        $response = $validator->isValid(Query::parse('title.equal(1776)'));
 
+        $this->assertEquals(false, $response);
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
     }
 }

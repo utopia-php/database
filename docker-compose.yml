@@ -13,7 +13,7 @@ services:
 
   postgres:
     image: postgres:13
-    container_name: postgres
+    container_name: utopia-postgres
     networks:
       - database
     ports:
@@ -24,7 +24,7 @@ services:
 
   cockroach:
     image: cockroachdb/cockroach:v20.2.0
-    container_name: cockroach
+    container_name: utopia-cockroach
     command: start-single-node --insecure --logtostderr
     networks:
       - database
@@ -34,7 +34,7 @@ services:
 
   mariadb:
     image: mariadb:10.5
-    container_name: mariadb
+    container_name: utopia-mariadb
     networks:
       - database
     ports:
@@ -44,7 +44,7 @@ services:
   
   mongo:
     image: mongo:3.6
-    container_name: mongo
+    container_name: utopia-mongo
     networks:
       - database
     ports:
@@ -55,7 +55,7 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: mysql
+    container_name: utopia-mysql
     networks:
       - database
     ports:
@@ -69,7 +69,7 @@ services:
 
   redis:
     image: redis:6.0-alpine
-    container_name: redis
+    container_name: utopia-redis
     networks:
       - database
 

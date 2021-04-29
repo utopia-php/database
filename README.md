@@ -123,22 +123,18 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 
 ## TODOS
 
-- [x] Updated collection on deletion
-- [x] Updated collection on attribute creation
-- [x] Updated collection on attribute deletion
-- [x] Updated collection on index creation
-- [x] Updated collection on index deletion
-- [ ] Validate original document before editing `$id`
-- [x] Test duplicated document exception is being thrown
-- [ ] Test no one can overwrite exciting documents/collections without permission
-- [x] Add autorization validation layer
-- [x] Add strcture validation layer (based on new collection structure)
-- [ ] Add cache layer (Delete / Update documents before cleaning cache)
-- [x] Implement find method
-- [ ] Implement or conditions for the find method
-- [ ] Test for find timeout limits
-- [ ] Merge new query syntax parser
-- [ ] Limit queries to indexed attaributes only?
+- [ ] CRUD: Updated databases list method
+- [ ] CRUD: Updated collection list method
+- [ ] CRUD: Add format validation on top of type validation
+- [ ] CRUD: Validate original document before editing `$id`
+- [ ] CRUD: Test no one can overwrite exciting documents/collections without permission
+- [ ] CRUD: Add cache layer (Delete / Update documents before cleaning cache)
+- [ ] FIND: Implement or conditions for the find method
+- [ ] FIND: Implement or conditions with floats
+- [ ] FIND: Test for find timeout limits
+- [ ] FIND: Limit queries to indexed attaributes only?
+- [ ] FIND: Add a query validator
+- [ ] FIND: Add support for more operators (>,>=,<,<=,search/match/like)
 
 ## System Requirements
 

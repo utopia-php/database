@@ -201,7 +201,7 @@ abstract class Adapter
     abstract public function createDocument(string $collection, Document $document): Document;
 
     /**
-     * Update Document.
+     * Update Document
      *
      * @param string $collection
      * @param Document $document
@@ -211,7 +211,7 @@ abstract class Adapter
     abstract public function updateDocument(string $collection, Document $document): Document;
 
     /**
-     * Delete Document.
+     * Delete Document
      *
      * @param string $collection
      * @param string $id
@@ -220,17 +220,21 @@ abstract class Adapter
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
 
-    // /**
-    //  * Find.
-    //  *
-    //  * Find data sets using chosen queries
-    //  *
-    //  * @param Document $collection
-    //  * @param array $options
-    //  *
-    //  * @return array
-    //  */
-    // abstract public function find(Document $collection, array $options);
+    /**
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return Document[]
+     */
+    abstract public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array;
 
     // /**
     //  * @param array $options

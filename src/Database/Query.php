@@ -153,7 +153,7 @@ class Query
 
         // Cast $value type
 
-        /** @var mixed */
+        /** @var array */
         $values = array_map(function ($value) {
 
             // Trim whitespace from around $value

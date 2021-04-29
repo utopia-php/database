@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fa7d9c6d206e196d739c246ce67aac67",
+    "content-hash": "dd2546d5cd02cf55391c4a5cd4768bd0",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -287,16 +287,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.4.0",
+            "version": "0.4.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "81c7806e13091a9d585ad9bba57fae625a2cf26c"
+                "reference": "8c48eff73219c8c1ac2807909f0a38f3480c8938"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/81c7806e13091a9d585ad9bba57fae625a2cf26c",
-                "reference": "81c7806e13091a9d585ad9bba57fae625a2cf26c",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/8c48eff73219c8c1ac2807909f0a38f3480c8938",
+                "reference": "8c48eff73219c8c1ac2807909f0a38f3480c8938",
                 "shasum": ""
             },
             "require": {
@@ -334,9 +334,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.4.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.4.1"
             },
-            "time": "2021-04-22T14:28:14+00:00"
+            "time": "2021-04-29T18:41:43+00:00"
         },
         {
             "name": "utopia-php/framework",
@@ -3922,7 +3922,9 @@
     "prefer-lowest": false,
     "platform": {
         "php": ">=7.1",
-        "ext-pdo": "*"
+        "ext-pdo": "*",
+        "ext-redis": "*",
+        "ext-mongodb": "*"
     },
     "platform-dev": [],
     "plugin-api-version": "2.0.0"

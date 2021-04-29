@@ -91,9 +91,16 @@ class Query
      * */
     public static function parse(string $filter): Query
     {
+        $attribute = '';
+        $operator = '';
+        $values = [];
+
         // get index of open parentheses
+        /** @var int */
         $end = mb_strpos($filter, '(');
+
         // count stanzas by only counting '.' that come before open parentheses
+        /** @var int */
         $stanzas = mb_substr_count(mb_substr($filter, 0, $end), ".") + 1;
 
         // TODO@kodumbeats handle relations between collections, e.g. if($stanzas > 2)
@@ -103,7 +110,7 @@ class Query
                 $input = explode('.', $filter, $stanzas);
                 $attribute = $input[0];
                 $expression = $input[1];
-                [$operator, $values] = self::parseExpression($expression);
+                [(string)$operator, (array)$values] = self::parseExpression($expression);
                 break;
         }
 

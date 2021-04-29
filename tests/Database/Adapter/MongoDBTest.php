@@ -1,39 +1,39 @@
 <?php
 
-namespace Utopia\Tests\Adapter;
+// namespace Utopia\Tests\Adapter;
 
-use MongoDB\Client;
-use PDO;
-use Utopia\Database\Database;
-use Utopia\Database\Adapter\MongoDB;
-use Utopia\Tests\Base;
+// use MongoDB\Client;
+// use PDO;
+// use Utopia\Database\Database;
+// use Utopia\Database\Adapter\MongoDB;
+// use Utopia\Tests\Base;
 
-class MongoDBTest extends Base
-{
-    /**
-     * @var Database
-     */
-    static $database = null;
+// class MongoDBTest extends Base
+// {
+//     /**
+//      * @var Database
+//      */
+//     static $database = null;
 
-    /**
-     * @reture Adapter
-     */
-    static function getDatabase(): Database
-    {
-        if(!is_null(self::$database)) {
-            return self::$database;
-        }
+//     /**
+//      * @reture Adapter
+//      */
+//     static function getDatabase(): Database
+//     {
+//         if(!is_null(self::$database)) {
+//             return self::$database;
+//         }
 
-        $client = new Client('mongodb://mongo/',
-            [
-                'username' => 'root',
-                'password' => 'example',
-            ],
-        );
+//         $client = new Client('mongodb://mongo/',
+//             [
+//                 'username' => 'root',
+//                 'password' => 'example',
+//             ],
+//         );
 
-        $database = new Database(new MongoDB($client));
-        $database->setNamespace('myapp_'.uniqid());
+//         $database = new Database(new MongoDB($client));
+//         $database->setNamespace('myapp_'.uniqid());
 
-        return self::$database = $database;
-    }
-}
+//         return self::$database = $database;
+//     }
+// }

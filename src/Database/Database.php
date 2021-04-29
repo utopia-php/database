@@ -7,6 +7,7 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Cache\Cache;
 
 class Database
 {
@@ -36,10 +37,18 @@ class Database
     // Collections
     const COLLECTIONS = 'collections';
 
+    // Cache
+    const TTL = 60 * 60 * 24; // 24 hours
+
     /**
      * @var Adapter
      */
     protected $adapter;
+
+    /**
+     * @var Cache
+     */
+    protected $cache;
 
     /**
      * Parent Collection
@@ -90,10 +99,12 @@ class Database
 
     /**
      * @param Adapter $adapter
+     * @param Cache $cache
      */
-    public function __construct(Adapter $adapter)
+    public function __construct(Adapter $adapter, Cache $cache)
     {
         $this->adapter = $adapter;
+        $this->cache = $cache;
 
         self::addFilter('json',
             function($value) {
@@ -440,7 +451,26 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-        $document   = $this->adapter->getDocument($collection->getId(), $id);
+        $document = null;
+        $cache = null;
+
+        // TODO@kodumbeats Check if returned cache id matches request
+        if ($cache = $this->cache->load($id, self::TTL)) {
+            $document = new Document($cache);
+            $validator = new Authorization($document, self::PERMISSION_READ);
+
+            if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
+                return new Document();
+            }
+
+            if($document->isEmpty()) {
+                return $document;
+            }
+
+            return $document;
+        }
+
+        $document = $this->adapter->getDocument($collection->getId(), $id);
 
         $document->setAttribute('$collection', $collection->getId());
 
@@ -456,6 +486,8 @@ class Database
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
+
+        $this->cache->save($id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -544,8 +576,10 @@ class Database
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
-        
         $document = $this->decode($collection, $document);
+
+        $this->cache->purge($id);
+        $this->cache->save($document->getId(), $document->getArrayCopy());
 
         return $document;
     }
@@ -567,6 +601,8 @@ class Database
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
         }
+
+        $this->cache->purge($id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }

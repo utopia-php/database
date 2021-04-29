@@ -57,6 +57,8 @@ Some examples to help you get started.
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\None as NoCache;
 
 $dbHost = 'mariadb';
 $dbPort = '3306';
@@ -71,7 +73,9 @@ $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 ]);
 
-$database = new Database(new MariaDB($pdo));
+$cache = new Cache(new NoCache());
+
+$database = new Database(new MariaDB($pdo), $cache);
 $database->setNamespace('myscope');
 
 $database->create(); // Creates a new schema named `myscope`

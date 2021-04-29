@@ -3,8 +3,11 @@
 namespace Utopia\Tests\Adapter;
 
 use PDO;
+use Redis;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
@@ -15,7 +18,7 @@ class MariaDBTest extends Base
     static $database = null;
 
     /**
-     * @reture Adapter
+     * @return Adapter
      */
     static function getDatabase(): Database
     {
@@ -36,7 +39,12 @@ class MariaDBTest extends Base
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         ]);
 
-        $database = new Database(new MariaDB($pdo));
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
+        $cache = new Cache(new RedisAdapter($redis));
+
+        $database = new Database(new MariaDB($pdo), $cache);
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;

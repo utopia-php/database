@@ -118,13 +118,6 @@ abstract class Adapter
     abstract public function createCollection(string $name): bool;
 
     /**
-     * List Collections
-     * 
-     * @return array
-     */
-    abstract public function listCollections(): array;
-
-    /**
      * Delete Collection
      * 
      * @param string $name

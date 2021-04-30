@@ -138,17 +138,23 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 ## TODOS
 
 - [ ] CRUD: Updated databases list method
-- [ ] CRUD: Updated collection list method
+- [x] CRUD: Updated collection list method
 - [ ] CRUD: Add format validation on top of type validation
 - [ ] CRUD: Validate original document before editing `$id`
 - [ ] CRUD: Test no one can overwrite exciting documents/collections without permission
-- [ ] FIND: Implement or conditions for the find method
-- [ ] FIND: Implement or conditions with floats
+- [x] FIND: Implement or conditions for the find method
+- [x] FIND: Implement or conditions with floats
 - [ ] FIND: Test for find timeout limits
-- [ ] FIND: Limit queries to indexed attaributes only?
-- [ ] FIND: Add a query validator
-- [ ] FIND: Add support for more operators (>,>=,<,<=,search/match/like)
+- [ ] FIND: Add a query validator (Limit queries to indexed attaributes only?)
+- [ ] FIND: Add support for more operators (search/match/like)
+- [ ] TEST: Find Limit & Offset values 
+- [ ] TEST: Find Order by (+multiple attributes) 
 - [ ] TEST: Missing Collection, DocumentId validators tests
+
+## Open Issues
+
+- Lazy index creation, maybe add a queue attribute to populate before creating the index?
+- In queries for arrays, should we create a dedicated index?
 
 ## System Requirements
 

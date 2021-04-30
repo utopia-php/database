@@ -37,9 +37,12 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDelete
      */
-    public function testCreateDeleteCollection()
+    public function testCreateListDeleteCollection()
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
+
+        $this->assertCount(1, static::getDatabase()->listCollections());
+
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
@@ -348,12 +351,13 @@ abstract class Base extends TestCase
         /**
          * Float condition
          */
-        // $documents = static::getDatabase()->find('movies', [
-        //     new Query('price', Query::TYPE_EQUAL, [25.99]),
-        // ]);
+        $documents = static::getDatabase()->find('movies', [
+            new Query('price', Query::TYPE_LESSER, [26.00]),
+            new Query('price', Query::TYPE_GREATER, [25.98]),
+        ]);
 
-        // $this->assertEquals(1, count($documents));
-        // $this->assertEquals('Captain Marvel', $documents[0]['name']);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Captain Marvel', $documents[0]['name']);
 
         /**
          * Multiple conditions
@@ -364,6 +368,17 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+
+        /**
+         * Multiple conditions and OR values
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('name', Query::TYPE_EQUAL, ['Frozen II', 'Captain Marvel']),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Frozen II', $documents[0]['name']);
+        $this->assertEquals('Captain Marvel', $documents[1]['name']);
     }
 
     public function testFindFirst()

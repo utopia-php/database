@@ -235,12 +235,20 @@ class Database
     /**
      * List Collections
      * 
+     * @param int $offset
+     * @param int $limit
+     * 
      * @return array
      */
-    public function listCollections(): array
+    public function listCollections($limit = 25, $offset = 0): array
     {
-        // TODO add a search here
-        return [];
+        Authorization::disable();
+        
+        $result = $this->find(self::COLLECTIONS, [], $limit, $offset);
+        
+        Authorization::reset();
+
+        return $result;
     }
 
     /**

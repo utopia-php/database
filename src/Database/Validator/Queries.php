@@ -59,6 +59,29 @@ class Queries extends Validator
      */
     public function isValid($queries, $strict = true)
     {
+        /**
+         * Array of attributes from $queries
+         *
+         * @var string[]
+         */
+        $found = [];
+
+        foreach ($queries as $query) {
+            // individually validate $query
+            if (!$this->validator->isValid($query)) {
+                $this->message = 'Query not valid: ' . $this->validator->getDescription();
+                return false;
+            }
+
+            // $attribute = array_search($query->getAttribute(), $indexes);
+            // TODO@kodumbeats add logic to check all attributes can be found in a single index
+
+            // if ($strict && !$attribute) {
+            //     $this->message = 'Index does not exist for ' . $query->getAttribute();
+            //     return false;
+            // }
+        }
+
         return true;
     }
     /**

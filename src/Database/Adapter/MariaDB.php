@@ -108,18 +108,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * List Collections
-     * 
-     * @return array
-     */
-    public function listCollections(): array
-    {
-        $list = [];
-
-        return $list;
-    }
-
-    /**
      * Delete Collection
      * 
      * @param string $id
@@ -493,21 +481,29 @@ class MariaDB extends Adapter
             $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
         }
 
-        foreach($queries as $query) {
-            $where[] = 'table_main.'.$query->getAttribute().$this->getSQLOperator($query->getOperator()).':attribute_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+        $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
+            ON table_main._uid = table_permissions._uid
+            AND table_permissions._action = 'read' AND table_permissions._role IN (".implode(',', $roles).")" : '';
+
+        foreach($queries as $i => $query) {
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = 'table_main.'.$query->getAttribute().' '.$this->getSQLOperator($query->getOperator()).' :attribute_'.$i.'_'.$key.'_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+            }
+
+            $where[] = implode(' OR ', $conditions);
         }
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
-            INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-                ON table_main._uid = table_permissions._uid
-                AND table_permissions._action = 'read'
-                AND table_permissions._role IN (".implode(',', $roles).")
+            {$permissions}
             WHERE ".implode(' AND ', $where)."
             LIMIT :offset, :limit;
         ");
-        
-        foreach($queries as $query) {
-            $stmt->bindValue(':attribute_'.$query->getAttribute(), $query->getValues()[0], $this->getPDOType($query->getValues()[0]));
+
+        foreach($queries as $i => $query) {
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
         }
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -641,6 +637,22 @@ class MariaDB extends Adapter
 
             case Query::TYPE_NOTEQUAL:
                 return '!=';
+            break;
+
+            case Query::TYPE_LESSER:
+                return '<';
+            break;
+
+            case Query::TYPE_LESSEREQUAL:
+                return '<=';
+            break;
+
+            case Query::TYPE_GREATER:
+                return '>';
+            break;
+
+            case Query::TYPE_GREATEREQUAL:
+                return '>=';
             break;
 
             default:

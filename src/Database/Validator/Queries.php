@@ -18,16 +18,21 @@ class Queries extends Validator
      */
     protected $validator;
 
+    /**
+     * @var array
+     */
+    protected $indexes = [];
 
     /**
      * Queries constructor
      *
      * @param QueryValidator $validator
-     * @param Query[] $queries
+     * @param array $indexes
      */
-    public function __construct($validator)
+    public function __construct($validator, $indexes)
     {
-        $this->validator= $validator;
+        $this->validator = $validator;
+        $this->indexes = $indexes;
     }
 
     /**

@@ -144,7 +144,6 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 - [ ] FIND: Test for find timeout limits
 - [ ] FIND: Add a query validator (Limit queries to indexed attaributes only?)
 - [ ] FIND: Add support for more operators (search/match/like)
-- [ ] * FIND: Missing returned data for $read & $write permissions (denormalize data?)
 - [ ] TEST: Missing Collection, DocumentId validators tests
 
 ## Open Issues

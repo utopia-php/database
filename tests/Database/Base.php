@@ -385,6 +385,20 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('movies');
 
         $this->assertEquals(5, count($documents));
+        $this->assertNotEmpty($documents[0]->getId());
+        $this->assertEquals(['*', 'user1', 'user2'], $documents[0]->getRead());
+        $this->assertEquals(['*', 'user1x', 'user2x'], $documents[0]->getWrite());
+        $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
+        $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
+        $this->assertIsString($documents[0]->getAttribute('director'));
+        $this->assertEquals(2013, $documents[0]->getAttribute('year'));
+        $this->assertIsInt($documents[0]->getAttribute('year'));
+        $this->assertEquals(39.50, $documents[0]->getAttribute('price'));
+        $this->assertIsFloat($documents[0]->getAttribute('price'));
+        $this->assertEquals(true, $documents[0]->getAttribute('active'));
+        $this->assertIsBool($documents[0]->getAttribute('active'));
+        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
+        $this->assertIsArray($documents[0]->getAttribute('generes'));
 
         /**
          * Check Permissions

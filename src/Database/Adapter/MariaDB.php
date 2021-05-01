@@ -101,6 +101,7 @@ class MariaDB extends Adapter
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(255) NOT NULL,
+                `_permissions` TEXT NOT NULL,
                 PRIMARY KEY (`_id`),
                 UNIQUE KEY `_index1` (`_uid`)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
@@ -246,27 +247,13 @@ class MariaDB extends Adapter
 
         $document = $stmt->fetch();
 
+        $permissions = (isset($document['_permissions'])) ? json_decode($document['_permissions'], true) : [];
         $document['$id'] = $document['_uid'];
-        $document['$read'] = [];
-        $document['$write'] = [];
+        $document['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
+        $document['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
         unset($document['_id']);
         unset($document['_uid']);
-
-        $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}_permissions
-            WHERE _uid = :_uid
-            LIMIT 100;
-        ");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-        $stmt->execute();
-
-        $permissions = $stmt->fetchAll();
-
-        foreach ($permissions as $permission) {
-            $action = $permission['_action'] ?? '';
-            $role = $permission['_role'] ?? '';
-            $document['$'.$action][] = $role;
-        }
+        unset($document['_permissions']);
 
         return new Document($document);
     }
@@ -295,9 +282,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid");
+                SET {$columns} _uid = :_uid, _permissions = :_permissions");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_permissions', json_encode([Database::PERMISSION_READ => $document->getRead(), Database::PERMISSION_WRITE => $document->getWrite()]), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -371,9 +359,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("UPDATE {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+                SET {$columns} _uid = :_uid, _permissions = :_permissions WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_permissions', json_encode([Database::PERMISSION_READ => $document->getRead(), Database::PERMISSION_WRITE => $document->getWrite()]), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -523,6 +512,14 @@ class MariaDB extends Adapter
         $results = $stmt->fetchAll();
 
         foreach ($results as &$value) {
+            $permissions = (isset($value['_permissions'])) ? json_decode($value['_permissions'], true) : [];
+            $value['$id'] = $value['_uid'];
+            $value['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
+            $value['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
+            unset($value['_id']);
+            unset($value['_uid']);
+            unset($value['_permissions']);
+
             $value = new Document($value);
         }
 

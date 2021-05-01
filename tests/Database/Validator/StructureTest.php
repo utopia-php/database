@@ -127,7 +127,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Collection "" not found', $validator->getDescription());
     }
 
-    public function testReuiredKeys()
+    public function testRequiredKeys()
     {
         $validator = new Structure(new Document($this->collection));
 

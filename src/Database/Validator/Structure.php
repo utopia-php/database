@@ -62,7 +62,7 @@ class Structure extends Validator
     /**
      * @var array
      */
-    static protected $validators = [];
+    static protected $formats = [];
 
     /**
      * @var string
@@ -86,9 +86,9 @@ class Structure extends Validator
      * 
      * @return array
      */
-    static public function getValidators(): array
+    static public function getFormats(): array
     {
-        return self::$validators;
+        return self::$formats;
     }
 
     /**
@@ -98,9 +98,9 @@ class Structure extends Validator
      * @param Validator $validator
      * @param string $type
      */
-    static public function addValidator(string $name, Validator $validator, string $type): void
+    static public function addFormat(string $name, Validator $validator, string $type): void
     {
-        self::$validators[$name] = [
+        self::$formats[$name] = [
             'validator' => $validator,
             'type' => $type,
         ];
@@ -111,9 +111,9 @@ class Structure extends Validator
      * 
      * @param string $name
      */
-    static public function removeValidator(string $name): void
+    static public function removeFormat(string $name): void
     {
-        unset(self::$validators[$name]);
+        unset(self::$formats[$name]);
     }
 
     /**

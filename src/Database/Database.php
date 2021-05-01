@@ -88,8 +88,28 @@ class Database
                 'array' => true,
                 'filters' => ['json'],
             ],
+            [
+                '$id' => 'attributesInQueue',
+                'type' => self::VAR_STRING,
+                'size' => 1000000,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+                'filters' => ['json'],
+            ],
+            [
+                '$id' => 'indexesInQueue',
+                'type' => self::VAR_STRING,
+                'size' => 1000000,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+                'filters' => ['json'],
+            ],
         ],
         'indexes' => [],
+        'attributesInQueue' => [],
+        'indexesInQueue' => [],
     ];
 
     /**
@@ -166,9 +186,11 @@ class Database
         $this->adapter->create();
 
         $this->createCollection(self::COLLECTIONS);
-        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 128, true);
-        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 8064, false);
-        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 8064, false);
+        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 512, true);
+        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 1000000, false);
+        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 1000000, false);
+        $this->createAttribute(self::COLLECTIONS, 'attributesInQueue', self::VAR_STRING, 1000000, false);
+        $this->createAttribute(self::COLLECTIONS, 'indexesInQueue', self::VAR_STRING, 1000000, false);
         $this->createIndex(self::COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
 
         return true;
@@ -216,6 +238,8 @@ class Database
             'name' => $id,
             'attributes' => [],
             'indexes' => [],
+            'attributesInQueue' => [],
+            'indexesInQueue' => [],
         ]));
     }
 
@@ -351,6 +375,70 @@ class Database
     }
 
     /**
+     * Add Attribute in Queue
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size utf8mb4 chars length
+     * @param bool $required
+     * @param bool $signed
+     * @param bool $array
+     * @param array $filters
+     * 
+     * @return bool
+     */
+    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $collection->setAttribute('attributesInQueue', new Document([
+            '$id' => $id,
+            'type' => $type,
+            'size' => $size,
+            'required' => $required,
+            'signed' => $signed,
+            'array' => $array,
+            'filters' => $filters,
+        ]), Document::SET_TYPE_APPEND);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
+     * Remove Attribute in Queue
+     * 
+     * @param string $collection
+     * @param string $id
+     * 
+     * @return bool
+     */
+    public function removeAttributeInQueue(string $collection, string $id): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributesInQueue', []);
+
+        foreach ($attributes as $key => $value) {
+            if(isset($value['$id']) && $value['$id'] === $id) {
+                unset($attributes[$key]);
+            }
+        }
+
+        $collection->setAttribute('attributesInQueue', $attributes);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection
@@ -436,6 +524,70 @@ class Database
         }
 
         return $this->adapter->deleteIndex($collection->getId(), $id);
+    }
+
+    /**
+     * Add Index in Queue
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param array $attributes
+     * @param array $lengths
+     * @param array $orders
+     *
+     * @return bool
+     */
+    public function addIndexInQueue(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
+    {
+        if(empty($attributes)) {
+            throw new Exception('Missing attributes');
+        }
+
+        $collection = $this->getCollection($collection);
+
+        $collection->setAttribute('indexesInQueue', new Document([
+            '$id' => $id,
+            'type' => $type,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders,
+        ]), Document::SET_TYPE_APPEND);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
+     * Remove Index in Queue
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function removeIndexInQueue(string $collection, string $id): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $indexes = $collection->getAttribute('indexesInQueue', []);
+
+        foreach ($indexes as $key => $value) {
+            if(isset($value['$id']) && $value['$id'] === $id) {
+                unset($indexes[$key]);
+            }
+        }
+
+        $collection->setAttribute('indexesInQueue', $indexes);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
     }
 
     /**

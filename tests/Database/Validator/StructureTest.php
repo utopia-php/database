@@ -20,6 +20,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'title',
                 'type' => Database::VAR_STRING,
+                'format' => '',
                 'size' => 256,
                 'required' => true,
                 'signed' => true,
@@ -29,6 +30,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'description',
                 'type' => Database::VAR_STRING,
+                'format' => '',
                 'size' => 1000000,
                 'required' => true,
                 'signed' => true,
@@ -38,6 +40,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'rating',
                 'type' => Database::VAR_INTEGER,
+                'format' => '',
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -47,6 +50,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'price',
                 'type' => Database::VAR_FLOAT,
+                'format' => '',
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -56,6 +60,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'published',
                 'type' => Database::VAR_BOOLEAN,
+                'format' => '',
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -65,6 +70,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'tags',
                 'type' => Database::VAR_STRING,
+                'format' => '',
                 'size' => 55,
                 'required' => true,
                 'signed' => true,

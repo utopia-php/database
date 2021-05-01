@@ -88,7 +88,7 @@ class MariaDB extends Adapter
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id}_permissions (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(13) NOT NULL,
+                `_uid` CHAR(255) NOT NULL,
                 `_action` CHAR(128) NOT NULL,
                 `_role` CHAR(128) NOT NULL,
                 PRIMARY KEY (`_id`),
@@ -100,7 +100,7 @@ class MariaDB extends Adapter
         return $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(13) NOT NULL,
+                `_uid` CHAR(255) NOT NULL,
                 PRIMARY KEY (`_id`),
                 UNIQUE KEY `_index1` (`_uid`)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
@@ -612,7 +612,7 @@ class MariaDB extends Adapter
             break;
 
             case Database::VAR_DOCUMENT:
-                return 'CHAR(13)';
+                return 'CHAR(255)';
             break;
             
             default:

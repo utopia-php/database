@@ -481,6 +481,28 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
         $this->assertEquals('Work in Progress 2', $documents[4]['name']);
         $this->assertEquals('Work in Progress', $documents[5]['name']);
+
+        /**
+         * Limit
+         */
+        $documents = static::getDatabase()->find('movies', [], 4, 0);
+
+        $this->assertEquals(4, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertEquals('Frozen II', $documents[1]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[2]['name']);
+        $this->assertEquals('Captain Marvel', $documents[3]['name']);
+
+        /**
+         * Limit + Offset
+         */
+        $documents = static::getDatabase()->find('movies', [], 4, 2);
+
+        $this->assertEquals(4, count($documents));
+        $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
+        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertEquals('Work in Progress', $documents[2]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[3]['name']);
     }
 
     public function testFindFirst()

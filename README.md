@@ -156,6 +156,15 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 - Lazy index creation, maybe add a queue attribute to populate before creating the index?
 - In queries for arrays, should we create a dedicated index?
 
+## Limitations (to be completed per adapter)
+
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9]
+- Document max size is x bytes
+- Collection can have a max of x attributes
+- Collection can have a max of x indexes
+- Index value max size is x bytes. Values over x bytes are truncated
+
 ## System Requirements
 
 Utopia Framework requires PHP 7.3 or later. We recommend using the latest PHP version whenever possible.

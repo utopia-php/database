@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Validator;
@@ -107,6 +108,26 @@ class Structure extends Validator
     }
 
     /**
+     * Get a Validator
+     * 
+     * @param string $name
+     * 
+     * @return Validator
+     */
+    static public function getFormat(string $name, string $type): Validator
+    {
+        if(isset(self::$formats[$name])) {
+            if(self::$formats[$name]['type'] !== $type) {
+                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            }
+
+            return self::$formats[$name]['validator'];
+        }
+
+        throw new Exception('Unknown format validator: "'.$name.'"');
+    }
+
+    /**
      * Remove a Validator
      * 
      * @param string $name
@@ -179,6 +200,7 @@ class Structure extends Validator
             $attribute = $keys[$key] ?? [];
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
+            $format = $attribute['format'] ?? '';
 
             switch ($type) {
                 case Database::VAR_STRING:
@@ -224,8 +246,16 @@ class Structure extends Validator
                 }
             }
 
+            if($format) {
+                $validator = self::getFormat($format, $type);
+
+                if(!$validator->isValid($value)) {
+                    $this->message = 'Attribute "'.$key.'" has invalid format. '.$validator->getDescription();
+                    return false;
+                }
+            }
+
             // TODO check for length / size
-            // TODO check for specific validation
         }
 
         return true;

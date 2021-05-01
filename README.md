@@ -138,7 +138,6 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 ## TODOS
 
 - [ ] CRUD: Updated databases list method
-- [ ] * CRUD: Add format validation on top of type validation
 - [ ] CRUD: Validate original document before editing `$id`
 - [ ] CRUD: Test no one can overwrite exciting documents/collections without permission
 - [ ] FIND: Test for find timeout limits

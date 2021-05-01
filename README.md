@@ -138,17 +138,15 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 ## TODOS
 
 - [ ] CRUD: Updated databases list method
-- [x] CRUD: Updated collection list method
-- [ ] CRUD: Add format validation on top of type validation
+- [ ] * CRUD: Add format validation on top of type validation
 - [ ] CRUD: Validate original document before editing `$id`
 - [ ] CRUD: Test no one can overwrite exciting documents/collections without permission
-- [x] FIND: Implement or conditions for the find method
-- [x] FIND: Implement or conditions with floats
 - [ ] FIND: Test for find timeout limits
 - [ ] FIND: Add a query validator (Limit queries to indexed attaributes only?)
 - [ ] FIND: Add support for more operators (search/match/like)
+- [ ] * FIND: Missing returned data for $read & $write permissions (denormalize data?)
 - [ ] TEST: Find Limit & Offset values 
-- [ ] TEST: Find Order by (+multiple attributes) 
+- [ ] * TEST: Find Order by (+multiple attributes) 
 - [ ] TEST: Missing Collection, DocumentId validators tests
 
 ## Open Issues

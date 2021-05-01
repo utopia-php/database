@@ -455,6 +455,32 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
         $this->assertEquals('Frozen II', $documents[0]['name']);
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
+
+        /**
+         * ORDER BY
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price'], [Database::ORDER_DESC]);
+
+        $this->assertEquals(6, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertEquals('Frozen II', $documents[1]['name']);
+        $this->assertEquals('Captain Marvel', $documents[2]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
+        $this->assertEquals('Work in Progress', $documents[4]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[5]['name']);
+
+        /**
+         * ORDER BY - Multiple attributes
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC, Database::ORDER_DESC]);
+
+        $this->assertEquals(6, count($documents));
+        $this->assertEquals('Frozen II', $documents[0]['name']);
+        $this->assertEquals('Frozen', $documents[1]['name']);
+        $this->assertEquals('Captain Marvel', $documents[2]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[4]['name']);
+        $this->assertEquals('Work in Progress', $documents[5]['name']);
     }
 
     public function testFindFirst()

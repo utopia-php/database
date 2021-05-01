@@ -476,9 +476,16 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
+        $orders = [];
 
         foreach($roles as &$role) {
             $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
+        }
+
+        foreach($orderAttributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orders[] = $attribute.' '.$orderType;
         }
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
@@ -494,10 +501,12 @@ class MariaDB extends Adapter
             $where[] = implode(' OR ', $conditions);
         }
 
+        $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
+
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
             WHERE ".implode(' AND ', $where)."
-            ORDER BY 
+            {$order}
             LIMIT :offset, :limit;
         ");
 

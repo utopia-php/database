@@ -51,6 +51,16 @@ class Database
     protected $cache;
 
     /**
+     * @var array
+     */
+    protected $primitives = [
+        self::VAR_STRING => true,
+        self::VAR_INTEGER => true,
+        self::VAR_FLOAT => true,
+        self::VAR_BOOLEAN => true,
+    ];
+
+    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      * 

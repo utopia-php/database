@@ -37,6 +37,10 @@ class Database
     // Collections
     const COLLECTIONS = 'collections';
 
+    // Lengths
+
+    const LENGTH_KEY = 255;
+
     // Cache
     const TTL = 60 * 60 * 24; // 24 hours
 

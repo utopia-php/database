@@ -91,7 +91,8 @@ class QueriesTest extends TestCase
             'type' => 'text',
             'attributes' => [
                 'title',
-                'description'
+                'description',
+                'price'
             ],
             'orders' => [
                 'ASC',
@@ -112,14 +113,12 @@ class QueriesTest extends TestCase
 
     public function setUp(): void
     {
-        $this->queryValidator= new QueryValidator($this->schema);
+        $this->queryValidator = new QueryValidator($this->schema);
 
         $query1 = Query::parse('title.notEqual("Iron Man", "Ant Man")');
         $query2 = Query::parse('description.equal("Best movie ever")');
-        $query3 = Query::parse('rating.greater(4)');
-        $query4 = Query::parse('price.lesserEqual(6.50)');
 
-        array_push($this->queries, $query1, $query2, $query3, $query4);
+        array_push($this->queries, $query1, $query2);
     }
 
     public function tearDown(): void
@@ -128,9 +127,19 @@ class QueriesTest extends TestCase
 
     public function testQueries()
     {
-        $validator = new Queries($this->validator, $this->indexes);
+        // test for SUCCESS
+        $validator = new Queries($this->queryValidator, $this->indexes);
 
-        $this->assertEquals(1, 1);
+        $this->assertEquals(true, $validator->isValid($this->queries));
+
+        $this->queries[] = Query::parse('price.lesserEqual(6.50)');
+        $this->assertEquals(true, $validator->isValid($this->queries));
+
+        //test for FAILURE
+        $this->queries[] = Query::parse('rating.greater(4)');
+
+        $this->assertEquals(false, $validator->isValid($this->queries));
+        $this->assertEquals("Index not found for title,description,price,rating", $validator->getDescription());
     }
 
     public function testIsStrict()

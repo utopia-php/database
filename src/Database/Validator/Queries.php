@@ -86,16 +86,19 @@ class Queries extends Validator
          */
         $indexId = null;
         
-        // look for strict match among indexes
-        foreach ($this->indexes as $index) {
-            if ($index['attributes'] === $queries) {
-                $indexId = $index['$id']; 
+        // Return false if attributes do not exactly match an index
+        if ($strict) {
+            // look for strict match among indexes
+            foreach ($this->indexes as $index) {
+                if ($index['attributes'] === $queries) {
+                    $indexId = $index['$id']; 
+                }
             }
-        }
 
-        if (!$indexId) {
-            $this->message = 'Index not found for ' . implode(",", $queries);
-            return false;
+            if (!$indexId) {
+                $this->message = 'Index not found for ' . implode(",", $queries);
+                return false;
+            }
         }
 
         return true;

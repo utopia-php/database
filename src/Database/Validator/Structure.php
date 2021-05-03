@@ -249,9 +249,24 @@ class Structure extends Validator
             if($format) {
                 $validator = self::getFormat($format, $type);
 
-                if(!$validator->isValid($value)) {
-                    $this->message = 'Attribute "'.$key.'" has invalid format. '.$validator->getDescription();
-                    return false;
+                if($array) { // Validate attribute type
+                    if(!is_array($value)) {
+                        $this->message = 'Attribute "'.$key.'" must be an array';
+                        return false;
+                    }
+
+                    foreach ($value as $x => $child) {
+                        if(!$validator->isValid($child)) {
+                            $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid format. '.$validator->getDescription();
+                            return false;
+                        }
+                    }
+                }
+                else {
+                    if(!$validator->isValid($value)) {
+                        $this->message = 'Attribute "'.$key.'" has invalid format. '.$validator->getDescription();
+                        return false;
+                    }
                 }
             }
 

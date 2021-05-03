@@ -95,6 +95,13 @@ abstract class Adapter
     abstract public function create(): bool;
 
     /**
+     * Check if database exists
+     *
+     * @return bool
+     */
+    abstract public function exists(): bool;
+
+    /**
      * List Databases
      *
      * @return array

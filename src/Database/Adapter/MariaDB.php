@@ -46,6 +46,29 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Check if database exists
+     *
+     * @return bool
+     */
+    public function exists(): bool
+    {
+        $name = $this->getNamespace();
+
+        $stmt = $this->getPDO()
+            ->prepare("SELECT SCHEMA_NAME
+                FROM INFORMATION_SCHEMA.SCHEMATA
+                WHERE SCHEMA_NAME = :schema;");
+            
+        $stmt->bindValue(':schema', $name, PDO::PARAM_STR);
+
+        $stmt->execute();
+        
+        $document = $stmt->fetch();
+
+        return ($document['SCHEMA_NAME'] == $name);
+    }
+
+    /**
      * List Databases
      * 
      * @return array

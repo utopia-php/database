@@ -210,6 +210,16 @@ class Database
     }
 
     /**
+     * Check if database exists
+     *
+     * @return bool
+     */
+    public function exists(): bool
+    {
+        return $this->adapter->exists();
+    }
+
+    /**
      * List Databases
      *
      * @return array

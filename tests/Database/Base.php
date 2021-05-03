@@ -27,15 +27,18 @@ abstract class Base extends TestCase
         Authorization::reset();
     }
 
-    public function testCreateDelete()
+    public function testCreateExistsDelete()
     {
+        $this->assertEquals(false, static::getDatabase()->exists());
         $this->assertEquals(true, static::getDatabase()->create());
+        $this->assertEquals(true, static::getDatabase()->exists());
         $this->assertEquals(true, static::getDatabase()->delete());
+        $this->assertEquals(false, static::getDatabase()->exists());
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
     /**
-     * @depends testCreateDelete
+     * @depends testCreateExistsDelete
      */
     public function testCreateListDeleteCollection()
     {

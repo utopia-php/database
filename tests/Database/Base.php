@@ -532,7 +532,7 @@ abstract class Base extends TestCase
     /**
      * @depends testFind
      */
-    public function countTest()
+    public function testCount()
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);

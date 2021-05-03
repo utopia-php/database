@@ -538,7 +538,7 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
-        $limit = ($max === 0) ? '' : 'LIMIT :max;';
+        $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach($roles as &$role) {
             $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
@@ -557,10 +557,10 @@ class MariaDB extends Adapter
             $where[] = implode(' OR ', $conditions);
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT COUNT(table_main.`_uid`) FROM {$this->getNamespace()}.{$name} table_main
+        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
             WHERE ".implode(' AND ', $where)."
-            {$limit}
+            {$limit}) table_count
         ");
 
         foreach($queries as $i => $query) {
@@ -569,7 +569,10 @@ class MariaDB extends Adapter
             }
         }
 
-        $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        if($max !== 0) {
+            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
         $stmt->execute();
 
         $result = $stmt->fetch();

@@ -87,7 +87,7 @@ class Queries extends Validator
         $indexId = null;
         
         // Return false if attributes do not exactly match an index
-        if ($strict) {
+        if ($this->strict) {
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
                 if ($index['attributes'] === $queries) {

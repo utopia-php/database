@@ -73,42 +73,52 @@ $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 ]);
 
-$cache = new Cache(new NoCache());
+$cache = new Cache(new NoCache()); // or use any cache adapter you wish
 
 $database = new Database(new MariaDB($pdo), $cache);
-$database->setNamespace('myscope');
+$database->setNamespace('mydb');
 
-$database->create(); // Creates a new schema named `myscope`
+$database->create(); // Creates a new schema named `mydb`
 ```
 
 **Creating a collection:**
 
 ```php
-$database->createCollection('documents');
+$database->createCollection('movies');
 
 // Add attributes
-$database->createAttribute('documents', 'string', Database::VAR_STRING, 128);
-$database->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0);
-$database->createAttribute('documents', 'float', Database::VAR_FLOAT, 0);
-$database->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0);
-$database->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true,  true);
+$database->createAttribute('movies', 'name', Database::VAR_STRING, 128, true);
+$database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true);
+$database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true);
+$database->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true);
+$database->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true);
+$database->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, true, true);
 
 // Create an Index
-$database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]);
+$database->createIndex('movies', 'index1', Database::INDEX_KEY, ['year'], [128], [Database::ORDER_ASC]);
 ```
 
 **Create a document:**
 
 ```php
-$document = $database->createDocument('documents', new Document([
+static::getDatabase()->createDocument('movies', new Document([
     '$read' => ['*', 'user1', 'user2'],
-    '$write' => ['*', 'user1', 'user2'],
-    'string' => 'text📝',
-    'integer' => 5,
-    'float' => 5.55,
-    'boolean' => true,
-    'colors' => ['pink', 'green', 'blue'],
+    '$write' => ['*', 'user1x', 'user2x'],
+    'name' => 'Captain Marvel',
+    'director' => 'Anna Boden & Ryan Fleck',
+    'year' => 2019,
+    'price' => 25.99,
+    'active' => true,
+    'generes' => ['science fiction', 'action', 'comics'],
 ]));
+```
+
+**Find:**
+
+```php
+$documents = static::getDatabase()->find('movies', [
+    new Query('year', Query::TYPE_EQUAL, [2019]),
+]);
 ```
 
 ### Adapters
@@ -128,17 +138,26 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 ## TODOS
 
 - [ ] CRUD: Updated databases list method
-- [ ] CRUD: Updated collection list method
-- [ ] CRUD: Add format validation on top of type validation
 - [ ] CRUD: Validate original document before editing `$id`
 - [ ] CRUD: Test no one can overwrite exciting documents/collections without permission
-- [ ] CRUD: Add cache layer (Delete / Update documents before cleaning cache)
-- [ ] FIND: Implement or conditions for the find method
-- [ ] FIND: Implement or conditions with floats
 - [ ] FIND: Test for find timeout limits
-- [ ] FIND: Limit queries to indexed attaributes only?
-- [ ] FIND: Add a query validator
-- [ ] FIND: Add support for more operators (>,>=,<,<=,search/match/like)
+- [ ] FIND: Add a query validator (Limit queries to indexed attaributes only?)
+- [ ] FIND: Add support for more operators (search/match/like)
+- [ ] TEST: Missing Collection, DocumentId validators tests
+
+## Open Issues
+
+- Lazy index creation, maybe add a queue attribute to populate before creating the index?
+- In queries for arrays, should we create a dedicated index?
+
+## Limitations (to be completed per adapter)
+
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9]
+- Document max size is x bytes
+- Collection can have a max of x attributes
+- Collection can have a max of x indexes
+- Index value max size is x bytes. Values over x bytes are truncated
 
 ## System Requirements
 

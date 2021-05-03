@@ -37,6 +37,9 @@ class Database
     // Collections
     const COLLECTIONS = 'collections';
 
+    // Lengths
+    const LENGTH_KEY = 255;
+
     // Cache
     const TTL = 60 * 60 * 24; // 24 hours
 
@@ -49,6 +52,16 @@ class Database
      * @var Cache
      */
     protected $cache;
+
+    /**
+     * @var array
+     */
+    protected $primitives = [
+        self::VAR_STRING => true,
+        self::VAR_INTEGER => true,
+        self::VAR_FLOAT => true,
+        self::VAR_BOOLEAN => true,
+    ];
 
     /**
      * Parent Collection
@@ -88,8 +101,28 @@ class Database
                 'array' => true,
                 'filters' => ['json'],
             ],
+            [
+                '$id' => 'attributesInQueue',
+                'type' => self::VAR_STRING,
+                'size' => 1000000,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+                'filters' => ['json'],
+            ],
+            [
+                '$id' => 'indexesInQueue',
+                'type' => self::VAR_STRING,
+                'size' => 1000000,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+                'filters' => ['json'],
+            ],
         ],
         'indexes' => [],
+        'attributesInQueue' => [],
+        'indexesInQueue' => [],
     ];
 
     /**
@@ -166,9 +199,11 @@ class Database
         $this->adapter->create();
 
         $this->createCollection(self::COLLECTIONS);
-        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 128, true);
-        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 8064, false);
-        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 8064, false);
+        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 512, true);
+        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 1000000, false);
+        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 1000000, false);
+        $this->createAttribute(self::COLLECTIONS, 'attributesInQueue', self::VAR_STRING, 1000000, false);
+        $this->createAttribute(self::COLLECTIONS, 'indexesInQueue', self::VAR_STRING, 1000000, false);
         $this->createIndex(self::COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
 
         return true;
@@ -216,6 +251,8 @@ class Database
             'name' => $id,
             'attributes' => [],
             'indexes' => [],
+            'attributesInQueue' => [],
+            'indexesInQueue' => [],
         ]));
     }
 
@@ -235,12 +272,20 @@ class Database
     /**
      * List Collections
      * 
+     * @param int $offset
+     * @param int $limit
+     * 
      * @return array
      */
-    public function listCollections(): array
+    public function listCollections($limit = 25, $offset = 0): array
     {
-        // TODO add a search here
-        return [];
+        Authorization::disable();
+        
+        $result = $this->find(self::COLLECTIONS, [], $limit, $offset);
+        
+        Authorization::reset();
+
+        return $result;
     }
 
     /**
@@ -343,6 +388,70 @@ class Database
     }
 
     /**
+     * Add Attribute in Queue
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size utf8mb4 chars length
+     * @param bool $required
+     * @param bool $signed
+     * @param bool $array
+     * @param array $filters
+     * 
+     * @return bool
+     */
+    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $collection->setAttribute('attributesInQueue', new Document([
+            '$id' => $id,
+            'type' => $type,
+            'size' => $size,
+            'required' => $required,
+            'signed' => $signed,
+            'array' => $array,
+            'filters' => $filters,
+        ]), Document::SET_TYPE_APPEND);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
+     * Remove Attribute in Queue
+     * 
+     * @param string $collection
+     * @param string $id
+     * 
+     * @return bool
+     */
+    public function removeAttributeInQueue(string $collection, string $id): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributesInQueue', []);
+
+        foreach ($attributes as $key => $value) {
+            if(isset($value['$id']) && $value['$id'] === $id) {
+                unset($attributes[$key]);
+            }
+        }
+
+        $collection->setAttribute('attributesInQueue', $attributes);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection
@@ -431,6 +540,70 @@ class Database
     }
 
     /**
+     * Add Index in Queue
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param array $attributes
+     * @param array $lengths
+     * @param array $orders
+     *
+     * @return bool
+     */
+    public function addIndexInQueue(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
+    {
+        if(empty($attributes)) {
+            throw new Exception('Missing attributes');
+        }
+
+        $collection = $this->getCollection($collection);
+
+        $collection->setAttribute('indexesInQueue', new Document([
+            '$id' => $id,
+            'type' => $type,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders,
+        ]), Document::SET_TYPE_APPEND);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
+     * Remove Index in Queue
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function removeIndexInQueue(string $collection, string $id): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $indexes = $collection->getAttribute('indexesInQueue', []);
+
+        foreach ($indexes as $key => $value) {
+            if(isset($value['$id']) && $value['$id'] === $id) {
+                unset($indexes[$key]);
+            }
+        }
+
+        $collection->setAttribute('indexesInQueue', $indexes);
+    
+        if($collection->getId() !== self::COLLECTIONS) {
+            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        }
+
+        return true;
+    }
+
+    /**
      * Get Document
      * 
      * @param string $collection
@@ -453,7 +626,7 @@ class Database
         $cache = null;
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load($id, self::TTL)) {
+        if ($cache = $this->cache->load('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, self::TTL)) {
             $document = new Document($cache);
             $validator = new Authorization($document, self::PERMISSION_READ);
 
@@ -485,7 +658,7 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->save($id, $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -576,8 +749,8 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge($id);
-        $this->cache->save($document->getId(), $document->getArrayCopy());
+        $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id);
+        $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy());
 
         return $document;
     }
@@ -600,7 +773,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge($id);
+        $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }
@@ -617,7 +790,7 @@ class Database
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
     {
         $collection = $this->getCollection($collection);
 
@@ -629,6 +802,22 @@ class Database
         }
 
         return $results;
+    }
+
+    /**
+     * Count Documents
+     * 
+     * @param string $collection
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    public function count(string $collection, array $queries = [], int $max = 0): int
+    {
+        $count = $this->adapter->count($collection, $queries, $max);
+
+        return $count;
     }
 
     // /**
@@ -653,22 +842,6 @@ class Database
     // {
     //     $results = $this->find($collection, $options);
     //     return \end($results);
-    // }
-
-    // /**
-    //  * @param array $options
-    //  *
-    //  * @return int
-    //  */
-    // public function count(array $options)
-    // {
-    //     $options = \array_merge([
-    //         'filters' => [],
-    //     ], $options);
-
-    //     $results = $this->adapter->count($options);
-
-    //     return $results;
     // }
 
     // /**

@@ -20,11 +20,6 @@ class MariaDB extends Adapter
     protected $pdo;
 
     /**
-     * @var bool
-     */
-    protected $transaction = false;
-
-    /**
      * Constructor.
      *
      * Set connection and settings
@@ -88,7 +83,7 @@ class MariaDB extends Adapter
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id}_permissions (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(13) NOT NULL,
+                `_uid` CHAR(255) NOT NULL,
                 `_action` CHAR(128) NOT NULL,
                 `_role` CHAR(128) NOT NULL,
                 PRIMARY KEY (`_id`),
@@ -100,23 +95,12 @@ class MariaDB extends Adapter
         return $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(13) NOT NULL,
+                `_uid` CHAR(255) NOT NULL,
+                `_permissions` TEXT NOT NULL,
                 PRIMARY KEY (`_id`),
                 UNIQUE KEY `_index1` (`_uid`)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
             ->execute();
-    }
-
-    /**
-     * List Collections
-     * 
-     * @return array
-     */
-    public function listCollections(): array
-    {
-        $list = [];
-
-        return $list;
     }
 
     /**
@@ -258,27 +242,13 @@ class MariaDB extends Adapter
 
         $document = $stmt->fetch();
 
+        $permissions = (isset($document['_permissions'])) ? json_decode($document['_permissions'], true) : [];
         $document['$id'] = $document['_uid'];
-        $document['$read'] = [];
-        $document['$write'] = [];
+        $document['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
+        $document['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
         unset($document['_id']);
         unset($document['_uid']);
-
-        $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}_permissions
-            WHERE _uid = :_uid
-            LIMIT 100;
-        ");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-        $stmt->execute();
-
-        $permissions = $stmt->fetchAll();
-
-        foreach ($permissions as $permission) {
-            $action = $permission['_action'] ?? '';
-            $role = $permission['_role'] ?? '';
-            $document['$'.$action][] = $role;
-        }
+        unset($document['_permissions']);
 
         return new Document($document);
     }
@@ -307,9 +277,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid");
+                SET {$columns} _uid = :_uid, _permissions = :_permissions");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_permissions', json_encode([Database::PERMISSION_READ => $document->getRead(), Database::PERMISSION_WRITE => $document->getWrite()]), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -383,9 +354,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("UPDATE {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+                SET {$columns} _uid = :_uid, _permissions = :_permissions WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_permissions', json_encode([Database::PERMISSION_READ => $document->getRead(), Database::PERMISSION_WRITE => $document->getWrite()]), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -480,34 +452,53 @@ class MariaDB extends Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param bool $count
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
+        $orders = [];
 
         foreach($roles as &$role) {
             $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
         }
 
-        foreach($queries as $query) {
-            $where[] = 'table_main.'.$query->getAttribute().$this->getSQLOperator($query->getOperator()).':attribute_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+        foreach($orderAttributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orders[] = $attribute.' '.$orderType;
         }
 
+        $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
+            ON table_main._uid = table_permissions._uid
+            AND table_permissions._action = 'read' AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = 'table_main.'.$query->getAttribute().' '.$this->getSQLOperator($query->getOperator()).' :attribute_'.$i.'_'.$key.'_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+            }
+
+            $where[] = implode(' OR ', $conditions);
+        }
+
+        $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
+
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
-            INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-                ON table_main._uid = table_permissions._uid
-                AND table_permissions._action = 'read'
-                AND table_permissions._role IN (".implode(',', $roles).")
+            {$permissions}
             WHERE ".implode(' AND ', $where)."
+            {$order}
             LIMIT :offset, :limit;
         ");
-        
-        foreach($queries as $query) {
-            $stmt->bindValue(':attribute_'.$query->getAttribute(), $query->getValues()[0], $this->getPDOType($query->getValues()[0]));
+
+        foreach($queries as $i => $query) {
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
         }
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -517,10 +508,76 @@ class MariaDB extends Adapter
         $results = $stmt->fetchAll();
 
         foreach ($results as &$value) {
+            $permissions = (isset($value['_permissions'])) ? json_decode($value['_permissions'], true) : [];
+            $value['$id'] = $value['_uid'];
+            $value['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
+            $value['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
+            unset($value['_id']);
+            unset($value['_uid']);
+            unset($value['_permissions']);
+
             $value = new Document($value);
         }
 
         return $results;
+    }
+
+    /**
+     * Cound Documents
+     *
+     * Count data set size using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    public function count(string $collection, array $queries = [], int $max = 0): int
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $limit = ($max === 0) ? '' : 'LIMIT :max';
+
+        foreach($roles as &$role) {
+            $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
+        }
+
+        $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
+            ON table_main._uid = table_permissions._uid
+            AND table_permissions._action = 'read' AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = 'table_main.'.$query->getAttribute().' '.$this->getSQLOperator($query->getOperator()).' :attribute_'.$i.'_'.$key.'_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+            }
+
+            $where[] = implode(' OR ', $conditions);
+        }
+
+        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
+            {$permissions}
+            WHERE ".implode(' AND ', $where)."
+            {$limit}) table_count
+        ");
+
+        foreach($queries as $i => $query) {
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        if($max !== 0) {
+            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
+        $stmt->execute();
+
+        $result = $stmt->fetch();
+
+        return $result['sum'] ?? 0;
     }
 
     /**
@@ -616,7 +673,7 @@ class MariaDB extends Adapter
             break;
 
             case Database::VAR_DOCUMENT:
-                return 'CHAR(13)';
+                return 'CHAR(255)';
             break;
             
             default:
@@ -641,6 +698,22 @@ class MariaDB extends Adapter
 
             case Query::TYPE_NOTEQUAL:
                 return '!=';
+            break;
+
+            case Query::TYPE_LESSER:
+                return '<';
+            break;
+
+            case Query::TYPE_LESSEREQUAL:
+                return '<=';
+            break;
+
+            case Query::TYPE_GREATER:
+                return '>';
+            break;
+
+            case Query::TYPE_GREATEREQUAL:
+                return '>=';
             break;
 
             default:

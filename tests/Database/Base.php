@@ -37,9 +37,12 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDelete
      */
-    public function testCreateDeleteCollection()
+    public function testCreateListDeleteCollection()
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
+
+        $this->assertCount(1, static::getDatabase()->listCollections());
+
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
@@ -93,6 +96,54 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('attributes');
     }
 
+    public function testAddRemoveAttribute()
+    {
+        static::getDatabase()->createCollection('attributesInQueue');
+
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string1', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string2', Database::VAR_STRING, 16383+1, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string3', Database::VAR_STRING, 65535+1, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string4', Database::VAR_STRING, 16777215+1, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'boolean', Database::VAR_BOOLEAN, 0, true));
+
+        $collection = static::getDatabase()->getCollection('attributesInQueue');
+        $this->assertCount(7, $collection->getAttribute('attributesInQueue'));
+
+        // Array
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string_list', Database::VAR_STRING, 128, true, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'integer_list', Database::VAR_INTEGER, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'float_list', Database::VAR_FLOAT, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'boolean_list', Database::VAR_BOOLEAN, 0, true, true));
+
+        $collection = static::getDatabase()->getCollection('attributesInQueue');
+        $this->assertCount(11, $collection->getAttribute('attributesInQueue'));
+
+        // Delete
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string1'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string2'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string3'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string4'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'integer'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'float'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'boolean'));
+
+        $collection = static::getDatabase()->getCollection('attributesInQueue');
+        $this->assertCount(4, $collection->getAttribute('attributesInQueue'));
+
+        // Delete Array
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string_list'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'integer_list'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'float_list'));
+        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'boolean_list'));
+
+        $collection = static::getDatabase()->getCollection('attributesInQueue');
+        $this->assertCount(0, $collection->getAttribute('attributesInQueue'));
+
+        static::getDatabase()->deleteCollection('attributesInQueue');
+    }
+
     public function testCreateDeleteIndex()
     {
         static::getDatabase()->createCollection('indexes');
@@ -119,6 +170,34 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         static::getDatabase()->deleteCollection('indexes');
+    }
+
+    public function testAddRemoveIndexInQueue()
+    {
+        static::getDatabase()->createCollection('indexesInQueue');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'boolean', Database::VAR_BOOLEAN, 0, true));
+
+        // Indexes
+        $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexesInQueue', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexesInQueue', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
+        $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexesInQueue', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
+        
+        $collection = static::getDatabase()->getCollection('indexesInQueue');
+        $this->assertCount(3, $collection->getAttribute('indexesInQueue'));
+
+        // Delete Indexes
+        $this->assertEquals(true, static::getDatabase()->removeIndexInQueue('indexesInQueue', 'index1'));
+        $this->assertEquals(true, static::getDatabase()->removeIndexInQueue('indexesInQueue', 'index2'));
+        $this->assertEquals(true, static::getDatabase()->removeIndexInQueue('indexesInQueue', 'index3'));
+
+        $collection = static::getDatabase()->getCollection('indexesInQueue');
+        $this->assertCount(0, $collection->getAttribute('indexesInQueue'));
+
+        static::getDatabase()->deleteCollection('indexesInQueue');
     }
 
     public function testCreateDocument()
@@ -306,6 +385,20 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('movies');
 
         $this->assertEquals(5, count($documents));
+        $this->assertNotEmpty($documents[0]->getId());
+        $this->assertEquals(['*', 'user1', 'user2'], $documents[0]->getRead());
+        $this->assertEquals(['*', 'user1x', 'user2x'], $documents[0]->getWrite());
+        $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
+        $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
+        $this->assertIsString($documents[0]->getAttribute('director'));
+        $this->assertEquals(2013, $documents[0]->getAttribute('year'));
+        $this->assertIsInt($documents[0]->getAttribute('year'));
+        $this->assertEquals(39.50, $documents[0]->getAttribute('price'));
+        $this->assertIsFloat($documents[0]->getAttribute('price'));
+        $this->assertEquals(true, $documents[0]->getAttribute('active'));
+        $this->assertIsBool($documents[0]->getAttribute('active'));
+        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
+        $this->assertIsArray($documents[0]->getAttribute('generes'));
 
         /**
          * Check Permissions
@@ -348,12 +441,13 @@ abstract class Base extends TestCase
         /**
          * Float condition
          */
-        // $documents = static::getDatabase()->find('movies', [
-        //     new Query('price', Query::TYPE_EQUAL, [25.99]),
-        // ]);
+        $documents = static::getDatabase()->find('movies', [
+            new Query('price', Query::TYPE_LESSER, [26.00]),
+            new Query('price', Query::TYPE_GREATER, [25.98]),
+        ]);
 
-        // $this->assertEquals(1, count($documents));
-        // $this->assertEquals('Captain Marvel', $documents[0]['name']);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Captain Marvel', $documents[0]['name']);
 
         /**
          * Multiple conditions
@@ -364,6 +458,65 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+
+        /**
+         * Multiple conditions and OR values
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('name', Query::TYPE_EQUAL, ['Frozen II', 'Captain Marvel']),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Frozen II', $documents[0]['name']);
+        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+
+        /**
+         * ORDER BY
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price'], [Database::ORDER_DESC]);
+
+        $this->assertEquals(6, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertEquals('Frozen II', $documents[1]['name']);
+        $this->assertEquals('Captain Marvel', $documents[2]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
+        $this->assertEquals('Work in Progress', $documents[4]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[5]['name']);
+
+        /**
+         * ORDER BY - Multiple attributes
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC, Database::ORDER_DESC]);
+
+        $this->assertEquals(6, count($documents));
+        $this->assertEquals('Frozen II', $documents[0]['name']);
+        $this->assertEquals('Frozen', $documents[1]['name']);
+        $this->assertEquals('Captain Marvel', $documents[2]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[4]['name']);
+        $this->assertEquals('Work in Progress', $documents[5]['name']);
+
+        /**
+         * Limit
+         */
+        $documents = static::getDatabase()->find('movies', [], 4, 0);
+
+        $this->assertEquals(4, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertEquals('Frozen II', $documents[1]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[2]['name']);
+        $this->assertEquals('Captain Marvel', $documents[3]['name']);
+
+        /**
+         * Limit + Offset
+         */
+        $documents = static::getDatabase()->find('movies', [], 4, 2);
+
+        $this->assertEquals(4, count($documents));
+        $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
+        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertEquals('Work in Progress', $documents[2]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[3]['name']);
     }
 
     public function testFindFirst()
@@ -376,24 +529,30 @@ abstract class Base extends TestCase
         $this->assertEquals('1', '1');
     }
 
-    public function countTest()
+    /**
+     * @depends testFind
+     */
+    public function testCount()
     {
-        $this->assertEquals('1', '1');
-    }
-
-    public function addFilterTest()
-    {
-        $this->assertEquals('1', '1');
-    }
-
-    public function encodeTest()
-    {
-        $this->assertEquals('1', '1');
-    }
-
-    public function decodeTest()
-    {
-        $this->assertEquals('1', '1');
+        $count = static::getDatabase()->count('movies');
+        $this->assertEquals(6, $count);
+        
+        $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2, $count);
+        
+        Authorization::unsetRole('userx');
+        $count = static::getDatabase()->count('movies');
+        $this->assertEquals(5, $count);
+        
+        Authorization::disable();
+        $count = static::getDatabase()->count('movies');
+        $this->assertEquals(6, $count);
+        Authorization::reset();
+        
+        Authorization::disable();
+        $count = static::getDatabase()->count('movies', [], 3);
+        $this->assertEquals(3, $count);
+        Authorization::reset();
     }
 
     /**

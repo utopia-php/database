@@ -6,6 +6,10 @@ class Query
 {
     const TYPE_EQUAL = 'equal';
     const TYPE_NOTEQUAL = 'notEqual';
+    const TYPE_LESSER = 'lesser';
+    const TYPE_LESSEREQUAL = 'lesserEqual';
+    const TYPE_GREATER = 'greater';
+    const TYPE_GREATEREQUAL = 'greaterEqual';
     
     /**
      * @var string

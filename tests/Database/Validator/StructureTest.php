@@ -6,6 +6,7 @@ use Utopia\Database\Validator\Structure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Tests\Format;
 
 class StructureTest extends TestCase
 {
@@ -20,6 +21,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'title',
                 'type' => Database::VAR_STRING,
+                'format' => '',
                 'size' => 256,
                 'required' => true,
                 'signed' => true,
@@ -29,6 +31,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'description',
                 'type' => Database::VAR_STRING,
+                'format' => '',
                 'size' => 1000000,
                 'required' => true,
                 'signed' => true,
@@ -38,6 +41,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'rating',
                 'type' => Database::VAR_INTEGER,
+                'format' => '',
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -47,6 +51,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'price',
                 'type' => Database::VAR_FLOAT,
+                'format' => '',
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -56,6 +61,7 @@ class StructureTest extends TestCase
             [
                 '$id' => 'published',
                 'type' => Database::VAR_BOOLEAN,
+                'format' => '',
                 'size' => 5,
                 'required' => true,
                 'signed' => true,
@@ -65,10 +71,21 @@ class StructureTest extends TestCase
             [
                 '$id' => 'tags',
                 'type' => Database::VAR_STRING,
+                'format' => '',
                 'size' => 55,
                 'required' => true,
                 'signed' => true,
                 'array' => true,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'feedback',
+                'type' => Database::VAR_STRING,
+                'format' => 'email',
+                'size' => 55,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
                 'filters' => [],
             ],
         ],
@@ -77,6 +94,7 @@ class StructureTest extends TestCase
 
     public function setUp(): void
     {
+        Structure::addFormat('email', new Format(0), Database::VAR_STRING);
     }
 
     public function tearDown(): void
@@ -116,12 +134,13 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Collection "" not found', $validator->getDescription());
     }
 
-    public function testReuiredKeys()
+    public function testRequiredKeys()
     {
         $validator = new Structure(new Document($this->collection));
 
@@ -132,6 +151,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
@@ -150,6 +170,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Unknown attribute: ""titlex"', $validator->getDescription());
@@ -167,8 +188,8 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
-
     }
 
     public function testStringValidation()
@@ -183,6 +204,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a string', $validator->getDescription());
@@ -200,6 +222,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => [1, 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a string', $validator->getDescription());
@@ -212,6 +235,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => [true],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a string', $validator->getDescription());
@@ -224,6 +248,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => true,
             'tags' => [],
+            'feedback' => 'team@appwrite.io',
         ])));
     }
 
@@ -239,6 +264,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
@@ -251,6 +277,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
@@ -268,6 +295,7 @@ class StructureTest extends TestCase
             'price' => 2,
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
@@ -280,6 +308,7 @@ class StructureTest extends TestCase
             'price' => '',
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
@@ -297,6 +326,7 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => 1,
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a boolean', $validator->getDescription());
@@ -309,8 +339,27 @@ class StructureTest extends TestCase
             'price' => 1.99,
             'published' => '',
             'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a boolean', $validator->getDescription());
+    }
+
+    public function testFormatValidation()
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team_appwrite.io',
+        ])));
+        
+        $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
     }
 }

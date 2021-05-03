@@ -24,15 +24,22 @@ class Queries extends Validator
     protected $indexes = [];
 
     /**
+     * @var bool
+     */
+    protected $strict;
+
+    /**
      * Queries constructor
      *
      * @param QueryValidator $validator
      * @param array $indexes
+     * @param bool $strict
      */
-    public function __construct($validator, $indexes)
+    public function __construct($validator, $indexes, $strict = true)
     {
         $this->validator = $validator;
         $this->indexes = $indexes;
+        $this->strict = $strict;
     }
 
     /**
@@ -53,11 +60,10 @@ class Queries extends Validator
      * Returns true if all $queries are valid as a set.
      *
      * @param mixed $value as array of Query objects
-     * @param bool $strict
      *
      * @return bool
      */
-    public function isValid($value, $strict = true)
+    public function isValid($value)
     {
         /**
          * Array of attributes from $value
@@ -106,5 +112,17 @@ class Queries extends Validator
     public function getType(): string
     {
         return self::TYPE_OBJECT;
+    }
+
+    /**
+     * Is Strict
+     *
+     * Returns true if strict validation is set
+     *
+     * @return bool
+     */
+    public function isStrict(): bool
+    {
+        return $this->strict;
     }
 }

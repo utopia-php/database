@@ -132,4 +132,15 @@ class QueriesTest extends TestCase
 
         $this->assertEquals(1, 1);
     }
+
+    public function testIsStrict()
+    {
+        $validator = new Queries($this->validator, $this->indexes);
+
+        $this->assertEquals(true, $validator->isStrict());
+
+        $validator = new Queries($this->validator, $this->indexes, false);
+
+        $this->assertEquals(false, $validator->isStrict());
+    }
 }

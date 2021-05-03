@@ -65,7 +65,7 @@ class MariaDB extends Adapter
         
         $document = $stmt->fetch();
 
-        return ($document['SCHEMA_NAME'] == $name);
+        return (($document['SCHEMA_NAME'] ?? '') == $name);
     }
 
     /**

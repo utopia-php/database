@@ -38,7 +38,6 @@ class Database
     const COLLECTIONS = 'collections';
 
     // Lengths
-
     const LENGTH_KEY = 255;
 
     // Cache
@@ -791,7 +790,7 @@ class Database
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
     {
         $collection = $this->getCollection($collection);
 
@@ -803,6 +802,22 @@ class Database
         }
 
         return $results;
+    }
+
+    /**
+     * Count Documents
+     * 
+     * @param string $collection
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    public function count(string $collection, array $queries = [], int $max = 0): int
+    {
+        $count = $this->adapter->count($collection, $queries, $max);
+
+        return $count;
     }
 
     // /**
@@ -827,22 +842,6 @@ class Database
     // {
     //     $results = $this->find($collection, $options);
     //     return \end($results);
-    // }
-
-    // /**
-    //  * @param array $options
-    //  *
-    //  * @return int
-    //  */
-    // public function count(array $options)
-    // {
-    //     $options = \array_merge([
-    //         'filters' => [],
-    //     ], $options);
-
-    //     $results = $this->adapter->count($options);
-
-    //     return $results;
     // }
 
     // /**

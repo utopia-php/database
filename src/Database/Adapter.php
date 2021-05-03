@@ -227,14 +227,18 @@ abstract class Adapter
      *
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array;
-
-    // /**
-    //  * @param array $options
-    //  *
-    //  * @return int
-    //  */
-    // abstract public function count(array $options);
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array;
+    
+    /**
+     * Count Documents
+     * 
+     * @param string $collection
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    abstract public function count(string $collection, array $queries = [], int $max = 0): int;
 
     /**
      * Get max STRING limit

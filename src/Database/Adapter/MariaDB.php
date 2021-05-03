@@ -20,11 +20,6 @@ class MariaDB extends Adapter
     protected $pdo;
 
     /**
-     * @var bool
-     */
-    protected $transaction = false;
-
-    /**
      * Constructor.
      *
      * Set connection and settings
@@ -457,10 +452,11 @@ class MariaDB extends Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param bool $count
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], $limit = 25, $offset = 0, $orderAttributes = [], $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -524,6 +520,61 @@ class MariaDB extends Adapter
         }
 
         return $results;
+    }
+
+    /**
+     * Cound Documents
+     *
+     * Count data set size using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    public function count(string $collection, array $queries = [], int $max = 0): int
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $limit = ($max === 0) ? '' : 'LIMIT :max;';
+
+        foreach($roles as &$role) {
+            $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
+        }
+
+        $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
+            ON table_main._uid = table_permissions._uid
+            AND table_permissions._action = 'read' AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = 'table_main.'.$query->getAttribute().' '.$this->getSQLOperator($query->getOperator()).' :attribute_'.$i.'_'.$key.'_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+            }
+
+            $where[] = implode(' OR ', $conditions);
+        }
+
+        $stmt = $this->getPDO()->prepare("SELECT COUNT(table_main.`_uid`) FROM {$this->getNamespace()}.{$name} table_main
+            {$permissions}
+            WHERE ".implode(' AND ', $where)."
+            {$limit}
+        ");
+
+        foreach($queries as $i => $query) {
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $result = $stmt->fetch();
+
+        return $result['sum'] ?? 0;
     }
 
     /**

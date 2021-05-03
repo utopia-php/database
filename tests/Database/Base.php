@@ -529,24 +529,30 @@ abstract class Base extends TestCase
         $this->assertEquals('1', '1');
     }
 
+    /**
+     * @depends testFind
+     */
     public function countTest()
     {
-        $this->assertEquals('1', '1');
-    }
-
-    public function addFilterTest()
-    {
-        $this->assertEquals('1', '1');
-    }
-
-    public function encodeTest()
-    {
-        $this->assertEquals('1', '1');
-    }
-
-    public function decodeTest()
-    {
-        $this->assertEquals('1', '1');
+        $count = static::getDatabase()->count('movies');
+        $this->assertEquals(6, $count);
+        
+        $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2, $count);
+        
+        Authorization::unsetRole('userx');
+        $count = static::getDatabase()->count('movies');
+        $this->assertEquals(5, $count);
+        
+        Authorization::disable();
+        $count = static::getDatabase()->count('movies');
+        $this->assertEquals(6, $count);
+        Authorization::reset();
+        
+        Authorization::disable();
+        $count = static::getDatabase()->count('movies', [], 3);
+        $this->assertEquals(3, $count);
+        Authorization::reset();
     }
 
     /**

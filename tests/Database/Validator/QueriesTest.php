@@ -6,6 +6,7 @@ use Utopia\Database\Validator\QueryValidator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Queries;
 
 class QueriesTest extends TestCase
 {
@@ -118,7 +119,7 @@ class QueriesTest extends TestCase
         $query3 = Query::parse('rating.greater(4)');
         $query4 = Query::parse('price.lesserEqual(6.50)');
 
-        array_push($queries, $query1, $query2, $query3, $query4);
+        array_push($this->queries, $query1, $query2, $query3, $query4);
     }
 
     public function tearDown(): void

@@ -3,7 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
-use Utopia\Validator\QueryValidator;
+use Utopia\Database\Validator\QueryValidator;
 use Utopia\Database\Query;
 
 class Queries extends Validator
@@ -52,21 +52,21 @@ class Queries extends Validator
      *
      * Returns true if all $queries are valid as a set.
      *
-     * @param Query[] $queries
+     * @param mixed $value as array of Query objects
      * @param bool $strict
      *
      * @return bool
      */
-    public function isValid($queries, $strict = true)
+    public function isValid($value, $strict = true)
     {
         /**
-         * Array of attributes from $queries
+         * Array of attributes from $value
          *
          * @var string[]
          */
         $found = [];
 
-        foreach ($queries as $query) {
+        foreach ($value as $query) {
             // individually validate $query
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();

@@ -24,6 +24,11 @@ class Queries extends Validator
     protected $indexes = [];
 
     /**
+     * @var array
+     */
+    protected $indexesInQueue = [];
+
+    /**
      * @var bool
      */
     protected $strict;
@@ -33,12 +38,14 @@ class Queries extends Validator
      *
      * @param QueryValidator $validator
      * @param array $indexes
+     * @param array $indexesInQueue
      * @param bool $strict
      */
-    public function __construct($validator, $indexes, $strict = true)
+    public function __construct($validator, $indexes, $indexesInQueue, $strict = true)
     {
         $this->validator = $validator;
         $this->indexes = $indexes;
+        $this->indexesInQueue = $indexesInQueue;
         $this->strict = $strict;
     }
 
@@ -58,9 +65,7 @@ class Queries extends Validator
      * Is valid.
      *
      * Returns true if all $queries are valid as a set.
-     *
      * @param mixed $value as array of Query objects
-     *
      * @return bool
      */
     public function isValid($value)
@@ -85,6 +90,11 @@ class Queries extends Validator
          * @var string
          */
         $indexId = null;
+
+        /**
+         * @var bool
+         */
+        $queued = false;
         
         // Return false if attributes do not exactly match an index
         if ($this->strict) {
@@ -96,7 +106,19 @@ class Queries extends Validator
             }
 
             if (!$indexId) {
-                $this->message = 'Index not found for ' . implode(",", $queries);
+                // check against the indexesInQueue
+                foreach ($this->indexesInQueue as $index) {
+                    if ($index['attributes'] === $queries) {
+                        $queued = true; 
+                    }
+                }
+
+                if ($queued) {
+                    $this->message = 'Index still in creation queue: ' . implode(",", $queries);
+                    return false;
+                }
+
+                $this->message = 'Index not found: ' . implode(",", $queries);
                 return false;
             }
         }

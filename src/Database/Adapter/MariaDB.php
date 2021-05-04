@@ -265,6 +265,10 @@ class MariaDB extends Adapter
 
         $document = $stmt->fetch();
 
+        if(empty($document)) {
+            return new Document([]);
+        }
+
         $permissions = (isset($document['_permissions'])) ? json_decode($document['_permissions'], true) : [];
         $document['$id'] = $document['_uid'];
         $document['$read'] = $permissions[Database::PERMISSION_READ] ?? [];

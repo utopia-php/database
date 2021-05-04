@@ -41,6 +41,6 @@ RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 COPY --from=step0 /usr/local/src/vendor /usr/src/code/vendor
 
 # Add Source Code
-COPY ./ /usr/src/code
+COPY . /usr/src/code
 
 CMD [ "tail", "-f", "/dev/null" ]

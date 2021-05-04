@@ -973,7 +973,7 @@ class Database
 
             foreach ($value as &$node) {
                 if (($node !== null)) {
-                    foreach ($filters as $filter) {
+                    foreach (array_reverse($filters) as $filter) {
                         $node = $this->decodeAttribute($filter, $node);
                     }
                 }

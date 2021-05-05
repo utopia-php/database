@@ -66,6 +66,8 @@ services:
       MYSQL_USER: user
       MYSQL_PASSWORD: password
       MYSQL_TCP_PORT: 3307
+    cap_add:
+      - SYS_NICE
 
   redis:
     image: redis:6.0-alpine

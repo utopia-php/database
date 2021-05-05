@@ -208,6 +208,7 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $type = $this->getSQLIndex($type);
 
         foreach($attributes as $key => &$attribute) {
             $length = $lengths[$key] ?? '';
@@ -219,7 +220,7 @@ class MariaDB extends Adapter
         }
 
         return $this->getPDO()
-            ->prepare("CREATE INDEX `{$id}` ON {$this->getNamespace()}.{$name} (".implode(', ', $attributes).");")
+            ->prepare("CREATE {$type} `{$id}` ON {$this->getNamespace()}.{$name} (".implode(', ', $attributes).");")
             ->execute();
     }
 
@@ -745,6 +746,30 @@ class MariaDB extends Adapter
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
+            break;
+        }
+    }
+
+    /**
+     * Get SQL Index
+     * 
+     * @param string $operator
+     * 
+     * @return string
+     */
+    protected function getSQLIndex(string $type): string
+    {
+        switch ($type) {
+            case Database::INDEX_KEY:
+                return 'INDEX';
+            break;
+            
+            case Database::INDEX_UNIQUE:
+                return 'UNIQUE INDEX';
+            break;
+
+            default:
+                throw new Exception('Unknown Index Type:' . $type);
             break;
         }
     }

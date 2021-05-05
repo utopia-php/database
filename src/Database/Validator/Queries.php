@@ -91,11 +91,6 @@ class Queries extends Validator
          */
         $indexId = null;
 
-        /**
-         * @var bool
-         */
-        $queued = false;
-        
         // Return false if attributes do not exactly match an index
         if ($this->strict) {
             // look for strict match among indexes
@@ -109,13 +104,9 @@ class Queries extends Validator
                 // check against the indexesInQueue
                 foreach ($this->indexesInQueue as $index) {
                     if ($index['attributes'] === $queries) {
-                        $queued = true; 
+                        $this->message = 'Index still in creation queue: ' . implode(",", $queries);
+                        return false;
                     }
-                }
-
-                if ($queued) {
-                    $this->message = 'Index still in creation queue: ' . implode(",", $queries);
-                    return false;
                 }
 
                 $this->message = 'Index not found: ' . implode(",", $queries);

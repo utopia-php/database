@@ -529,6 +529,9 @@ abstract class Base extends TestCase
     {
         $document = static::getDatabase()->findFirst('movies', [], 4, 2);
         $this->assertEquals('Captain America: The First Avenger', $document['name']);
+
+        $document = static::getDatabase()->findFirst('movies', [], 4, 10);
+        $this->assertEquals(false, $document);
     }
 
     /**
@@ -538,6 +541,9 @@ abstract class Base extends TestCase
     {
         $document = static::getDatabase()->findLast('movies', [], 4, 2);
         $this->assertEquals('Work in Progress 2', $document['name']);
+
+        $document = static::getDatabase()->findLast('movies', [], 4, 10);
+        $this->assertEquals(false, $document);
     }
 
     /**

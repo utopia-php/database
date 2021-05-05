@@ -145,6 +145,7 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 - [ ] FIND: Add support for more operators (search/match/like)
 - [ ] TEST: Missing Collection, DocumentId validators tests
 - [ ] TEST: Validate row size is not larger than allowed by adapter (MySQL/MariaDB ~16k)
+- [ ] TEST: Add test for creation of a unique index
 
 ## Open Issues
 

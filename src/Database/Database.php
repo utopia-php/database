@@ -815,6 +815,30 @@ class Database
     }
 
     /**
+     * @param string $collection
+     * @param array $options
+     *
+     * @return Document|bool
+     */
+    public function findFirst(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
+    {
+        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes);
+        return \reset($results);
+    }
+
+    /**
+     * @param string $collection
+     * @param array $options
+     *
+     * @return Document|false
+     */
+    public function findLast(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
+    {
+        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes);
+        return \end($results);
+    }
+
+    /**
      * Count Documents
      * 
      * @param string $collection
@@ -829,30 +853,6 @@ class Database
 
         return $count;
     }
-
-    // /**
-    //  * @param string $collection
-    //  * @param array $options
-    //  *
-    //  * @return Document
-    //  */
-    // public function findFirst(string $collection, array $options)
-    // {
-    //     $results = $this->find($collection, $options);
-    //     return \reset($results);
-    // }
-
-    // /**
-    //  * @param string $collection
-    //  * @param array $options
-    //  *
-    //  * @return Document
-    //  */
-    // public function findLast(string $collection, array $options)
-    // {
-    //     $results = $this->find($collection, $options);
-    //     return \end($results);
-    // }
 
     // /**
     //  * @param array $data

@@ -522,14 +522,22 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[3]['name']);
     }
 
+    /**
+     * @depends testFind
+     */
     public function testFindFirst()
     {
-        $this->assertEquals('1', '1');
+        $document = static::getDatabase()->findFirst('movies', [], 4, 2);
+        $this->assertEquals('Captain America: The First Avenger', $document['name']);
     }
 
+    /**
+     * @depends testFind
+     */
     public function testFindLast()
     {
-        $this->assertEquals('1', '1');
+        $document = static::getDatabase()->findLast('movies', [], 4, 2);
+        $this->assertEquals('Work in Progress 2', $document['name']);
     }
 
     /**

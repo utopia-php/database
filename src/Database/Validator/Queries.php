@@ -95,7 +95,7 @@ class Queries extends Validator
         if ($this->strict) {
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
-                if ($index['attributes'] === $queries) {
+                if ($this->arrayMatch($index['attributes'],  $queries)) {
                     $indexId = $index['$id']; 
                 }
             }
@@ -103,7 +103,7 @@ class Queries extends Validator
             if (!$indexId) {
                 // check against the indexesInQueue
                 foreach ($this->indexesInQueue as $index) {
-                    if ($index['attributes'] === $queries) {
+                    if ($this->arrayMatch($index['attributes'], $queries)) {
                         $this->message = 'Index still in creation queue: ' . implode(",", $queries);
                         return false;
                     }
@@ -150,5 +150,28 @@ class Queries extends Validator
     public function isStrict(): bool
     {
         return $this->strict;
+    }
+
+    /**
+     * Check if indexed array $indexes matches $queries
+     *
+     * @param array $indexes
+     * @param array $queries
+     *
+     * @return bool
+     */
+    protected function arrayMatch($indexes, $queries): bool
+    {
+        // Check the count of indexes first for performance
+        if (count($indexes) !== count($queries)) {
+            return false;
+        }
+
+        // Only matching arrays will have equal diffs in both directions
+        if (array_diff_assoc($indexes, $queries) !== array_diff_assoc($queries, $indexes)) {
+            return false;
+        }
+
+        return true;
     }
 }

@@ -4,6 +4,8 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use Utopia\Database\Adapter;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
 use MongoDB\Client;
 use MongoDB\Database;
 
@@ -41,6 +43,14 @@ class MongoDB extends Adapter
         $namespace = $this->getNamespace();
         return (!!$this->client->$namespace);
     }
+
+    /**
+     * Check if database exists
+     *
+     * @return bool
+     */
+    public function exists(): bool
+    {}
 
     /**
      * List Databases
@@ -105,6 +115,130 @@ class MongoDB extends Adapter
     {
         return (!!$this->getDatabase()->dropCollection($id));
     }
+
+    /**
+     * Create Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    {}
+
+    /**
+     * Delete Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * 
+     * @return bool
+     */
+    public function deleteAttribute(string $collection, string $id): bool
+    {}
+
+    /**
+     * Create Index
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param array $attributes
+     * @param array $lengths
+     * @param array $orders
+     *
+     * @return bool
+     */
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    {}
+
+    /**
+     * Delete Index
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function deleteIndex(string $collection, string $id): bool
+    {}
+
+    /**
+     * Get Document
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return Document
+     */
+    public function getDocument(string $collection, string $id): Document
+    {}
+
+    /**
+     * Create Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    public function createDocument(string $collection, Document $document): Document
+    {}
+
+    /**
+     * Update Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    public function updateDocument(string $collection, Document $document): Document
+    {}
+
+    /**
+     * Delete Document
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function deleteDocument(string $collection, string $id): bool
+    {}
+
+    /**
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return Document[]
+     */
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
+    {}
+    
+    /**
+     * Count Documents
+     * 
+     * @param string $collection
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    public function count(string $collection, array $queries = [], int $max = 0): int
+    {}
 
     /**
      * @return Database

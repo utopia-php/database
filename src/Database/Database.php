@@ -146,7 +146,7 @@ class Database
              */
             function($value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
-                
+
                 if(!is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
@@ -1022,7 +1022,7 @@ class Database
             $value = $document->getAttribute($key, null);
 
             if($array) {
-                $value = json_decode($value, true);
+                $value = (!is_string($value)) ? $value : json_decode($value, true);
             }
             else {
                 $value = [$value];

@@ -326,7 +326,7 @@ class MariaDB extends Adapter
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate(); // TODO add test for catching this exception
+                    throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
                     break;
                 
                 default:

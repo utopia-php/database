@@ -206,7 +206,14 @@ class MongoDB extends Adapter
      * @return Document
      */
     public function getDocument(string $collection, string $id): Document
-    {}
+    {
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        $result = $collection->findOne(['+id' => $id]);
+        var_dump($this->bsonToArray($result));
+
+    }
 
     /**
      * Create Document
@@ -217,7 +224,49 @@ class MongoDB extends Adapter
      * @return Document
      */
     public function createDocument(string $collection, Document $document): Document
-    {}
+    {
+    
+        $name = $this->filter($collection);
+        $namespace = $this->getNamespace();
+        $collection = $this->getClient()->$namespace->$name;
+
+        $collection->insertOne($this->replaceKeys($document->getArrayCopy()));
+
+        return $document;
+    }
+
+    /**
+     * Keys cannot begin with $ in MongoDB
+     * Convert $ to +
+     *
+     * @param array
+     * @return array
+     */
+    protected function replaceKeys($array) {
+        return array_combine(str_replace('$', '+', array_keys($array)), $array);
+    }
+
+    protected function bsonToArray($bson)
+    {
+        $bson = iterator_to_array($bson);
+        // array_walk($bson, function (&$value) {
+        //       // if (isset($value['_id'])) {
+        //       //   $value['_id'] = $value->getArrayCopy()['_id'];
+        //       // }
+        //       if (isset($value['+id'])) {
+        //         $value['+id'] = iterator_to_array($value['+id']);
+        //       }
+        //       if (isset($value['+read'])) {
+        //         $value['+read'] = iterator_to_array($value['+read']);
+        //       }
+        //       if (isset($value['+write'])) {
+        //         $value['+write'] = iterator_to_array($value['+write']);
+        //       }
+        //     }
+        // );
+
+        return $bson;
+    }
 
     /**
      * Update Document

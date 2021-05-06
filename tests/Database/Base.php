@@ -3,6 +3,7 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
@@ -570,6 +571,200 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies', [], 3);
         $this->assertEquals(3, $count);
         Authorization::reset();
+    }
+
+    public function testEncodeDecode()
+    {
+        $collection = new Document([
+            '$collection' => Database::COLLECTIONS,
+            '$id' => 'users',
+            'name' => 'Users',
+            'attributes' => [
+                [
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 256,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'email',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 1024,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'status',
+                    'type' => Database::VAR_INTEGER,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'password',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 16384,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'passwordUpdate',
+                    'type' => Database::VAR_INTEGER,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'registration',
+                    'type' => Database::VAR_INTEGER,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'emailVerification',
+                    'type' => Database::VAR_BOOLEAN,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'reset',
+                    'type' => Database::VAR_BOOLEAN,
+                    'format' => '',
+                    'size' => 0,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'prefs',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 16384,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => ['json']
+                ],
+                [
+                    '$id' => 'sessions',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 16384,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => ['json'],
+                ],
+                [
+                    '$id' => 'tokens',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 16384,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => ['json'],
+                ],
+                [
+                    '$id' => 'memberships',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 16384,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => false,
+                    'filters' => ['json'],
+                ],
+            ],
+            'indexes' => [
+                [
+                    '$id' => '_key_email',
+                    'type' => Database::INDEX_UNIQUE,
+                    'attributes' => ['email'],
+                    'lengths' => [1024],
+                    'orders' => [Database::ORDER_ASC],
+                ]
+            ],
+        ]);
+
+        $document = new Document([
+            '$id' => '608fdbe51361a',
+            '$read' => ['*'],
+            '$write' => ['user:608fdbe51361a'],
+            'email' => 'test@example.com',
+            'emailVerification' => false,
+            'status' => 1,
+            'password' => 'randomhash',
+            'passwordUpdate' => 1234,
+            'registration' => 1234,
+            'reset' => false,
+            'name' => 'My Name',
+            'prefs' => new stdClass,
+            'sessions' => [],
+            'tokens' => [],
+            'memberships' => [],
+        ]);
+
+        $result = static::getDatabase()->encode($collection, $document);
+
+        $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
+        $this->assertEquals(['*'], $result->getAttribute('$read'));
+        $this->assertEquals(['user:608fdbe51361a'], $result->getAttribute('$write'));
+        $this->assertEquals('test@example.com', $result->getAttribute('email'));
+        $this->assertEquals(false, $result->getAttribute('emailVerification'));
+        $this->assertEquals(1, $result->getAttribute('status'));
+        $this->assertEquals('randomhash', $result->getAttribute('password'));
+        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
+        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals(false, $result->getAttribute('reset'));
+        $this->assertEquals('My Name', $result->getAttribute('name'));
+        $this->assertEquals('{}', $result->getAttribute('prefs'));
+        $this->assertEquals('[]', $result->getAttribute('sessions'));
+        $this->assertEquals('[]', $result->getAttribute('tokens'));
+        $this->assertEquals('[]', $result->getAttribute('memberships'));
+
+        $result = static::getDatabase()->decode($collection, $document);
+
+        $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
+        $this->assertEquals(['*'], $result->getAttribute('$read'));
+        $this->assertEquals(['user:608fdbe51361a'], $result->getAttribute('$write'));
+        $this->assertEquals('test@example.com', $result->getAttribute('email'));
+        $this->assertEquals(false, $result->getAttribute('emailVerification'));
+        $this->assertEquals(1, $result->getAttribute('status'));
+        $this->assertEquals('randomhash', $result->getAttribute('password'));
+        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
+        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals(false, $result->getAttribute('reset'));
+        $this->assertEquals('My Name', $result->getAttribute('name'));
+        $this->assertEquals([], $result->getAttribute('prefs'));
+        $this->assertEquals([], $result->getAttribute('sessions'));
+        $this->assertEquals([], $result->getAttribute('tokens'));
+        $this->assertEquals([], $result->getAttribute('memberships'));
     }
 
     /**

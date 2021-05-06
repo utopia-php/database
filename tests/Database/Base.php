@@ -700,6 +700,26 @@ abstract class Base extends TestCase
                     'array' => false,
                     'filters' => ['json'],
                 ],
+                [
+                    '$id' => 'roles',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 128,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => true,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'tags',
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 128,
+                    'signed' => true,
+                    'required' => false,
+                    'array' => true,
+                    'filters' => ['json'],
+                ],
             ],
             'indexes' => [
                 [
@@ -728,6 +748,16 @@ abstract class Base extends TestCase
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],
+            'roles' => [
+                'admin',
+                'developer',
+                'tester',
+            ],
+            'tags' => [
+                ['$id' => '1', 'label' => 'x'],
+                ['$id' => '2', 'label' => 'y'],
+                ['$id' => '3', 'label' => 'z'],
+            ],
         ]);
 
         $result = static::getDatabase()->encode($collection, $document);
@@ -747,6 +777,8 @@ abstract class Base extends TestCase
         $this->assertEquals('[]', $result->getAttribute('sessions'));
         $this->assertEquals('[]', $result->getAttribute('tokens'));
         $this->assertEquals('[]', $result->getAttribute('memberships'));
+        $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
+        $this->assertEquals(['{"$id":"1","label":"x"}','{"$id":"2","label":"y"}','{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
 
         $result = static::getDatabase()->decode($collection, $document);
 
@@ -765,6 +797,12 @@ abstract class Base extends TestCase
         $this->assertEquals([], $result->getAttribute('sessions'));
         $this->assertEquals([], $result->getAttribute('tokens'));
         $this->assertEquals([], $result->getAttribute('memberships'));
+        $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
+        $this->assertEquals([
+            ['$id' => '1', 'label' => 'x'],
+            ['$id' => '2', 'label' => 'y'],
+            ['$id' => '3', 'label' => 'z'],
+        ], $result->getAttribute('tags'));
     }
 
     /**

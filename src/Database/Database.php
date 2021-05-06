@@ -819,6 +819,7 @@ class Database
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node);
+            $node->setAttribute('$collection', $collection->getId());
         }
 
         return $results;

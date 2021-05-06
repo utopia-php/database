@@ -390,6 +390,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
+        $this->assertEquals('movies', $documents[0]->getCollection());
         $this->assertEquals(['*', 'user1', 'user2'], $documents[0]->getRead());
         $this->assertEquals(['*', 'user1x', 'user2x'], $documents[0]->getWrite());
         $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));

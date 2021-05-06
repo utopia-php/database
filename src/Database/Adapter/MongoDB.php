@@ -6,29 +6,24 @@ use Exception;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use MongoDB\Client;
-use MongoDB\Database;
+use MongoDB\Client as MongoClient;
+use MongoDB\Database as MongoDatabase;
 
 class MongoDB extends Adapter
 {
     /**
-     * @var Client
+     * @var MongoClient
      */
     protected $client;
-
-    /**
-     * @var Database|null
-     */
-    protected $database;
 
     /**
      * Constructor.
      *
      * Set connection and settings
      *
-     * @param Client $client
+     * @param MongoClient $client
      */
-    public function __construct(Client $client)
+    public function __construct(MongoClient $client)
     {
         $this->client = $client;
     }
@@ -41,7 +36,7 @@ class MongoDB extends Adapter
     public function create(): bool
     {
         $namespace = $this->getNamespace();
-        return (!!$this->client->$namespace);
+        return (!!$this->getClient()->$namespace);
     }
 
     /**
@@ -50,7 +45,16 @@ class MongoDB extends Adapter
      * @return bool
      */
     public function exists(): bool
-    {}
+    {
+        $name = $this->getNamespace();
+        forEach ($this->getClient()->listDatabaseNames() as $key => $value) {
+            if ($name === $value) {
+                return true;
+            } 
+        }
+
+        return false;
+    }
 
     /**
      * List Databases
@@ -61,7 +65,7 @@ class MongoDB extends Adapter
     {
         $list = [];
 
-        foreach ($this->client->listDatabaseNames() as $key => $value) {
+        foreach ($this->getClient()->listDatabaseNames() as $key => $value) {
             $list[] = $value;
         }
         
@@ -75,7 +79,7 @@ class MongoDB extends Adapter
      */
     public function delete(): bool
     {
-        return (!!$this->getDatabase()->drop($this->getNamespace()));
+        return (!!$this->getClient()->dropDatabase($this->getNamespace()));
     }
 
     /**
@@ -86,7 +90,8 @@ class MongoDB extends Adapter
      */
     public function createCollection(string $id): bool
     {
-        return (!!$this->getDatabase()->createCollection($id));
+        $namespace = $this->getNamespace();
+        return (!!$this->getClient()->$namespace->createCollection($id));
     }
 
     /**
@@ -96,9 +101,10 @@ class MongoDB extends Adapter
      */
     public function listCollections(): array
     {
+        $namespace = $this->getNamespace();
         $list = [];
 
-        foreach ($this->getDatabase()->listCollectionNames() as $key => $value) {
+        foreach ($this->getClient()->$namespace->listCollectionNames() as $key => $value) {
             $list[] = $value;
         }
         
@@ -113,7 +119,8 @@ class MongoDB extends Adapter
      */
     public function deleteCollection(string $id): bool
     {
-        return (!!$this->getDatabase()->dropCollection($id));
+        $namespace = $this->getNamespace();
+        return (!!$this->getClient()->$namespace->dropCollection($id));
     }
 
     /**
@@ -128,7 +135,24 @@ class MongoDB extends Adapter
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
-    {}
+    {
+        
+        // From MariaDB Adapter
+        // $name = $this->filter($collection);
+        // $id = $this->filter($id);
+        // $type = $this->getSQLType($type, $size, $signed);
+
+        // if($array) {
+        //     $type = 'LONGTEXT';
+        // }
+
+        // return $this->getPDO()
+        //     ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
+        //         ADD COLUMN `{$id}` {$type};")
+        //     ->execute();
+
+        return true;
+    }
 
     /**
      * Delete Attribute
@@ -139,7 +163,9 @@ class MongoDB extends Adapter
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
-    {}
+    {
+        return true;
+    }
 
     /**
      * Create Index
@@ -154,7 +180,9 @@ class MongoDB extends Adapter
      * @return bool
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
-    {}
+    {
+        return true;
+    }
 
     /**
      * Delete Index
@@ -165,7 +193,9 @@ class MongoDB extends Adapter
      * @return bool
      */
     public function deleteIndex(string $collection, string $id): bool
-    {}
+    {
+        return true;
+    }
 
     /**
      * Get Document
@@ -253,7 +283,7 @@ class MongoDB extends Adapter
 
         $namespace = $this->getNamespace();
         
-        return $this->client->$namespace;
+        return $this->getClient()->$namespace;
     }
 
     /**

@@ -89,7 +89,7 @@ class Database
                 'size' => 1000000,
                 'required' => false,
                 'signed' => true,
-                'array' => true,
+                'array' => false,
                 'filters' => ['json'],
             ],
             [
@@ -98,7 +98,7 @@ class Database
                 'size' => 1000000,
                 'required' => false,
                 'signed' => true,
-                'array' => true,
+                'array' => false,
                 'filters' => ['json'],
             ],
             [
@@ -107,7 +107,7 @@ class Database
                 'size' => 1000000,
                 'required' => false,
                 'signed' => true,
-                'array' => true,
+                'array' => false,
                 'filters' => ['json'],
             ],
             [
@@ -116,7 +116,7 @@ class Database
                 'size' => 1000000,
                 'required' => false,
                 'signed' => true,
-                'array' => true,
+                'array' => false,
                 'filters' => ['json'],
             ],
         ],
@@ -142,16 +142,24 @@ class Database
         self::addFilter('json',
             /**
              * @param mixed $value
-             * @return string
+             * @return mixed
              */
-            function($value): string {
+            function($value) {
+                if(!is_array($value) && !$value instanceof \stdClass) {
+                    return $value;
+                }
+
                 return json_encode($value);
             },
             /**
              * @param mixed $value
-             * @return array
+             * @return mixed
              */
-            function($value): array {
+            function($value) {
+                if(!is_string($value)) {
+                    return $value;
+                }
+
                 return json_decode($value, true);
             }
         );

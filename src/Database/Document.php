@@ -12,16 +12,6 @@ class Document extends ArrayObject
     const SET_TYPE_APPEND = 'append';
 
     /**
-     * @var bool
-     */
-    protected $filter = false;
-
-    /**
-     * @var bool
-     */
-    protected $casting = false;
-
-    /**
      * Construct.
      *
      * Construct a new fields object
@@ -248,52 +238,6 @@ class Document extends ArrayObject
     public function isSet($key): bool
     {
         return isset($this[$key]);
-    }
-
-    /**
-     * Get Document Filter Status
-     *
-     * @return bool
-     */
-    public function getFilterStatus(): bool
-    {
-        return $this->filter;
-    }
-
-    /**
-     * Set Document Filter Status
-     *
-     * @param bool $status
-     *
-     * @return self
-     */
-    public function setFilterStatus(bool $status): self
-    {
-        $this->filter = $status;
-        return $this;
-    }
-
-    /**
-     * Get Document Casting Status
-     *
-     * @return bool
-     */
-    public function getCastingStatus(): bool
-    {
-        return $this->casting;
-    }
-
-    /**
-     * Set Document Casting Status
-     *
-     * @param bool $status
-     *
-     * @return self
-     */
-    public function setCastingStatus(bool $status): self
-    {
-        $this->casting = $status;
-        return $this;
     }
 
     /**

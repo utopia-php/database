@@ -151,20 +151,6 @@ class DocumentTest extends TestCase
         $this->assertEquals(true, $this->document->isSet('title'));
     }
 
-    public function testFilterStatus()
-    {
-        $this->assertEquals(false, $this->document->getFilterStatus());
-        $this->assertEquals($this->document, $this->document->setFilterStatus(true));
-        $this->assertEquals(true, $this->document->getFilterStatus());
-    }
-
-    public function testCastingStatus()
-    {
-        $this->assertEquals(false, $this->document->getCastingStatus());
-        $this->assertEquals($this->document, $this->document->setCastingStatus(true));
-        $this->assertEquals(true, $this->document->getCastingStatus());
-    }
-
     public function testGetArrayCopy()
     {
         $this->assertEquals([

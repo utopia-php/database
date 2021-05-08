@@ -800,6 +800,10 @@ class MariaDB extends Adapter
             case 'integer':
                 return PDO::PARAM_INT;
             break;
+
+            case 'null':
+                return PDO::PARAM_NULL;
+            break;
             
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));

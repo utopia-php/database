@@ -801,7 +801,7 @@ class MariaDB extends Adapter
                 return PDO::PARAM_INT;
             break;
 
-            case 'null':
+            case 'NULL':
                 return PDO::PARAM_NULL;
             break;
             

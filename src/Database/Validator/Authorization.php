@@ -64,11 +64,9 @@ class Authorization extends Validator
             return true;
         }
 
-        $permission = '';
+        $permission = '-';
 
         foreach ($permissions as $permission) {
-            $permission = \str_replace(':{self}', ':'.$this->document->getId(), $permission);
-
             if (\array_key_exists($permission, self::$roles)) {
                 return true;
             }

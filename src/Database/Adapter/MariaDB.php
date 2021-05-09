@@ -519,6 +519,7 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
             WHERE ".implode(' AND ', $where)."
+            GROUP BY table_main._uid 
             {$order}
             LIMIT :offset, :limit;
         ");
@@ -551,7 +552,7 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Cound Documents
+     * Count Documents
      *
      * Count data set size using chosen queries
      *
@@ -588,6 +589,7 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
             WHERE ".implode(' AND ', $where)."
+            GROUP BY table_main._uid 
             {$limit}) table_count
         ");
 

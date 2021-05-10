@@ -273,7 +273,31 @@ class MongoDB extends Adapter
      * @return Document
      */
     public function updateDocument(string $collection, Document $document): Document
-    {}
+    {
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        $result = $collection->findOneAndUpdate(
+            ['+id' => $document->getId()],
+            ['$set' => $this->replaceChars('$', '+', $document->getArrayCopy())],
+            [
+                'typemap' => [
+                    'root' => 'array',
+                    'document' => 'array',
+                    'array' => 'array'
+                ],
+                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER,
+            ]
+        );
+
+        // Remove internal Mongo ID
+        unset($result['_id']);
+
+        // Change back to $
+        $result = $this->replaceChars('+', '$', $result);
+
+        return new Document($result);
+    }
 
     /**
      * Delete Document

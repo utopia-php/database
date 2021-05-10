@@ -356,10 +356,15 @@ class MongoDB extends Adapter
         foreach($queries as $i => $query) {
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getOperator()); 
-            // TODO@kodumbeats handle OR queries
-            $value = $query->getValues()[0]; 
+            // $value = $query->getValues()[0]; 
+            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
 
-            $filters[$attribute][$operator] = $value;
+            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
+            if (is_array($value) && $operator = '$eq') {
+                $filters[$attribute]['$in'] = $value;
+            } else {
+                $filters[$attribute][$operator] = $value;
+            }
         }
 
         /**
@@ -367,7 +372,6 @@ class MongoDB extends Adapter
          */
         $found = [];
 
-        var_dump($filters);
         $results = $collection->find($filters);
 
         foreach($results as $i => $result) {

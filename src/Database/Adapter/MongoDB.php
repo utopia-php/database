@@ -309,7 +309,7 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-        $result = $collection->findOne(
+        $result = $collection->findOneAndDelete(
             ['+id' => $id],
             [
                 'typemap' => [

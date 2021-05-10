@@ -338,7 +338,9 @@ class MongoDB extends Adapter
      * @return Document[]
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
-    {}
+    {
+        return [];
+    }
     
     /**
      * Count Documents
@@ -350,7 +352,9 @@ class MongoDB extends Adapter
      * @return int
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
-    {}
+    {
+        return 0;
+    }
 
     /**
      * @return Database

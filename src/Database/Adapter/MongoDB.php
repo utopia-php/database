@@ -387,6 +387,46 @@ class MongoDB extends Adapter
     }
 
     /**
+     * Get SQL Operator
+     * 
+     * @param string $operator
+     * 
+     * @return string
+     */
+    protected function getQueryOperator(string $operator): string
+    {
+        switch ($operator) {
+            case Query::TYPE_EQUAL:
+                return '$eq';
+            break;
+
+            case Query::TYPE_NOTEQUAL:
+                return '$ne';
+            break;
+
+            case Query::TYPE_LESSER:
+                return '$lt';
+            break;
+
+            case Query::TYPE_LESSEREQUAL:
+                return '$lte';
+            break;
+
+            case Query::TYPE_GREATER:
+                return '$gt';
+            break;
+
+            case Query::TYPE_GREATEREQUAL:
+                return '$gte';
+            break;
+
+            default:
+                throw new Exception('Unknown Operator:' . $operator);
+            break;
+        }
+    }
+
+    /**
      * Get max STRING limit
      * 
      * @return int

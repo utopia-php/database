@@ -308,7 +308,23 @@ class MongoDB extends Adapter
      * @return bool
      */
     public function deleteDocument(string $collection, string $id): bool
-    {}
+    {
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        $result = $collection->findOne(
+            ['+id' => $id],
+            [
+                'typemap' => [
+                    'root' => 'array',
+                    'document' => 'array',
+                    'array' => 'array'
+                ]
+            ]
+        );
+
+        return (!!$result);
+    }
 
     /**
      * Find Documents

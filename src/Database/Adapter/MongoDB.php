@@ -218,6 +218,10 @@ class MongoDB extends Adapter
             ]
         );
 
+        if(empty($result)) {
+            return new Document([]);
+        }
+
         // Remove internal Mongo ID
         unset($result['_id']);
 

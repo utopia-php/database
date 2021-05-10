@@ -213,6 +213,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, true, true));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$read' => ['*', 'user1', 'user2'],
@@ -222,6 +223,7 @@ abstract class Base extends TestCase
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
+            'empty' => [],
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -235,6 +237,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+        $this->assertEquals([], $document->getAttribute('empty'));
 
         return $document;
     }
@@ -390,6 +393,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
+        $this->assertEquals('movies', $documents[0]->getCollection());
         $this->assertEquals(['*', 'user1', 'user2'], $documents[0]->getRead());
         $this->assertEquals(['*', 'user1x', 'user2x'], $documents[0]->getWrite());
         $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));

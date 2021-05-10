@@ -33,7 +33,7 @@ class StructureTest extends TestCase
                 'type' => Database::VAR_STRING,
                 'format' => '',
                 'size' => 1000000,
-                'required' => true,
+                'required' => false,
                 'signed' => true,
                 'array' => false,
                 'filters' => [],
@@ -73,7 +73,7 @@ class StructureTest extends TestCase
                 'type' => Database::VAR_STRING,
                 'format' => '',
                 'size' => 55,
-                'required' => true,
+                'required' => false,
                 'signed' => true,
                 'array' => true,
                 'filters' => [],
@@ -155,6 +155,33 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
+    }
+
+    public function testNullValues()
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'My Title',
+            'description' => null,
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'My Title',
+            'description' => null,
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', null, 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
     }
     
     public function testUnknownKeys()

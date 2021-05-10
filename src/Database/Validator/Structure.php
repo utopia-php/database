@@ -201,6 +201,7 @@ class Structure extends Validator
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $format = $attribute['format'] ?? '';
+            $required = $attribute['required'] ?? false;
 
             switch ($type) {
                 case Database::VAR_STRING:
@@ -233,6 +234,10 @@ class Structure extends Validator
                 }
 
                 foreach ($value as $x => $child) {
+                    if($required == false && is_null($child)) { // Allow null value to optional params
+                        continue;
+                    }
+
                     if(!$validator->isValid($child)) {
                         $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid type. '.$validator->getDescription();
                         return false;
@@ -240,6 +245,10 @@ class Structure extends Validator
                 }
             }
             else {
+                if($required == false && is_null($value)) { // Allow null value to optional params
+                    continue;
+                }
+
                 if(!$validator->isValid($value)) {
                     $this->message = 'Attribute "'.$key.'" has invalid type. '.$validator->getDescription();
                     return false;

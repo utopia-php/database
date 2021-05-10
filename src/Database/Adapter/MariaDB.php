@@ -326,7 +326,7 @@ class MariaDB extends Adapter
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate(); // TODO add test for catching this exception
+                    throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
                     break;
                 
                 default:
@@ -519,6 +519,7 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
             WHERE ".implode(' AND ', $where)."
+            GROUP BY table_main._uid 
             {$order}
             LIMIT :offset, :limit;
         ");
@@ -551,7 +552,7 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Cound Documents
+     * Count Documents
      *
      * Count data set size using chosen queries
      *
@@ -588,6 +589,7 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
             WHERE ".implode(' AND ', $where)."
+            GROUP BY table_main._uid 
             {$limit}) table_count
         ");
 
@@ -799,6 +801,10 @@ class MariaDB extends Adapter
 
             case 'integer':
                 return PDO::PARAM_INT;
+            break;
+
+            case 'NULL':
+                return PDO::PARAM_NULL;
             break;
             
             default:

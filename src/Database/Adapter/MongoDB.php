@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Query;
 use MongoDB\Client as MongoClient;
 use MongoDB\Database as MongoDatabase;
 
@@ -343,7 +344,41 @@ class MongoDB extends Adapter
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
     {
-        return [];
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+
+        /**
+         * @var array
+         */
+        $filters = [];
+
+        foreach($queries as $i => $query) {
+            $attribute = $query->getAttribute();
+            $operator = $this->getQueryOperator($query->getOperator()); 
+            // TODO@kodumbeats handle OR queries
+            $value = $query->getValues()[0]; 
+
+            $filters[$attribute][$operator] = $value;
+        }
+
+        /**
+         * @var Document[]
+         */
+        $found = [];
+
+        var_dump($filters);
+        $results = $collection->find($filters);
+
+        foreach($results as $i => $result) {
+            // Remove internal Mongo ID
+            unset($result['_id']);
+
+            // Change back to $
+            $found[] = new Document($this->replaceChars('+', '$', $result));
+        }
+
+        return $found;
     }
     
     /**

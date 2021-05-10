@@ -90,8 +90,7 @@ class MongoDB extends Adapter
      */
     public function createCollection(string $id): bool
     {
-        $namespace = $this->getNamespace();
-        return (!!$this->getClient()->$namespace->createCollection($id));
+        return (!!$this->getDatabase()->createCollection($id));
     }
 
     /**
@@ -101,10 +100,9 @@ class MongoDB extends Adapter
      */
     public function listCollections(): array
     {
-        $namespace = $this->getNamespace();
         $list = [];
 
-        foreach ($this->getClient()->$namespace->listCollectionNames() as $key => $value) {
+        foreach ($this->getDatabase()->listCollectionNames() as $key => $value) {
             $list[] = $value;
         }
         
@@ -119,8 +117,7 @@ class MongoDB extends Adapter
      */
     public function deleteCollection(string $id): bool
     {
-        $namespace = $this->getNamespace();
-        return (!!$this->getClient()->$namespace->dropCollection($id));
+        return (!!$this->getDatabase()->dropCollection($id));
     }
 
     /**

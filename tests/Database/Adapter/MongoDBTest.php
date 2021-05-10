@@ -26,11 +26,13 @@ class MongoDBTest extends Base
             return self::$database;
         }
 
+        $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
         $client = new Client('mongodb://mongo/',
             [
                 'username' => 'root',
                 'password' => 'example',
             ],
+            $options
         );
 
         $redis = new Redis();

@@ -429,8 +429,10 @@ class MongoDB extends Adapter
         /**
          * @var array
          */
-        $options['limit'] = $max;
+        $options = [];
 
+        // set max limit
+        $options['limit'] = $max;
 
         // queries
         foreach($queries as $i => $query) {
@@ -455,23 +457,19 @@ class MongoDB extends Adapter
     }
 
     /**
-     * @return Database
+     * @return MongoDatabase
      *
      * @throws Exception
      */
     protected function getDatabase()
     {
-        if($this->database) {
-            return $this->database;
-        }
-
         $namespace = $this->getNamespace();
         
         return $this->getClient()->$namespace;
     }
 
     /**
-     * @return Client
+     * @return MongoClient
      *
      * @throws Exception
      */
@@ -523,7 +521,7 @@ class MongoDB extends Adapter
     /**
      * Get Mongo Order
      *
-     * @param string
+     * @param string $order
      *
      * @return int
      */

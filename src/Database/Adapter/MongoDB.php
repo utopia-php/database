@@ -136,21 +136,6 @@ class MongoDB extends Adapter
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
-        
-        // From MariaDB Adapter
-        // $name = $this->filter($collection);
-        // $id = $this->filter($id);
-        // $type = $this->getSQLType($type, $size, $signed);
-
-        // if($array) {
-        //     $type = 'LONGTEXT';
-        // }
-
-        // return $this->getPDO()
-        //     ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
-        //         ADD COLUMN `{$id}` {$type};")
-        //     ->execute();
-
         return true;
     }
 
@@ -185,9 +170,6 @@ class MongoDB extends Adapter
         $id = $this->filter($id);
         $collection = $this->getDatabase()->$name;
 
-        /**
-         * @var array
-         */
         $indexes = [];
 
         // orders
@@ -230,22 +212,12 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-        $result = $collection->findOne(
-            ['_id' => $id],
-            [
-                'typemap' => [
-                    'root' => 'array',
-                    'document' => 'array',
-                    'array' => 'array'
-                ]
-            ]
-        );
+        $result = $collection->findOne(['_id' => $id]);
 
         if(empty($result)) {
             return new Document([]);
         }
 
-        // Change back to $
         $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
@@ -284,19 +256,6 @@ class MongoDB extends Adapter
     }
 
     /**
-     * Keys cannot begin with $ in MongoDB
-     * Convert $ to _
-     *
-     * @param string $from
-     * @param string $to
-     * @param array $array
-     * @return array
-     */
-    protected function replaceChars($from, $to, $array) {
-        return array_combine(str_replace($from, $to, array_keys($array)), $array);
-    }
-
-    /**
      * Update Document
      *
      * @param string $collection
@@ -312,17 +271,9 @@ class MongoDB extends Adapter
         $result = $collection->findOneAndUpdate(
             ['_id' => $document->getId()],
             ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
-            [
-                'typemap' => [
-                    'root' => 'array',
-                    'document' => 'array',
-                    'array' => 'array'
-                ],
-                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER,
-            ]
+            ['returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER]
         );
 
-        // Change back to $
         $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
@@ -341,16 +292,7 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-        $result = $collection->findOneAndDelete(
-            ['_id' => $id],
-            [
-                'typemap' => [
-                    'root' => 'array',
-                    'document' => 'array',
-                    'array' => 'array'
-                ]
-            ]
-        );
+        $result = $collection->findOneAndDelete(['_id' => $id]);
 
         return (!!$result);
     }
@@ -375,14 +317,8 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
         $roles = Authorization::getRoles();
 
-        /**
-         * @var array
-         */
         $filters = [];
 
-        /**
-         * @var array
-         */
         $options = ['sort', 'limit' => $limit, 'skip' => $offset];
 
         // orders
@@ -419,7 +355,6 @@ class MongoDB extends Adapter
         $results = $collection->find($filters, $options);
 
         foreach($results as $i => $result) {
-            // Change back to $
             $found[] = new Document($this->replaceChars('_', '$', $result));
         }
 
@@ -441,14 +376,8 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
         $roles = Authorization::getRoles();
 
-        /**
-         * @var array
-         */
         $filters = [];
 
-        /**
-         * @var array
-         */
         $options = [];
 
         // set max limit
@@ -496,6 +425,19 @@ class MongoDB extends Adapter
     protected function getClient()
     {
         return $this->client;
+    }
+
+    /**
+     * Keys cannot begin with $ in MongoDB
+     * Convert $ to _
+     *
+     * @param string $from
+     * @param string $to
+     * @param array $array
+     * @return array
+     */
+    protected function replaceChars($from, $to, $array) {
+        return array_combine(str_replace($from, $to, array_keys($array)), $array);
     }
 
     /**

@@ -181,7 +181,23 @@ class MongoDB extends Adapter
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        return true;
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+        $collection = $this->getDatabase()->$name;
+
+        /**
+         * @var array
+         */
+        $indexes = [];
+
+        // orders
+        foreach($attributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
+            $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+            $indexes[$attribute] = $orderType;
+        }
+
+        return (!!$collection->createIndex($indexes, ['name' => $id]));
     }
 
     /**
@@ -194,7 +210,11 @@ class MongoDB extends Adapter
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return true;
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+        $collection = $this->getDatabase()->$name;
+
+        return (!!$collection->dropIndex($id));
     }
 
     /**

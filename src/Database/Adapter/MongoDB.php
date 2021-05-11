@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
@@ -210,7 +211,7 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
 
         $result = $collection->findOne(
-            ['+id' => $id],
+            ['_id' => $id],
             [
                 'typemap' => [
                     'root' => 'array',
@@ -225,10 +226,10 @@ class MongoDB extends Adapter
         }
 
         // Remove internal Mongo ID
-        unset($result['_id']);
+        // unset($result['_id']);
 
         // Change back to $
-        $result = $this->replaceChars('+', '$', $result);
+        $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
 
@@ -249,14 +250,25 @@ class MongoDB extends Adapter
         $namespace = $this->getNamespace();
         $collection = $this->getClient()->$namespace->$name;
 
-        $collection->insertOne($this->replaceChars('$', '+', $document->getArrayCopy()));
+        try {
+            $collection->insertOne($this->replaceChars('$', '_', $document->getArrayCopy()));
+        } catch (\MongoDB\Driver\Exception\BulkWriteException $e) {
+            switch ($e->getCode()) {
+                case 11000:
+                    throw new Duplicate('Duplicated document: '.$e->getMessage());
+                    break;
+                default:
+                    throw $e;
+                    break;
+            }
+        }
 
         return $document;
     }
 
     /**
      * Keys cannot begin with $ in MongoDB
-     * Convert $ to +
+     * Convert $ to _
      *
      * @param string $from
      * @param string $to
@@ -281,8 +293,8 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
 
         $result = $collection->findOneAndUpdate(
-            ['+id' => $document->getId()],
-            ['$set' => $this->replaceChars('$', '+', $document->getArrayCopy())],
+            ['_id' => $document->getId()],
+            ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
             [
                 'typemap' => [
                     'root' => 'array',
@@ -294,10 +306,10 @@ class MongoDB extends Adapter
         );
 
         // Remove internal Mongo ID
-        unset($result['_id']);
+        // unset($result['_id']);
 
         // Change back to $
-        $result = $this->replaceChars('+', '$', $result);
+        $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
     }
@@ -316,7 +328,7 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
 
         $result = $collection->findOneAndDelete(
-            ['+id' => $id],
+            ['_id' => $id],
             [
                 'typemap' => [
                     'root' => 'array',
@@ -382,7 +394,7 @@ class MongoDB extends Adapter
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['+read']['$in'] = Authorization::getRoles();
+            $filters['_read']['$in'] = Authorization::getRoles();
         }
 
         /**
@@ -394,10 +406,10 @@ class MongoDB extends Adapter
 
         foreach($results as $i => $result) {
             // Remove internal Mongo ID
-            unset($result['_id']);
+            // unset($result['_id']);
 
             // Change back to $
-            $found[] = new Document($this->replaceChars('+', '$', $result));
+            $found[] = new Document($this->replaceChars('_', '$', $result));
         }
 
         return $found;
@@ -445,7 +457,7 @@ class MongoDB extends Adapter
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['+read']['$in'] = Authorization::getRoles();
+            $filters['_read']['$in'] = Authorization::getRoles();
         }
 
         return $collection->count($filters, $options);

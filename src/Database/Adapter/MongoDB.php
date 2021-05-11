@@ -347,12 +347,24 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-
         /**
          * @var array
          */
         $filters = [];
 
+        /**
+         * @var array
+         */
+        $options = ['sort', 'limit' => $limit, 'skip' => $offset];
+
+        // orders
+        foreach($orderAttributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
+            $orderType = $this->getOrder($this->filter($orderTypes[$i] ?? Database::ORDER_ASC));
+            $options['sort'][$attribute] = $orderType;
+        }
+
+        // queries
         foreach($queries as $i => $query) {
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getOperator()); 
@@ -372,7 +384,7 @@ class MongoDB extends Adapter
          */
         $found = [];
 
-        $results = $collection->find($filters);
+        $results = $collection->find($filters, $options);
 
         foreach($results as $i => $result) {
             // Remove internal Mongo ID
@@ -426,7 +438,7 @@ class MongoDB extends Adapter
     }
 
     /**
-     * Get SQL Operator
+     * Get Query Operator
      * 
      * @param string $operator
      * 
@@ -437,31 +449,53 @@ class MongoDB extends Adapter
         switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '$eq';
-            break;
+                break;
 
             case Query::TYPE_NOTEQUAL:
                 return '$ne';
-            break;
+                break;
 
             case Query::TYPE_LESSER:
                 return '$lt';
-            break;
+                break;
 
             case Query::TYPE_LESSEREQUAL:
                 return '$lte';
-            break;
+                break;
 
             case Query::TYPE_GREATER:
                 return '$gt';
-            break;
+                break;
 
             case Query::TYPE_GREATEREQUAL:
                 return '$gte';
-            break;
+                break;
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
-            break;
+                break;
+        }
+    }
+
+    /**
+     * Get Mongo Order
+     *
+     * @param string
+     *
+     * @return int
+     */
+    protected function getOrder(string $order): int
+    {
+        switch ($order) {
+            case Database::ORDER_ASC:
+                return 1;
+                break;
+            case Database::ORDER_DESC:
+                return -1;
+                break;
+            default:
+                throw new Exception('Unknown sort order:' . $order);
+                break;
         }
     }
 

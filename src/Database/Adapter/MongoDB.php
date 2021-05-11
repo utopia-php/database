@@ -236,8 +236,7 @@ class MongoDB extends Adapter
     {
     
         $name = $this->filter($collection);
-        $namespace = $this->getNamespace();
-        $collection = $this->getClient()->$namespace->$name;
+        $collection = $this->getDatabase()->$name;
 
         try {
             $collection->insertOne($this->replaceChars('$', '_', $document->getArrayCopy()));

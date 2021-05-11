@@ -225,9 +225,6 @@ class MongoDB extends Adapter
             return new Document([]);
         }
 
-        // Remove internal Mongo ID
-        // unset($result['_id']);
-
         // Change back to $
         $result = $this->replaceChars('_', '$', $result);
 
@@ -304,9 +301,6 @@ class MongoDB extends Adapter
                 'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER,
             ]
         );
-
-        // Remove internal Mongo ID
-        // unset($result['_id']);
 
         // Change back to $
         $result = $this->replaceChars('_', '$', $result);
@@ -405,9 +399,6 @@ class MongoDB extends Adapter
         $results = $collection->find($filters, $options);
 
         foreach($results as $i => $result) {
-            // Remove internal Mongo ID
-            // unset($result['_id']);
-
             // Change back to $
             $found[] = new Document($this->replaceChars('_', '$', $result));
         }

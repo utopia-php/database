@@ -7,6 +7,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
 use MongoDB\Database as MongoDatabase;
 
@@ -346,6 +347,7 @@ class MongoDB extends Adapter
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
+        $roles = Authorization::getRoles();
 
         /**
          * @var array
@@ -376,6 +378,11 @@ class MongoDB extends Adapter
             } else {
                 $filters[$attribute][$operator] = $value;
             }
+        }
+
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $filters['+read']['$in'] = Authorization::getRoles();
         }
 
         /**
@@ -409,6 +416,7 @@ class MongoDB extends Adapter
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
+        $roles = Authorization::getRoles();
 
         /**
          * @var array
@@ -433,6 +441,11 @@ class MongoDB extends Adapter
             } else {
                 $filters[$attribute][$operator] = $value;
             }
+        }
+
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $filters['+read']['$in'] = Authorization::getRoles();
         }
 
         return $collection->count($filters, $options);

@@ -45,7 +45,7 @@ abstract class Base extends TestCase
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
 
-        // $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertCount(1, static::getDatabase()->listCollections());
 
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));

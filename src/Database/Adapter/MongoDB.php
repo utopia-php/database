@@ -368,7 +368,6 @@ class MongoDB extends Adapter
         foreach($queries as $i => $query) {
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getOperator()); 
-            // $value = $query->getValues()[0]; 
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
 
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
@@ -408,7 +407,35 @@ class MongoDB extends Adapter
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        return 0;
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        /**
+         * @var array
+         */
+        $filters = [];
+
+        /**
+         * @var array
+         */
+        $options['limit'] = $max;
+
+
+        // queries
+        foreach($queries as $i => $query) {
+            $attribute = $query->getAttribute();
+            $operator = $this->getQueryOperator($query->getOperator()); 
+            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
+
+            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
+            if (is_array($value) && $operator = '$eq') {
+                $filters[$attribute]['$in'] = $value;
+            } else {
+                $filters[$attribute][$operator] = $value;
+            }
+        }
+
+        return $collection->count($filters, $options);
     }
 
     /**

@@ -283,6 +283,13 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
+     * Does the adapter handle casting?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForCasting(): bool;
+
+    /**
      * Filter Keys
      * 
      * @throws Exception

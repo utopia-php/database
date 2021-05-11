@@ -551,4 +551,9 @@ class MongoDB extends Adapter
     {
         return true;
     }
+
+    public function getSupportForCasting(): bool
+    {
+        return true;
+    }
 }

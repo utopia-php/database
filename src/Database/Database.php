@@ -675,8 +675,10 @@ class Database
             return $document;
         }
 
-        $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document);
+        if (!$this->adapter->getSupportForCasting()) {
+            $document = $this->casting($collection, $document);
+            $document = $this->decode($collection, $document);
+        }
 
         $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
@@ -817,8 +819,10 @@ class Database
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes);
 
         foreach ($results as &$node) {
-            $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node);
+            if (!$this->adapter->getSupportForCasting()) {
+                $node = $this->casting($collection, $node);
+                $node = $this->decode($collection, $node);
+            }
             $node->setAttribute('$collection', $collection->getId());
         }
 

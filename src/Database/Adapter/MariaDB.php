@@ -661,6 +661,16 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Does the adapter handle casting?
+     * 
+     * @return bool
+     */
+    public function getSupportForCasting(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get SQL Type
      * 
      * @param string $type

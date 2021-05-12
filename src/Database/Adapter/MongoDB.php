@@ -172,11 +172,25 @@ class MongoDB extends Adapter
 
         $indexes = [];
 
-        // orders
         foreach($attributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
-            $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-            $indexes[$attribute] = $orderType;
+
+            switch ($type) {
+                case Database::INDEX_KEY:
+                    // ordering for plain indexes
+                    $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                    $indexes[$attribute] = $orderType;
+                    break;
+                case Database::INDEX_FULLTEXT:
+                    // MongoDB fulltext index is just 'text'
+                    // Not using Database::INDEX_KEY for clarity
+                    $indexes[$attribute] = 'text';
+                    break;
+                default:
+                    // index not supported
+                    // TODO@kodumbeats handle and test for this case
+                    return false;
+            }
         }
 
         return (!!$collection->createIndex($indexes, ['name' => $id]));

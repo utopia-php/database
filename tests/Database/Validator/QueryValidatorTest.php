@@ -84,8 +84,8 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(Query::parse('title.notEqual("Iron Man", "Ant Man")')));
         $this->assertEquals(true, $validator->isValid(Query::parse('description.equal("Best movie ever")')));
         $this->assertEquals(true, $validator->isValid(Query::parse('rating.greater(4)')));
-
         $this->assertEquals(true, $validator->isValid(Query::parse('price.lesserEqual(6.50)')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('tags.contains("action")')));
     }
 
     public function testInvalidOperator()
@@ -116,5 +116,15 @@ class QueryValidatorTest extends TestCase
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
+    }
+
+    public function testOperatorWrongType()
+    {
+        $validator = new QueryValidator($this->schema);
+
+        $response = $validator->isValid(Query::parse('title.contains("Iron")'));
+
+        $this->assertEquals(false, $response);
+        $this->assertEquals('Query operator only supported on array attributes: contains', $validator->getDescription());
     }
 }

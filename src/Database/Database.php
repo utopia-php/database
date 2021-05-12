@@ -675,10 +675,8 @@ class Database
             return $document;
         }
 
-        if (!$this->adapter->getSupportForCasting()) {
-            $document = $this->casting($collection, $document);
-            $document = $this->decode($collection, $document);
-        }
+        $document = $this->casting($collection, $document);
+        $document = $this->decode($collection, $document);
 
         $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
@@ -819,10 +817,8 @@ class Database
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes);
 
         foreach ($results as &$node) {
-            if (!$this->adapter->getSupportForCasting()) {
-                $node = $this->casting($collection, $node);
-                $node = $this->decode($collection, $node);
-            }
+            $node = $this->casting($collection, $node);
+            $node = $this->decode($collection, $node);
             $node->setAttribute('$collection', $collection->getId());
         }
 
@@ -1026,40 +1022,42 @@ class Database
      */
     public function casting(Document $collection, Document $document):Document
     {
-        $attributes = $collection->getAttribute('attributes', []);
+        if (!$this->adapter->getSupportForCasting()) {
+            $attributes = $collection->getAttribute('attributes', []);
 
-        foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
-            $type = $attribute['type'] ?? '';
-            $array = $attribute['array'] ?? false;
-            $value = $document->getAttribute($key, null);
+            foreach ($attributes as $attribute) {
+                $key = $attribute['$id'] ?? '';
+                $type = $attribute['type'] ?? '';
+                $array = $attribute['array'] ?? false;
+                $value = $document->getAttribute($key, null);
 
-            if($array) {
-                $value = (!is_string($value)) ? $value : json_decode($value, true);
-            }
-            else {
-                $value = [$value];
-            }
-
-            foreach ($value as &$node) {
-                switch ($type) {
-                    case self::VAR_BOOLEAN:
-                        $node = (bool)$node;
-                        break;
-                    case self::VAR_INTEGER:
-                        $node = (int)$node;
-                        break;
-                    case self::VAR_FLOAT:
-                        $node = (float)$node;
-                        break;
-                    
-                    default:
-                        # code...
-                        break;
+                if($array) {
+                    $value = (!is_string($value)) ? $value : json_decode($value, true);
                 }
+                else {
+                    $value = [$value];
+                }
+
+                foreach ($value as &$node) {
+                    switch ($type) {
+                        case self::VAR_BOOLEAN:
+                            $node = (bool)$node;
+                            break;
+                        case self::VAR_INTEGER:
+                            $node = (int)$node;
+                            break;
+                        case self::VAR_FLOAT:
+                            $node = (float)$node;
+                            break;
+                        
+                        default:
+                            # code...
+                            break;
+                    }
+                }
+                
+                $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
-            
-            $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
         return $document;

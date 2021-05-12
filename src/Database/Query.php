@@ -10,6 +10,7 @@ class Query
     const TYPE_LESSEREQUAL = 'lesserEqual';
     const TYPE_GREATER = 'greater';
     const TYPE_GREATEREQUAL = 'greaterEqual';
+    const TYPE_CONTAINS = 'contains';
     
     /**
      * @var string

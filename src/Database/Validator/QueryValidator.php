@@ -28,11 +28,6 @@ class QueryValidator extends Validator
         'greater',
         'greaterEqual',
         'contains',
-        'notContains',
-        'isNull',
-        'isNotNull',
-        'isEmpty',
-        'isNotEmpty',
     ];
 
     /**

@@ -1022,42 +1022,44 @@ class Database
      */
     public function casting(Document $collection, Document $document):Document
     {
-        if (!$this->adapter->getSupportForCasting()) {
-            $attributes = $collection->getAttribute('attributes', []);
+        if ($this->adapter->getSupportForCasting()) {
+            return $document;
+        }
 
-            foreach ($attributes as $attribute) {
-                $key = $attribute['$id'] ?? '';
-                $type = $attribute['type'] ?? '';
-                $array = $attribute['array'] ?? false;
-                $value = $document->getAttribute($key, null);
+        $attributes = $collection->getAttribute('attributes', []);
 
-                if($array) {
-                    $value = (!is_string($value)) ? $value : json_decode($value, true);
-                }
-                else {
-                    $value = [$value];
-                }
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
+            $value = $document->getAttribute($key, null);
 
-                foreach ($value as &$node) {
-                    switch ($type) {
-                        case self::VAR_BOOLEAN:
-                            $node = (bool)$node;
-                            break;
-                        case self::VAR_INTEGER:
-                            $node = (int)$node;
-                            break;
-                        case self::VAR_FLOAT:
-                            $node = (float)$node;
-                            break;
-                        
-                        default:
-                            # code...
-                            break;
-                    }
-                }
-                
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
+            if($array) {
+                $value = (!is_string($value)) ? $value : json_decode($value, true);
             }
+            else {
+                $value = [$value];
+            }
+
+            foreach ($value as &$node) {
+                switch ($type) {
+                    case self::VAR_BOOLEAN:
+                        $node = (bool)$node;
+                        break;
+                    case self::VAR_INTEGER:
+                        $node = (int)$node;
+                        break;
+                    case self::VAR_FLOAT:
+                        $node = (float)$node;
+                        break;
+                    
+                    default:
+                        # code...
+                        break;
+                }
+            }
+            
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
         return $document;

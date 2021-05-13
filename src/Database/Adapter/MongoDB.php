@@ -139,6 +139,8 @@ class MongoDB extends Adapter
      */
     public function deleteCollection(string $id): bool
     {
+        $id = $this->filter($id);
+
         return (!!$this->getDatabase()->dropCollection($id));
     }
 

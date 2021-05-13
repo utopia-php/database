@@ -464,6 +464,15 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
 
         /**
+         * Array contains OR condition
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('generes', Query::TYPE_CONTAINS, ['comics', 'kids']),
+        ]);
+
+        $this->assertEquals(4, count($documents));
+
+        /**
          * Multiple conditions
          */
         $documents = static::getDatabase()->find('movies', [

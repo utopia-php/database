@@ -454,8 +454,14 @@ abstract class Base extends TestCase
             new Query('price', Query::TYPE_GREATER, [25.98]),
         ]);
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals('Captain Marvel', $documents[0]['name']);
+        /**
+         * Array contains condition
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('generes', Query::TYPE_CONTAINS, ['comics']),
+        ]);
+
+        $this->assertEquals(2, count($documents));
 
         /**
          * Multiple conditions

@@ -350,6 +350,8 @@ class MongoDB extends Adapter
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
             if (is_array($value) && $operator = '$eq') {
                 $filters[$attribute]['$in'] = $value;
+            } elseif ($operator = '$in') {
+                $filters[$attribute]['$in'] = $query->getValues();
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -405,6 +407,8 @@ class MongoDB extends Adapter
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
             if (is_array($value) && $operator = '$eq') {
                 $filters[$attribute]['$in'] = $value;
+            } elseif ($operator = '$in') {
+                $filters[$attribute]['$in'] = $query->getValues();
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -485,6 +489,10 @@ class MongoDB extends Adapter
 
             case Query::TYPE_GREATEREQUAL:
                 return '$gte';
+                break;
+
+            case Query::TYPE_CONTAINS:
+                return '$in';
                 break;
 
             default:

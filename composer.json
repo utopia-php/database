@@ -1,0 +1,37 @@
+{
+    "name": "utopia-php/database",
+    "description": "A simple library to manage application persistency using multiple database adapters",
+    "type": "library",
+    "keywords": ["php","framework", "upf", "utopia", "database"],
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "authors": [
+        {
+            "name": "Eldad Fux",
+            "email": "eldad@appwrite.io"
+        },
+        {
+            "name": "Brandon Leckemby",
+            "email": "brandon@appwrite.io"
+        }
+    ],
+    "autoload": {
+        "psr-4": {"Utopia\\Database\\": "src/Database"}
+    },
+    "autoload-dev": {
+        "psr-4": {"Utopia\\Tests\\": "tests/Database"}
+    },
+    "require": {
+        "php": ">=7.1",
+        "ext-pdo": "*",
+        "ext-redis": "*",
+        "ext-mongodb": "*",
+        "utopia-php/framework": "0.*.*",
+        "utopia-php/cache": "0.4.*",
+        "mongodb/mongodb": "1.8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.4",
+        "vimeo/psalm": "4.0.1"
+    }
+}

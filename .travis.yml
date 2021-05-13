@@ -1,0 +1,32 @@
+dist: xenial
+
+arch:
+  - amd64
+
+os: linux
+
+language: shell
+
+services:
+- docker
+
+notifications:
+  email:
+  - team@appwrite.io
+
+before_script: docker run --rm --interactive --tty --volume "$(pwd)":/app composer update --ignore-platform-reqs --optimize-autoloader --no-plugins --no-scripts --prefer-dist
+
+before_install:
+- >
+  if [ ! -z "${DOCKERHUB_PULL_USERNAME:-}" ]; then
+    echo "${DOCKERHUB_PULL_PASSWORD}" | docker login --username "${DOCKERHUB_PULL_USERNAME}" --password-stdin
+  fi
+
+install:
+- docker-compose up -d
+- sleep 10
+
+script:
+- docker ps
+- docker-compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+- docker-compose exec tests vendor/bin/psalm --show-info=true

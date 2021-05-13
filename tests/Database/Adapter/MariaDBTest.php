@@ -17,6 +17,18 @@ class MariaDBTest extends Base
      */
     static $database = null;
 
+    // TODO@kodumbeats hacky way to identify adapters for tests
+    // Remove once all methods are implemented
+    /**
+     * Return name of adapter
+     *
+     * @return string
+     */
+    static function getAdapterName(): string
+    {
+        return "mariadb";
+    }
+
     /**
      * @return Adapter
      */

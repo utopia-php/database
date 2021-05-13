@@ -342,20 +342,7 @@ class MongoDB extends Adapter
         }
 
         // queries
-        foreach($queries as $i => $query) {
-            $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getOperator()); 
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
-
-            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
-            if (is_array($value) && $operator = '$eq') {
-                $filters[$attribute]['$in'] = $value;
-            } elseif ($operator = '$in') {
-                $filters[$attribute]['$in'] = $query->getValues();
-            } else {
-                $filters[$attribute][$operator] = $value;
-            }
-        }
+        $filters = $this->buildFilters($queries);
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -399,20 +386,7 @@ class MongoDB extends Adapter
         $options['limit'] = $max;
 
         // queries
-        foreach($queries as $i => $query) {
-            $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getOperator()); 
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
-
-            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
-            if (is_array($value) && $operator = '$eq') {
-                $filters[$attribute]['$in'] = $value;
-            } elseif ($operator = '$in') {
-                $filters[$attribute]['$in'] = $query->getValues();
-            } else {
-                $filters[$attribute][$operator] = $value;
-            }
-        }
+        $filters = $this->buildFilters($queries);
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -453,8 +427,38 @@ class MongoDB extends Adapter
      * @param array $array
      * @return array
      */
-    protected function replaceChars($from, $to, $array) {
+    protected function replaceChars($from, $to, $array): array
+    {
         return array_combine(str_replace($from, $to, array_keys($array)), $array);
+    }
+
+    /**
+     * Build mongo filters from array of $queries
+     *
+     * @param Query[] $queries
+     *
+     * @return array
+     */
+    protected function buildFilters($queries): array
+    {
+        $filters = [];
+
+        foreach($queries as $i => $query) {
+            $attribute = $query->getAttribute();
+            $operator = $this->getQueryOperator($query->getOperator()); 
+            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
+
+            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
+            if (is_array($value) && $operator = '$eq') {
+                $filters[$attribute]['$in'] = $value;
+            } elseif ($operator = '$in') {
+                $filters[$attribute]['$in'] = $query->getValues();
+            } else {
+                $filters[$attribute][$operator] = $value;
+            }
+        }
+
+        return $filters;
     }
 
     /**

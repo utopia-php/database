@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
+use Utopia\Database\Database;
 use Utopia\Database\Validator\QueryValidator;
 use Utopia\Database\Query;
 
@@ -78,7 +79,8 @@ class Queries extends Validator
         $queries = [];
 
         foreach ($value as $query) {
-            $queries[] = $query->getAttribute(); 
+            // [attribute => operator]
+            $queries[$query->getAttribute()] = $query->getOperator(); 
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
@@ -91,27 +93,36 @@ class Queries extends Validator
          */
         $indexId = null;
 
+        $found = null;
+
         // Return false if attributes do not exactly match an index
         if ($this->strict) {
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  $queries)) {
-                    $indexId = $index['$id']; 
+                if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
+                    // $indexId = $index['$id']; 
+                    $found = $index; 
                 }
             }
 
-            if (!$indexId) {
+            if (!$found) {
                 // check against the indexesInQueue
                 foreach ($this->indexesInQueue as $index) {
-                    if ($this->arrayMatch($index['attributes'], $queries)) {
-                        $this->message = 'Index still in creation queue: ' . implode(",", $queries);
+                    if ($this->arrayMatch($index['attributes'], array_keys($queries))) {
+                        $this->message = 'Index still in creation queue: ' . implode(",", array_keys($queries));
                         return false;
                     }
                 }
 
-                $this->message = 'Index not found: ' . implode(",", $queries);
+                $this->message = 'Index not found: ' . implode(",", array_keys($queries));
                 return false;
             }
+
+            // search operator requires fulltext index
+            if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
+                $this->message = 'Search operator requires fulltext index: ' . implode(",", array_keys($queries));
+                return false;
+            } 
         }
 
         return true;

@@ -28,6 +28,7 @@ class QueryValidator extends Validator
         'greater',
         'greaterEqual',
         'contains',
+        'search',
     ];
 
     /**

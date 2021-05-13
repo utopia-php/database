@@ -475,6 +475,19 @@ abstract class Base extends TestCase
             ]);
 
             $this->assertEquals(4, count($documents));
+
+            /**
+             * Fulltext search
+             */
+            $success = static::getDatabase()->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
+            $this->assertEquals(true, $success);
+
+            $documents = static::getDatabase()->find('movies', [
+                new Query('name', Query::TYPE_SEARCH, ['captain']),
+            ]);
+
+            $this->assertEquals(2, count($documents));
+
         }
 
         /**

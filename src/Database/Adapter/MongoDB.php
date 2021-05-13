@@ -470,10 +470,13 @@ class MongoDB extends Adapter
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 
 
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
-            if (is_array($value) && $operator = '$eq') {
+            if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
-            } elseif ($operator = '$in') {
+            } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
+            } elseif ($operator === '$search') {
+                // only one fulltext index per mongo collection, so attribute not necessary
+                $filters['$text'][$operator] = $value;
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -518,6 +521,10 @@ class MongoDB extends Adapter
 
             case Query::TYPE_CONTAINS:
                 return '$in';
+                break;
+
+            case Query::TYPE_SEARCH:
+                return '$search';
                 break;
 
             default:

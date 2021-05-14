@@ -441,7 +441,7 @@ class MongoDB extends Adapter
 
     /**
      * Keys cannot begin with $ in MongoDB
-     * Convert $ to _
+     * Convert $ prefix to _ on $id, $read, $write, and $collection
      *
      * @param string $from
      * @param string $to
@@ -450,7 +450,17 @@ class MongoDB extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
-        return array_combine(str_replace($from, $to, array_keys($array)), $array);
+        $array[$to.'id'] = $array[$from.'id'];
+        $array[$to.'read'] = $array[$from.'read'];
+        $array[$to.'write'] = $array[$from.'write'];
+        $array[$to.'collection'] = $array[$from.'collection'];
+
+        unset($array[$from.'id']);
+        unset($array[$from.'read']);
+        unset($array[$from.'write']);
+        unset($array[$from.'collection']);
+
+        return $array;
     }
 
     /**

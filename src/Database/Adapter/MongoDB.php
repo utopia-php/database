@@ -404,7 +404,7 @@ class MongoDB extends Adapter
         $options = [];
 
         // set max limit
-        $options['limit'] = $max;
+        $options['limit'] = ($max) ? $max : null;
 
         // queries
         $filters = $this->buildFilters($queries);
@@ -414,7 +414,7 @@ class MongoDB extends Adapter
             $filters['_read']['$in'] = Authorization::getRoles();
         }
 
-        return $collection->count($filters, $options);
+        return $collection->countDocuments($filters, $options);
     }
 
     /**

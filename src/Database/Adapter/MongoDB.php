@@ -353,7 +353,7 @@ class MongoDB extends Adapter
 
         $filters = [];
 
-        $options = ['sort', 'limit' => $limit, 'skip' => $offset];
+        $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
 
         // orders
         foreach($orderAttributes as $i => $attribute) {
@@ -606,6 +606,11 @@ class MongoDB extends Adapter
         return true;
     }
 
+    /**
+     * Is casting supported?
+     * 
+     * @return bool
+     */
     public function getSupportForCasting(): bool
     {
         return true;

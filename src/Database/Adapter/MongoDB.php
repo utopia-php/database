@@ -192,6 +192,10 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
 
         $indexes = [];
+        $options = [];
+
+        // pass in custom index name
+        $options['name'] = $id;
 
         foreach($attributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
@@ -207,6 +211,11 @@ class MongoDB extends Adapter
                     // Not using Database::INDEX_KEY for clarity
                     $indexes[$attribute] = 'text';
                     break;
+                case Database::INDEX_UNIQUE:
+                    $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                    $indexes[$attribute] = $orderType;
+                    $options['unique'] = true;
+                    break;
                 default:
                     // index not supported
                     // TODO@kodumbeats handle and test for this case
@@ -214,7 +223,7 @@ class MongoDB extends Adapter
             }
         }
 
-        return (!!$collection->createIndex($indexes, ['name' => $id]));
+        return (!!$collection->createIndex($indexes, $options));
     }
 
     /**

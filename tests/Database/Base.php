@@ -161,14 +161,16 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
         
         $collection = static::getDatabase()->getCollection('indexes');
-        $this->assertCount(3, $collection->getAttribute('indexes'));
+        $this->assertCount(4, $collection->getAttribute('indexes'));
 
         // Delete Indexes
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index4'));
 
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
@@ -978,5 +980,26 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument($document->getCollection(), $document);
         
         return $document;
+    }
+
+    /**
+     * @depends testFind
+     */
+    public function testUniqueIndexDuplicate()
+    {
+        $this->expectException(Duplicate::class);
+
+        $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['*', 'user1', 'user2'],
+            '$write' => ['*', 'user1x', 'user2x'],
+            'name' => 'Frozen',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
     }
 }

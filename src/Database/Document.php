@@ -187,11 +187,11 @@ class Document extends ArrayObject
      */
     public function find(string $key, $find, string $subject = '')
     {
-        $subject = &$this[$subject] ?? null;
+        $subject = $this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
         if(is_array($subject)) {
-            foreach($subject as $i => &$value) {
+            foreach($subject as $i => $value) {
                 if(isset($value[$key]) && $value[$key] == $find) {
                     return $value;
                 }

@@ -122,20 +122,97 @@ class DocumentTest extends TestCase
         $this->assertEquals([], $this->document->getAttribute('list', []));
     }
 
-    public function testSearch()
+    public function testFind()
     {
-        $this->assertEquals(null, $this->document->search('find', 'one'));
+        $this->assertEquals(null, $this->document->find('find', 'one'));
         
         $this->document->setAttribute('findString', 'demo');
-        $this->assertEquals($this->document, $this->document->search('findString', 'demo'));
+        $this->assertEquals($this->document, $this->document->find('findString', 'demo'));
         
         $this->document->setAttribute('findArray', ['demo']);
-        $this->assertEquals(null, $this->document->search('findArray', 'demo'));
-        $this->assertEquals($this->document, $this->document->search('findArray', ['demo']));
+        $this->assertEquals(null, $this->document->find('findArray', 'demo'));
+        $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
 
-        $this->assertEquals($this->document->getAttribute('children')[0], $this->document->search('name', 'x', $this->document->getAttribute('children')));
-        $this->assertEquals($this->document->getAttribute('children')[2], $this->document->search('name', 'z', $this->document->getAttribute('children')));
-        $this->assertEquals(null, $this->document->search('name', 'v', $this->document->getAttribute('children')));
+        $this->assertEquals($this->document->getAttribute('children')[0], $this->document->find('name', 'x', 'children'));
+        $this->assertEquals($this->document->getAttribute('children')[2], $this->document->find('name', 'z', 'children'));
+        $this->assertEquals(null, $this->document->find('name', 'v', 'children'));
+    }
+
+    public function testFindAndReplace()
+    {
+        $document = new Document([
+            '$id' => $this->id,
+            '$collection' => $this->collection,
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['*'],
+            'title' => 'This is a test.',
+            'list' => [
+                'one'
+            ],
+            'children' => [
+                new Document(['name' => 'x']),
+                new Document(['name' => 'y']),
+                new Document(['name' => 'z']),
+            ]
+        ]);
+
+        $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
+        $this->assertEquals('1', $document->getAttribute('children')[0]['name']);
+        $this->assertEquals(true, $document->getAttribute('children')[0]['test']);
+        
+        // Array with wrong value
+        $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
+        
+        // Array with wrong key
+        $this->assertEquals(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
+        
+        // No array
+        $this->assertEquals(true, $document->findAndReplace('title', 'This is a test.', 'new'));
+        $this->assertEquals('new', $document->getAttribute('title'));
+
+        // No array with wrong value
+        $this->assertEquals(false, $document->findAndReplace('title', 'test', 'new'));
+
+        // No array with wrong key
+        $this->assertEquals(false, $document->findAndReplace('titlex', 'This is a test.', 'new'));
+    }
+
+    public function testFindAndRemove()
+    {
+        $document = new Document([
+            '$id' => $this->id,
+            '$collection' => $this->collection,
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['*'],
+            'title' => 'This is a test.',
+            'list' => [
+                'one'
+            ],
+            'children' => [
+                new Document(['name' => 'x']),
+                new Document(['name' => 'y']),
+                new Document(['name' => 'z']),
+            ]
+        ]);
+        $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
+        $this->assertEquals('y', $document->getAttribute('children')[1]['name']);
+        $this->assertCount(2, $document->getAttribute('children'));
+        
+        // Array with wrong value
+        $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
+        
+        // Array with wrong key
+        $this->assertEquals(false, $document->findAndRemove('namex', 'x', 'children'));
+        
+        // No array
+        $this->assertEquals(true, $document->findAndRemove('title', 'This is a test.'));
+        $this->assertEquals(false, $document->isset('title'));
+
+        // No array with wrong value
+        $this->assertEquals(false, $document->findAndRemove('title', 'new'));
+
+        // No array with wrong key
+        $this->assertEquals(false, $document->findAndRemove('titlex', 'This is a test.'));
     }
 
     public function testIsEmpty()

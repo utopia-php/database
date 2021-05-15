@@ -177,45 +177,99 @@ class Document extends ArrayObject
     }
 
     /**
-     * Search.
+     * Find.
+     *
+     * @param string $key
+     * @param mixed $find
+     * @param string $subject
+     *
+     * @return mixed
+     */
+    public function find(string $key, $find, string $subject = '')
+    {
+        $subject = &$this[$subject] ?? null;
+        $subject = (empty($subject)) ? $this : $subject;
+
+        if(is_array($subject)) {
+            foreach($subject as $i => &$value) {
+                if(isset($value[$key]) && $value[$key] == $find) {
+                    return $value;
+                }
+            }
+            return false;
+        }
+
+        if(isset($subject[$key]) && $subject[$key] == $find) {
+            return $subject;
+        }
+        return false;
+    }
+
+    /**
+     * Find and Replace.
      *
      * Get array child by key and value match
      *
      * @param string $key
-     * @param mixed $value
-     * @param mixed $scope
+     * @param mixed $find
+     * @param mixed $replace
+     * @param string $subject
      *
-     * @return mixed
+     * @return bool
      */
-    public function search(string $key, $value, $scope = null)
+    public function findAndReplace(string $key, $find, $replace, string $subject = ''): bool
     {
-        $array = (!\is_null($scope)) ? $scope : $this;
+        $subject = &$this[$subject] ?? null;
+        $subject = (empty($subject)) ? $this : $subject;
 
-        if (\is_array($array)  || $array instanceof self) {
-            if (isset($array[$key]) && $array[$key] == $value) {
-                return $array;
-            }
-
-            foreach ($array as $k => $v) {
-                if ((\is_array($v) || $v instanceof self) && (!empty($v))) {
-                    $result = $this->search($key, $value, $v);
-
-                    if (!empty($result)) {
-                        return $result;
-                    }
-                } else {
-                    if ($k === $key && $v === $value) {
-                        return $array;
-                    }
+        if(is_array($subject)) {
+            foreach($subject as $i => &$value) {
+                if(isset($value[$key]) && $value[$key] == $find) {
+                    $value = $replace;
+                    return true;
                 }
             }
+            return false;
         }
 
-        if ($array === $value) {
-            return $array;
+        if(isset($subject[$key]) && $subject[$key] == $find) {
+            $subject[$key] = $replace;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Find and Remove.
+     *
+     * Get array child by key and value match
+     *
+     * @param string $key
+     * @param mixed $find
+     * @param string $subject
+     *
+     * @return bool
+     */
+    public function findAndRemove(string $key, $find, string $subject = ''): bool
+    {
+        $subject = &$this[$subject] ?? null;
+        $subject = (empty($subject)) ? $this : $subject;
+
+        if(is_array($subject)) {
+            foreach($subject as $i => &$value) {
+                if(isset($value[$key]) && $value[$key] == $find) {
+                    unset($subject[$i]);
+                    return true;
+                }
+            }
+            return false;
         }
 
-        return;
+        if(isset($subject[$key]) && $subject[$key] == $find) {
+            unset($subject[$key]);
+            return true;
+        }
+        return false;
     }
 
     /**

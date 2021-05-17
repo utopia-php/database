@@ -188,7 +188,7 @@ docker-compose exec tests vendor/bin/psalm --show-info=true
 **Brandon Leckemby**
 
 + [https://github.com/kodumbeats](https://github.com/kodumbeats)
-+ [blog.leckemby.me](blog.leckemby.me)
++ [https://blog.kodumbeats.dev](https://blog.kodumbeats.dev)
 
 ## Copyright and license
 

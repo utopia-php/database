@@ -192,14 +192,14 @@ class Document extends ArrayObject
 
         if(is_array($subject)) {
             foreach($subject as $i => $value) {
-                if(isset($value[$key]) && $value[$key] == $find) {
+                if(isset($value[$key]) && $value[$key] === $find) {
                     return $value;
                 }
             }
             return false;
         }
 
-        if(isset($subject[$key]) && $subject[$key] == $find) {
+        if(isset($subject[$key]) && $subject[$key] === $find) {
             return $subject;
         }
         return false;
@@ -224,7 +224,7 @@ class Document extends ArrayObject
 
         if(is_array($subject)) {
             foreach($subject as $i => &$value) {
-                if(isset($value[$key]) && $value[$key] == $find) {
+                if(isset($value[$key]) && $value[$key] === $find) {
                     $value = $replace;
                     return true;
                 }
@@ -232,7 +232,7 @@ class Document extends ArrayObject
             return false;
         }
 
-        if(isset($subject[$key]) && $subject[$key] == $find) {
+        if(isset($subject[$key]) && $subject[$key] === $find) {
             $subject[$key] = $replace;
             return true;
         }
@@ -257,7 +257,7 @@ class Document extends ArrayObject
 
         if(is_array($subject)) {
             foreach($subject as $i => &$value) {
-                if(isset($value[$key]) && $value[$key] == $find) {
+                if(isset($value[$key]) && $value[$key] === $find) {
                     unset($subject[$i]);
                     return true;
                 }
@@ -265,7 +265,7 @@ class Document extends ArrayObject
             return false;
         }
 
-        if(isset($subject[$key]) && $subject[$key] == $find) {
+        if(isset($subject[$key]) && $subject[$key] === $find) {
             unset($subject[$key]);
             return true;
         }

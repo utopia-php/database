@@ -27,9 +27,9 @@ When `TYPE` can be:
 
 **All PRs must include a commit message with the changes description!** 
 
-For the initial start, fork the project and use git clone command to download the repository to your computer. A standard procedure for working on an issue would be to:
+For the initial start, fork the project and use the `git clone` command to download the repository to your computer. A standard procedure for working on an issue would be to:
 
-1. `git pull`, before creating a new branch, pull the changes from upstream. Your master needs to be up to date.
+1. `git pull`, before creating a new branch, pull the changes from upstream. Your main needs to be up to date.
 ```
 $ git pull
 ```
@@ -44,8 +44,7 @@ $ git checkout -b [name_of_your_new_branch]
 $ git push origin [name_of_your_new_branch]
 ```
 
-5. Submit your changes for review
-If you go to your repository on GitHub, you'll see a `Compare & pull request` button. Click on that button.
+5. Submit your changes for review. If you go to your repository on GitHub, you'll see a `Compare & pull request` button. Click on that button.
 6. Start a Pull Request
 Now submit the pull request and click on `Create pull request`.
 7. Get a code review approval/reject
@@ -64,14 +63,14 @@ Below are outlined the most useful files for adding a new database adapter:
 .
 ├── src # Source code
 │   └── Database
-│       ├── Adapter # Where your new adapter goes!
+│       ├── Adapter/ # Where your new adapter goes!
 │       ├── Adapter.php # Parent class for individual adapters
 │       ├── Database.php # Database class - calls individual adapter methods
 │       ├── Document.php # Document class - 
 │       └── Query.php # Query class - holds query attributes, methods, and values
 └── tests
     └── Database
-        ├── Adapter # Extended from Base 
+        ├── Adapter/ # Extended from Base 
         └── Base.php # Parent class that holds all tests
 ```
 
@@ -97,7 +96,7 @@ class NewDB extends Adapter
 {
 ```
 
-Only include dependencies strictly necessary for the database, preferably official PHP clients, if available.
+Only include dependencies strictly necessary for the database, preferably official PHP libraries, if available.
 
 ### Testing with Docker 
 
@@ -120,5 +119,4 @@ The existing test suite is helpful when developing a new database adapter. To ge
 
 #### NoSQL Databases
 - NoSQL databases may not need to implement the attribute functions. See the MongoDB adapter as an example.
-
 

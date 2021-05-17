@@ -28,11 +28,7 @@ class QueryValidator extends Validator
         'greater',
         'greaterEqual',
         'contains',
-        'notContains',
-        'isNull',
-        'isNotNull',
-        'isEmpty',
-        'isNotEmpty',
+        'search',
     ];
 
     /**
@@ -83,7 +79,7 @@ class QueryValidator extends Validator
         }
 
         // Extract the type of desired attribute from collection $schema
-        $attributeType = $this->schema[array_search($query->getAttribute(), array_column($this->schema, '$id'))]['type'];
+        $attributeType = $this->schema[$attributeIndex]['type'];
 
         foreach ($query->getValues() as $value) {
             if (gettype($value) !== $attributeType) {
@@ -91,6 +87,12 @@ class QueryValidator extends Validator
                 return false;
             }
         }
+
+        // Contains operator only supports array attributes
+        if (!$this->schema[$attributeIndex]['array'] && $query->getOperator() === Query::TYPE_CONTAINS) {
+            $this->message = 'Query operator only supported on array attributes: ' . $query->getOperator();
+            return false;
+        } 
 
         return true;
     }

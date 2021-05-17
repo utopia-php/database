@@ -827,7 +827,11 @@ class Database
 
     /**
      * @param string $collection
-     * @param array $options
+     * @param array $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
      *
      * @return Document|bool
      */
@@ -839,7 +843,11 @@ class Database
 
     /**
      * @param string $collection
-     * @param array $options
+     * @param array $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
      *
      * @return Document|false
      */
@@ -1014,6 +1022,10 @@ class Database
      */
     public function casting(Document $collection, Document $document):Document
     {
+        if ($this->adapter->getSupportForCasting()) {
+            return $document;
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {

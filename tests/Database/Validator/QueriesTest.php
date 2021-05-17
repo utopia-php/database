@@ -99,10 +99,26 @@ class QueriesTest extends TestCase
                     'DESC'
                 ],
             ],
+            [
+                '$id' => 'testindex3',
+                'type' => 'fulltext',
+                'attributes' => [
+                    'title'
+                ],
+                'orders' => []
+            ],
+            [
+                '$id' => 'testindex4',
+                'type' => 'text',
+                'attributes' => [
+                    'description'
+                ],
+                'orders' => []
+            ],
         ],
         'indexesInQueue' => [
             [
-                '$id' => 'testindex3',
+                '$id' => 'testindex4',
                 'type' => 'text',
                 'attributes' => [
                     'price',
@@ -112,7 +128,7 @@ class QueriesTest extends TestCase
                     'ASC',
                     'DESC'
                 ]
-            ]
+            ],
         ]
     ];
 
@@ -151,7 +167,9 @@ class QueriesTest extends TestCase
         $this->queries[] = Query::parse('price.lesserEqual(6.50)');
         $this->assertEquals(true, $validator->isValid($this->queries));
 
+
         // test for FAILURE
+
         $this->queries[] = Query::parse('rating.greater(4)');
 
         $this->assertEquals(false, $validator->isValid($this->queries));
@@ -165,6 +183,12 @@ class QueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Index still in creation queue: price,title", $validator->getDescription());
 
+        // test fulltext
+
+        $query3 = Query::parse('description.search("iron")');
+        $this->queries = [$query3];
+        $this->assertEquals(false, $validator->isValid($this->queries));
+        $this->assertEquals("Search operator requires fulltext index: description", $validator->getDescription());
     }
 
     public function testIsStrict()

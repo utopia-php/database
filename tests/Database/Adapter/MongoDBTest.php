@@ -1,39 +1,60 @@
 <?php
 
-// namespace Utopia\Tests\Adapter;
+namespace Utopia\Tests\Adapter;
 
-// use MongoDB\Client;
-// use PDO;
-// use Utopia\Database\Database;
-// use Utopia\Database\Adapter\MongoDB;
-// use Utopia\Tests\Base;
+use Redis;
+use MongoDB\Client;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Database;
+use Utopia\Database\Adapter\MongoDB;
+use Utopia\Tests\Base;
 
-// class MongoDBTest extends Base
-// {
-//     /**
-//      * @var Database
-//      */
-//     static $database = null;
+class MongoDBTest extends Base
+{
+    /**
+     * @var Database
+     */
+    static $database = null;
 
-//     /**
-//      * @reture Adapter
-//      */
-//     static function getDatabase(): Database
-//     {
-//         if(!is_null(self::$database)) {
-//             return self::$database;
-//         }
+    // TODO@kodumbeats hacky way to identify adapters for tests
+    // Remove once all methods are implemented
+    /**
+     * Return name of adapter
+     *
+     * @return string
+     */
+    static function getAdapterName(): string
+    {
+        return "mongodb";
+    }
 
-//         $client = new Client('mongodb://mongo/',
-//             [
-//                 'username' => 'root',
-//                 'password' => 'example',
-//             ],
-//         );
+    /**
+     * @return Adapter
+     */
+    static function getDatabase(): Database
+    {
+        if(!is_null(self::$database)) {
+            return self::$database;
+        }
 
-//         $database = new Database(new MongoDB($client));
-//         $database->setNamespace('myapp_'.uniqid());
+        $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+        $client = new Client('mongodb://mongo/',
+            [
+                'username' => 'root',
+                'password' => 'example',
+            ],
+            $options
+        );
 
-//         return self::$database = $database;
-//     }
-// }
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
+        $cache = new Cache(new RedisAdapter($redis));
+
+        $database = new Database(new MongoDB($client), $cache);
+        $database->setNamespace('myapp_'.uniqid());
+
+        return self::$database = $database;
+    }
+}

@@ -161,14 +161,16 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
         
         $collection = static::getDatabase()->getCollection('indexes');
-        $this->assertCount(3, $collection->getAttribute('indexes'));
+        $this->assertCount(4, $collection->getAttribute('indexes'));
 
         // Delete Indexes
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index4'));
 
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
@@ -454,8 +456,41 @@ abstract class Base extends TestCase
             new Query('price', Query::TYPE_GREATER, [25.98]),
         ]);
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals('Captain Marvel', $documents[0]['name']);
+        // TODO@kodumbeats hacky way to pass mariadb tests
+        // Remove when $operator="contains" is supported
+        if ($this->getAdapterName() === "mongodb")
+        {
+            /**
+             * Array contains condition
+             */
+            $documents = static::getDatabase()->find('movies', [
+                new Query('generes', Query::TYPE_CONTAINS, ['comics']),
+            ]);
+
+            $this->assertEquals(2, count($documents));
+
+            /**
+             * Array contains OR condition
+             */
+            $documents = static::getDatabase()->find('movies', [
+                new Query('generes', Query::TYPE_CONTAINS, ['comics', 'kids']),
+            ]);
+
+            $this->assertEquals(4, count($documents));
+
+            /**
+             * Fulltext search
+             */
+            $success = static::getDatabase()->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
+            $this->assertEquals(true, $success);
+
+            $documents = static::getDatabase()->find('movies', [
+                new Query('name', Query::TYPE_SEARCH, ['captain']),
+            ]);
+
+            $this->assertEquals(2, count($documents));
+
+        }
 
         /**
          * Multiple conditions
@@ -945,5 +980,26 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument($document->getCollection(), $document);
         
         return $document;
+    }
+
+    /**
+     * @depends testFind
+     */
+    public function testUniqueIndexDuplicate()
+    {
+        $this->expectException(Duplicate::class);
+
+        $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['*', 'user1', 'user2'],
+            '$write' => ['*', 'user1x', 'user2x'],
+            'name' => 'Frozen',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
     }
 }

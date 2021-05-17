@@ -110,7 +110,7 @@ The existing test suite is helpful when developing a new database adapter. To ge
 - Filter new IDs with `$this->filter($id);`
 - Prioritize code performance.
 - The Query and Queries validators contain the information about which queries the adapters support.
-- The [Authorization validator](/src/Database/Validator/Authorization.php) is used to consider permissions for searching methods `find()` and `sort()`. Only return documents with correct `read` permissions.
+- The [Authorization validator](/src/Database/Validator/Authorization.php) is used to check permissions for searching methods `find()` and `sort()`. Ensure these methods only return documents with the correct `read` permissions.
 - The `Database` class has useful constants like types and definitions. Prefer these constants when comparing strings.
 
 #### SQL Databases
@@ -119,4 +119,3 @@ The existing test suite is helpful when developing a new database adapter. To ge
 
 #### NoSQL Databases
 - NoSQL databases may not need to implement the attribute functions. See the MongoDB adapter as an example.
-

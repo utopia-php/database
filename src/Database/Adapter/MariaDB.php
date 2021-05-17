@@ -208,7 +208,6 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLIndex($type);
 
         foreach($attributes as $key => &$attribute) {
             $length = $lengths[$key] ?? '';
@@ -216,11 +215,15 @@ class MariaDB extends Adapter
             $order = $orders[$key] ?? 'ASC';
             $attribute = $this->filter($attribute);
 
+            if(Database::INDEX_FULLTEXT === $type) {
+                $order = '';
+            }
+
             $attribute = "`{$attribute}`{$length} {$order}";
         }
 
         return $this->getPDO()
-            ->prepare("CREATE {$type} `{$id}` ON {$this->getNamespace()}.{$name} (".implode(', ', $attributes).");")
+            ->prepare("CREATE ".$this->getSQLIndex($type)." `{$id}` ON {$this->getNamespace()}.{$name} (".implode(', ', $attributes).");")
             ->execute();
     }
 
@@ -508,7 +511,7 @@ class MariaDB extends Adapter
         foreach($queries as $i => $query) {
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = 'table_main.'.$query->getAttribute().' '.$this->getSQLOperator($query->getOperator()).' :attribute_'.$i.'_'.$key.'_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -525,6 +528,7 @@ class MariaDB extends Adapter
         ");
 
         foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
             foreach($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
             }
@@ -580,7 +584,7 @@ class MariaDB extends Adapter
         foreach($queries as $i => $query) {
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = 'table_main.'.$query->getAttribute().' '.$this->getSQLOperator($query->getOperator()).' :attribute_'.$i.'_'.$key.'_'.$query->getAttribute(); // Using `attrubute_` to avoid conflicts with custom names
+                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -594,6 +598,7 @@ class MariaDB extends Adapter
         ");
 
         foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
             foreach($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
             }
@@ -723,6 +728,29 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get SQL Condtions
+     * 
+     * @param string $attribute
+     * @param string $operator
+     * @param string $placeholder
+     * @param mixed $value
+     * 
+     * @return string
+     */
+    protected function getSQLCondition(string $attribute, string $operator, string $placeholder, $value): string
+    {
+        switch ($operator) {
+            case Query::TYPE_SEARCH:
+                return 'MATCH('.$attribute.') AGAINST('.$this->getPDO()->quote($value).')';
+            break;
+
+            default:
+                return $attribute.' '.$this->getSQLOperator($operator).' '.$placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+            break;
+        }
+    }
+
+    /**
      * Get SQL Operator
      * 
      * @param string $operator
@@ -778,6 +806,10 @@ class MariaDB extends Adapter
             
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
+            break;
+            
+            case Database::INDEX_FULLTEXT:
+                return 'FULLTEXT INDEX';
             break;
 
             default:

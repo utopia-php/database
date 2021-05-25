@@ -36,18 +36,26 @@ $cache = new Cache(new RedisAdapter($redis));
 $database = new Database(new MongoDB($client), $cache);
 $database->setNamespace('myapp_60ad50d614c60');
 
+echo "Creating index";
+
+$start = microtime(true);
+$success = $database->createIndex('articles', 'published', Database::INDEX_KEY, ['created'], [], [Database::ORDER_DESC]);
+$time = microtime(true) - $start;
+
+echo "\nCompleted in " . $time . "s\n";
+
 // Query documents
 echo "Querying\n";
 
-echo "Changing role to 'user4567'\n";
-Authorization::setRole('user4567');
+echo "Changing role to 'user4869'\n";
+Authorization::setRole('user4869');
 
-echo "Running query: text.search('time')\n";
+echo "Running query: text.search('into the woods')\n";
 
 $start = microtime(true);
 $documents = $database->find('articles', [
-    // new Query('text', Query::TYPE_SEARCH, ['time']),
-]);
+    new Query('text', Query::TYPE_SEARCH, ['cheshire cat']), # Wed May 26 2010 00:52:00 GMT+0000
+], 1000);
 $time = microtime(true) - $start;
 
 echo "Found " . count($documents) . " results";

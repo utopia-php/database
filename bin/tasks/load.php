@@ -9,10 +9,13 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Validator\Authorization;
+use MongoDB\Client;
 
 // Constants
-$limit = 50000;
+$limit = 35000;
 
 // DB options
 $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
@@ -35,26 +38,63 @@ $database->setNamespace('myapp_'.uniqid());
 
 // Outline collection schema
 $database->create();
-$database->createCollection('authors');
-$database->createAttribute('authors', 'name', Database::VAR_STRING, 256, true);
-$database->createAttribute('authors', 'address', Database::VAR_STRING, 512, true);
-
+$database->createCollection('articles');
+$database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
+$database->createAttribute('articles', 'created', Database::VAR_INTEGER, 0, true);
+$database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
 
 // Fill DB
 $faker = Factory::create();
 
-
-
-
 $start = microtime(true);
 echo 'Filling databases';
-for ($i=0; $i < 50000; $i++) {
-    $database->createDocument('authors', new Document([
-        '$read' => ['*'],
-        '$write' => ['*'],
-        'name' => $faker->name(),
-        'address' => $faker->address()
+for ($i=0; $i < $limit; $i++) {
+    $database->createDocument('articles', new Document([
+        // Five random users out of 10,000 get read access
+        '$read' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+        // Three random users out of 10,000 get write access
+        '$write' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+        'author' => $faker->name(),
+        'created' => $faker->unixTime(),
+        'text' => $faker->realTextBetween(1000, 4000),
     ]));
+    if ($i % 5000 === 0) {
+        echo '.';
+    }
 }
-$end = microtime(true);
-echo 'Completed in ' . ($end - $start) . 's';
+$time = microtime(true) - $start;
+echo "\nCompleted in " . $time . "s\n";
+
+// Create fulltext index
+echo "Creating index";
+
+$start = microtime(true);
+$success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
+$time = microtime(true) - $start;
+
+echo "\nCompleted in " . $time . "s\n";
+
+// Query documents
+echo "Querying\n";
+
+$start = microtime(true);
+$documents = $database->find('articles', [
+    new Query('text', Query::TYPE_SEARCH, ['rich and famous']),
+]);
+$time = microtime(true) - $start;
+
+echo "Found " . count($documents) . " results";
+echo "\nCompleted in " . $time . "s\n";
+
+echo "Changing role\n";
+Authorization::setRole('user4567');
+
+$start = microtime(true);
+$documents = $database->find('articles', [
+    new Query('text', Query::TYPE_SEARCH, ['rich and famous']),
+]);
+$time = microtime(true) - $start;
+
+echo "Found " . count($documents) . " results";
+echo "\nCompleted in " . $time . "s\n";
+

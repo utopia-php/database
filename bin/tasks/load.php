@@ -15,7 +15,7 @@ use Utopia\Database\Validator\Authorization;
 use MongoDB\Client;
 
 // Constants
-$limit = 35000;
+$limit = 1000000;
 
 // DB options
 $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
@@ -47,11 +47,11 @@ $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true)
 $faker = Factory::create();
 
 $start = microtime(true);
-echo 'Filling databases';
+echo 'Filling database with ' . $limit . " documents";
 for ($i=0; $i < $limit; $i++) {
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
-        '$read' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+        '$read' => [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         // Three random users out of 10,000 get write access
         '$write' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         'author' => $faker->name(),
@@ -77,21 +77,14 @@ echo "\nCompleted in " . $time . "s\n";
 // Query documents
 echo "Querying\n";
 
-$start = microtime(true);
-$documents = $database->find('articles', [
-    new Query('text', Query::TYPE_SEARCH, ['rich and famous']),
-]);
-$time = microtime(true) - $start;
-
-echo "Found " . count($documents) . " results";
-echo "\nCompleted in " . $time . "s\n";
-
-echo "Changing role\n";
+echo "Changing role to 'user4567'\n";
 Authorization::setRole('user4567');
 
+echo "Running query: text.search('time')\n";
+
 $start = microtime(true);
 $documents = $database->find('articles', [
-    new Query('text', Query::TYPE_SEARCH, ['rich and famous']),
+    new Query('text', Query::TYPE_SEARCH, ['time']),
 ]);
 $time = microtime(true) - $start;
 

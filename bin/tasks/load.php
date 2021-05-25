@@ -65,29 +65,29 @@ for ($i=0; $i < $limit; $i++) {
 $time = microtime(true) - $start;
 echo "\nCompleted in " . $time . "s\n";
 
-// Create fulltext index
-echo "Creating index";
+// // Create fulltext index
+// echo "Creating index";
 
-$start = microtime(true);
-$success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
-$time = microtime(true) - $start;
+// $start = microtime(true);
+// $success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
+// $time = microtime(true) - $start;
 
-echo "\nCompleted in " . $time . "s\n";
+// echo "\nCompleted in " . $time . "s\n";
 
-// Query documents
-echo "Querying\n";
+// // Query documents
+// echo "Querying\n";
 
-echo "Changing role to 'user4567'\n";
-Authorization::setRole('user4567');
+// echo "Changing role to 'user4567'\n";
+// Authorization::setRole('user4567');
 
-echo "Running query: text.search('time')\n";
+// echo "Running query: text.search('time')\n";
 
-$start = microtime(true);
-$documents = $database->find('articles', [
-    new Query('text', Query::TYPE_SEARCH, ['time']),
-]);
-$time = microtime(true) - $start;
+// $start = microtime(true);
+// $documents = $database->find('articles', [
+//     new Query('text', Query::TYPE_SEARCH, ['time']),
+// ]);
+// $time = microtime(true) - $start;
 
-echo "Found " . count($documents) . " results";
-echo "\nCompleted in " . $time . "s\n";
+// echo "Found " . count($documents) . " results";
+// echo "\nCompleted in " . $time . "s\n";
 

@@ -298,6 +298,8 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $columns = '';
 
+        $this->getPDO()->beginTransaction();
+
         /**
          * Insert Attributes
          */
@@ -329,6 +331,7 @@ class MariaDB extends Adapter
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
+                    $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
                     break;
                 
@@ -353,8 +356,27 @@ class MariaDB extends Adapter
                 $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
 
                 if(!$stmt->execute()) {
+                    $this->getPDO()->rollBack();
                     throw new Exception('Failed to save permission');
                 }
+            }
+        }
+
+        try {
+            if(!$this->getPDO()->commit()) {
+                throw new Exception('Failed to commit transaction');
+            }
+        } catch (PDOException $e) {
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    $this->getPDO()->rollBack();
+                    throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
+                    break;
+                
+                default:
+                    throw $e;
+                    break;
             }
         }
         

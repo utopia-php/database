@@ -15,9 +15,6 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client;
 
-// Constants
-$limit = 1000000;
-
 // mongodb
 $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
 $client = new Client('mongodb://mongo/',
@@ -75,29 +72,78 @@ $database->setNamespace('myapp_60ad4d52a7c01');
 // echo "\nCompleted in " . $time . "s\n";
 
 // Query documents
-echo "Querying\n";
 
-echo "Changing role to 'user4869'\n";
-Authorization::setRole('user4869');
 
-echo "Running query: text.search('Alice')\n";
+function runQueries($database, $limit = 25) {
+    echo "Running query: text.search('Alice')\n";
 
-$start = microtime(true);
-$documents = $database->find('articles', [
-    new Query('text', Query::TYPE_SEARCH, ['Alice']),
-], 25);
-$time = microtime(true) - $start;
+    $start = microtime(true);
+    $documents = $database->find('articles', [
+        new Query('text', Query::TYPE_SEARCH, ['Alice']),
+    ], $limit);
+    $time = microtime(true) - $start;
 
-echo "Found " . count($documents) . " results";
-echo "\nCompleted in " . $time . "s\n";
+    echo "Found " . count($documents) . " results";
+    echo "\nCompleted in " . $time . "s\n";
 
-echo "Running query: created.greater('1262322000')\n"; # Jan 1, 2010
+    echo "Running query: created.greater('1262322000')\n"; # Jan 1, 2010
 
-$start = microtime(true);
-$documents = $database->find('articles', [
-    new Query('created', Query::TYPE_GREATER, [1262322000]),
-], 25);
-$time = microtime(true) - $start;
+    $start = microtime(true);
+    $documents = $database->find('articles', [
+        new Query('created', Query::TYPE_GREATER, [1262322000]),
+    ], $limit);
+    $time = microtime(true) - $start;
 
-echo "Found " . count($documents) . " results";
-echo "\nCompleted in " . $time . "s\n";
+    echo "Found " . count($documents) . " results";
+    echo "\nCompleted in " . $time . "s\n";
+    sleep(1);
+}
+
+$faker = Factory::create();
+
+$user = $faker->numerify('user####');
+echo "Changing role to '" . $user . "'\n";
+Authorization::setRole($user);
+
+runQueries($database);
+
+$count = 100;
+echo "Randomly generating " . $count . " roles\n";
+
+
+for ($i=0; $i < $count; $i++) {
+    Authorization::setRole($faker->numerify('user####'));
+}
+echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+runQueries($database);
+
+$count = 400;
+echo "Randomly generating an additional " . $count . " roles\n";
+
+for ($i=0; $i < $count; $i++) {
+    Authorization::setRole($faker->numerify('user####'));
+}
+
+echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+runQueries($database);
+
+$count = 500;
+echo "Randomly generating an additional " . $count . " roles\n";
+
+for ($i=0; $i < $count; $i++) {
+    Authorization::setRole($faker->numerify('user####'));
+}
+
+echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+runQueries($database);
+
+$count = 1000;
+echo "Randomly generating an additional " . $count . " roles\n";
+
+for ($i=0; $i < $count; $i++) {
+    Authorization::setRole($faker->numerify('user####'));
+}
+
+echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+runQueries($database);
+

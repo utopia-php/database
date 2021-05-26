@@ -362,22 +362,8 @@ class MariaDB extends Adapter
             }
         }
 
-        try {
-            if(!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
-            }
-        } catch (PDOException $e) {
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    $this->getPDO()->rollBack();
-                    throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
-                    break;
-                
-                default:
-                    throw $e;
-                    break;
-            }
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
         }
         
         return $document;

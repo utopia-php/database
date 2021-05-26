@@ -383,6 +383,8 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $columns = '';
 
+        $this->getPDO()->beginTransaction();
+
         /**
          * Update Attributes
          */
@@ -422,6 +424,7 @@ class MariaDB extends Adapter
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
         if(!$stmt->execute()) {
+            $this->getPDO()->rollBack();
             throw new Exception('Failed to clean permissions');
         }
 
@@ -437,9 +440,14 @@ class MariaDB extends Adapter
                 $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
 
                 if(!$stmt->execute()) {
+                    $this->getPDO()->rollBack();
                     throw new Exception('Failed to save permission');
                 }
             }
+        }
+
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
         }
         
         return $document;
@@ -457,6 +465,8 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
+        $this->getPDO()->beginTransaction();
+
         $stmt = $this->getPDO()
             ->prepare("DELETE FROM {$this->getNamespace()}.{$name}
                 WHERE _uid = :_uid LIMIT 1");
@@ -464,6 +474,7 @@ class MariaDB extends Adapter
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
         if(!$stmt->execute()) {
+            $this->getPDO()->rollBack();
             throw new Exception('Failed to clean document');
         }
 
@@ -474,7 +485,12 @@ class MariaDB extends Adapter
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
         if(!$stmt->execute()) {
+            $this->getPDO()->rollBack();
             throw new Exception('Failed to clean permissions');
+        }
+        
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
         }
         
         return true;

@@ -64,6 +64,8 @@ $database->createCollection('articles');
 $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
 $database->createAttribute('articles', 'created', Database::VAR_INTEGER, 0, true);
 $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
+$database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
+$database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
 
 // Fill DB
 $faker = Factory::create();
@@ -79,6 +81,8 @@ for ($i=0; $i < $limit; $i++) {
         'author' => $faker->name(),
         'created' => $faker->unixTime(),
         'text' => $faker->realTextBetween(1000, 4000),
+        'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
+        'views' => $faker->randomNumber(6, false)
     ]));
     if ($i % 5000 === 0) {
         echo '.';

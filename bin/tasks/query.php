@@ -31,7 +31,7 @@ $redis->flushAll();
 $cache = new Cache(new RedisAdapter($redis));
 
 $database = new Database(new MongoDB($client), $cache);
-$database->setNamespace('myapp_60ad4d52a7c01');
+$database->setNamespace('myapp_60afec3d936a0');
 
 
 // MariaDB
@@ -53,8 +53,11 @@ $database->setNamespace('myapp_60ad4d52a7c01');
 // $redis->flushAll();
 // $cache = new Cache(new RedisAdapter($redis));
 
+// /**
+//  * @var Database
+//  */
 // $database = new Database(new MariaDB($pdo), $cache);
-// $database->setNamespace('myapp_60ae724abe58b');
+// $database->setNamespace('myapp_60afd9a009280');
 
 // Query documents
 
@@ -62,25 +65,59 @@ $database->setNamespace('myapp_60ad4d52a7c01');
 function runQueries($database, $limit = 25) {
     echo "Running query: text.search('Alice')\n";
 
+    /**
+     * @var Document[]
+     */
+    $documents = null;
+
     $start = microtime(true);
     $documents = $database->find('articles', [
         new Query('text', Query::TYPE_SEARCH, ['Alice']),
+        // new Query('author', Query::TYPE_SEARCH, ['Alice']),
     ], $limit);
     $time = microtime(true) - $start;
 
     echo "Found " . count($documents) . " results";
     echo "\nCompleted in " . $time . "s\n";
 
-    echo "Running query: created.greater('1262322000')\n"; # Jan 1, 2010
+
+    echo "Running query: [created.greater(1262322000), genre.equal('travel')]\n"; # Jan 1, 2010
 
     $start = microtime(true);
     $documents = $database->find('articles', [
         new Query('created', Query::TYPE_GREATER, [1262322000]),
+        new Query('genre', Query::TYPE_EQUAL, ['travel']),
     ], $limit);
     $time = microtime(true) - $start;
 
     echo "Found " . count($documents) . " results";
     echo "\nCompleted in " . $time . "s\n";
+
+
+    echo "Running query: genre.equal('fashion', 'finance', 'sports')\n";
+
+    $start = microtime(true);
+    $documents = $database->find('articles', [
+        new Query('genre', Query::TYPE_EQUAL, ['fashion', 'finance', 'sports']),
+    ], $limit);
+    $time = microtime(true) - $start;
+
+    echo "Found " . count($documents) . " results";
+    echo "\nCompleted in " . $time . "s\n";
+
+
+    echo "Running query: views.greater(100000)\n";
+
+    $start = microtime(true);
+    $documents = $database->find('articles', [
+        new Query('views', Query::TYPE_GREATER, [100000]),
+    ], $limit);
+    $time = microtime(true) - $start;
+
+    echo "Found " . count($documents) . " results";
+    echo "\nCompleted in " . $time . "s\n";
+
+
     sleep(1);
 }
 

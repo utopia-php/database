@@ -56,21 +56,6 @@ $database->setNamespace('myapp_60ad4d52a7c01');
 // $database = new Database(new MariaDB($pdo), $cache);
 // $database->setNamespace('myapp_60ae724abe58b');
 
-// Create index
-// echo "Creating indexes";
-
-// $start = microtime(true);
-// $success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
-// $time = microtime(true) - $start;
-
-// echo "\nCompleted in " . $time . "s\n";
-
-// $start = microtime(true);
-// $success = $database->createIndex('articles', 'published', Database::INDEX_KEY, ['created'], [], [Database::ORDER_DESC]);
-// $time = microtime(true) - $start;
-
-// echo "\nCompleted in " . $time . "s\n";
-
 // Query documents
 
 

@@ -19,44 +19,44 @@ use MongoDB\Client;
 $limit = 250000;
 
 // Mongodb
-// $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-// $client = new Client('mongodb://mongo/',
-//     [
-//         'username' => 'root',
-//         'password' => 'example',
-//     ],
-//     $options
-// );
-
-// $redis = new Redis();
-// $redis->connect('redis', 6379);
-// $redis->flushAll();
-// $cache = new Cache(new RedisAdapter($redis));
-
-// $database = new Database(new MongoDB($client), $cache);
-// $database->setNamespace('myapp_'.uniqid());
-
-// MariaDB
-$dbHost = 'mariadb';
-$dbPort = '3306';
-$dbUser = 'root';
-$dbPass = 'password';
-
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-    PDO::ATTR_TIMEOUT => 3, // Seconds
-    PDO::ATTR_PERSISTENT => true,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-]);
+$options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+$client = new Client('mongodb://mongo/',
+    [
+        'username' => 'root',
+        'password' => 'example',
+    ],
+    $options
+);
 
 $redis = new Redis();
 $redis->connect('redis', 6379);
 $redis->flushAll();
 $cache = new Cache(new RedisAdapter($redis));
 
-$database = new Database(new MariaDB($pdo), $cache);
+$database = new Database(new MongoDB($client), $cache);
 $database->setNamespace('myapp_'.uniqid());
+
+// MariaDB
+// $dbHost = 'mariadb';
+// $dbPort = '3306';
+// $dbUser = 'root';
+// $dbPass = 'password';
+
+// $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+//     PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+//     PDO::ATTR_TIMEOUT => 3, // Seconds
+//     PDO::ATTR_PERSISTENT => true,
+//     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+//     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+// ]);
+
+// $redis = new Redis();
+// $redis->connect('redis', 6379);
+// $redis->flushAll();
+// $cache = new Cache(new RedisAdapter($redis));
+
+// $database = new Database(new MariaDB($pdo), $cache);
+// $database->setNamespace('myapp_'.uniqid());
 
 // Outline collection schema
 $database->create();
@@ -90,30 +90,4 @@ for ($i=0; $i < $limit; $i++) {
 }
 $time = microtime(true) - $start;
 echo "\nCompleted in " . $time . "s\n";
-
-// // Create fulltext index
-// echo "Creating index";
-
-// $start = microtime(true);
-// $success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
-// $time = microtime(true) - $start;
-
-// echo "\nCompleted in " . $time . "s\n";
-
-// // Query documents
-// echo "Querying\n";
-
-// echo "Changing role to 'user4567'\n";
-// Authorization::setRole('user4567');
-
-// echo "Running query: text.search('time')\n";
-
-// $start = microtime(true);
-// $documents = $database->find('articles', [
-//     new Query('text', Query::TYPE_SEARCH, ['time']),
-// ]);
-// $time = microtime(true) - $start;
-
-// echo "Found " . count($documents) . " results";
-// echo "\nCompleted in " . $time . "s\n";
 

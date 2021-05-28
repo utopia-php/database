@@ -15,6 +15,7 @@ use Utopia\Database\Validator\Authorization;
 
 $dbms = $argv[1];
 $loadedDB = $argv[2];
+$limit = $argv[3];
 
 // Implemented databases
 $supported = [
@@ -31,6 +32,11 @@ if (!in_array($dbms, $supported)) {
 if (!$loadedDB) {
     echo "Second argument is the name of a filled database";
     return;
+}
+
+if (!isset($limit)) {
+    echo "Using default limit of 25";
+    $limit = 25;
 }
 
 $database = null;
@@ -71,7 +77,7 @@ if ($dbms === 'mariadb') {
 
 $database->setNamespace($loadedDB);
 
-function runQueries($database, $limit = 25) {
+function runQueries($database, $limit) {
     /**
      * @var Document[]
      */
@@ -88,8 +94,8 @@ function runQueries($database, $limit = 25) {
     ], $limit);
     $time = microtime(true) - $start;
 
-    echo "Found " . count($documents) . " results";
-    echo "\nCompleted in " . $time . "s\n";
+    echo "Found " . count($documents) . " results\n";
+    echo $time." s\n";
 
 
     // Favorite genres
@@ -101,8 +107,8 @@ function runQueries($database, $limit = 25) {
     ], $limit);
     $time = microtime(true) - $start;
 
-    echo "Found " . count($documents) . " results";
-    echo "\nCompleted in " . $time . "s\n";
+    echo "Found " . count($documents) . " results\n";
+    echo $time." s\n";
 
 
     // Popular posts
@@ -138,44 +144,44 @@ $user = $faker->numerify('user####');
 echo "Changing role to '" . $user . "'\n";
 Authorization::setRole($user);
 
-runQueries($database);
+runQueries($database, $limit);
 
+// add another $count roles
 $count = 100;
-echo "Randomly generating " . $count . " roles\n";
 
 for ($i=0; $i < $count; $i++) {
     Authorization::setRole($faker->numerify('user####'));
 }
 echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database);
+runQueries($database, $limit);
 
+// add another $count roles
 $count = 400;
-echo "Randomly generating an additional " . $count . " roles\n";
 
 for ($i=0; $i < $count; $i++) {
     Authorization::setRole($faker->numerify('user####'));
 }
 
 echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database);
+runQueries($database, $limit);
 
+// add another $count roles
 $count = 500;
-echo "Randomly generating an additional " . $count . " roles\n";
 
 for ($i=0; $i < $count; $i++) {
     Authorization::setRole($faker->numerify('user####'));
 }
 
 echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database);
+runQueries($database, $limit);
 
+// add another $count roles
 $count = 1000;
-echo "Randomly generating an additional " . $count . " roles\n";
 
 for ($i=0; $i < $count; $i++) {
     Authorization::setRole($faker->numerify('user####'));
 }
 
 echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database);
+runQueries($database, $limit);
 

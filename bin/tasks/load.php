@@ -32,7 +32,7 @@ Co\run(function() use (&$start) {
     , 128);
 
     // Constants
-    $limit = 80000;
+    $limit = 150000;
 
     // Mongodb
     // $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
@@ -72,6 +72,7 @@ Co\run(function() use (&$start) {
 
     $database = new Database(new MariaDB($pdo), $cache);
     $database->setNamespace('myapp_'.$uniqid);
+    echo 'Database created: myapp_'.$uniqid;
 
 
     // Outline collection schema
@@ -91,27 +92,31 @@ Co\run(function() use (&$start) {
     $start = microtime(true);
     echo 'Filling database with ' . $limit . " documents";
 
-    for ($i=0; $i < $limit; $i++) {
+    if ($limit <= 1000) {
+        echo "Please insert > 1000 documents";
+        return;
+    }
+
+    for ($i=0; $i < $limit/1000; $i++) {
         go(function() use ($pool, $faker, $uniqid, $cache) {
             $pdo = $pool->get();
 
             $database = new Database(new MariaDB($pdo), $cache);
             $database->setNamespace('myapp_'.$uniqid);
 
-            $database->createDocument('articles', new Document([
-                // Five random users out of 10,000 get read access
-                '$read' => [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
-                // Three random users out of 10,000 get write access
-                '$write' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
-                'author' => $faker->name(),
-                'created' => $faker->unixTime(),
-                'text' => $faker->realTextBetween(1000, 4000),
-                'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
-                'views' => $faker->randomNumber(6, false)
-            ]));
-            // if ($i % 5000 === 0) {
-            //     echo '.';
-            // }
+            for ($i=0; $i < 1000; $i++) {
+                $database->createDocument('articles', new Document([
+                    // Five random users out of 10,000 get read access
+                    '$read' => [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+                    // Three random users out of 10,000 get write access
+                    '$write' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+                    'author' => $faker->name(),
+                    'created' => $faker->unixTime(),
+                    'text' => $faker->realTextBetween(1000, 4000),
+                    'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
+                    'views' => $faker->randomNumber(6, false)
+                ]));
+            }
 
             $pool->put($pdo);
             $database = null;

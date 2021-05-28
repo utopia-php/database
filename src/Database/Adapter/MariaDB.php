@@ -343,23 +343,29 @@ class MariaDB extends Adapter
 
         /**
          * Insert Permissions
+         * 
+         * Following performance inhancment tips from this discussions:
+         * https://stackoverflow.com/a/4559320/2299554
+         * https://stackoverflow.com/a/9088630/2299554
          */
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                SET _uid = :_uid, _action = :_action, _role = :_role");
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
+                (_uid, _action, _role) VALUES ";
+        $values = [];
 
         foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
             foreach ($roles as $key => $role) {
-                $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
-                $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
-
-                if(!$stmt->execute()) {
-                    $this->getPDO()->rollBack();
-                    throw new Exception('Failed to save permission');
-                }
+                $query .= '(?, ?, ?), ';
+                $values[] = $document->getId();
+                $values[] = $action;
+                $values[] = $role;
             }
+        }
+
+        $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
+
+        if(!$stmt->execute($values)) {
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to save permission');
         }
 
         if(!$this->getPDO()->commit()) {
@@ -428,22 +434,31 @@ class MariaDB extends Adapter
             throw new Exception('Failed to clean permissions');
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                SET _uid = :_uid, _action = :_action, _role = :_role");
+        /**
+         * Insert Permissions
+         * 
+         * Following performance inhancment tips from this discussions:
+         * https://stackoverflow.com/a/4559320/2299554
+         * https://stackoverflow.com/a/9088630/2299554
+         */
+        $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
+                (_uid, _action, _role) VALUES ";
+        $values = [];
 
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) { // Insert all permissions
+        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
             foreach ($roles as $key => $role) {
-                $stmt->bindValue(':_action', $action, PDO::PARAM_STR);
-                $stmt->bindValue(':_role', $role, PDO::PARAM_STR);
-
-                if(!$stmt->execute()) {
-                    $this->getPDO()->rollBack();
-                    throw new Exception('Failed to save permission');
-                }
+                $query .= '(?, ?, ?), ';
+                $values[] = $document->getId();
+                $values[] = $action;
+                $values[] = $role;
             }
+        }
+
+        $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
+
+        if(!$stmt->execute($values)) {
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to save permission');
         }
 
         if(!$this->getPDO()->commit()) {

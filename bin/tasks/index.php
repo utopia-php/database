@@ -71,29 +71,24 @@ if ($dbms === 'mariadb') {
 
 $database->setNamespace($loadedDB);
 
-
-// Create index
 echo "Creating indexes\n";
 
-echo "For query: text.search('Alice')\n";
-$start = microtime(true);
-$success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
-$time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n";
 
 echo "For query: [created.greater(1262322000), genre.equal('travel')]\n"; # Jan 1, 2010
 
 $start = microtime(true);
 $success = $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
 $time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n";
+echo "Completed in " . $time . "s\n\n";
+
 
 echo "For query: genre.equal('fashion', 'finance', 'sports')\n";
 
 $start = microtime(true);
 $success = $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
 $time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n";
+echo "Completed in " . $time . "s\n\n";
+
 
 echo "For query: views.greater(100000)\n";
 
@@ -102,3 +97,9 @@ $success = $database->createIndex('articles', 'views', Database::INDEX_KEY, ['vi
 $time = microtime(true) - $start;
 echo "Completed in " . $time . "s\n";
 
+
+echo "For query: text.search('Alice')\n";
+$start = microtime(true);
+$success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
+$time = microtime(true) - $start;
+echo "Completed in " . $time . "s\n\n";

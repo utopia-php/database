@@ -361,7 +361,7 @@ class MariaDB extends Adapter
             }
         }
 
-        $stmt = $this->getPDO()->prepare(substr($query, 0, -2));
+        $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
 
         if(!$stmt->execute($values)) {
             $this->getPDO()->rollBack();

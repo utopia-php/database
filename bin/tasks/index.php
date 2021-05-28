@@ -22,8 +22,14 @@ $supported = [
     'mariadb'
 ];
 
+// Check input
 if (!in_array($dbms, $supported)) {
     echo "First argument must be one of: 'mongodb', 'mariadb'";
+    return;
+}
+
+if (!$loadedDB) {
+    echo "Second argument is the name of a filled database";
     return;
 }
 

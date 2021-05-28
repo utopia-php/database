@@ -105,22 +105,21 @@ class MariaDB extends Adapter
 
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id}_permissions (
-                `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(255) NOT NULL,
+                `_document` CHAR(255) NOT NULL,
                 `_action` CHAR(128) NOT NULL,
                 `_role` CHAR(128) NOT NULL,
-                PRIMARY KEY (`_id`),
-                INDEX `_index1` (`_uid`),
+                PRIMARY KEY (`_uid`),
+                INDEX `_index1` (`_document`),
                 INDEX `_index2` (`_action` ASC, `_role` ASC)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
             ->execute();
 
         return $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
-                `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(255) NOT NULL,
                 `_permissions` TEXT NOT NULL,
-                PRIMARY KEY (`_id`),
+                PRIMARY KEY (`_uid`),
                 UNIQUE KEY `_index1` (`_uid`)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
             ->execute();
@@ -277,7 +276,6 @@ class MariaDB extends Adapter
         $document['$id'] = $document['_uid'];
         $document['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
         $document['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
-        unset($document['_id']);
         unset($document['_uid']);
         unset($document['_permissions']);
 
@@ -349,12 +347,13 @@ class MariaDB extends Adapter
          * https://stackoverflow.com/a/9088630/2299554
          */
         $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                (_uid, _action, _role) VALUES ";
+                (_uid, _document, _action, _role) VALUES ";
         $values = [];
 
         foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
             foreach ($roles as $key => $role) {
-                $query .= '(?, ?, ?), ';
+                $query .= '(?, ?, ?, ?), ';
+                $values[] = $this->getId();
                 $values[] = $document->getId();
                 $values[] = $action;
                 $values[] = $role;
@@ -442,12 +441,13 @@ class MariaDB extends Adapter
          * https://stackoverflow.com/a/9088630/2299554
          */
         $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                (_uid, _action, _role) VALUES ";
+                (_uid, _document, _action, _role) VALUES ";
         $values = [];
 
         foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
             foreach ($roles as $key => $role) {
-                $query .= '(?, ?, ?), ';
+                $query .= '(?, ?, ?, ?), ';
+                $values[] = $this->getId();
                 $values[] = $document->getId();
                 $values[] = $action;
                 $values[] = $role;
@@ -544,7 +544,7 @@ class MariaDB extends Adapter
         }
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-            ON table_main._uid = table_permissions._uid
+            ON table_main._uid = table_permissions._document
             AND table_permissions._action = 'read'" : ''; // Disable join when no authorization required
         $permissions2 = (Authorization::$status) ? " AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
 
@@ -586,7 +586,6 @@ class MariaDB extends Adapter
             $value['$id'] = $value['_uid'];
             $value['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
             $value['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
-            unset($value['_id']);
             unset($value['_uid']);
             unset($value['_permissions']);
 
@@ -619,7 +618,7 @@ class MariaDB extends Adapter
         }
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-            ON table_main._uid = table_permissions._uid
+            ON table_main._uid = table_permissions._document
             AND table_permissions._action = 'read'" : ''; // Disable join when no authorization required
         $permissions2 = (Authorization::$status) ? " AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
 
@@ -906,5 +905,16 @@ class MariaDB extends Adapter
     protected function getPDO()
     {
         return $this->pdo;
+    }
+
+    /**
+     * Get 13 Chars Unique ID.
+     * Used for internal permissions uid, not to confuse with Database::getId()
+     * 
+     * @return string
+     */
+    public function getId(): string
+    {
+        return \uniqid(); // Not to confuse with Database::getId()
     }
 }

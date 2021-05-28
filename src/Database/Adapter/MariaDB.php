@@ -107,11 +107,10 @@ class MariaDB extends Adapter
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id}_permissions (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(255) NOT NULL,
-                `_action` CHAR(128) NOT NULL,
                 `_role` CHAR(128) NOT NULL,
                 PRIMARY KEY (`_id`),
                 INDEX `_index1` (`_uid`),
-                INDEX `_index2` (`_action` ASC, `_role` ASC)
+                INDEX `_index2` (`_role` ASC)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
             ->execute();
 
@@ -349,16 +348,13 @@ class MariaDB extends Adapter
          * https://stackoverflow.com/a/9088630/2299554
          */
         $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                (_uid, _action, _role) VALUES ";
+                (_uid, _role) VALUES ";
         $values = [];
 
-        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
-            foreach ($roles as $key => $role) {
-                $query .= '(?, ?, ?), ';
-                $values[] = $document->getId();
-                $values[] = $action;
-                $values[] = $role;
-            }
+        foreach ($document->getRead() as $key => $role) {
+            $query .= '(?, ?), ';
+            $values[] = $document->getId();
+            $values[] = $role;
         }
 
         $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
@@ -442,16 +438,13 @@ class MariaDB extends Adapter
          * https://stackoverflow.com/a/9088630/2299554
          */
         $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                (_uid, _action, _role) VALUES ";
+                (_uid, _role) VALUES ";
         $values = [];
 
-        foreach (['read' => $document->getRead(), 'write' => $document->getWrite()] as $action => $roles) {  // Insert all permissions
-            foreach ($roles as $key => $role) {
-                $query .= '(?, ?, ?), ';
-                $values[] = $document->getId();
-                $values[] = $action;
-                $values[] = $role;
-            }
+        foreach ($document->getRead() as $key => $role) {
+            $query .= '(?, ?), ';
+            $values[] = $document->getId();
+            $values[] = $role;
         }
 
         $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
@@ -544,8 +537,7 @@ class MariaDB extends Adapter
         }
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-            ON table_main._uid = table_permissions._uid
-            AND table_permissions._action = 'read'" : ''; // Disable join when no authorization required
+            ON table_main._uid = table_permissions._uid" : ''; // Disable join when no authorization required
         $permissions2 = (Authorization::$status) ? " AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
@@ -619,8 +611,7 @@ class MariaDB extends Adapter
         }
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-            ON table_main._uid = table_permissions._uid
-            AND table_permissions._action = 'read'" : ''; // Disable join when no authorization required
+            ON table_main._uid = table_permissions._uid" : ''; // Disable join when no authorization required
         $permissions2 = (Authorization::$status) ? " AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {

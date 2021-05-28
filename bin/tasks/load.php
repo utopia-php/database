@@ -7,7 +7,7 @@ use MongoDB\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\None as NoAdapter;
+use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -84,7 +84,7 @@ if ($argv[1]=== 'mariadb') {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         ]);
 
-        $cache = new Cache(new NoAdapter());
+        $cache = new Cache(new NoCache());
 
         $uniqid = \uniqid();
 
@@ -135,13 +135,13 @@ if ($argv[1] === 'mongodb') {
         $options
     );
 
-    $redis = new Redis();
-    $redis->connect('redis', 6379);
-    $redis->flushAll();
-    $cache = new Cache(new RedisAdapter($redis));
+    $uniqid = \uniqid();
+
+    $cache = new Cache(new NoCache());
 
     $database = new Database(new MongoDB($client), $cache);
-    $database->setNamespace('myapp_'.uniqid());
+    $database->setNamespace('myapp_'.$uniqid);
+    echo 'Database created: myapp_'.$uniqid."\n";
 
     // Outline collection schema
     createSchema($database);

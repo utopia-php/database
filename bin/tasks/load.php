@@ -25,7 +25,7 @@ Co\run(function() use (&$start) {
             ->withHost('mariadb')
             ->withPort(3306)
             // ->withUnixSocket('/tmp/mysql.sock')
-            ->withDbName('myapp_60afd845470c2')
+            ->withDbName('mysql') // db required just to get started
             ->withCharset('utf8mb4')
             ->withUsername('root')
             ->withPassword('password')

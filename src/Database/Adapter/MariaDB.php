@@ -538,7 +538,7 @@ class MariaDB extends Adapter
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
             ON table_main._uid = table_permissions._uid" : ''; // Disable join when no authorization required
-        $permissions2 = (Authorization::$status) ? " AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+        $permissions2 = (Authorization::$status) ? "table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
@@ -553,8 +553,8 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
-            WHERE ".implode(' AND ', $where)."
-            {$permissions2}
+            WHERE {$permissions2}
+            AND ".implode(' AND ', $where)."
             GROUP BY table_main._uid 
             {$order}
             LIMIT :offset, :limit;
@@ -612,7 +612,7 @@ class MariaDB extends Adapter
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
             ON table_main._uid = table_permissions._uid" : ''; // Disable join when no authorization required
-        $permissions2 = (Authorization::$status) ? " AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+        $permissions2 = (Authorization::$status) ? "table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
@@ -625,8 +625,8 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
             {$permissions}
-            WHERE ".implode(' AND ', $where)."
-            {$permissions2}
+            WHERE {$permissions2}
+            AND ".implode(' AND ', $where)."
             GROUP BY table_main._uid 
             {$limit}) table_count
         ");

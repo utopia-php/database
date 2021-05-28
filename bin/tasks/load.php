@@ -18,14 +18,14 @@ use Utopia\Database\Validator\Authorization;
 Swoole\Runtime::enableCoroutine();
 
 $start = null;
-Co\run(function() use ($start) {
+Co\run(function() use (&$start) {
 
     $pool = new PDOPool(
         (new PDOConfig())
             ->withHost('mariadb')
             ->withPort(3306)
             // ->withUnixSocket('/tmp/mysql.sock')
-            ->withDbName('myapp_60b0e48f63005')
+            ->withDbName('myapp_60afd845470c2')
             ->withCharset('utf8mb4')
             ->withUsername('root')
             ->withPassword('password')

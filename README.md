@@ -188,17 +188,33 @@ Three commands have been added to `bin/` to fill, index, and query the DB to tes
 
 To test your DB changes under load:
 
-1. Enable your database of choice by uncommenting it in:
-  - `bin/tasks/load.php`
-  - `bin/tasks/index.php`
-  - `bin/tasks/query.php`
-2. Load the database with `docker-compose exec tests bin/load`
-3. Get the name of the created database from your favorite DB tool
-4. Add the database name to `$database->setNamespace('myapp_60afd9a009280');` in:
-  - `bin/tasks/index.php`
-  - `bin/tasks/query.php`
-5. Create indexes with `docker-compose exec tests bin/index`
-6. Run query test suite with `docker-compose exec tests bin/query`
+#### Load the database
+
+```bash
+docker-compose exec tests bin/load [dbms] [limit]
+
+# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [limit]: integer of total documents to generate
+```
+
+#### Create indexes
+
+```bash
+docker-compose exec tests bin/index [dbms] [filledDB]
+
+# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [filledDB]: name of filled database by bin/load
+```
+
+#### Run Query Suite
+
+```bash
+docker-compose exec tests bin/query [dbms] [totalDocuments] [filledDB]
+
+# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [filledDB]: name of filled database by bin/load
+# [limit]: integer of query limit (default 25)
+```
 
 ## Authors
 

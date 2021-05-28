@@ -178,6 +178,28 @@ To run static code analysis, use the following Psalm command:
 ```bash
 docker-compose exec tests vendor/bin/psalm --show-info=true
 ```
+### Load testing
+
+Three commands have been added to `bin/` to fill, index, and query the DB to test changes:
+
+- `bin/load` invokes `bin/tasks/load.php`
+- `bin/index` invokes `bin/tasks/index.php`
+- `bin/query` invokes `bin/tasks/query.php`
+
+To test your DB changes under load:
+
+1. Enable your database of choice by uncommenting it in:
+  - `bin/tasks/load.php`
+  - `bin/tasks/index.php`
+  - `bin/tasks/query.php`
+2. Load the database with `docker-compose exec tests bin/load`
+3. Get the name of the created database from your favorite DB tool
+4. Add the database name to `$database->setNamespace('myapp_60afd9a009280');` in:
+  - `bin/tasks/index.php`
+  - `bin/tasks/query.php`
+5. Create indexes with `docker-compose exec tests bin/index`
+6. Run query test suite with `docker-compose exec tests bin/query`
+
 ## Authors
 
 **Eldad Fux**

@@ -21,6 +21,7 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+
   cockroach:
     image: cockroachdb/cockroach:v20.2.0
     container_name: utopia-cockroach
@@ -73,21 +74,6 @@ services:
     container_name: utopia-redis
     networks:
       - database
-
-  ##############################################
-  ##            FOR DEVELOPMENT               ##
-  ##############################################
-
-  # mongo-gui:
-  #   container_name: "mongo-gui"
-  #   image: ugleiton/mongo-gui
-  #   restart: always
-  #   ports:
-  #     - "4321:4321"
-  #   environment:
-  #     - MONGO_URL=mongodb://root:example@mongo:27017
-  #   networks:
-  #     - database
 
 networks:
   database:

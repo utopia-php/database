@@ -538,7 +538,7 @@ class MariaDB extends Adapter
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
             ON table_main._uid = table_permissions._uid" : ''; // Disable join when no authorization required
-        $permissions2 = (Authorization::$status) ? "table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+        $permissions2 = (Authorization::$status) ? "table_permissions._role IN (".implode(',', $roles).")" : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
@@ -612,7 +612,7 @@ class MariaDB extends Adapter
 
         $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
             ON table_main._uid = table_permissions._uid" : ''; // Disable join when no authorization required
-        $permissions2 = (Authorization::$status) ? "table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+        $permissions2 = (Authorization::$status) ? "table_permissions._role IN (".implode(',', $roles).")" : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];

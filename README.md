@@ -178,6 +178,44 @@ To run static code analysis, use the following Psalm command:
 ```bash
 docker-compose exec tests vendor/bin/psalm --show-info=true
 ```
+### Load testing
+
+Three commands have been added to `bin/` to fill, index, and query the DB to test changes:
+
+- `bin/load` invokes `bin/tasks/load.php`
+- `bin/index` invokes `bin/tasks/index.php`
+- `bin/query` invokes `bin/tasks/query.php`
+
+To test your DB changes under load:
+
+#### Load the database
+
+```bash
+docker-compose exec tests bin/load [dbms] [limit]
+
+# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [limit]: integer of total documents to generate
+```
+
+#### Create indexes
+
+```bash
+docker-compose exec tests bin/index [dbms] [filledDB]
+
+# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [filledDB]: name of filled database by bin/load
+```
+
+#### Run Query Suite
+
+```bash
+docker-compose exec tests bin/query [dbms] [totalDocuments] [filledDB]
+
+# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [filledDB]: name of filled database by bin/load
+# [limit]: integer of query limit (default 25)
+```
+
 ## Authors
 
 **Eldad Fux**

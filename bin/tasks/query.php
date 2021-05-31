@@ -85,67 +85,37 @@ $cli
     });
 
 function runQueries($database, $limit) {
-    /**
-     * @var Document[]
-     */
-    $documents = null;
-
     // Recent travel blogs
-    echo "Running query: [created.greater(1262322000), genre.equal('travel')]\n"; # Jan 1, 2010
-
-    $start = microtime(true);
-    $documents = $database->find('articles', [
-        new Query('created', Query::TYPE_GREATER, [1262322000]),
-        new Query('genre', Query::TYPE_EQUAL, ['travel']),
-    ], $limit);
-    $time = microtime(true) - $start;
-
-    echo "Found " . count($documents) . " results\n";
-    echo $time." s\n";
-
+    $query = ["created.greater(1262322000)", "genre.equal('travel')"];
+    runQuery($query, $database, $limit);
 
     // Favorite genres
-    echo "Running query: genre.equal('fashion', 'finance', 'sports')\n";
-
-    $start = microtime(true);
-    $documents = $database->find('articles', [
-        new Query('genre', Query::TYPE_EQUAL, ['fashion', 'finance', 'sports']),
-    ], $limit);
-    $time = microtime(true) - $start;
-
-    echo "Found " . count($documents) . " results\n";
-    echo $time." s\n";
-
+    $query = ["genre.equal('fashion, 'finance', 'sports')"];
+    runQuery($query, $database, $limit);
 
     // Popular posts
-    echo "Running query: views.greater(100000)\n";
+    $query = ["views.greater(100000)"];
+    runQuery($query, $database, $limit);
 
-    $start = microtime(true);
-    $documents = $database->find('articles', [
-        new Query('views', Query::TYPE_GREATER, [100000]),
-    ], $limit);
-    $time = microtime(true) - $start;
-
-    echo "Found " . count($documents) . " results";
-    echo "\nCompleted in " . $time . "s\n";
-
-
-    // Fulltext Search
-    echo "Running query: text.search('Alice')\n";
-
-    $start = microtime(true);
-    $documents = $database->find('articles', [
-        new Query('text', Query::TYPE_SEARCH, ['Alice']),
-        // new Query('author', Query::TYPE_SEARCH, ['Alice']),
-    ], $limit);
-    $time = microtime(true) - $start;
-
-    echo "Found " . count($documents) . " results";
-    echo "\nCompleted in " . $time . "s\n";
+    // Fulltext search
+    $query = ["text.search('Alice')"];
+    runQuery($query, $database, $limit);
 }
 
 function addRoles($faker, $count) {
     for ($i=0; $i < $count; $i++) {
         Authorization::setRole($faker->numerify('user####'));
     }
+}
+
+function runQuery($query, $database, $limit) {
+    Console::log('Running query: ['.implode(', ', $query).']');
+    $query = array_map(function($q) {
+        return Query::parse($q);
+    }, $query);
+
+    $start = microtime(true);
+    $documents = $database->find('articles', $query, $limit);
+    $time = microtime(true) - $start;
+    Console::success("{$time} s");
 }

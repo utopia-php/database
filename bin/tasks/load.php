@@ -37,18 +37,7 @@ $cli
             case 'mariadb': 
                 Swoole\Runtime::enableCoroutine();
                 Co\run(function() use (&$start, $limit, $name) {
-
-                    $pool = new PDOPool(
-                        (new PDOConfig())
-                            ->withHost('mariadb')
-                            ->withPort(3306)
-                            // ->withUnixSocket('/tmp/mysql.sock')
-                            ->withDbName('mysql') // db required just to get started
-                            ->withCharset('utf8mb4')
-                            ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
-
+                    // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mariadb';
                     $dbPort = '3306';
                     $dbUser = 'root';
@@ -62,7 +51,6 @@ $cli
                         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                     ]);
 
-                    $pdo = $pool->get();
                     $cache = new Cache(new NoCache());
 
                     $database = new Database(new MariaDB($pdo), $cache);
@@ -70,12 +58,27 @@ $cli
 
                     // Outline collection schema
                     createSchema($database);
-                    $database = null; // Unsetting to reclaim connection
+
+                    // reclaim resources
+                    $database = null;
+                    $pdo = null;
 
                     // Init Faker
                     $faker = Factory::create();
 
                     $start = microtime(true);
+
+                    // create PDO pool for coroutines
+                    $pool = new PDOPool(
+                        (new PDOConfig())
+                            ->withHost('mariadb')
+                            ->withPort(3306)
+                            // ->withUnixSocket('/tmp/mysql.sock')
+                            ->withDbName($name)
+                            ->withCharset('utf8mb4')
+                            ->withUsername('root')
+                            ->withPassword('password')
+                    , 128);
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {

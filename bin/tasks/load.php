@@ -33,9 +33,9 @@ $cli
         $start = null;
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
+        Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
             case 'mariadb': 
-                Swoole\Runtime::enableCoroutine();
                 Co\run(function() use (&$start, $limit, $name) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mariadb';
@@ -103,31 +103,43 @@ $cli
                 break;
 
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                $client = new Client('mongodb://mongo/',
-                    [
-                        'username' => 'root',
-                        'password' => 'example',
-                    ],
-                    $options
-                );
+                Co\run(function() use (&$start, $limit, $name) {
+                    $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                    $client = new Client('mongodb://mongo/',
+                        [
+                            'username' => 'root',
+                            'password' => 'example',
+                        ],
+                        $options
+                    );
 
-                $cache = new Cache(new NoCache());
+                    $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                    $database->setNamespace($name);
 
-                $database = new Database(new MongoDB($client), $cache);
-                $database->setNamespace($name);
+                    // Outline collection schema
+                    createSchema($database);
 
-                // Outline collection schema
-                createSchema($database);
+                    // Fill DB
+                    $faker = Factory::create();
 
-                // Fill DB
-                $faker = Factory::create();
+                    $start = microtime(true);
 
-                $start = microtime(true);
-                for ($i=0; $i < $limit; $i++) {
-                    addArticle($database, $faker);
-                }
+                    for ($i=0; $i < $limit/1000; $i++) {
+                        go(function() use ($client, $name, $faker) {
+                            $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                            $database->setNamespace($name);
+
+                            // Each coroutine loads 1000 documents
+                            for ($i=0; $i < 1000; $i++) {
+                                addArticle($database, $faker);
+                            }
+
+                            $database = null;
+                        });
+                    }
+                });
                 break;
+
             default:
                 echo 'Adapter not supported';
                 return;

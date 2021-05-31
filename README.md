@@ -191,28 +191,28 @@ To test your DB changes under load:
 #### Load the database
 
 ```bash
-docker-compose exec tests bin/load [dbms] [limit]
+docker-compose exec tests bin/load [adapter] [limit]
 
-# [dbms]: either 'mongodb' or 'mariadb', no quotes
+# [adapter]: either 'mongodb' or 'mariadb', no quotes
 # [limit]: integer of total documents to generate
 ```
 
 #### Create indexes
 
 ```bash
-docker-compose exec tests bin/index [dbms] [filledDB]
+docker-compose exec tests bin/index [adapter] [collection]
 
-# [dbms]: either 'mongodb' or 'mariadb', no quotes
-# [filledDB]: name of filled database by bin/load
+# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [collection]: name of filled database by bin/load
 ```
 
 #### Run Query Suite
 
 ```bash
-docker-compose exec tests bin/query [dbms] [totalDocuments] [filledDB]
+docker-compose exec tests bin/query [adapter] [collection] [limit]
 
-# [dbms]: either 'mongodb' or 'mariadb', no quotes
-# [filledDB]: name of filled database by bin/load
+# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [collection]: name of filled database by bin/load
 # [limit]: integer of query limit (default 25)
 ```
 

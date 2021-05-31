@@ -13,8 +13,8 @@ use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 
-$dbms = $argv[1];
-$loadedDB = $argv[2];
+$adapter = $argv[1];
+$collection = $argv[2];
 
 // Implemented databases
 $supported = [
@@ -23,19 +23,19 @@ $supported = [
 ];
 
 // Check input
-if (!in_array($dbms, $supported)) {
+if (!in_array($adapter, $supported)) {
     echo "First argument must be one of: 'mongodb', 'mariadb'";
     return;
 }
 
-if (!$loadedDB) {
+if (!$collection) {
     echo "Second argument is the name of a filled database";
     return;
 }
 
 $database = null;
 
-if ($dbms === 'mongodb') {
+if ($adapter === 'mongodb') {
     $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
     $client = new Client('mongodb://mongo/',
         [
@@ -50,7 +50,7 @@ if ($dbms === 'mongodb') {
     $database = new Database(new MongoDB($client), $cache);
 }
 
-if ($dbms === 'mariadb') {
+if ($adapter === 'mariadb') {
     $dbHost = 'mariadb';
     $dbPort = '3306';
     $dbUser = 'root';
@@ -69,7 +69,7 @@ if ($dbms === 'mariadb') {
     $database = new Database(new MariaDB($pdo), $cache);
 }
 
-$database->setNamespace($loadedDB);
+$database->setNamespace($collection);
 
 echo "Creating indexes\n";
 

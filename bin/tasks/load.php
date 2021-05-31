@@ -15,7 +15,7 @@ use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 
-$dbms = $argv[1];
+$adapter = $argv[1];
 $limit = $argv[2];
 
 // Implemented databases
@@ -24,7 +24,7 @@ $supported = [
     'mariadb'
 ];
 
-if (!in_array($dbms, $supported)) {
+if (!in_array($adapter, $supported)) {
     echo "First argument must be one of: 'mongodb', 'mariadb'";
     return;
 }
@@ -56,7 +56,7 @@ function addArticle($database, $faker) {
 $start = null;
 
 // MariaDB
-if ($dbms === 'mariadb') {
+if ($adapter === 'mariadb') {
     Swoole\Runtime::enableCoroutine();
     Co\run(function() use (&$start, $limit) {
 
@@ -125,7 +125,7 @@ if ($dbms === 'mariadb') {
 }
 
 // MongoDB
-if ($dbms === 'mongodb') {
+if ($adapter === 'mongodb') {
     $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
     $client = new Client('mongodb://mongo/',
         [

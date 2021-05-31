@@ -1,6 +1,9 @@
 <?php
 
-require_once '/usr/src/code/vendor/autoload.php';
+/**
+ * @var CLI
+ */
+global $cli;
 
 use Faker\Factory;
 use MongoDB\Client;
@@ -8,26 +11,128 @@ use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\CLI\CLI;
+use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
-$adapter = $argv[1];
-$limit = $argv[2];
+$cli
+    ->task('load')
+    ->desc('Load database with mock data for testing')
+    ->param('adapter', '', new Text(0), 'Database adapter', false)
+    ->param('limit', '', new Numeric(), 'Total number of records to add to database', false)
+    ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
+    ->action(function ($adapter, $limit, $name) {
 
-// Implemented databases
-$supported = [
-    'mongodb',
-    'mariadb'
-];
+        $start = null;
+        Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
-if (!in_array($adapter, $supported)) {
-    echo "First argument must be one of: 'mongodb', 'mariadb'";
-    return;
-}
+        switch ($adapter) {
+            case 'mariadb': 
+                Swoole\Runtime::enableCoroutine();
+                Co\run(function() use (&$start, $limit, $name) {
+
+                    $pool = new PDOPool(
+                        (new PDOConfig())
+                            ->withHost('mariadb')
+                            ->withPort(3306)
+                            // ->withUnixSocket('/tmp/mysql.sock')
+                            ->withDbName('mysql') // db required just to get started
+                            ->withCharset('utf8mb4')
+                            ->withUsername('root')
+                            ->withPassword('password')
+                    , 128);
+
+                    $dbHost = 'mariadb';
+                    $dbPort = '3306';
+                    $dbUser = 'root';
+                    $dbPass = 'password';
+
+                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+                        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+                        PDO::ATTR_TIMEOUT => 3, // Seconds
+                        PDO::ATTR_PERSISTENT => true,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    ]);
+
+                    $pdo = $pool->get();
+                    $cache = new Cache(new NoCache());
+
+                    $database = new Database(new MariaDB($pdo), $cache);
+                    $database->setNamespace($name);
+
+                    // Outline collection schema
+                    createSchema($database);
+                    $database = null; // Unsetting to reclaim connection
+
+                    // Init Faker
+                    $faker = Factory::create();
+
+                    $start = microtime(true);
+
+                    // A coroutine is assigned per 1000 documents
+                    for ($i=0; $i < $limit/1000; $i++) {
+                        go(function() use ($pool, $faker, $name, $cache) {
+                            $pdo = $pool->get();
+
+                            $database = new Database(new MariaDB($pdo), $cache);
+                            $database->setNamespace($name);
+
+                            // Each coroutine loads 1000 documents
+                            for ($i=0; $i < 1000; $i++) {
+                                addArticle($database, $faker);
+                            }
+
+                            // Reclaim resources
+                            $pool->put($pdo);
+                            $database = null;
+                        });
+                    }
+
+                });
+                break;
+
+            case 'mongodb':
+                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                $client = new Client('mongodb://mongo/',
+                    [
+                        'username' => 'root',
+                        'password' => 'example',
+                    ],
+                    $options
+                );
+
+                $cache = new Cache(new NoCache());
+
+                $database = new Database(new MongoDB($client), $cache);
+                $database->setNamespace($name);
+
+                // Outline collection schema
+                createSchema($database);
+
+                // Fill DB
+                $faker = Factory::create();
+
+                $start = microtime(true);
+                for ($i=0; $i < $limit; $i++) {
+                    addArticle($database, $faker);
+                }
+                break;
+            default:
+                echo 'Adapter not supported';
+                return;
+        }
+
+        $time = microtime(true) - $start;
+        Console::success("Completed in {$time} seconds");
+    });
 
 function createSchema($database) {
     $database->create();
@@ -53,108 +158,3 @@ function addArticle($database, $faker) {
     ]));
 }
 
-$start = null;
-
-// MariaDB
-if ($adapter === 'mariadb') {
-    Swoole\Runtime::enableCoroutine();
-    Co\run(function() use (&$start, $limit) {
-
-        $pool = new PDOPool(
-            (new PDOConfig())
-                ->withHost('mariadb')
-                ->withPort(3306)
-                // ->withUnixSocket('/tmp/mysql.sock')
-                ->withDbName('mysql') // db required just to get started
-                ->withCharset('utf8mb4')
-                ->withUsername('root')
-                ->withPassword('password')
-        , 128);
-
-        $dbHost = 'mariadb';
-        $dbPort = '3306';
-        $dbUser = 'root';
-        $dbPass = 'password';
-
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-            PDO::ATTR_TIMEOUT => 3, // Seconds
-            PDO::ATTR_PERSISTENT => true,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        ]);
-
-        $cache = new Cache(new NoCache());
-
-        $uniqid = \uniqid();
-
-        $database = new Database(new MariaDB($pdo), $cache);
-        $database->setNamespace('myapp_'.$uniqid);
-        echo 'Database created: myapp_'.$uniqid."\n";
-
-        // Outline collection schema
-        createSchema($database);
-        $database = null; // Unsetting to reclaim connection
-
-        // Init Faker
-        $faker = Factory::create();
-
-        $start = microtime(true);
-        echo 'Filling database with ' . $limit . " documents";
-
-        // A coroutine is assigned per 1000 documents
-        for ($i=0; $i < $limit/1000; $i++) {
-            go(function() use ($pool, $faker, $uniqid, $cache) {
-                $pdo = $pool->get();
-
-                $database = new Database(new MariaDB($pdo), $cache);
-                $database->setNamespace('myapp_'.$uniqid);
-
-                // Each coroutine loads 1000 documents
-                for ($i=0; $i < 1000; $i++) {
-                    addArticle($database, $faker);
-                }
-
-                // Reclaim resources
-                $pool->put($pdo);
-                $database = null;
-            });
-        }
-
-    });
-}
-
-// MongoDB
-if ($adapter === 'mongodb') {
-    $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-    $client = new Client('mongodb://mongo/',
-        [
-            'username' => 'root',
-            'password' => 'example',
-        ],
-        $options
-    );
-
-    $uniqid = \uniqid();
-
-    $cache = new Cache(new NoCache());
-
-    $database = new Database(new MongoDB($client), $cache);
-    $database->setNamespace('myapp_'.$uniqid);
-    echo 'Database created: myapp_'.$uniqid."\n";
-
-    // Outline collection schema
-    createSchema($database);
-
-    // Fill DB
-    $faker = Factory::create();
-
-    $start = microtime(true);
-    echo 'Filling database with ' . $limit . " documents";
-    for ($i=0; $i < $limit; $i++) {
-        addArticle($database, $faker);
-    }
-}
-
-$time = microtime(true) - $start;
-echo "\nCompleted in " . $time . "s\n";

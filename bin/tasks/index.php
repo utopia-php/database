@@ -1,105 +1,99 @@
 <?php
 
-require_once '/usr/src/code/vendor/autoload.php';
+/**
+ * @var CLI
+ */
+global $cli;
 
 use Faker\Factory;
 use MongoDB\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\CLI\CLI;
+use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
-$adapter = $argv[1];
-$collection = $argv[2];
+$cli
+    ->task('index')
+    ->desc('Index mock data for testing queries')
+    ->param('adapter', '', new Text(0), 'Database adapter', false)
+    ->param('name', '', new Text(0), 'Name of created database.', false)
+    ->action(function ($adapter, $name) {
+        $database = null;
 
-// Implemented databases
-$supported = [
-    'mongodb',
-    'mariadb'
-];
+        switch ($adapter) {
+            case 'mongodb':
+                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                $client = new Client('mongodb://mongo/',
+                    [
+                        'username' => 'root',
+                        'password' => 'example',
+                    ],
+                    $options
+                );
 
-// Check input
-if (!in_array($adapter, $supported)) {
-    echo "First argument must be one of: 'mongodb', 'mariadb'";
-    return;
-}
+                $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                break;
 
-if (!$collection) {
-    echo "Second argument is the name of a filled database";
-    return;
-}
+            case 'mariadb':
+                $dbHost = 'mariadb';
+                $dbPort = '3306';
+                $dbUser = 'root';
+                $dbPass = 'password';
 
-$database = null;
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+                    PDO::ATTR_TIMEOUT => 3, // Seconds
+                    PDO::ATTR_PERSISTENT => true,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                ]);
 
-if ($adapter === 'mongodb') {
-    $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-    $client = new Client('mongodb://mongo/',
-        [
-            'username' => 'root',
-            'password' => 'example',
-        ],
-        $options
-    );
+                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                break;
 
-    $cache = new Cache(new NoCache());
+            default:
+                Console::error('Adapter not supported');
+                return;
+        }
 
-    $database = new Database(new MongoDB($client), $cache);
-}
+        $database->setNamespace($name);
 
-if ($adapter === 'mariadb') {
-    $dbHost = 'mariadb';
-    $dbPort = '3306';
-    $dbUser = 'root';
-    $dbPass = 'password';
+        Console::info("For query: [created.greater(1262322000), genre.equal('travel')]");
 
-    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-        PDO::ATTR_TIMEOUT => 3, // Seconds
-        PDO::ATTR_PERSISTENT => true,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    ]);
-
-    $cache = new Cache(new NoCache());
-
-    $database = new Database(new MariaDB($pdo), $cache);
-}
-
-$database->setNamespace($collection);
-
-echo "Creating indexes\n";
+        $start = microtime(true);
+        $success = $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
 
 
-echo "For query: [created.greater(1262322000), genre.equal('travel')]\n"; # Jan 1, 2010
+        Console::info("For query: genre.equal('fashion', 'finance', 'sports')");
 
-$start = microtime(true);
-$success = $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
-$time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n\n";
-
-
-echo "For query: genre.equal('fashion', 'finance', 'sports')\n";
-
-$start = microtime(true);
-$success = $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
-$time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n\n";
+        $start = microtime(true);
+        $success = $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
 
 
-echo "For query: views.greater(100000)\n";
+        Console::info("For query: views.greater(100000)");
 
-$start = microtime(true);
-$success = $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
-$time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n";
+        $start = microtime(true);
+        $success = $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
 
 
-echo "For query: text.search('Alice')\n";
-$start = microtime(true);
-$success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
-$time = microtime(true) - $start;
-echo "Completed in " . $time . "s\n\n";
+        Console::info("For query: text.search('Alice')");
+        $start = microtime(true);
+        $success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
+    });
+

@@ -9,7 +9,7 @@ use Utopia\CLI\Console;
 $cli = new CLI();
 
 include 'tasks/load.php';
-// include 'tasks/index.php';
+include 'tasks/index.php';
 // include 'tasks/query.php';
 
 $cli->run();

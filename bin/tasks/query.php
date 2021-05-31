@@ -67,55 +67,21 @@ $cli
 
         $database->setNamespace($name);
 
-
         $faker = Factory::create();
-
-        $user = $faker->numerify('user####');
-        echo "Changing role to '" . $user . "'\n";
-        Authorization::setRole($user);
-
+        addRoles($faker, 1);
         runQueries($database, $limit);
 
-        // add another $count roles
-        $count = 100;
-
-        for ($i=0; $i < $count; $i++) {
-            Authorization::setRole($faker->numerify('user####'));
-        }
-        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        addRoles($faker, 100);
         runQueries($database, $limit);
 
-        // add another $count roles
-        $count = 400;
-
-        for ($i=0; $i < $count; $i++) {
-            Authorization::setRole($faker->numerify('user####'));
-        }
-
-        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        addRoles($faker, 400);
         runQueries($database, $limit);
 
-        // add another $count roles
-        $count = 500;
-
-        for ($i=0; $i < $count; $i++) {
-            Authorization::setRole($faker->numerify('user####'));
-        }
-
-        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        addRoles($faker, 500);
         runQueries($database, $limit);
 
-        // add another $count roles
-        $count = 1000;
-
-        for ($i=0; $i < $count; $i++) {
-            Authorization::setRole($faker->numerify('user####'));
-        }
-
-        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        addRoles($faker, 1000);
         runQueries($database, $limit);
-
-
     });
 
 function runQueries($database, $limit) {
@@ -123,7 +89,6 @@ function runQueries($database, $limit) {
      * @var Document[]
      */
     $documents = null;
-
 
     // Recent travel blogs
     echo "Running query: [created.greater(1262322000), genre.equal('travel')]\n"; # Jan 1, 2010
@@ -179,3 +144,8 @@ function runQueries($database, $limit) {
     echo "\nCompleted in " . $time . "s\n";
 }
 
+function addRoles($faker, $count) {
+    for ($i=0; $i < $count; $i++) {
+        Authorization::setRole($faker->numerify('user####'));
+    }
+}

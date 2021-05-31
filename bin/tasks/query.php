@@ -1,81 +1,122 @@
 <?php
 
-require_once '/usr/src/code/vendor/autoload.php';
+/**
+ * @var CLI
+ */
+global $cli;
 
 use Faker\Factory;
 use MongoDB\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\CLI\CLI;
+use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
-$adapter = $argv[1];
-$collection = $argv[2];
-$limit = $argv[3];
+$cli
+    ->task('query')
+    ->desc('Query mock data')
+    ->param('adapter', '', new Text(0), 'Database adapter', false)
+    ->param('name', '', new Text(0), 'Name of created database.', false)
+    ->param('limit', 25, new Numeric(), 'Limit on queried documents', true)
+    ->action(function ($adapter, $name, $limit) {
+        $database = null;
 
-// Implemented databases
-$supported = [
-    'mongodb',
-    'mariadb'
-];
+        switch ($adapter) {
+            case 'mongodb':
+                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                $client = new Client('mongodb://mongo/',
+                    [
+                        'username' => 'root',
+                        'password' => 'example',
+                    ],
+                    $options
+                );
 
-// Check input
-if (!in_array($adapter, $supported)) {
-    echo "First argument must be one of: 'mongodb', 'mariadb'";
-    return;
-}
+                $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                break;
 
-if (!$collection) {
-    echo "Second argument is the name of a filled database";
-    return;
-}
+            case 'mariadb':
+                $dbHost = 'mariadb';
+                $dbPort = '3306';
+                $dbUser = 'root';
+                $dbPass = 'password';
 
-if (!isset($limit)) {
-    echo "Using default limit of 25";
-    $limit = 25;
-}
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+                    PDO::ATTR_TIMEOUT => 3, // Seconds
+                    PDO::ATTR_PERSISTENT => true,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                ]);
 
-$database = null;
+                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                break;
 
-if ($adapter === 'mongodb') {
-    $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-    $client = new Client('mongodb://mongo/',
-        [
-            'username' => 'root',
-            'password' => 'example',
-        ],
-        $options
-    );
+            default:
+                Console::error('Adapter not supported');
+                return;
+        }
 
-    $cache = new Cache(new NoCache());
+        $database->setNamespace($name);
 
-    $database = new Database(new MongoDB($client), $cache);
-}
 
-if ($adapter === 'mariadb') {
-    $dbHost = 'mariadb';
-    $dbPort = '3306';
-    $dbUser = 'root';
-    $dbPass = 'password';
+        $faker = Factory::create();
 
-    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-        PDO::ATTR_TIMEOUT => 3, // Seconds
-        PDO::ATTR_PERSISTENT => true,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    ]);
+        $user = $faker->numerify('user####');
+        echo "Changing role to '" . $user . "'\n";
+        Authorization::setRole($user);
 
-    $cache = new Cache(new NoCache());
+        runQueries($database, $limit);
 
-    $database = new Database(new MariaDB($pdo), $cache);
-}
+        // add another $count roles
+        $count = 100;
 
-$database->setNamespace($collection);
+        for ($i=0; $i < $count; $i++) {
+            Authorization::setRole($faker->numerify('user####'));
+        }
+        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        runQueries($database, $limit);
+
+        // add another $count roles
+        $count = 400;
+
+        for ($i=0; $i < $count; $i++) {
+            Authorization::setRole($faker->numerify('user####'));
+        }
+
+        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        runQueries($database, $limit);
+
+        // add another $count roles
+        $count = 500;
+
+        for ($i=0; $i < $count; $i++) {
+            Authorization::setRole($faker->numerify('user####'));
+        }
+
+        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        runQueries($database, $limit);
+
+        // add another $count roles
+        $count = 1000;
+
+        for ($i=0; $i < $count; $i++) {
+            Authorization::setRole($faker->numerify('user####'));
+        }
+
+        echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
+        runQueries($database, $limit);
+
+
+    });
 
 function runQueries($database, $limit) {
     /**
@@ -137,51 +178,4 @@ function runQueries($database, $limit) {
     echo "Found " . count($documents) . " results";
     echo "\nCompleted in " . $time . "s\n";
 }
-
-$faker = Factory::create();
-
-$user = $faker->numerify('user####');
-echo "Changing role to '" . $user . "'\n";
-Authorization::setRole($user);
-
-runQueries($database, $limit);
-
-// add another $count roles
-$count = 100;
-
-for ($i=0; $i < $count; $i++) {
-    Authorization::setRole($faker->numerify('user####'));
-}
-echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database, $limit);
-
-// add another $count roles
-$count = 400;
-
-for ($i=0; $i < $count; $i++) {
-    Authorization::setRole($faker->numerify('user####'));
-}
-
-echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database, $limit);
-
-// add another $count roles
-$count = 500;
-
-for ($i=0; $i < $count; $i++) {
-    Authorization::setRole($faker->numerify('user####'));
-}
-
-echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database, $limit);
-
-// add another $count roles
-$count = 1000;
-
-for ($i=0; $i < $count; $i++) {
-    Authorization::setRole($faker->numerify('user####'));
-}
-
-echo "\nWith " . count(Authorization::getRoles()) . " roles: \n";
-runQueries($database, $limit);
 

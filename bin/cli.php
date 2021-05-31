@@ -10,6 +10,6 @@ $cli = new CLI();
 
 include 'tasks/load.php';
 include 'tasks/index.php';
-// include 'tasks/query.php';
+include 'tasks/query.php';
 
 $cli->run();

@@ -68,19 +68,25 @@ $cli
         $database->setNamespace($name);
 
         $faker = Factory::create();
+
         addRoles($faker, 1);
+        Console::info("\n".count(Authorization::getRoles())." roles:");
         runQueries($database, $limit);
 
         addRoles($faker, 100);
+        Console::info("\n".count(Authorization::getRoles())." roles:");
         runQueries($database, $limit);
 
         addRoles($faker, 400);
+        Console::info("\n".count(Authorization::getRoles())." roles:");
         runQueries($database, $limit);
 
         addRoles($faker, 500);
+        Console::info("\n".count(Authorization::getRoles())." roles:");
         runQueries($database, $limit);
 
         addRoles($faker, 1000);
+        Console::info("\n".count(Authorization::getRoles())." roles:");
         runQueries($database, $limit);
     });
 

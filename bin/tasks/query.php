@@ -17,7 +17,6 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
-
 $cli
     ->task('query')
     ->desc('Query mock data')
@@ -104,12 +103,12 @@ $cli
             'results' => runQueries($database, $limit)
         ];
 
-        if (!file_exists('results')) {
-            mkdir('results', 0777, true);
+        if (!file_exists('bin/view/results')) {
+            mkdir('bin/view/results', 0777, true);
         }
 
         $time = time();
-        $f = fopen("results/{$adapter}_{$name}_{$limit}_{$time}.json", 'w');
+        $f = fopen("bin/view/results/{$adapter}_{$name}_{$limit}_{$time}.json", 'w');
         fwrite($f, json_encode($report));
         fclose($f);
     });

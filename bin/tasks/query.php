@@ -2,9 +2,7 @@
 
 /**
  * @var CLI
- */
-global $cli;
-
+ */ global $cli;
 use Faker\Factory;
 use MongoDB\Client;
 use Utopia\Cache\Cache;
@@ -69,52 +67,82 @@ $cli
 
         $faker = Factory::create();
 
-        addRoles($faker, 1);
-        Console::info("\n".count(Authorization::getRoles())." roles:");
-        runQueries($database, $limit);
+        $report = [];
 
-        addRoles($faker, 100);
-        Console::info("\n".count(Authorization::getRoles())." roles:");
-        runQueries($database, $limit);
+        $count = addRoles($faker, 1);
+        Console::info("\n{$count} roles:");
+        $report[] = [
+            'roles' => $count,
+            'results' => runQueries($database, $limit)
+        ];
 
-        addRoles($faker, 400);
-        Console::info("\n".count(Authorization::getRoles())." roles:");
-        runQueries($database, $limit);
+        $count = addRoles($faker, 100);
+        Console::info("\n{$count} roles:");
+        $report[] = [
+            'roles' => $count,
+            'results' => runQueries($database, $limit)
+        ];
 
-        addRoles($faker, 500);
-        Console::info("\n".count(Authorization::getRoles())." roles:");
-        runQueries($database, $limit);
+        $count = addRoles($faker, 400);
+        Console::info("\n{$count} roles:");
+        $report[] = [
+            'roles' => $count,
+            'results' => runQueries($database, $limit)
+        ];
 
-        addRoles($faker, 1000);
-        Console::info("\n".count(Authorization::getRoles())." roles:");
-        runQueries($database, $limit);
+        $count = addRoles($faker, 500);
+        Console::info("\n{$count} roles:");
+        $report[] = [
+            'roles' => $count,
+            'results' => runQueries($database, $limit)
+        ];
+
+        $count = addRoles($faker, 1000);
+        Console::info("\n{$count} roles:");
+        $report[] = [
+            'roles' => $count,
+            'results' => runQueries($database, $limit)
+        ];
+
+        if (!file_exists('results')) {
+            mkdir('results', 0777, true);
+        }
+
+        $time = time();
+        $f = fopen("results/{$adapter}_{$name}_{$limit}_{$time}.json", 'w');
+        fwrite($f, json_encode($report));
+        fclose($f);
     });
 
 function runQueries($database, $limit) {
+    $results = [];
     // Recent travel blogs
     $query = ["created.greater(1262322000)", "genre.equal('travel')"];
-    runQuery($query, $database, $limit);
+    $results[] = runQuery($query, $database, $limit, $results);
 
     // Favorite genres
     $query = ["genre.equal('fashion, 'finance', 'sports')"];
-    runQuery($query, $database, $limit);
+    $results[] = runQuery($query, $database, $limit, $results);
 
     // Popular posts
     $query = ["views.greater(100000)"];
-    runQuery($query, $database, $limit);
+    $results[] = runQuery($query, $database, $limit, $results);
 
     // Fulltext search
     $query = ["text.search('Alice')"];
-    runQuery($query, $database, $limit);
+    $results[] = runQuery($query, $database, $limit, $results);
+
+    return $results;
 }
 
 function addRoles($faker, $count) {
     for ($i=0; $i < $count; $i++) {
         Authorization::setRole($faker->numerify('user####'));
     }
+    return count(Authorization::getRoles());
 }
 
-function runQuery($query, $database, $limit) {
+function runQuery($query, $database, $limit, $results) {
     Console::log('Running query: ['.implode(', ', $query).']');
     $query = array_map(function($q) {
         return Query::parse($q);
@@ -124,4 +152,10 @@ function runQuery($query, $database, $limit) {
     $documents = $database->find('articles', $query, $limit);
     $time = microtime(true) - $start;
     Console::success("{$time} s");
+    $results = [
+        'query' => $query,
+        'time' => $time,
+        'limit' => $limit,
+    ];
+    return $results;
 }

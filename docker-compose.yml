@@ -10,6 +10,8 @@ services:
       - database
     volumes:
       - ./:/usr/src/code
+    ports:
+      - "8708:8708"
 
   postgres:
     image: postgres:13

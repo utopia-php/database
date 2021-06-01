@@ -117,19 +117,19 @@ function runQueries($database, $limit) {
     $results = [];
     // Recent travel blogs
     $query = ["created.greater(1262322000)", "genre.equal('travel')"];
-    $results[] = runQuery($query, $database, $limit, $results);
+    $results[] = runQuery($query, $database, $limit);
 
     // Favorite genres
     $query = ["genre.equal('fashion, 'finance', 'sports')"];
-    $results[] = runQuery($query, $database, $limit, $results);
+    $results[] = runQuery($query, $database, $limit);
 
     // Popular posts
     $query = ["views.greater(100000)"];
-    $results[] = runQuery($query, $database, $limit, $results);
+    $results[] = runQuery($query, $database, $limit);
 
     // Fulltext search
     $query = ["text.search('Alice')"];
-    $results[] = runQuery($query, $database, $limit, $results);
+    $results[] = runQuery($query, $database, $limit);
 
     return $results;
 }
@@ -141,7 +141,7 @@ function addRoles($faker, $count) {
     return count(Authorization::getRoles());
 }
 
-function runQuery($query, $database, $limit, $results) {
+function runQuery($query, $database, $limit) {
     Console::log('Running query: ['.implode(', ', $query).']');
     $query = array_map(function($q) {
         return Query::parse($q);
@@ -151,10 +151,5 @@ function runQuery($query, $database, $limit, $results) {
     $documents = $database->find('articles', $query, $limit);
     $time = microtime(true) - $start;
     Console::success("{$time} s");
-    $results = [
-        'query' => $query,
-        'time' => $time,
-        'limit' => $limit,
-    ];
-    return $results;
+    return $time;
 }

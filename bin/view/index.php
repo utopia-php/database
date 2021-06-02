@@ -17,20 +17,22 @@
         <canvas id="radarchart"></canvas>
     </div>
 
-    <div id="datatables">
-    <table>
-        <tr>{{ results[0].name }}</tr>
-        <tr>
-            <td v-for="r in results[0].data" :key="r.roles">{{ r.results }}</td>
-        </tr>
-    </table>
-    <br>
-    <table>
-        <tr>{{ results[1].name }}</tr>
-        <tr>
-            <td v-for="r in results[1].data" :key="r.roles">{{ r.results }}</td>
-        </tr>
-    </table>
+    <div id="datatables" class="datatables">
+        <table v-for="n in 4" :key="n">
+            <tr>
+                <th colspan="5">{{ queries[n-1] }}</th>
+            </tr>
+            <tr>
+                <th>1 role</th>
+                <th>100 roles</th>
+                <th>500 roles</th>
+                <th>1000 roles</th>
+                <th>2000 roles</th>
+            </tr>
+            <tr v-for="result in results" :key="result.name">
+                <td v-for="set in result.data">{{ set.results[n-1].toFixed(4) }}</td>
+            </tr>
+        </table>
     </div>
 
 <script>
@@ -119,7 +121,8 @@ const myChart = new Chart(
 const datatables = {
     data() {
         return {
-            results: results
+        results: results,
+        queries: ['created.greater(), genre.equal()', 'genre.equal(OR)', 'views.greater()', 'text.search()']
         }
     }
 }
@@ -129,10 +132,23 @@ Vue.createApp(datatables).mount('#datatables')
 </script>
 
 <style>
+table {
+    margin: 1em;
+}
+
 .chartcontainer {
     width: 75vw;
-    height: 75vh;
+    height: 65vh;
     margin: auto;
+}
+
+.datatables {
+    display: flex;
+    flex-flow: row wrap;
+    padding-left: 2em;
+    padding-right: 2em;
+    margin-left: auto;
+    margin-right: auto;
 }
 </style>
 

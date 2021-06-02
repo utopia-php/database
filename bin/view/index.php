@@ -7,16 +7,49 @@
     <title>utopia-php/database</title>
     <meta name="description" content="utopia-php/database">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/vue@next"></script>
 
 </head>
 
 <body>
 
-<div class="canvascontainer">
-    <canvas id="myChart"></canvas>
-</div>
+    <div class="chartcontainer">
+        <canvas id="radarchart"></canvas>
+    </div>
+
+    <div id="datatables">
+    <table>
+        <tr>{{ results[0].name }}</tr>
+        <tr>
+            <td v-for="r in results[0].data" :key="r.roles">{{ r.results }}</td>
+        </tr>
+    </table>
+    <br>
+    <table>
+        <tr>{{ results[1].name }}</tr>
+        <tr>
+            <td v-for="r in results[1].data" :key="r.roles">{{ r.results }}</td>
+        </tr>
+    </table>
+    </div>
 
 <script>
+
+const results = <?php
+    $directory = './results';
+    $scanned_directory = array_diff(scandir($directory), array('..', '.'));
+
+    $results = [];
+    foreach ($scanned_directory as $path) {
+        $results[] = [
+            'name' => $path,
+            'data' => json_decode(file_get_contents("{$directory}/{$path}"), true)
+        ];
+    }
+    echo json_encode($results);
+?>
+
+console.log(results)
 
 const colors = [
     {
@@ -37,26 +70,8 @@ const colors = [
     },
 ];
 
-let results = <?php
-
-    $directory = './results';
-    $scanned_directory = array_diff(scandir($directory), array('..', '.'));
-    // $files = '["' . implode('", "', $scanned_directory) . '"]';
-
-    $results = [];
-    foreach ($scanned_directory as $path) {
-        $results[] = [
-            'name' => $path,
-            'data' => json_decode(file_get_contents("{$directory}/{$path}"), true)
-        ];
-    }
-    echo json_encode($results);
-?>
-
-console.log(results);
-
+// Radar chart
 let datasets = [];
-
 for (i=0; i < results.length; i++) {
     datasets[i] = {
         label: results[i].name,
@@ -71,7 +86,7 @@ for (i=0; i < results.length; i++) {
     }
 }
 
-const data = {
+const chartData = {
     labels: [
         'created.greater(), genre.equal()',
         'genre.equal(OR)',
@@ -83,7 +98,7 @@ const data = {
 
 const config = {
   type: 'radar',
-  data: data,
+  data: chartData,
   options: {
     elements: {
       line: {
@@ -95,15 +110,26 @@ const config = {
   },
 };
 
-var myChart = new Chart(
-    document.getElementById('myChart'),
+const myChart = new Chart(
+    document.getElementById('radarchart'),
     config
 );
+
+// datatables with vue
+const datatables = {
+    data() {
+        return {
+            results: results
+        }
+    }
+}
+
+Vue.createApp(datatables).mount('#datatables')
 
 </script>
 
 <style>
-.canvascontainer {
+.chartcontainer {
     width: 75vw;
     height: 75vh;
     margin: auto;

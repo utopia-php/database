@@ -24,7 +24,7 @@ class AuthorizationTest extends TestCase
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$read' => ['user:123', 'team:123'],
-            '$write' => ['*'],
+            '$write' => ['all'],
         ]);
         $this->object = new Authorization($this->document, 'read');
     }
@@ -46,7 +46,7 @@ class AuthorizationTest extends TestCase
         $this->assertEquals(Authorization::isRole('user:456'), true);
         $this->assertEquals(Authorization::isRole('user:457'), false);
         $this->assertEquals(Authorization::isRole(''), false);
-        $this->assertEquals(Authorization::isRole('*'), true);
+        $this->assertEquals(Authorization::isRole('all'), true);
 
         $this->assertEquals($this->object->isValid($this->document->getRead()), true);
         

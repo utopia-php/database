@@ -37,7 +37,7 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$read' => ['user:123', 'team:123'],
-            '$write' => ['*'],
+            '$write' => ['all'],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -71,7 +71,7 @@ class DocumentTest extends TestCase
     public function testPermissions()
     {
         $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals(['*'], $this->document->getWrite());
+        $this->assertEquals(['all'], $this->document->getWrite());
     }
 
     public function testGetAttributes()
@@ -144,7 +144,7 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$read' => ['user:123', 'team:123'],
-            '$write' => ['*'],
+            '$write' => ['all'],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -183,7 +183,7 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$read' => ['user:123', 'team:123'],
-            '$write' => ['*'],
+            '$write' => ['all'],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -234,7 +234,7 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$read' => ['user:123', 'team:123'],
-            '$write' => ['*'],
+            '$write' => ['all'],
             'title' => 'This is a test.',
             'list' => [
                 'one'

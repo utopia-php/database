@@ -20,17 +20,21 @@
     <div id="datatables" class="datatables">
         <table v-for="n in 4" :key="n">
             <tr>
-                <th colspan="5">{{ queries[n-1] }}</th>
+                <!-- v-for is base 1 index  -->
+                <th colspan="6">{{ queries[n-1] }}</th>
             </tr>
             <tr>
+                <th></th> 
                 <th>1 role</th>
                 <th>100 roles</th>
                 <th>500 roles</th>
                 <th>1000 roles</th>
                 <th>2000 roles</th>
             </tr>
-            <tr v-for="result in results" :key="result.name">
-                <td v-for="set in result.data">{{ set.results[n-1].toFixed(4) }}</td>
+            <tr v-for="(result, index) in results" :key="result.name" v-bind:style="{ backgroundColor: colors[index].table }">
+                <!-- grab just the timestamp from result.name -->
+                <td> {{ result.name.split("_")[3] }}</td>
+                <td v-for="set in result.data">{{ set.results[n-1].toFixed(4) }} s</td>
             </tr>
         </table>
     </div>
@@ -55,20 +59,39 @@ console.log(results)
 
 const colors = [
     {
-        line: "rgb(0, 184, 148)",
-        fill: "rgba(0, 184, 148, 0.2)"
+        line: "rgba(0, 184, 148, 1.0)",
+        fill: "rgba(0, 184, 148, 0.2)",
+        table: "rgba(0, 184, 148, 0.4)",
     },
     {
-        line: "rgb(214, 48, 49)",
-        fill: "rgba(214, 48, 49, 0.2)"
+        line: "rgba(214, 48, 49, 1.0)",
+        fill: "rgba(214, 48, 49, 0.2)",
+        table: "rgba(214, 48, 49, 0.4)",
     },
     {
-        line: "rgb(9, 132, 227)",
-        fill: "rgba(9, 132, 227, 0.2)"
+        line: "rgba(9, 132, 227, 1.0)",
+        fill: "rgba(9, 132, 227, 0.2)",
+        table: "rgba(9, 132, 227, 0.4)",
     },
     {
-        line: "rgb(0, 206, 201)",
-        fill: "rgba(0, 206, 201, 0.2)"
+        line: "rgba(95, 39, 205, 1.0)",
+        fill: "rgba(95, 39, 205, 0.2)",
+        table: "rgba(95, 39, 205, 0.4)",
+    },
+    {
+        line: "rgba(34, 47, 62, 1.0)",
+        fill: "rgba(34, 47, 62, 0.2)",
+        table: "rgba(34, 47, 62, 0.4)",
+    },
+    {
+        line: "rgba(243, 104, 224, 1.0)",
+        fill: "rgba(243, 104, 224, 0.2)",
+        table: "rgba(243, 104, 224, 0.4)"
+    },
+    {
+        line: "rgba(255, 159, 67, 1.0)",
+        fill: "rgba(255, 159, 67, 0.2)",
+        table: "rgba(255, 159, 67, 0.4)",
     },
 ];
 
@@ -77,7 +100,7 @@ let datasets = [];
 for (i=0; i < results.length; i++) {
     datasets[i] = {
         label: results[i].name,
-        data: results[i].data[1].results,
+        data: results[i].data[0].results,
         fill: true,
         backgroundColor: colors[i].fill,
         borderColor: colors[i].line,
@@ -121,8 +144,9 @@ const myChart = new Chart(
 const datatables = {
     data() {
         return {
-        results: results,
-        queries: ['created.greater(), genre.equal()', 'genre.equal(OR)', 'views.greater()', 'text.search()']
+            results: results,
+            queries: chartData.labels,
+            colors: colors
         }
     }
 }
@@ -136,19 +160,23 @@ table {
     margin: 1em;
 }
 
+table td {
+    width: 110px;
+    text-align: center;
+}
+
 .chartcontainer {
-    width: 75vw;
-    height: 65vh;
+    width: 650px;
+    height: 550px;
     margin: auto;
 }
 
 .datatables {
     display: flex;
     flex-flow: row wrap;
+    justify-content: center;
     padding-left: 2em;
     padding-right: 2em;
-    margin-left: auto;
-    margin-right: auto;
 }
 </style>
 

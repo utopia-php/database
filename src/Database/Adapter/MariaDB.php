@@ -103,23 +103,15 @@ class MariaDB extends Adapter
     {
         $id = $this->filter($id);
 
-        $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id}_permissions (
-                `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(255) NOT NULL,
-                `_role` CHAR(128) NOT NULL,
-                PRIMARY KEY (`_id`),
-                INDEX `_index1` (`_uid`,`_role`)
-              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-            ->execute();
-
         return $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(255) NOT NULL,
-                `_permissions` TEXT NOT NULL,
+                `_read` TEXT NOT NULL,
+                `_write` TEXT NOT NULL,
                 PRIMARY KEY (`_id`),
-                UNIQUE KEY `_index1` (`_uid`)
+                UNIQUE KEY `_index1` (`_uid`),
+                FULLTEXT KEY `_index2` (`_read`)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
             ->execute();
     }
@@ -133,10 +125,6 @@ class MariaDB extends Adapter
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);
-        
-        $this->getPDO()
-            ->prepare("DROP TABLE {$this->getNamespace()}.{$id}_permissions;")
-            ->execute();
 
         return $this->getPDO()
             ->prepare("DROP TABLE {$this->getNamespace()}.{$id};")
@@ -271,13 +259,13 @@ class MariaDB extends Adapter
             return new Document([]);
         }
 
-        $permissions = (isset($document['_permissions'])) ? json_decode($document['_permissions'], true) : [];
         $document['$id'] = $document['_uid'];
-        $document['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
-        $document['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
+        $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
+        $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
         unset($document['_id']);
         unset($document['_uid']);
-        unset($document['_permissions']);
+        unset($document['_read']);
+        unset($document['_write']);
 
         return new Document($document);
     }
@@ -308,10 +296,11 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid, _permissions = :_permissions");
+                SET {$columns} _uid = :_uid, _read = :_read, _write = :_write");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_permissions', json_encode([Database::PERMISSION_READ => $document->getRead(), Database::PERMISSION_WRITE => $document->getWrite()]), PDO::PARAM_STR);
+        $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
+        $stmt->bindValue(':_write', json_encode($document->getWrite()), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -337,30 +326,6 @@ class MariaDB extends Adapter
                     throw $e;
                     break;
             }
-        }
-
-        /**
-         * Insert Permissions
-         * 
-         * Following performance inhancment tips from this discussions:
-         * https://stackoverflow.com/a/4559320/2299554
-         * https://stackoverflow.com/a/9088630/2299554
-         */
-        $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                (_uid, _role) VALUES ";
-        $values = [];
-
-        foreach ($document->getRead() as $key => $role) {
-            $query .= '(?, ?), ';
-            $values[] = $document->getId();
-            $values[] = $role;
-        }
-
-        $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
-
-        if(!$stmt->execute($values)) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to save permission');
         }
 
         if(!$this->getPDO()->commit()) {
@@ -396,10 +361,11 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("UPDATE {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid, _permissions = :_permissions WHERE _uid = :_uid");
+                SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_permissions', json_encode([Database::PERMISSION_READ => $document->getRead(), Database::PERMISSION_WRITE => $document->getWrite()]), PDO::PARAM_STR);
+        $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
+        $stmt->bindValue(':_write', json_encode($document->getWrite()), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -413,44 +379,6 @@ class MariaDB extends Adapter
 
         if(!empty($attributes)) {
             $stmt->execute();
-        }
-
-        /**
-         * Update Permissions
-         */
-        $stmt = $this->getPDO() // Clean all old permissions to avoid any duplications
-            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}_permissions
-                WHERE _uid = :_uid");
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        if(!$stmt->execute()) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to clean permissions');
-        }
-
-        /**
-         * Insert Permissions
-         * 
-         * Following performance inhancment tips from this discussions:
-         * https://stackoverflow.com/a/4559320/2299554
-         * https://stackoverflow.com/a/9088630/2299554
-         */
-        $query = "INSERT INTO {$this->getNamespace()}.{$name}_permissions
-                (_uid, _role) VALUES ";
-        $values = [];
-
-        foreach ($document->getRead() as $key => $role) {
-            $query .= '(?, ?), ';
-            $values[] = $document->getId();
-            $values[] = $role;
-        }
-
-        $stmt = $this->getPDO()->prepare(substr($query, 0, -2)); // Removes the last `, ` from the prepared statement
-
-        if(!$stmt->execute($values)) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to save permission');
         }
 
         if(!$this->getPDO()->commit()) {
@@ -484,17 +412,6 @@ class MariaDB extends Adapter
             $this->getPDO()->rollBack();
             throw new Exception('Failed to clean document');
         }
-
-        $stmt = $this->getPDO()
-            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}_permissions
-                WHERE _uid = :_uid");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        if(!$stmt->execute()) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to clean permissions');
-        }
         
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
@@ -526,7 +443,7 @@ class MariaDB extends Adapter
         $orders = [];
 
         foreach($roles as &$role) {
-            $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
+            $role = "+".str_replace('+', ' ', $role)."+";
         }
 
         foreach($orderAttributes as $i => $attribute) {
@@ -535,8 +452,7 @@ class MariaDB extends Adapter
             $orders[] = $attribute.' '.$orderType;
         }
 
-        $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-            ON table_main._uid = table_permissions._uid AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)" : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
@@ -550,9 +466,7 @@ class MariaDB extends Adapter
         $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
-            {$permissions}
-            WHERE ".implode(' AND ', $where)."
-            GROUP BY table_main._uid 
+            WHERE {$permissions} AND ".implode(' AND ', $where)."
             {$order}
             LIMIT :offset, :limit;
         ");
@@ -571,13 +485,13 @@ class MariaDB extends Adapter
         $results = $stmt->fetchAll();
 
         foreach ($results as &$value) {
-            $permissions = (isset($value['_permissions'])) ? json_decode($value['_permissions'], true) : [];
             $value['$id'] = $value['_uid'];
-            $value['$read'] = $permissions[Database::PERMISSION_READ] ?? [];
-            $value['$write'] = $permissions[Database::PERMISSION_WRITE] ?? [];
+            $value['$read'] = (isset($value['_read'])) ? json_decode($value['_read'], true) : [];
+            $value['$write'] = (isset($value['_write'])) ? json_decode($value['_write'], true) : [];
             unset($value['_id']);
             unset($value['_uid']);
-            unset($value['_permissions']);
+            unset($value['_read']);
+            unset($value['_write']);
 
             $value = new Document($value);
         }
@@ -604,11 +518,11 @@ class MariaDB extends Adapter
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach($roles as &$role) {
-            $role = $this->getPDO()->quote($role, PDO::PARAM_STR);
+            $role = "+".str_replace('+', ' ', $role)."+";
         }
 
-        $permissions = (Authorization::$status) ? "INNER JOIN {$this->getNamespace()}.{$name}_permissions as table_permissions
-            ON table_main._uid = table_permissions._uid AND table_permissions._role IN (".implode(',', $roles).")" : ''; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)" : '1=1'; // Disable join when no authorization required
+
         foreach($queries as $i => $query) {
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
@@ -619,9 +533,7 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
-            {$permissions}
-            WHERE ".implode(' AND ', $where)."
-            GROUP BY table_main._uid 
+            WHERE {$permissions} AND ".implode(' AND ', $where)."
             {$limit}) table_count
         ");
 

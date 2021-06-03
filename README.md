@@ -217,6 +217,14 @@ docker-compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[
 # [name]: name of filled database by bin/load
 ```
 
+#### Visualize Query Results
+
+```bash
+docker-compose exec tests bin/compare
+```
+
+Navigate to `localhost:8708` to visualize query results.
+
 ## Authors
 
 **Eldad Fux**

@@ -103,17 +103,18 @@ class MariaDB extends Adapter
     {
         $id = $this->filter($id);
 
-        return $this->getPDO()
+        $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                 `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                 `_uid` CHAR(255) NOT NULL,
                 `_read` TEXT NOT NULL,
                 `_write` TEXT NOT NULL,
                 PRIMARY KEY (`_id`),
-                UNIQUE KEY `_index1` (`_uid`),
-                FULLTEXT KEY `_index2` (`_read`)
+                UNIQUE KEY `_index1` (`_uid`)
               ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
             ->execute();
+
+        return $this->createIndex($id, '_index2', Database::INDEX_FULLTEXT, ['_read'], [], []);
     }
 
     /**
@@ -198,7 +199,7 @@ class MariaDB extends Adapter
         foreach($attributes as $key => &$attribute) {
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '('.(int)$length.')';
-            $order = $orders[$key] ?? 'ASC';
+            $order = $orders[$key] ?? '';
             $attribute = $this->filter($attribute);
 
             if(Database::INDEX_FULLTEXT === $type) {
@@ -209,7 +210,7 @@ class MariaDB extends Adapter
         }
 
         return $this->getPDO()
-            ->prepare("CREATE ".$this->getSQLIndex($type)." `{$id}` ON {$this->getNamespace()}.{$name} (".implode(', ', $attributes).");")
+            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
             ->execute();
     }
 
@@ -441,18 +442,14 @@ class MariaDB extends Adapter
         $roles = Authorization::getRoles();
         $where = ['1=1'];
         $orders = [];
-
-        foreach($roles as &$role) {
-            $role = "+".str_replace('+', ' ', $role)."+";
-        }
-
+        
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             $orders[] = $attribute.' '.$orderType;
         }
 
-        $permissions = (Authorization::$status) ? "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)" : '1=1'; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
@@ -517,11 +514,7 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach($roles as &$role) {
-            $role = "+".str_replace('+', ' ', $role)."+";
-        }
-
-        $permissions = (Authorization::$status) ? "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)" : '1=1'; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
@@ -733,29 +726,54 @@ class MariaDB extends Adapter
     /**
      * Get SQL Index
      * 
-     * @param string $operator
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param array $attributes
      * 
      * @return string
      */
-    protected function getSQLIndex(string $type): string
+    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
     {
         switch ($type) {
             case Database::INDEX_KEY:
-                return 'INDEX';
+            case Database::INDEX_ARRAY:
+                $type = 'INDEX';
             break;
             
             case Database::INDEX_UNIQUE:
-                return 'UNIQUE INDEX';
+                $type = 'UNIQUE INDEX';
             break;
             
             case Database::INDEX_FULLTEXT:
-                return 'FULLTEXT INDEX';
+                $type = 'FULLTEXT INDEX';
             break;
-
+            
             default:
                 throw new Exception('Unknown Index Type:' . $type);
             break;
         }
+
+        return 'CREATE '.$type.' '.$id.' ON '.$this->getNamespace().'.'.$collection.' ( '.implode(', ', $attributes).' );';
+    }
+
+    /**
+     * Get SQL Permissions
+     * 
+     * @param array $roles
+     * @param string $operator
+     * @param string $placeholder
+     * @param mixed $value
+     * 
+     * @return string
+     */
+    protected function getSQLPermissions(array $roles): string
+    {
+        foreach($roles as &$role) {
+            $role = "+".str_replace('+', ' ', $role)."+";
+        }
+
+        return "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
     }
 
     /**

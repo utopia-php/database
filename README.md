@@ -149,7 +149,6 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 
 ## Open Issues
 
-- Lazy index creation, maybe add a queue attribute to populate before creating the index?
 - In queries for arrays, should we create a dedicated index?
 
 ## Limitations (to be completed per adapter)

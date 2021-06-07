@@ -85,9 +85,9 @@ class MySQL extends MariaDB
     protected function getSQLPermissions(array $roles): string
     {
         foreach($roles as &$role) {
-            $role = 'JSON_CONTAINS(_read, \'"'.$role.'"\', \'$\')';
+            $role = 'JSON_CONTAINS(_read, '.$this->getPDO()->quote("\"".$role."\"").', \'$\')';
         }
-        
+
         return '('.implode(' OR ', $roles).')';
     }
 }

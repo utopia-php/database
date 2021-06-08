@@ -102,6 +102,73 @@ $cli
                 });
                 break;
 
+            case 'mysql': 
+                Co\run(function() use (&$start, $limit, $name) {
+                    // can't use PDO pool to act above the database level e.g. creating schemas
+                    $dbHost = 'mysql';
+                    $dbPort = '3307';
+                    $dbUser = 'root';
+                    $dbPass = 'password';
+
+                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+                        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+                        PDO::ATTR_TIMEOUT => 3, // Seconds
+                        PDO::ATTR_PERSISTENT => true,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    ]);
+
+                    $cache = new Cache(new NoCache());
+
+                    $database = new Database(new MariaDB($pdo), $cache);
+                    $database->setNamespace($name);
+
+                    // Outline collection schema
+                    createSchema($database);
+
+                    // reclaim resources
+                    $database = null;
+                    $pdo = null;
+
+                    // Init Faker
+                    $faker = Factory::create();
+
+                    $start = microtime(true);
+
+                    // create PDO pool for coroutines
+                    $pool = new PDOPool(
+                        (new PDOConfig())
+                            ->withHost('mysql')
+                            ->withPort(3307)
+                            // ->withUnixSocket('/tmp/mysql.sock')
+                            ->withDbName($name)
+                            ->withCharset('utf8mb4')
+                            ->withUsername('root')
+                            ->withPassword('password')
+                    , 128);
+
+                    // A coroutine is assigned per 1000 documents
+                    for ($i=0; $i < $limit/1000; $i++) {
+                        go(function() use ($pool, $faker, $name, $cache) {
+                            $pdo = $pool->get();
+
+                            $database = new Database(new MariaDB($pdo), $cache);
+                            $database->setNamespace($name);
+
+                            // Each coroutine loads 1000 documents
+                            for ($i=0; $i < 1000; $i++) {
+                                addArticle($database, $faker);
+                            }
+
+                            // Reclaim resources
+                            $pool->put($pdo);
+                            $database = null;
+                        });
+                    }
+
+                });
+                break;
+
             case 'mongodb':
                 Co\run(function() use (&$start, $limit, $name) {
                     $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
@@ -164,7 +231,7 @@ function addArticle($database, $faker) {
         // Five random users out of 10,000 get read access
         '$read' => [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         // Three random users out of 10,000 get write access
-        '$write' => ['*', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+        '$write' => ['all', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         'author' => $faker->name(),
         'created' => $faker->unixTime(),
         'text' => $faker->realTextBetween(1000, 4000),

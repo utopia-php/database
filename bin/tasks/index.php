@@ -59,6 +59,23 @@ $cli
                 $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
                 break;
 
+            case 'mysql':
+                $dbHost = 'mysql';
+                $dbPort = '3307';
+                $dbUser = 'root';
+                $dbPass = 'password';
+
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+                    PDO::ATTR_TIMEOUT => 3, // Seconds
+                    PDO::ATTR_PERSISTENT => true,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                ]);
+
+                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                break;
+
             default:
                 Console::error('Adapter not supported');
                 return;

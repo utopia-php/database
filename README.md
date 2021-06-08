@@ -102,8 +102,8 @@ $database->createIndex('movies', 'index1', Database::INDEX_KEY, ['year'], [128],
 
 ```php
 static::getDatabase()->createDocument('movies', new Document([
-    '$read' => ['*', 'user1', 'user2'],
-    '$write' => ['*', 'user1x', 'user2x'],
+    '$read' => ['all', 'user1', 'user2'],
+    '$write' => ['all', 'user1x', 'user2x'],
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',
     'year' => 2019,
@@ -149,7 +149,6 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 
 ## Open Issues
 
-- Lazy index creation, maybe add a queue attribute to populate before creating the index?
 - In queries for arrays, should we create a dedicated index?
 
 ## Limitations (to be completed per adapter)

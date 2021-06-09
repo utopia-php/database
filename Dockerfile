@@ -38,6 +38,12 @@ WORKDIR /usr/src/code
 
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
+
+RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
+
 COPY --from=step0 /usr/local/src/vendor /usr/src/code/vendor
 
 # Add Source Code

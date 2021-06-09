@@ -32,6 +32,8 @@
     },
     "require-dev": {
         "phpunit/phpunit": "^9.4",
-        "vimeo/psalm": "4.0.1"
+        "vimeo/psalm": "4.0.1",
+        "fakerphp/faker": "^1.14",
+        "utopia-php/cli": "^0.11.0"
     }
 }

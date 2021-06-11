@@ -266,8 +266,8 @@ class Database
         
         return $this->createDocument(Database::COLLECTIONS, new Document([
             '$id' => $id,
-            '$read' => ['all'],
-            '$write' => ['all'],
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
             'name' => $id,
             'attributes' => [],
             'indexes' => [],

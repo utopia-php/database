@@ -20,7 +20,7 @@ abstract class Base extends TestCase
 
     public function setUp(): void
     {
-        Authorization::setRole('all');
+        Authorization::setRole('role:all');
     }
 
     public function tearDown(): void
@@ -218,8 +218,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, true, true));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,
@@ -323,8 +323,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, true, true));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
@@ -334,8 +334,8 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Frozen II',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2019,
@@ -345,8 +345,8 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Captain America: The First Avenger',
             'director' => 'Joe Johnston',
             'year' => 2011,
@@ -356,8 +356,8 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Captain Marvel',
             'director' => 'Anna Boden & Ryan Fleck',
             'year' => 2019,
@@ -367,8 +367,8 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Work in Progress',
             'director' => 'TBD',
             'year' => 2025,
@@ -379,7 +379,7 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createDocument('movies', new Document([
             '$read' => ['userx'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Work in Progress 2',
             'director' => 'TBD',
             'year' => 2026,
@@ -396,8 +396,8 @@ abstract class Base extends TestCase
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
         $this->assertEquals('movies', $documents[0]->getCollection());
-        $this->assertEquals(['all', 'user1', 'user2'], $documents[0]->getRead());
-        $this->assertEquals(['all', 'user1x', 'user2x'], $documents[0]->getWrite());
+        $this->assertEquals(['role:all', 'user1', 'user2'], $documents[0]->getRead());
+        $this->assertEquals(['role:all', 'user1x', 'user2x'], $documents[0]->getWrite());
         $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
         $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
         $this->assertIsString($documents[0]->getAttribute('director'));
@@ -772,7 +772,7 @@ abstract class Base extends TestCase
 
         $document = new Document([
             '$id' => '608fdbe51361a',
-            '$read' => ['all'],
+            '$read' => ['role:all'],
             '$write' => ['user:608fdbe51361a'],
             'email' => 'test@example.com',
             'emailVerification' => false,
@@ -801,7 +801,7 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->encode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertEquals(['all'], $result->getAttribute('$read'));
+        $this->assertEquals(['role:all'], $result->getAttribute('$read'));
         $this->assertEquals(['user:608fdbe51361a'], $result->getAttribute('$write'));
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
@@ -821,7 +821,7 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->decode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertEquals(['all'], $result->getAttribute('$read'));
+        $this->assertEquals(['role:all'], $result->getAttribute('$read'));
         $this->assertEquals(['user:608fdbe51361a'], $result->getAttribute('$write'));
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
@@ -849,8 +849,8 @@ abstract class Base extends TestCase
     public function testReadPermissionsSuccess(Document $document)
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['all'],
-            '$write' => ['all'],
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,
@@ -866,7 +866,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $document->isEmpty());
         
-        Authorization::setRole('all');
+        Authorization::setRole('role:all');
 
         return $document;
     }
@@ -897,8 +897,8 @@ abstract class Base extends TestCase
     public function testWritePermissionsSuccess(Document $document)
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['all'],
-            '$write' => ['all'],
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,
@@ -921,8 +921,8 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['all'],
-            '$write' => ['all'],
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,
@@ -941,8 +941,8 @@ abstract class Base extends TestCase
         $this->expectException(ExceptionAuthorization::class);
 
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['all'],
-            '$write' => ['all'],
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,
@@ -954,8 +954,8 @@ abstract class Base extends TestCase
 
         $document = static::getDatabase()->updateDocument('documents', $document->getId(), new Document([
             '$id' => $document->getId(),
-            '$read' => ['all'],
-            '$write' => ['all'],
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
             'float' => 5.55,
@@ -991,8 +991,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['all', 'user1', 'user2'],
-            '$write' => ['all', 'user1x', 'user2x'],
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,

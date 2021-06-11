@@ -10,7 +10,7 @@ class Authorization extends Validator
     /**
      * @var array
      */
-    static $roles = ['all' => true];
+    static $roles = ['role:all' => true];
 
     /**
      * @var Document

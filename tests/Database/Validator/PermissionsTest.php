@@ -26,7 +26,7 @@ class PermissionsTest extends TestCase
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$read' => ['user:123', 'team:123'],
-            '$write' => ['all'],
+            '$write' => ['role:all'],
         ]);
         
         $this->assertEquals($object->isValid($document->getRead()), true);

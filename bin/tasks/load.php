@@ -231,7 +231,7 @@ function addArticle($database, $faker) {
         // Five random users out of 10,000 get read access
         '$read' => [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         // Three random users out of 10,000 get write access
-        '$write' => ['all', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+        '$write' => ['role:all', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         'author' => $faker->name(),
         'created' => $faker->unixTime(),
         'text' => $faker->realTextBetween(1000, 4000),

@@ -515,7 +515,7 @@ abstract class Base extends TestCase
         /**
          * ORDER BY
          */
-        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC]);
 
         $this->assertEquals(6, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
@@ -541,22 +541,22 @@ abstract class Base extends TestCase
         /**
          * Limit
          */
-        $documents = static::getDatabase()->find('movies', [], 4, 0);
-
-        $this->assertEquals(4, count($documents));
-        $this->assertEquals('Frozen', $documents[0]['name']);
-        $this->assertEquals('Frozen II', $documents[1]['name']);
-        $this->assertEquals('Captain America: The First Avenger', $documents[2]['name']);
-        $this->assertEquals('Captain Marvel', $documents[3]['name']);
-
-        /**
-         * Limit + Offset
-         */
-        $documents = static::getDatabase()->find('movies', [], 4, 2);
+        $documents = static::getDatabase()->find('movies', [], 4, 0, ['name']);
 
         $this->assertEquals(4, count($documents));
         $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertEquals('Frozen', $documents[2]['name']);
+        $this->assertEquals('Frozen II', $documents[3]['name']);
+
+        /**
+         * Limit + Offset
+         */
+        $documents = static::getDatabase()->find('movies', [], 4, 2, ['name']);
+
+        $this->assertEquals(4, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertEquals('Frozen II', $documents[1]['name']);
         $this->assertEquals('Work in Progress', $documents[2]['name']);
         $this->assertEquals('Work in Progress 2', $documents[3]['name']);
     }
@@ -566,8 +566,8 @@ abstract class Base extends TestCase
      */
     public function testFindFirst()
     {
-        $document = static::getDatabase()->findFirst('movies', [], 4, 2);
-        $this->assertEquals('Captain America: The First Avenger', $document['name']);
+        $document = static::getDatabase()->findFirst('movies', [], 4, 2, ['name']);
+        $this->assertEquals('Frozen', $document['name']);
 
         $document = static::getDatabase()->findFirst('movies', [], 4, 10);
         $this->assertEquals(false, $document);
@@ -578,7 +578,7 @@ abstract class Base extends TestCase
      */
     public function testFindLast()
     {
-        $document = static::getDatabase()->findLast('movies', [], 4, 2);
+        $document = static::getDatabase()->findLast('movies', [], 4, 2, ['name']);
         $this->assertEquals('Work in Progress 2', $document['name']);
 
         $document = static::getDatabase()->findLast('movies', [], 4, 10);

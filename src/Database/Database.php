@@ -25,6 +25,7 @@ class Database
     const INDEX_FULLTEXT = 'fulltext';
     const INDEX_UNIQUE = 'unique';
     const INDEX_SPATIAL = 'spatial';
+    const INDEX_ARRAY = 'array';
 
     // Orders
     const ORDER_ASC = 'ASC';

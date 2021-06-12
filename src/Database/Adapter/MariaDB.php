@@ -456,8 +456,8 @@ class MariaDB extends Adapter
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
-
-            $where[] = implode(' OR ', $conditions);
+            $condition = implode(' OR ', $conditions);
+            $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
         $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';

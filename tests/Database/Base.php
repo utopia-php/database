@@ -82,22 +82,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, true, 1.5));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, true, false));
 
-        // Type of provided default value does not match
-        // Testing for failure
-        $this->expectException(\Exception::class);
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'string_bad_default', Database::VAR_STRING, 256, true, 1));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'string_bad_default', Database::VAR_STRING, 256, true, 1.5));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'string_bad_default', Database::VAR_STRING, 256, true, false));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'integer_bad_default', Database::VAR_INTEGER, 0, true, "one"));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'integer_bad_default', Database::VAR_INTEGER, 0, true, 1.5));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'integer_bad_default', Database::VAR_INTEGER, 0, true, false));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'float_bad_default', Database::VAR_FLOAT, 0, true, 1));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'float_bad_default', Database::VAR_FLOAT, 0, true, "one"));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'float_bad_default', Database::VAR_FLOAT, 0, true, false));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'boolean_bad_default', Database::VAR_BOOLEAN, 0, true, 1));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'boolean_bad_default', Database::VAR_BOOLEAN, 0, true, "true"));
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'boolean_bad_default', Database::VAR_BOOLEAN, 0, true, 1.5));
-
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(15, $collection->getAttribute('attributes'));
 
@@ -123,15 +107,60 @@ abstract class Base extends TestCase
         $this->assertCount(4, $collection->getAttribute('attributes'));
 
         // Delete default
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, 'test'));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, 1));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, true, 1.5));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, true, false));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_default'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer_default'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float_default'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_default'));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(0, $collection->getAttribute('attributes'));
 
+        // Using this collection to test invalid default values
+        // static::getDatabase()->deleteCollection('attributes');
+    }
+
+    /**
+     * Using phpunit dataProviders to check that all these combinations of types/defaults throw exceptions
+     * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
+     */
+    public function invalidDefaultValues()
+    {
+        return [
+            [Database::VAR_STRING, 1],
+            [Database::VAR_STRING, 1.5],
+            [Database::VAR_STRING, false],
+            [Database::VAR_INTEGER, "one"],
+            [Database::VAR_INTEGER, 1.5],
+            [Database::VAR_INTEGER, true],
+            [Database::VAR_FLOAT, 1],
+            [Database::VAR_FLOAT, "one"],
+            [Database::VAR_FLOAT, false],
+            [Database::VAR_BOOLEAN, 0],
+            [Database::VAR_BOOLEAN, "false"],
+            [Database::VAR_BOOLEAN, 0.5],
+        ];
+    }
+
+    /**
+     * @depends testCreateDeleteAttribute
+     * @dataProvider invalidDefaultValues
+     * @expectedException Exception
+     */
+    public function testInvalidDefaultValues($type, $default)
+    {
+        $this->expectException(\Exception::class);
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_default', $type, 256, true, $default));
+    }
+
+    /**
+     * Ensure the collection is removed after use
+     * 
+     * @depends testInvalidDefaultValues
+     */
+    public function testCleanupInvalidDefaultValues()
+    {
         static::getDatabase()->deleteCollection('attributes');
+        $this->assertEquals(1,1);
     }
 
     public function testAddRemoveAttribute()

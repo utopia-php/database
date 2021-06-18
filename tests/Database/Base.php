@@ -68,13 +68,38 @@ abstract class Base extends TestCase
         $this->assertCount(7, $collection->getAttribute('attributes'));
 
         // Array
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_list', Database::VAR_INTEGER, 0, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_list', Database::VAR_FLOAT, 0, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, 'string', true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_list', Database::VAR_INTEGER, 0, true, 0, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_list', Database::VAR_FLOAT, 0, true, 0.1, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, false, true, true));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(11, $collection->getAttribute('attributes'));
+
+        // Default values
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, 'test'));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, 1));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, true, 1.5));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, true, false));
+
+        // Type of provided default value does not match
+        // Testing for failure
+        $this->expectException(\Exception::class);
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'string_bad_default', Database::VAR_STRING, 256, true, 1));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'string_bad_default', Database::VAR_STRING, 256, true, 1.5));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'string_bad_default', Database::VAR_STRING, 256, true, false));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'integer_bad_default', Database::VAR_INTEGER, 0, true, "one"));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'integer_bad_default', Database::VAR_INTEGER, 0, true, 1.5));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'integer_bad_default', Database::VAR_INTEGER, 0, true, false));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'float_bad_default', Database::VAR_FLOAT, 0, true, 1));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'float_bad_default', Database::VAR_FLOAT, 0, true, "one"));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'float_bad_default', Database::VAR_FLOAT, 0, true, false));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'boolean_bad_default', Database::VAR_BOOLEAN, 0, true, 1));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'boolean_bad_default', Database::VAR_BOOLEAN, 0, true, "true"));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'boolean_bad_default', Database::VAR_BOOLEAN, 0, true, 1.5));
+
+        $collection = static::getDatabase()->getCollection('attributes');
+        $this->assertCount(15, $collection->getAttribute('attributes'));
 
         // Delete
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
@@ -86,13 +111,22 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(4, $collection->getAttribute('attributes'));
+        $this->assertCount(8, $collection->getAttribute('attributes'));
 
         // Delete Array
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_list'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer_list'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float_list'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_list'));
+
+        $collection = static::getDatabase()->getCollection('attributes');
+        $this->assertCount(4, $collection->getAttribute('attributes'));
+
+        // Delete default
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, 'test'));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, 1));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, true, 1.5));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, true, false));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(0, $collection->getAttribute('attributes'));
@@ -214,8 +248,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, '', true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, '', true, true));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
@@ -320,7 +354,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, '', true, true));
 
         static::getDatabase()->createDocument('movies', new Document([
             '$read' => ['role:all', 'user1', 'user2'],

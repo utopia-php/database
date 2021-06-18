@@ -331,13 +331,14 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
+     * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
      * @param array $filters
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -346,6 +347,7 @@ class Database
             'type' => $type,
             'size' => $size,
             'required' => $required,
+            'default' => $default,
             'signed' => $signed,
             'array' => $array,
             'filters' => $filters,
@@ -374,6 +376,10 @@ class Database
             default:
                 throw new Exception('Unknown attribute type: '.$type);
                 break;
+        }
+
+        if (!\is_null($default) && $type !== \gettype($default)) {
+            throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
         }
 
         return $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
@@ -416,13 +422,14 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
+     * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
      * @param array $filters
      * 
      * @return bool
      */
-    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -431,6 +438,7 @@ class Database
             'type' => $type,
             'size' => $size,
             'required' => $required,
+            'default' => $default,
             'signed' => $signed,
             'array' => $array,
             'filters' => $filters,

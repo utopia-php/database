@@ -562,6 +562,102 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testUpdateDocument
+     */
+    public function testFindAndDelete()
+    {
+        static::getDatabase()->createCollection('movies2');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies2', 'name', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies2', 'director', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies2', 'year', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies2', 'price', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies2', 'active', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies2', 'generes', Database::VAR_STRING, 32, true, true, true));
+
+        static::getDatabase()->createDocument('movies2', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Frozen',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
+
+        static::getDatabase()->createDocument('movies2', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Frozen II',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2019,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
+
+        static::getDatabase()->createDocument('movies2', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Captain America: The First Avenger',
+            'director' => 'Joe Johnston',
+            'year' => 2011,
+            'price' => 25.94,
+            'active' => true,
+            'generes' => ['science fiction', 'action', 'comics'],
+        ]));
+
+        static::getDatabase()->createDocument('movies2', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Captain Marvel',
+            'director' => 'Anna Boden & Ryan Fleck',
+            'year' => 2019,
+            'price' => 25.99,
+            'active' => true,
+            'generes' => ['science fiction', 'action', 'comics'],
+        ]));
+
+        static::getDatabase()->createDocument('movies2', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Work in Progress',
+            'director' => 'TBD',
+            'year' => 2025,
+            'price' => 0.0,
+            'active' => false,
+            'generes' => [],
+        ]));
+
+        static::getDatabase()->createDocument('movies2', new Document([
+            '$read' => ['userx'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Work in Progress 2',
+            'director' => 'TBD',
+            'year' => 2026,
+            'price' => 0.0,
+            'active' => false,
+            'generes' => [],
+        ]));
+
+        /**
+         * Check Basic
+         */
+        $documents = static::getDatabase()->find('movies2');
+
+        $this->assertEquals(6, count($documents));
+        $this->assertNotEmpty($documents[0]->getId());
+        
+        $res = static::getDatabase()->findAndDelete('movies2', [
+            new Query('year', Query::TYPE_EQUAL, [2019]),
+        ],25, ['name', '_uid']);
+
+        $this->assertIsBool($res);
+        $this->assertEquals(true, $res);
+    }
+
+    /**
      * @depends testFind
      */
     public function testFindFirst()

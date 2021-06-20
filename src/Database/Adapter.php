@@ -250,7 +250,7 @@ abstract class Adapter
      *
      * @return Document[]
      */
-    abstract public function findAndDelete(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): bool;
+    abstract public function findAndDelete(string $collection, array $queries = [], int $limit = 25, array $orderAttributes = [], array $orderTypes = []): bool;
     
     /**
      * Count Documents

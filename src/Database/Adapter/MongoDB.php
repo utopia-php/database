@@ -392,6 +392,49 @@ class MongoDB extends Adapter
 
         return $found;
     }
+
+    /**
+     * Find and Delete Documents
+     *
+     * Find and delete data sets using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return bool
+     */
+    public function findAndDelete(string $collection, array $queries = [], int $limit = 25, array $orderAttributes = [], array $orderTypes = []): bool
+    {
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        $filters = [];
+
+        $options = ['sort' => [], 'limit' => $limit];
+
+        // orders
+        foreach($orderAttributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
+            $orderType = $this->getOrder($this->filter($orderTypes[$i] ?? Database::ORDER_ASC));
+            $options['sort'][$attribute] = $orderType;
+        }
+
+        // queries
+        $filters = $this->buildFilters($queries);
+
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $filters['_read']['$in'] = Authorization::getRoles();
+        }
+
+        $collection->deleteMany($filters, $options);
+
+        return true;
+    }
     
     /**
      * Count Documents

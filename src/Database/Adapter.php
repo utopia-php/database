@@ -237,6 +237,22 @@ abstract class Adapter
     abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array;
     
     /**
+     * Find and Delete Documents
+     *
+     * Find and delete data sets using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return Document[]
+     */
+    abstract public function findAndDelete(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): bool;
+    
+    /**
      * Count Documents
      * 
      * @param string $collection

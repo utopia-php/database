@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
+use Utopia\Database\Validator\Key;
 
 class Permissions extends Validator
 {
@@ -19,6 +20,15 @@ class Permissions extends Validator
         'role',
         'team',
         'user',
+    ];
+
+    /**
+     * @var string[]
+     */
+    protected $roles = [
+        'all',
+        'guest',
+        'member',
     ];
 
     /**
@@ -71,14 +81,47 @@ class Permissions extends Validator
                 return false;
             }
 
-            // Substring before ":" must be a known permission type
+            /**
+             * Split role into format {$type}:{$value}
+             *
+             * Substring before ":" $type must be a known permission type
+             * Substring after ":" $value must not be empty and satisty requirements per $type
+             */
+
             $type = \substr($role, 0, \strpos($role, ':'));
             $value = \substr($role, \strpos($role, ':') + 1);
 
-            if (!\in_array($type, $this->permissions)) {
-                $this->message = 'Permission role must begin with one of: ' . \implode(", ", $this->permissions);
+            if (strlen($value) === 0) {
+                $this->message = 'Permission role value must not be empty';
 
                 return false;
+            }
+
+            switch ($type) {
+                case 'team':
+                    // Team:[role] can have any string as role
+                    break;
+                case 'role':
+                    // role:$value must be in list of $roles
+                    if (!\in_array($value, $this->roles)) {
+                        $this->message = 'Permission roles must be one of: ' . \implode(", ", $this->roles);
+                        return false;
+                    }
+                    break;
+                case 'user':
+                case 'member':
+                    // member:[memberId] and user:[userId] must be valid keys
+                    $key = new Key();
+                    if (!$key->isValid($value)) {
+                        $this->message = $key->getDescription();
+
+                        return false;
+                    }
+                    break;
+
+                default:
+                    $this->message = 'Permission role must begin with one of: ' . \implode(", ", $this->permissions);
+                    return false; break;
             }
         }
 

@@ -71,11 +71,11 @@ class PermissionsTest extends TestCase
 
         // Only contains a single ':'
         $this->assertEquals($object->isValid(['user1234']), false);
-        $this->assertEquals($object->getDescription(), 'Permission role must contain one and only one ":" character: user1234');
+        $this->assertEquals($object->getDescription(), 'Permission roles must contain one and only one ":" character.');
         $this->assertEquals($object->isValid(['user::1234']), false);
-        $this->assertEquals($object->getDescription(), 'Permission role must contain one and only one ":" character: user::1234');
+        $this->assertEquals($object->getDescription(), 'Permission roles must contain one and only one ":" character.');
         $this->assertEquals($object->isValid(['user:123:4']), false);
-        $this->assertEquals($object->getDescription(), 'Permission role must contain one and only one ":" character: user:123:4');
+        $this->assertEquals($object->getDescription(), 'Permission roles must contain one and only one ":" character.');
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertEquals($object->isValid(['memmber:1234']), false);

@@ -30,14 +30,17 @@ class PermissionsTest extends TestCase
         ]);
         
         $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getWrite()), true);
         
         $document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$read' => ['user:123', 'team:123'],
+            '$read' => ['member:123'],
         ]);
         
         $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getWrite()), true);
         $this->assertEquals($object->isValid('sting'), false);
         
     }

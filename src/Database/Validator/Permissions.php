@@ -65,13 +65,13 @@ class Permissions extends Validator
             $pos = \strpos($role, ':');
             // Should only contain a single ":" char
             if ($pos === false || $pos !== \strrpos($role, ':')) {
-                $this->message = 'Permission role must contain one and only one \':\' character: ' . $role;
+                $this->message = 'Permission role must contain one and only one ":" character: ' . $role;
 
                 return false;
             }
 
             // Substring before ":" must be a known permission
-            if (!\in_array(\substr($role, 0, \strpos($role, ":")), $this->permissions)) {
+            if (!\in_array(\substr($role, 0, \strpos($role, ':')), $this->permissions)) {
                 $this->message = 'Permission role must begin with one of: ' . \implode(", ", $this->permissions);
 
                 return false;

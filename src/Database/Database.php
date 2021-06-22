@@ -378,8 +378,30 @@ class Database
                 break;
         }
 
-        if (!\is_null($default) && $type !== \gettype($default)) {
-            throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+        // only execute when $default is given
+        if (!\is_null($default)) {
+            switch (\gettype($default)) {
+                // first enforce typed array for each value in $default
+                case 'array':
+                    foreach ($default as $value) {
+                        if ($type !== \gettype($value)) {
+                            throw new Exception('Default value contents do not match given type ' . $type);
+                        }
+                    }
+                    break;
+                // then enforce for primitive types
+                case self::VAR_STRING:
+                case self::VAR_INTEGER:
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                    if ($type !== \gettype($default)) {
+                        throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    }
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type for: '.$default);
+                    break;
+            }
         }
 
         return $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
@@ -714,6 +736,8 @@ class Database
         $collection = $this->getCollection($collection);
 
         /**
+         * Find all attributes with default values
+         *
          * @var Document[]
          */
         $defaults = array_filter($collection->getAttributes()['attributes'], function ($attribute) {
@@ -721,10 +745,7 @@ class Database
         });
 
         foreach ($defaults as $default) {
-            // TODO@kodumbeats default values for arrays?
-            if ($default->getAttribute('array') === false) {
-                $document->setAttribute($default->getId(), $default->getAttribute('default'));
-            }
+            $document->setAttribute($default->getId(), $default->getAttribute('default'));
         }
 
         $document

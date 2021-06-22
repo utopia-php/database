@@ -307,6 +307,35 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testCreateDocumentDefaults()
+    {
+        static::getDatabase()->createCollection('defaults');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'string', Database::VAR_STRING, 128, false, 'default'));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'integer', Database::VAR_INTEGER, 0, false, 1));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'float', Database::VAR_FLOAT, 0, false, 1.5));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'boolean', Database::VAR_BOOLEAN, 0, false, true));
+        // TODO@kodumbeats default values for arrays?
+        // $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'colors', Database::VAR_STRING, 32, true, 'red', true, true));
+
+        $document = static::getDatabase()->createDocument('defaults', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+        ]));
+
+        $this->assertNotEmpty(true, $document->getId());
+
+        $this->assertIsString($document->getAttribute('string'));
+        $this->assertEquals('default', $document->getAttribute('string'));
+        $this->assertIsInt($document->getAttribute('integer'));
+        $this->assertEquals(1, $document->getAttribute('integer'));
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(1.5, $document->getAttribute('float'));
+
+        // cleanup collection
+        static::getDatabase()->deleteCollection('defaults');
+    }
+
     /**
      * @depends testCreateDocument
      */

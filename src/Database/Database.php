@@ -713,6 +713,20 @@ class Database
 
         $collection = $this->getCollection($collection);
 
+        /**
+         * @var Document[]
+         */
+        $defaults = array_filter($collection->getAttributes()['attributes'], function ($attribute) {
+            return (!\is_null($attribute->getAttribute('default')));
+        });
+
+        foreach ($defaults as $default) {
+            // TODO@kodumbeats default values for arrays?
+            if ($default->getAttribute('array') === false) {
+                $document->setAttribute($default->getId(), $default->getAttribute('default'));
+            }
+        }
+
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
             ->setAttribute('$collection', $collection->getId())

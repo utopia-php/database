@@ -98,9 +98,6 @@ class Permissions extends Validator
             }
 
             switch ($type) {
-                case 'team':
-                    // Team:[role] can have any string as role
-                    break;
                 case 'role':
                     // role:$value must be in list of $roles
                     if (!\in_array($value, $this->roles)) {
@@ -108,9 +105,10 @@ class Permissions extends Validator
                         return false;
                     }
                     break;
+                case 'team':
                 case 'user':
                 case 'member':
-                    // member:[memberId] and user:[userId] must be valid keys
+                    // every valid $value must be a valid Key
                     $key = new Key();
                     if (!$key->isValid($value)) {
                         $this->message = $key->getDescription();

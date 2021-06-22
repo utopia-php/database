@@ -96,7 +96,7 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->isValid(['role:memer']), false);
         $this->assertEquals($object->getDescription(), 'Permission roles must be one of: all, guest, member');
 
-        // member:[memberId] and user:[userId] must be valid keys
+        // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading underscores
         $this->assertEquals($object->isValid(['member:_1234']), false);
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
@@ -106,7 +106,7 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
         $this->assertEquals($object->isValid(['user:12&4']), false);
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
-        $this->assertEquals($object->isValid(['user:ab(124']), false);
+        $this->assertEquals($object->isValid(['team:ab(124']), false);
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
 
         // Shorter than 32 chars

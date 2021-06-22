@@ -757,7 +757,9 @@ class Database
          * Find all attributes with default values
          * @var Document[]
          */
-        $defaults = array_filter($collection->getAttributes()['attributes'], function ($attribute) {
+        $attributes = $collection->getAttributes()['attributes'];
+
+        $defaults = array_filter($attributes, function ($attribute) {
             return (!\is_null($attribute->getAttribute('default')));
         });
 

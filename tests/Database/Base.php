@@ -324,8 +324,6 @@ abstract class Base extends TestCase
 
         $this->assertNotEmpty(true, $document->getId());
 
-        var_dump($document);
-
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('default', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));

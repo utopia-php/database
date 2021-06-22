@@ -735,19 +735,6 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        /**
-         * Find all attributes with default values
-         *
-         * @var Document[]
-         */
-        $defaults = array_filter($collection->getAttributes()['attributes'], function ($attribute) {
-            return (!\is_null($attribute->getAttribute('default')));
-        });
-
-        foreach ($defaults as $default) {
-            $document->setAttribute($default->getId(), $default->getAttribute('default'));
-        }
-
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
             ->setAttribute('$collection', $collection->getId())
@@ -760,6 +747,35 @@ class Database
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
         }
+
+        // Decode after validating structure to add default values
+        // TODO@kodumbeats refactor this to make the decoding unnecessary
+
+        $document = $this->decode($collection, $document);
+
+        /**
+         * Find all attributes with default values
+         * @var Document[]
+         */
+        $defaults = array_filter($collection->getAttributes()['attributes'], function ($attribute) {
+            return (!\is_null($attribute->getAttribute('default')));
+        });
+
+        foreach ($defaults as $default) {
+            if (\is_null($document->getAttribute($default->getId(), null))) {
+                $document->setAttribute($default->getId(), $default->getAttribute('default'));
+            }
+        }
+
+        // re-encode and revalidate structure
+        $document = $this->encode($collection, $document);
+
+        if (!$validator->isValid($document)) {
+            throw new StructureException($validator->getDescription());
+        }
+
+        // End duplicated decoding
+        // TODO@kodumbeats refactor this to make the decoding unnecessary
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
         

@@ -651,7 +651,7 @@ abstract class Base extends TestCase
         
         $res = static::getDatabase()->findAndDelete('movies2', [
             new Query('year', Query::TYPE_EQUAL, [2019]),
-        ],25, ['name', '_uid']);
+        ]);
 
         $this->assertIsBool($res);
         $this->assertEquals(true, $res);

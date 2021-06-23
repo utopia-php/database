@@ -838,11 +838,11 @@ class Database
      *
      * @return bool
      */
-    public function findAndDelete(string $collection, array $queries = [], int $limit = 25, array $orderAttributes = [], array $orderTypes = []): bool
+    public function findAndDelete(string $collection, array $queries = []): bool
     {
         $collection = $this->getCollection($collection);
 
-        return $this->adapter->findAndDelete($collection->getId(), $queries, $limit, $orderAttributes, $orderTypes);
+        return $this->adapter->findAndDelete($collection->getId(), $queries);
     }
 
     /**

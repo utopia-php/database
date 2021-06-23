@@ -88,8 +88,8 @@ class Permissions extends Validator
              * Substring after ":" $value must not be empty and satisty requirements per $type
              */
 
-            $type = \substr($role, 0, \strpos($role, ':'));
-            $value = \substr($role, \strpos($role, ':') + 1);
+            $type = \substr($role, 0, $pos);
+            $value = \substr($role, $pos + 1);
 
             if (strlen($value) === 0) {
                 $this->message = 'Permission role value must not be empty';

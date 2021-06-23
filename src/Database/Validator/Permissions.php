@@ -110,7 +110,7 @@ class Permissions extends Validator
                     // user:$id and member:$id must be valid Keys
                     $key = new Key();
                     if (!$key->isValid($value)) {
-                        $this->message = $key->getDescription();
+                        $this->message = 'Permission role must contain a valid $id: ' . $key->getDescription();
 
                         return false;
                     }

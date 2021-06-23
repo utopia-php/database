@@ -105,15 +105,64 @@ class Permissions extends Validator
                         return false;
                     }
                     break;
-                case 'team':
                 case 'user':
                 case 'member':
-                    // every valid $value must be a valid Key
+                    // user:$id and member:$id must be valid Keys
                     $key = new Key();
                     if (!$key->isValid($value)) {
                         $this->message = $key->getDescription();
 
                         return false;
+                    }
+                    break;
+                case 'team':
+                    // team:$teamId or team:$teamId/$teamRole
+                    $key = new Key();
+
+                    // must have at most a single "/" char
+                    $pos = \strpos($value, '/');
+
+                    // if no team role is given and and $id is not valid
+                    if ($pos === false && !$key->isValid($value)) {
+                        $this->message = 'Permission role must contain a valid $id: ' . $key->getDescription();
+
+                        return false;
+                    }
+
+                    // if "/" is at index zero
+                    if ($pos === 0) {
+                        $this->message = 'Team ID must not be empty.';
+
+                        return false;
+                    }
+
+                    // if a "/" is found, ensure is unique and both substrings are valid
+                    if ($pos > 0) {
+                        // Split into format {$teamId}:{$teamRole}
+                        $teamId = \substr($value, 0, $pos);
+                        $teamRole = \substr($value, $pos + 1);
+
+                        // $teamRole must not be empty
+                        // Case $teamId < 1 already covered.
+                        if (strlen($teamRole) < 1) {
+                            $this->message = 'Team role must not be empty.';
+
+                            return false;
+                        } 
+
+                        // Ensure "/" is unique
+                        if ($pos !== \strrpos($value, '/')) {
+                            $this->message = 'Permission roles may contain at most one "/" character.';
+
+                            return false;
+                        }
+
+                        // $teamId and $teamRole must both be valid Keys
+                        if (!$key->isValid($teamId) || !$key->isValid($teamRole)) {
+                            $this->message = 'Permission role for team must contain valid teamID and role: ' . $key->getDescription();
+
+                            return false;
+                        }
                     }
                     break;
 

@@ -36,7 +36,7 @@ class PermissionsTest extends TestCase
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$read' => ['user:123', 'team:123'],
-            '$read' => ['member:123'],
+            '$read' => ['member:123', 'team:123/edit'],
         ]);
         
         $this->assertEquals($object->isValid($document->getRead()), true);
@@ -106,7 +106,7 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
         $this->assertEquals($object->isValid(['user:12&4']), false);
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
-        $this->assertEquals($object->isValid(['team:ab(124']), false);
+        $this->assertEquals($object->isValid(['member:ab(124']), false);
         $this->assertEquals($object->getDescription(), 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
 
         // Shorter than 32 chars
@@ -123,5 +123,21 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->getDescription(), 'Permission role must begin with one of: member, role, team, user');
         $this->assertEquals($object->isValid(['userr:1234']), false);
         $this->assertEquals($object->getDescription(), 'Permission role must begin with one of: member, role, team, user');
+
+        // Team permission
+        $this->assertEquals($object->isValid(['team:_abcd']), false);
+        $this->assertEquals($object->getDescription(), 'Permission role must contain a valid $id: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
+        $this->assertEquals($object->isValid(['team:abcd/']), false);
+        $this->assertEquals($object->getDescription(), 'Team role must not be empty.');
+        $this->assertEquals($object->isValid(['team:/abcd']), false);
+        $this->assertEquals($object->getDescription(), 'Team ID must not be empty.');
+        $this->assertEquals($object->isValid(['team:abcd//efgh']), false);
+        $this->assertEquals($object->getDescription(), 'Permission roles may contain at most one "/" character.');
+        $this->assertEquals($object->isValid(['team:abcd/e/fgh']), false);
+        $this->assertEquals($object->getDescription(), 'Permission roles may contain at most one "/" character.');
+        $this->assertEquals($object->isValid(['team:ab&cd3/efgh']), false);
+        $this->assertEquals($object->getDescription(), 'Permission role for team must contain valid teamID and role: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
+        $this->assertEquals($object->isValid(['team:abcd/ef*gh']), false);
+        $this->assertEquals($object->getDescription(), 'Permission role for team must contain valid teamID and role: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
     }
 }

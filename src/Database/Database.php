@@ -380,6 +380,9 @@ class Database
 
         // only execute when $default is given
         if (!\is_null($default)) {
+            if ($required === true) {
+                throw new Exception('Cannot set a default value on a required attribute');
+            }
             switch (\gettype($default)) {
                 // first enforce typed array for each value in $default
                 case 'array':
@@ -740,19 +743,6 @@ class Database
             ->setAttribute('$collection', $collection->getId())
         ;
 
-        $document = $this->encode($collection, $document);
-
-        $validator = new Structure($collection);
-
-        if (!$validator->isValid($document)) {
-            throw new StructureException($validator->getDescription());
-        }
-
-        // Decode after validating structure to add default values
-        // TODO@kodumbeats refactor this to make the decoding unnecessary
-
-        $document = $this->decode($collection, $document);
-
         /**
          * Find all attributes with default values
          * @var Document[]
@@ -763,21 +753,21 @@ class Database
             return (!\is_null($attribute->getAttribute('default')));
         });
 
+        // Since required params cannot have a default value,
+        // we can set default values here and validate structure 
         foreach ($defaults as $default) {
             if (\is_null($document->getAttribute($default->getId(), null))) {
                 $document->setAttribute($default->getId(), $default->getAttribute('default'));
             }
         }
 
-        // re-encode and revalidate structure
         $document = $this->encode($collection, $document);
+
+        $validator = new Structure($collection);
 
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
         }
-
-        // End duplicated decoding
-        // TODO@kodumbeats refactor this to make the decoding unnecessary
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
         

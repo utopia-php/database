@@ -511,39 +511,35 @@ class MariaDB extends Adapter
      *
      * @return bool
      */
-    public function findAndDelete(string $collection, array $queries = [], int $limit = 25, array $orderAttributes = [], array $orderTypes = []): bool
+    public function findAndDelete(string $collection, array $queries = []): bool
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
-        $orders = [];
-        
-        foreach($orderAttributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $orders[] = $attribute.' '.$orderType;
-        }
+        $limit = 25;
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles, $name) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition($name.'.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
-        $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
-
         $this->getPDO()->beginTransaction();
 
-        $this->getPDO()->prepare("USE {$this->getNamespace()}")->execute();
+        if(!$this->getPDO()->prepare("USE {$this->getNamespace()}")->execute()) {
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to delete records');
+        }
 
-        //TODO! in Mariadb limit and orderby clause is not working though docs says it works
-        $stmt = $this->getPDO()->prepare("DELETE table_main FROM {$this->getNamespace()}.{$name} table_main
+        $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getNamespace()}.{$name}
             WHERE {$permissions} AND ".implode(' AND ', $where)."
+            ORDER BY _id ASC
+            LIMIT :limit;
         ");
 
         foreach($queries as $i => $query) {
@@ -553,12 +549,14 @@ class MariaDB extends Adapter
             }
         }
 
-        // $stmt->bindValue(':limit', $limit, PDO::PARAM_INT); // LIMIT doesn't work
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 
-        if(!$stmt->execute()) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to delete records');
-        }
+        do {
+            if(!$stmt->execute()) {
+                $this->getPDO()->rollBack();
+                throw new Exception('Failed to delete records');
+            }
+        } while ($stmt->rowCount() == $limit);
         
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
@@ -838,13 +836,13 @@ class MariaDB extends Adapter
      * 
      * @return string
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissions(array $roles, $table = 'table_main'): string
     {
         foreach($roles as &$role) { // Add surrounding quotes after escaping, use + as placeholder after getPDO()->quote()
             $role = "+".str_replace('+', ' ', $role)."+";
         }
 
-        return "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
+        return "MATCH ({$table}._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
     }
 
     /**

@@ -407,21 +407,12 @@ class MongoDB extends Adapter
      *
      * @return bool
      */
-    public function findAndDelete(string $collection, array $queries = [], int $limit = 25, array $orderAttributes = [], array $orderTypes = []): bool
+    public function findAndDelete(string $collection, array $queries = []): bool
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
         $filters = [];
-
-        $options = ['sort' => [], 'limit' => $limit];
-
-        // orders
-        foreach($orderAttributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
-            $orderType = $this->getOrder($this->filter($orderTypes[$i] ?? Database::ORDER_ASC));
-            $options['sort'][$attribute] = $orderType;
-        }
 
         // queries
         $filters = $this->buildFilters($queries);
@@ -431,7 +422,7 @@ class MongoDB extends Adapter
             $filters['_read']['$in'] = Authorization::getRoles();
         }
 
-        $collection->deleteMany($filters, $options);
+        $collection->deleteMany($filters);
 
         return true;
     }

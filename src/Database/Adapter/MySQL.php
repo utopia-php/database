@@ -82,10 +82,11 @@ class MySQL extends MariaDB
      * @param string $operator
      * @param string $placeholder
      * @param mixed $value
+     * @param string $table
      * 
      * @return string
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissions(array $roles, $table = "table_main"): string
     {
         foreach($roles as &$role) {
             $role = 'JSON_CONTAINS(_read, '.$this->getPDO()->quote("\"".$role."\"").', \'$\')';
@@ -101,26 +102,18 @@ class MySQL extends MariaDB
      *
      * @param string $collection
      * @param \Utopia\Database\Query[] $queries
-     * @param int $limit
-     * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
      * @param bool $count
      *
      * @return bool
      */
-    public function findAndDelete(string $collection, array $queries = [], int $limit = 25, array $orderAttributes = [], array $orderTypes = []): bool
+    public function findAndDelete(string $collection, array $queries = []): bool
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
-        $orders = [];
-        
-        foreach($orderAttributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $orders[] = $attribute.' '.$orderType;
-        }
+        $limit = 25;
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
 
@@ -133,13 +126,15 @@ class MySQL extends MariaDB
             $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
-        $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
-
         $this->getPDO()->beginTransaction();
 
+        if(!$this->getPDO()->prepare("USE {$this->getNamespace()}")->execute()) {
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to delete records');
+        }
+
         $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getNamespace()}.{$name} table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
-            {$order}
+            WHERE {$permissions} AND ".implode(' AND ', $where)."   
             LIMIT :limit;
         ");
 
@@ -152,10 +147,14 @@ class MySQL extends MariaDB
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 
-        if(!$stmt->execute()) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to delete records');
-        }
+        do {
+            if(!$stmt->execute()) {
+                $this->getPDO()->rollBack();
+                throw new Exception('Failed to delete records');
+                // break;
+            }
+        } while($stmt->rowCount() == $limit);
+
         
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');

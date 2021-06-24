@@ -827,6 +827,25 @@ class Database
     }
 
     /**
+     * Find And Delete Documents
+     * 
+     * @param string $collection
+     * @param Query[] $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     *
+     * @return bool
+     */
+    public function findAndDelete(string $collection, array $queries = []): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        return $this->adapter->findAndDelete($collection->getId(), $queries);
+    }
+
+    /**
      * @param string $collection
      * @param array $queries
      * @param int $limit

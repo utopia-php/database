@@ -3,7 +3,10 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use PDO;
 use Utopia\Database\Database;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class MySQL extends MariaDB
 {
@@ -79,10 +82,11 @@ class MySQL extends MariaDB
      * @param string $operator
      * @param string $placeholder
      * @param mixed $value
+     * @param string $table
      * 
      * @return string
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissions(array $roles, $table = "table_main"): string
     {
         foreach($roles as &$role) {
             $role = 'JSON_CONTAINS(_read, '.$this->getPDO()->quote("\"".$role."\"").', \'$\')';

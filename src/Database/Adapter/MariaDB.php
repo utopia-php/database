@@ -497,6 +497,70 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Find and Delete Documents
+     *
+     * Find and delete data sets using chosen queries
+     *
+     * @param string $collection
+     * @param \Utopia\Database\Query[] $queries
+     *
+     * @return bool
+     */
+    public function findAndDelete(string $collection, array $queries = []): bool
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $limit = 25;
+
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles, $name) : '1=1'; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition($name.'.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+            }
+            $condition = implode(' OR ', $conditions);
+            $where[] = empty($condition) ? '' : '('.$condition.')';
+        }
+
+        $this->getPDO()->beginTransaction();
+
+        if(!$this->getPDO()->prepare("USE {$this->getNamespace()}")->execute()) {
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to delete records');
+        }
+
+        $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getNamespace()}.{$name}
+            WHERE {$permissions} AND ".implode(' AND ', $where)."
+            ORDER BY _id ASC
+            LIMIT :limit;
+        ");
+
+        foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+
+        do {
+            if(!$stmt->execute()) {
+                $this->getPDO()->rollBack();
+                throw new Exception('Failed to delete records');
+            }
+        } while ($stmt->rowCount() == $limit);
+        
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
+        }
+
+        return true;
+    }
+
+    /**
      * Count Documents
      *
      * Count data set size using chosen queries
@@ -767,13 +831,13 @@ class MariaDB extends Adapter
      * 
      * @return string
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissions(array $roles, $table = 'table_main'): string
     {
         foreach($roles as &$role) { // Add surrounding quotes after escaping, use + as placeholder after getPDO()->quote()
             $role = "+".str_replace('+', ' ', $role)."+";
         }
 
-        return "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
+        return "MATCH ({$table}._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
     }
 
     /**

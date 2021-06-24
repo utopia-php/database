@@ -503,11 +503,6 @@ class MariaDB extends Adapter
      *
      * @param string $collection
      * @param \Utopia\Database\Query[] $queries
-     * @param int $limit
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param bool $count
      *
      * @return bool
      */

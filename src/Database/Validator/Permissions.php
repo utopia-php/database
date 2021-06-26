@@ -159,7 +159,7 @@ class Permissions extends Validator
 
                         // $teamId and $teamRole must both be valid Keys
                         if (!$key->isValid($teamId) || !$key->isValid($teamRole)) {
-                            $this->message = 'Permission role for team must contain valid teamID and role: ' . $key->getDescription();
+                            $this->message = '[team:$teamId/$role] $teamID and $role must be valid keys: ' . $key->getDescription();
 
                             return false;
                         }

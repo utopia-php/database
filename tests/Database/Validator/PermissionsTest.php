@@ -136,8 +136,8 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->isValid(['team:abcd/e/fgh']), false);
         $this->assertEquals($object->getDescription(), 'Permission roles may contain at most one "/" character.');
         $this->assertEquals($object->isValid(['team:ab&cd3/efgh']), false);
-        $this->assertEquals($object->getDescription(), 'Permission role for team must contain valid teamID and role: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
+        $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
         $this->assertEquals($object->isValid(['team:abcd/ef*gh']), false);
-        $this->assertEquals($object->getDescription(), 'Permission role for team must contain valid teamID and role: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
+        $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars');
     }
 }

@@ -110,7 +110,7 @@ class Permissions extends Validator
                     // user:$id and member:$id must be valid Keys
                     $key = new Key();
                     if (!$key->isValid($value)) {
-                        $this->message = 'Permission role must contain a valid $id: ' . $key->getDescription();
+                        $this->message = '[role:$id] $id must be a valid key: ' . $key->getDescription();
 
                         return false;
                     }
@@ -124,7 +124,7 @@ class Permissions extends Validator
 
                     // if no team role is given and and $id is not valid
                     if ($pos === false && !$key->isValid($value)) {
-                        $this->message = 'Permission role must contain a valid $id: ' . $key->getDescription();
+                        $this->message = '[role:$id] $id must be a valid key: ' . $key->getDescription();
 
                         return false;
                     }

@@ -138,7 +138,7 @@ class Permissions extends Validator
 
                     // if a "/" is found, ensure is unique and both substrings are valid
                     if ($pos > 0) {
-                        // Split into format {$teamId}:{$teamRole}
+                        // Split into format {$teamId}/{$teamRole}
                         $teamId = \substr($value, 0, $pos);
                         $teamRole = \substr($value, $pos + 1);
 

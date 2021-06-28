@@ -35,5 +35,9 @@ class KeyTest extends TestCase
         $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscriber'), false);
         $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscribe'), true);
         $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscrib'), true);
+
+        $this->assertEquals(true, $this->object->isValid('5f058a8925807'));
+        $this->assertEquals(true, $this->object->isValid('5f058a89258075f058a89258075f058t'));
+        $this->assertEquals(false, $this->object->isValid('5f058a89258075f058a89258075f058tx'));
     }
 }

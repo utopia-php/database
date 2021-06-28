@@ -42,7 +42,7 @@ class Key extends Validator
             return false;
         }
         
-        if (\preg_match('/[^A-Za-z0-9\-\_]/', $value)) {
+        if (\preg_match('/[^A-Za-z0-9\_]/', $value)) {
             return false;
         }
 

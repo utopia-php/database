@@ -750,7 +750,7 @@ class Database
         $attributes = $collection->getAttributes()['attributes'];
 
         $defaults = array_filter($attributes, function ($attribute) {
-            return (!\is_null($attribute->getAttribute('default')));
+            return (isset($attribute['default'])) ? $attribute['default'] : false;
         });
 
         // Since required params cannot have a default value,

@@ -254,12 +254,14 @@ class Database
      * Create Collection
      * 
      * @param string $id
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
      * 
      * @return Document
      */
-    public function createCollection(string $id): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
-        $this->adapter->createCollection($id);
+        $this->adapter->createCollection($id, $attributes, $indexes);
 
         if($id === self::COLLECTIONS) {
             return new Document($this->collection);
@@ -270,8 +272,8 @@ class Database
             '$read' => ['role:all'],
             '$write' => ['role:all'],
             'name' => $id,
-            'attributes' => [],
-            'indexes' => [],
+            'attributes' => $attributes,
+            'indexes' => $indexes,
             'attributesInQueue' => [],
             'indexesInQueue' => [],
         ]));

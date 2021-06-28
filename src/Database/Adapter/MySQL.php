@@ -11,9 +11,11 @@ class MySQL extends MariaDB
      * Create Collection
      * 
      * @param string $id
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
      * @return bool
      */
-    public function createCollection(string $id): bool
+    public function createCollection(string $id, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($id);
 

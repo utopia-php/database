@@ -743,24 +743,6 @@ class Database
             ->setAttribute('$collection', $collection->getId())
         ;
 
-        /**
-         * Find all attributes with default values
-         * @var Document[]
-         */
-        $attributes = $collection->getAttributes()['attributes'];
-
-        $defaults = array_filter($attributes, function ($attribute) {
-            return (isset($attribute['default'])) ? $attribute['default'] : false;
-        });
-
-        // Since required params cannot have a default value,
-        // we can set default values here and validate structure 
-        foreach ($defaults as $default) {
-            if (\is_null($document->getAttribute($default->getId(), null))) {
-                $document->setAttribute($default->getId(), $default->getAttribute('default'));
-            }
-        }
-
         $document = $this->encode($collection, $document);
 
         $validator = new Structure($collection);
@@ -999,14 +981,21 @@ class Database
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
+            $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
 
-            if(is_null($value)) {
+            // continue on optional param with no default
+            if (is_null($value) && is_null($default)) {
                 continue;
             }
 
-            $value = ($array) ? $value : [$value];
+            // assign default only if no no value provided
+            if (is_null($value) && !is_null($default)) {
+                $value = ($array) ? $default : [$default];
+            } else {
+                $value = ($array) ? $value : [$value];
+            }
 
             foreach ($value as &$node) {
                 if (($node !== null)) {

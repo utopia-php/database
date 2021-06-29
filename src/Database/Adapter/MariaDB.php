@@ -105,7 +105,7 @@ class MariaDB extends Adapter
     {
         $id = $this->filter($id);
 
-        if (!\empty($attributes) || !\empty($indexes)) {
+        if (!empty($attributes) || !empty($indexes)) {
             foreach ($attributes as &$attribute) {
                 $attrId = $attribute->getId();
                 $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size'), $attribute->getAttribute('signed'));
@@ -114,12 +114,12 @@ class MariaDB extends Adapter
                     $attrType = 'LONGTEXT';
                 }
 
-                $attribute = "`{$attrId}` {$attrType},"
+                $attribute = "`{$attrId}` {$attrType}, ";
             }
 
             foreach ($indexes as &$index) {
                 $indexId = $this->filter($index->getId()); 
-                $indexType = $this->getSQLIndexType($attribute->getAttribute('type'));
+                $indexType = $this->getSQLIndexType($index->getAttribute('type'));
 
                 $indexAttributes = $index->getAttribute('attributes');
                 foreach ($indexAttributes as $key => &$attribute) {

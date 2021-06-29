@@ -726,6 +726,35 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get SQL Index Type
+     * 
+     * @param string $type
+     * 
+     * @return string
+     */
+    protected function getSQLIndexType(string $type): string
+    {
+        switch ($type) {
+            case Database::INDEX_KEY:
+            case Database::INDEX_ARRAY:
+                return 'INDEX';
+            break;
+            
+            case Database::INDEX_UNIQUE:
+                return 'UNIQUE INDEX';
+            break;
+            
+            case Database::INDEX_FULLTEXT:
+                return 'FULLTEXT INDEX';
+            break;
+            
+            default:
+                throw new Exception('Unknown Index Type:' . $type);
+            break;
+        }
+    }
+
+    /**
      * Get SQL Index
      * 
      * @param string $collection

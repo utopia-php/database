@@ -105,16 +105,65 @@ class MariaDB extends Adapter
     {
         $id = $this->filter($id);
 
-        $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
-                `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(255) NOT NULL,
-                `_read` TEXT NOT NULL,
-                `_write` TEXT NOT NULL,
-                PRIMARY KEY (`_id`),
-                UNIQUE KEY `_index1` (`_uid`)
-              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-            ->execute();
+        if (!\empty($attributes) || !\empty($indexes)) {
+            foreach ($attributes as &$attribute) {
+                $attrId = $attribute->getId();
+                $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size'), $attribute->getAttribute('signed'));
+
+                if($attribute->getAttribute('array')) {
+                    $attrType = 'LONGTEXT';
+                }
+
+                $attribute = "`{$attrId}` {$attrType},"
+            }
+
+            foreach ($indexes as &$index) {
+                $indexId = $this->filter($index->getId()); 
+                $indexType = $this->getSQLIndexType($attribute->getAttribute('type'));
+
+                $indexAttributes = $index->getAttribute('attributes');
+                foreach ($indexAttributes as $key => &$attribute) {
+                    $indexLength = $index->getAttribute('lengths')[$key] ?? '';
+                    $indexLength = (empty($length)) ? '' : '('.(int)$length.')';
+                    $indexOrder = $index->getAttribute('orders')[$key] ?? '';
+                    $indexAttribute = $this->filter($attribute);
+
+                    if ($indexType === Database::INDEX_FULLTEXT) {
+                        $indexOrder = '';
+                    }
+
+                    $attribute = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                }
+
+                $index = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+
+            }
+
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
+                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                    `_uid` CHAR(255) NOT NULL,
+                    `_read` TEXT NOT NULL,
+                    `_write` TEXT NOT NULL,
+                    " . \implode(' ', $attributes) . "
+                    PRIMARY KEY (`_id`),
+                    " . \implode(' ', $indexes) . "
+                    UNIQUE KEY `_index1` (`_uid`)
+                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                ->execute();
+
+        } else {
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
+                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                    `_uid` CHAR(255) NOT NULL,
+                    `_read` TEXT NOT NULL,
+                    `_write` TEXT NOT NULL,
+                    PRIMARY KEY (`_id`),
+                    UNIQUE KEY `_index1` (`_uid`)
+                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                ->execute();
+        }
 
         return $this->createIndex($id, '_index2', Database::INDEX_FULLTEXT, ['_read'], [], []);
     }

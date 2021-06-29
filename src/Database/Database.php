@@ -331,13 +331,14 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
+     * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
      * @param array $filters
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -346,6 +347,7 @@ class Database
             'type' => $type,
             'size' => $size,
             'required' => $required,
+            'default' => $default,
             'signed' => $signed,
             'array' => $array,
             'filters' => $filters,
@@ -374,6 +376,35 @@ class Database
             default:
                 throw new Exception('Unknown attribute type: '.$type);
                 break;
+        }
+
+        // only execute when $default is given
+        if (!\is_null($default)) {
+            if ($required === true) {
+                throw new Exception('Cannot set a default value on a required attribute');
+            }
+            switch (\gettype($default)) {
+                // first enforce typed array for each value in $default
+                case 'array':
+                    foreach ($default as $value) {
+                        if ($type !== \gettype($value)) {
+                            throw new Exception('Default value contents do not match given type ' . $type);
+                        }
+                    }
+                    break;
+                // then enforce for primitive types
+                case self::VAR_STRING:
+                case self::VAR_INTEGER:
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                    if ($type !== \gettype($default)) {
+                        throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    }
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type for: '.$default);
+                    break;
+            }
         }
 
         return $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
@@ -416,13 +447,14 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
+     * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
      * @param array $filters
      * 
      * @return bool
      */
-    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -431,6 +463,7 @@ class Database
             'type' => $type,
             'size' => $size,
             'required' => $required,
+            'default' => $default,
             'signed' => $signed,
             'array' => $array,
             'filters' => $filters,
@@ -948,14 +981,21 @@ class Database
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
+            $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
 
-            if(is_null($value)) {
+            // continue on optional param with no default
+            if (is_null($value) && is_null($default)) {
                 continue;
             }
 
-            $value = ($array) ? $value : [$value];
+            // assign default only if no no value provided
+            if (is_null($value) && !is_null($default)) {
+                $value = ($array) ? $default : [$default];
+            } else {
+                $value = ($array) ? $value : [$value];
+            }
 
             foreach ($value as &$node) {
                 if (($node !== null)) {

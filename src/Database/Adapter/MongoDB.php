@@ -114,6 +114,56 @@ class MongoDB extends Adapter
             return false;
         }
 
+        // Since attributes are not used by this adapter
+        // Only act when $indexes is provided
+        if (!empty($indexes)) {
+            /**
+             * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
+             * @var array
+             */
+            $newIndexes = [];
+
+            // using $i and $j as counters to distinguish from $key
+            foreach ($indexes as $i => $index) {
+                $key = [];
+                $name = $this->filter($index->getId());
+                $unique = false;
+
+                $attributes = $index->getAttribute('attributes');
+
+                foreach($attributes as $j => $attribute) {
+                    $attribute = $this->filter($attribute);
+
+                    switch ($index->getAttribute('type')) {
+                        case Database::INDEX_KEY:
+                            $order = $this->getOrder($attribute->getAttribute('order')[$j] ?? Database::ORDER_ASC);
+                            break;
+                        case Database::INDEX_FULLTEXT:
+                            // MongoDB fulltext index is just 'text'
+                            // Not using Database::INDEX_KEY for clarity
+                            $order = 'text';
+                            break;
+                        case Database::INDEX_UNIQUE:
+                            $order = $this->getOrder($attribute->getAttribute('order')[$j] ?? Database::ORDER_ASC);
+                            $unique = true;
+                            break;
+                        default:
+                            // index not supported
+                            return false;
+                    }
+
+                    $key[$attribute] = $order;
+                }
+
+                $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
+            }
+
+            if (!$collection->createIndexes($newIndexes)) {
+                return false;
+            }
+
+        }
+
         return true;
     }
 

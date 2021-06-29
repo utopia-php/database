@@ -95,14 +95,14 @@ class MariaDB extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $id
+     * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
      * @return bool
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($name);
 
         if (!empty($attributes) || !empty($indexes)) {
             foreach ($attributes as &$attribute) {
@@ -123,7 +123,7 @@ class MariaDB extends Adapter
                 $indexAttributes = $index->getAttribute('attributes');
                 foreach ($indexAttributes as $key => &$attribute) {
                     $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                    $indexLength = (empty($length)) ? '' : '('.(int)$length.')';
+                    $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
                     $indexOrder = $index->getAttribute('orders')[$key] ?? '';
                     $indexAttribute = $this->filter($attribute);
 

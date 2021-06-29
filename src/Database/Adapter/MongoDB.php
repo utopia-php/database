@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
+use MongoDB\Collection as MongoCollection;
 use MongoDB\Database as MongoDatabase;
 
 class MongoDB extends Adapter
@@ -88,27 +89,27 @@ class MongoDB extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $id
+     * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
      * @return bool
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($name);
 
         if ($this->getDatabase()->createCollection($id)) {
             return false;
         }
 
         /**
-         * @var Database
+         * @var MongoCollection
          */
-        $collection = $this->getDatabase();
+        $collection = $this->getDatabase()->selectCollection($id);
 
         // Mongo creates an index for _id; index _read,_write by default
-        $read = $collection->createIndex($id, '_read_permissions', Database::INDEX_KEY, ['_read'], [], [Database::ORDER_DESC]);
-        $write = $collection->createIndex($id, '_write_permissions', Database::INDEX_KEY, ['_write'], [], [Database::ORDER_DESC]);
+        $read = $this->createIndex($id, '_read_permissions', Database::INDEX_KEY, ['_read'], [], [Database::ORDER_DESC]);
+        $write = $this->createIndex($id, '_write_permissions', Database::INDEX_KEY, ['_write'], [], [Database::ORDER_DESC]);
 
         if (!$read || !$write) {
             return false;
@@ -130,13 +131,14 @@ class MongoDB extends Adapter
                 $unique = false;
 
                 $attributes = $index->getAttribute('attributes');
+                $orders = $index->getAttribute('orders');
 
                 foreach($attributes as $j => $attribute) {
                     $attribute = $this->filter($attribute);
 
                     switch ($index->getAttribute('type')) {
                         case Database::INDEX_KEY:
-                            $order = $this->getOrder($attribute->getAttribute('order')[$j] ?? Database::ORDER_ASC);
+                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
                             break;
                         case Database::INDEX_FULLTEXT:
                             // MongoDB fulltext index is just 'text'
@@ -144,7 +146,7 @@ class MongoDB extends Adapter
                             $order = 'text';
                             break;
                         case Database::INDEX_UNIQUE:
-                            $order = $this->getOrder($attribute->getAttribute('order')[$j] ?? Database::ORDER_ASC);
+                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
                             $unique = true;
                             break;
                         default:

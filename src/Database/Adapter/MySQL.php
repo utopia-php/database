@@ -43,10 +43,6 @@ class MySQL extends MariaDB
 
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
-
-                foreach ($attributes as $key => &$value) {
-                    $value = '(CAST('.$value.' AS char(255) ARRAY))';
-                }
             break;
             
             case Database::INDEX_UNIQUE:

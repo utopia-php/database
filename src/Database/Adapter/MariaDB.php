@@ -30,7 +30,6 @@ class MariaDB extends Adapter
     {
         $this->pdo = $pdo;
     }
-    
     /**
      * Create Database
      * 
@@ -143,7 +142,7 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_uid` CHAR(255) NOT NULL,
-                    `_read` TEXT NOT NULL,
+                    `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
                     `_write` TEXT NOT NULL,
                     " . \implode(' ', $attributes) . "
                     PRIMARY KEY (`_id`),
@@ -157,7 +156,7 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_uid` CHAR(255) NOT NULL,
-                    `_read` TEXT NOT NULL,
+                    `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
                     `_write` TEXT NOT NULL,
                     PRIMARY KEY (`_id`),
                     UNIQUE KEY `_index1` (`_uid`)
@@ -165,7 +164,7 @@ class MariaDB extends Adapter
                 ->execute();
         }
 
-        return $this->createIndex($id, '_index2', Database::INDEX_FULLTEXT, ['_read'], [], []);
+        return $this->createIndex($id, '_index2', $this->getIndexTypeForReadPermission(), ['_read'], [], []);
     }
 
     /**
@@ -657,6 +656,26 @@ class MariaDB extends Adapter
     public function getSupportForCasting(): bool
     {
         return false;
+    }
+
+    /**
+     * Returns the attribute type for read permissions
+     *
+     * @return string
+     */
+    public function getTypeForReadPermission(): string
+    {
+        return "TEXT";
+    }
+
+    /**
+     * Returns the index type for read permissions
+     *
+     * @return string
+     */
+    public function getIndexTypeForReadPermission(): string
+    {
+        return Database::INDEX_FULLTEXT;
     }
 
     /**

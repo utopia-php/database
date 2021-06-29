@@ -23,17 +23,30 @@ class KeyTest extends TestCase
 
     public function testValues()
     {
-        $this->assertEquals($this->object->isValid('dasda asdasd'), false);
-        $this->assertEquals($this->object->isValid('asdasdasdas'), true);
-        $this->assertEquals($this->object->isValid('_asdasdasdas'), false);
-        $this->assertEquals($this->object->isValid('asd"asdasdas'), false);
-        $this->assertEquals($this->object->isValid('asd\'asdasdas'), false);
-        $this->assertEquals($this->object->isValid('as$$5dasdasdas'), false);
-        $this->assertEquals($this->object->isValid(false), false);
-        $this->assertEquals($this->object->isValid(null), false);
-        $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscribers'), false);
-        $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscriber'), false);
-        $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscribe'), true);
-        $this->assertEquals($this->object->isValid('socialAccountForYoutubeSubscrib'), true);
+        // Must be strings
+        $this->assertEquals(false, $this->object->isValid(false));
+        $this->assertEquals(false, $this->object->isValid(null));
+        $this->assertEquals(false, $this->object->isValid(['value']));
+        $this->assertEquals(false, $this->object->isValid(0));
+        $this->assertEquals(false, $this->object->isValid(1.5));
+        $this->assertEquals(true, $this->object->isValid('asdas7as9as'));
+        $this->assertEquals(true, $this->object->isValid('5f058a8925807'));
+
+        // No leading underscore
+        $this->assertEquals(false, $this->object->isValid('_asdasdasdas'));
+        $this->assertEquals(true, $this->object->isValid('a_sdasdasdas'));
+
+        // No Special characters
+        $this->assertEquals(false, $this->object->isValid('dasda asdasd'));
+        $this->assertEquals(false, $this->object->isValid('asd"asd6sdas'));
+        $this->assertEquals(false, $this->object->isValid('asd\'as0asdas'));
+        $this->assertEquals(false, $this->object->isValid('as$$5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as-5dasdasdas'));
+
+        // At most 32 chars
+        $this->assertEquals(true, $this->object->isValid('socialAccountForYoutubeSubscribe'));
+        $this->assertEquals(false, $this->object->isValid('socialAccountForYoutubeSubscribers'));
+        $this->assertEquals(true, $this->object->isValid('5f058a89258075f058a89258075f058t'));
+        $this->assertEquals(false, $this->object->isValid('5f058a89258075f058a89258075f058tx'));
     }
 }

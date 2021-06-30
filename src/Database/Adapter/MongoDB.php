@@ -98,18 +98,19 @@ class MongoDB extends Adapter
     {
         $id = $this->filter($name);
 
-        if ($this->getDatabase()->createCollection($id)) {
+        $database = $this->getDatabase();
+
+        // Returns an array/object with the result document
+        if (empty($database->createCollection($id))) {
             return false;
         }
 
-        /**
-         * @var MongoCollection
-         */
-        $collection = $this->getDatabase()->selectCollection($id);
+        $collection = $database->$id;
 
         // Mongo creates an index for _id; index _read,_write by default
-        $read = $this->createIndex($id, '_read_permissions', Database::INDEX_KEY, ['_read'], [], [Database::ORDER_DESC]);
-        $write = $this->createIndex($id, '_write_permissions', Database::INDEX_KEY, ['_write'], [], [Database::ORDER_DESC]);
+        // Returns the name of the created index as a string.
+        $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
+        $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
 
         if (!$read || !$write) {
             return false;

@@ -63,7 +63,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
         
-        $document = $stmt->fetch();
+        $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return (($document['SCHEMA_NAME'] ?? '') == $name);
     }
@@ -254,7 +254,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if(empty($document)) {
             return new Document([]);
@@ -479,7 +479,7 @@ class MariaDB extends Adapter
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
-        $results = $stmt->fetchAll();
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
@@ -543,7 +543,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $result['sum'] ?? 0;
     }

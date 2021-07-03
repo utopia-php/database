@@ -663,7 +663,7 @@ class MariaDB extends Adapter
      *
      * @return string
      */
-    public function getTypeForReadPermission(): string
+    protected function getTypeForReadPermission(): string
     {
         return "TEXT";
     }
@@ -673,7 +673,7 @@ class MariaDB extends Adapter
      *
      * @return string
      */
-    public function getIndexTypeForReadPermission(): string
+    protected function getIndexTypeForReadPermission(): string
     {
         return Database::INDEX_FULLTEXT;
     }

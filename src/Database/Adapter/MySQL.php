@@ -12,7 +12,7 @@ class MySQL extends MariaDB
      *
      * @return string
      */
-    public function getTypeForReadPermission(): string
+    protected function getTypeForReadPermission(): string
     {
         return "JSON";
     }
@@ -22,7 +22,7 @@ class MySQL extends MariaDB
      *
      * @return string
      */
-    public function getIndexTypeForReadPermission(): string
+    protected function getIndexTypeForReadPermission(): string
     {
         return Database::INDEX_ARRAY;
     }

@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
+use MongoDB\Collection as MongoCollection;
 use MongoDB\Database as MongoDatabase;
 
 class MongoDB extends Adapter
@@ -88,28 +89,82 @@ class MongoDB extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $id
+     * @param string $name
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
      * @return bool
      */
-    public function createCollection(string $id): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($name);
 
-        if ($this->getDatabase()->createCollection($id)) {
+        $database = $this->getDatabase();
+
+        // Returns an array/object with the result document
+        if (empty($database->createCollection($id))) {
             return false;
         }
 
-        /**
-         * @var Database
-         */
-        $collection = $this->getDatabase();
+        $collection = $database->$id;
 
         // Mongo creates an index for _id; index _read,_write by default
-        $read = $collection->createIndex($id, '_read_permissions', Database::INDEX_KEY, ['_read'], [], [Database::ORDER_DESC]);
-        $write = $collection->createIndex($id, '_write_permissions', Database::INDEX_KEY, ['_write'], [], [Database::ORDER_DESC]);
+        // Returns the name of the created index as a string.
+        $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
+        $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
 
         if (!$read || !$write) {
             return false;
+        }
+
+        // Since attributes are not used by this adapter
+        // Only act when $indexes is provided
+        if (!empty($indexes)) {
+            /**
+             * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
+             * @var array
+             */
+            $newIndexes = [];
+
+            // using $i and $j as counters to distinguish from $key
+            foreach ($indexes as $i => $index) {
+                $key = [];
+                $name = $this->filter($index->getId());
+                $unique = false;
+
+                $attributes = $index->getAttribute('attributes');
+                $orders = $index->getAttribute('orders');
+
+                foreach($attributes as $j => $attribute) {
+                    $attribute = $this->filter($attribute);
+
+                    switch ($index->getAttribute('type')) {
+                        case Database::INDEX_KEY:
+                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                            break;
+                        case Database::INDEX_FULLTEXT:
+                            // MongoDB fulltext index is just 'text'
+                            // Not using Database::INDEX_KEY for clarity
+                            $order = 'text';
+                            break;
+                        case Database::INDEX_UNIQUE:
+                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                            $unique = true;
+                            break;
+                        default:
+                            // index not supported
+                            return false;
+                    }
+
+                    $key[$attribute] = $order;
+                }
+
+                $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
+            }
+
+            if (!$collection->createIndexes($newIndexes)) {
+                return false;
+            }
+
         }
 
         return true;

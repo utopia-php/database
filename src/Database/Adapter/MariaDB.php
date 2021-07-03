@@ -30,7 +30,6 @@ class MariaDB extends Adapter
     {
         $this->pdo = $pdo;
     }
-    
     /**
      * Create Database
      * 
@@ -96,25 +95,76 @@ class MariaDB extends Adapter
     /**
      * Create Collection
      * 
-     * @param string $id
+     * @param string $name
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
      * @return bool
      */
-    public function createCollection(string $id): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($id);
+        $id = $this->filter($name);
 
-        $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
-                `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                `_uid` CHAR(255) NOT NULL,
-                `_read` TEXT NOT NULL,
-                `_write` TEXT NOT NULL,
-                PRIMARY KEY (`_id`),
-                UNIQUE KEY `_index1` (`_uid`)
-              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-            ->execute();
+        if (!empty($attributes) || !empty($indexes)) {
+            foreach ($attributes as &$attribute) {
+                $attrId = $attribute->getId();
+                $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size'), $attribute->getAttribute('signed'));
 
-        return $this->createIndex($id, '_index2', Database::INDEX_FULLTEXT, ['_read'], [], []);
+                if($attribute->getAttribute('array')) {
+                    $attrType = 'LONGTEXT';
+                }
+
+                $attribute = "`{$attrId}` {$attrType}, ";
+            }
+
+            foreach ($indexes as &$index) {
+                $indexId = $this->filter($index->getId()); 
+                $indexType = $this->getSQLIndexType($index->getAttribute('type'));
+
+                $indexAttributes = $index->getAttribute('attributes');
+                foreach ($indexAttributes as $key => &$attribute) {
+                    $indexLength = $index->getAttribute('lengths')[$key] ?? '';
+                    $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
+                    $indexOrder = $index->getAttribute('orders')[$key] ?? '';
+                    $indexAttribute = $this->filter($attribute);
+
+                    if ($indexType === Database::INDEX_FULLTEXT) {
+                        $indexOrder = '';
+                    }
+
+                    $attribute = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                }
+
+                $index = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+
+            }
+
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
+                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                    `_uid` CHAR(255) NOT NULL,
+                    `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
+                    `_write` TEXT NOT NULL,
+                    " . \implode(' ', $attributes) . "
+                    PRIMARY KEY (`_id`),
+                    " . \implode(' ', $indexes) . "
+                    UNIQUE KEY `_index1` (`_uid`)
+                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                ->execute();
+
+        } else {
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
+                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                    `_uid` CHAR(255) NOT NULL,
+                    `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
+                    `_write` TEXT NOT NULL,
+                    PRIMARY KEY (`_id`),
+                    UNIQUE KEY `_index1` (`_uid`)
+                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                ->execute();
+        }
+
+        return $this->createIndex($id, '_index2', $this->getIndexTypeForReadPermission(), ['_read'], [], []);
     }
 
     /**
@@ -609,6 +659,26 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Returns the attribute type for read permissions
+     *
+     * @return string
+     */
+    protected function getTypeForReadPermission(): string
+    {
+        return "TEXT";
+    }
+
+    /**
+     * Returns the index type for read permissions
+     *
+     * @return string
+     */
+    protected function getIndexTypeForReadPermission(): string
+    {
+        return Database::INDEX_FULLTEXT;
+    }
+
+    /**
      * Get SQL Type
      * 
      * @param string $type
@@ -719,6 +789,35 @@ class MariaDB extends Adapter
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
+            break;
+        }
+    }
+
+    /**
+     * Get SQL Index Type
+     * 
+     * @param string $type
+     * 
+     * @return string
+     */
+    protected function getSQLIndexType(string $type): string
+    {
+        switch ($type) {
+            case Database::INDEX_KEY:
+            case Database::INDEX_ARRAY:
+                return 'INDEX';
+            break;
+            
+            case Database::INDEX_UNIQUE:
+                return 'UNIQUE INDEX';
+            break;
+            
+            case Database::INDEX_FULLTEXT:
+                return 'FULLTEXT INDEX';
+            break;
+            
+            default:
+                throw new Exception('Unknown Index Type:' . $type);
             break;
         }
     }

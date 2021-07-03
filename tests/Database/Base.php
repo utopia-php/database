@@ -269,6 +269,88 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('indexesInQueue');
     }
 
+    public function testCreateCollectionWithSchema()
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'attribute1',
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'attribute2',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'attribute3',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => 'index1',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1'],
+                'lengths' => [256],
+                'orders' => ['ASC'],
+            ]),
+            new Document([
+                '$id' => 'index2',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute2'],
+                'lengths' => [],
+                'orders' => ['DESC'],
+            ]),
+            new Document([
+                '$id' => 'index3',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute3', 'attribute2'],
+                'lengths' => [],
+                'orders' => ['DESC', 'ASC'],
+            ]),
+        ];
+
+        $collection = static::getDatabase()->createCollection('withSchema', $attributes, $indexes);
+
+        $this->assertEquals(false, $collection->isEmpty());
+        $this->assertEquals('withSchema', $collection->getId());
+
+        $this->assertIsArray($collection->getAttribute('attributes'));
+        $this->assertCount(3, $collection->getAttribute('attributes'));
+        $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
+        $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
+        $this->assertEquals(Database::VAR_INTEGER, $collection->getAttribute('attributes')[1]['type']);
+        $this->assertEquals('attribute3', $collection->getAttribute('attributes')[2]['$id']);
+        $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
+
+        $this->assertIsArray($collection->getAttribute('indexes'));
+        $this->assertCount(3, $collection->getAttribute('indexes'));
+        $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
+        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
+        $this->assertEquals('index2', $collection->getAttribute('indexes')[1]['$id']);
+        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[1]['type']);
+        $this->assertEquals('index3', $collection->getAttribute('indexes')[2]['$id']);
+        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
+
+        static::getDatabase()->deleteCollection('withSchema');
+    }
+
     public function testCreateDocument()
     {
         static::getDatabase()->createCollection('documents');

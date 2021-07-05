@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\IndexLimit;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -259,9 +260,22 @@ class MariaDB extends Adapter
             $attribute = "`{$attribute}`{$length} {$order}";
         }
 
-        return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
-            ->execute();
+        try {
+            $success = $this->getPDO()
+                ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+                ->execute();
+        } catch (PDOException $e) {
+            switch ($e->getCode()) {
+                case 42000:
+                    throw new IndexLimit('Index limit reached. Cannot create new index.');
+                    break;
+                default:
+                    throw $e;
+                    break;
+            }
+        }
+
+        return $success;
     }
 
     /**

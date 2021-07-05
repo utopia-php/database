@@ -7,6 +7,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\IndexLimit;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
@@ -277,8 +278,13 @@ class MongoDB extends Adapter
                     return false;
             }
         }
+        try{
+            $success = $collection->createIndex($indexes, $options);
+        } catch (\MongoDB\Driver\Exception\CommandException $e) {
+            throw new IndexLimit('Index limit reached. Cannot create new index.');
+        }
 
-        return (!!$collection->createIndex($indexes, $options));
+        return (!!$success);
     }
 
     /**

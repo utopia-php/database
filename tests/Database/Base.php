@@ -1144,6 +1144,22 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testExceptionIndexLimit()
+    {
+        static::getDatabase()->createCollection('exceptionLimit');
+
+        // add unique attributes for indexing
+        for ($i=0; $i < 64; $i++) {
+            $this->assertEquals(true, static::getDatabase()->createAttribute('exceptionLimit', "test{$i}", Database::VAR_STRING, 256, true));
+        }
+
+        // testing for indexLimit = 64
+        $this->expectException(\Utopia\Database\Exception\IndexLimit::class);
+        for ($i=0; $i < 64; $i++) {
+            $this->assertEquals(true, static::getDatabase()->createIndex('exceptionLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [256]));
+        }
+    }
+
     /**
      * @depends testGetDocument
      */

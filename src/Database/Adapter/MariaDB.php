@@ -318,6 +318,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
+        /** @var array $document */
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if(empty($document)) {
@@ -607,6 +608,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
+        /** @var array $result */
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $result['sum'] ?? 0;

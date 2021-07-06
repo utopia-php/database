@@ -620,6 +620,10 @@ class Database
 
         $collection = $this->getCollection($collection);
 
+        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+            throw new IndexLimitException('Index limit reached. Cannot create new index.');
+        }
+
         $collection->setAttribute('indexesInQueue', new Document([
             '$id' => $id,
             'type' => $type,

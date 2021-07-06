@@ -1162,6 +1162,27 @@ abstract class Base extends TestCase
         }
         $this->expectException(IndexLimitException::class);
         $this->assertEquals(false, static::getDatabase()->createIndex('exceptionLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
+
+        static::getDatabase()->deleteCollection('exceptionLimit');
+    }
+
+    public function testExceptionIndexLimitInQueue()
+    {
+        static::getDatabase()->createCollection('exceptionLimitInQueue');
+
+        // add unique attributes for indexing
+        for ($i=0; $i < 64; $i++) {
+            $this->assertEquals(true, static::getDatabase()->createAttribute('exceptionLimitInQueue', "test{$i}", Database::VAR_STRING, 16, true));
+        }
+
+        // testing for indexLimit = 64
+        // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
+        // Add up to the limit, then check if the next index throws IndexLimitException
+        for ($i=0; $i < 61; $i++) {
+            $this->assertEquals(true, static::getDatabase()->addIndexInQueue('exceptionLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
+        }
+        $this->expectException(IndexLimitException::class);
+        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('exceptionLimitInQueue', "index62", Database::INDEX_KEY, ["test62"], [16]));
     }
 
     /**

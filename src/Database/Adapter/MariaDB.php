@@ -9,7 +9,6 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\IndexLimit;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 

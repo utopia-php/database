@@ -7,7 +7,6 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\IndexLimit;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
@@ -278,13 +277,8 @@ class MongoDB extends Adapter
                     return false;
             }
         }
-        try{
-            $success = $collection->createIndex($indexes, $options);
-        } catch (\MongoDB\Driver\Exception\CommandException $e) {
-            throw new IndexLimit('Index limit reached. Cannot create new index.');
-        }
 
-        return (!!$success);
+        return (!!$collection->createIndex($indexes, $options));
     }
 
     /**
@@ -684,6 +678,30 @@ class MongoDB extends Adapter
     public function getSupportForFulltextIndex(): bool
     {
         return true;
+    }
+
+    /**
+     * Get current index count.
+     * 
+     * @param string $collection collectionID
+     * @return int
+     */
+    public function getIndexCount(string $collection): int
+    {
+        $name = $this->filter($collection);
+        $indexes = $this->getDatabase()->$name->listIndexes();
+
+        return \iterator_count($indexes);
+    }
+
+    /**
+     * Get maximum index limit.
+     * 
+     * @return int
+     */
+    public function getIndexLimit(): int
+    {
+        return 64;
     }
 
     /**

@@ -285,6 +285,21 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
+     * Get current index count.
+     * 
+     * @param string $collection collectionID
+     * @return int
+     */
+    abstract public function getIndexCount(string $collection): int;
+
+    /**
+     * Get maximum index limit.
+     * 
+     * @return int
+     */
+    abstract public function getIndexLimit(): int;
+
+    /**
      * Does the adapter handle casting?
      * 
      * @return bool

@@ -260,22 +260,9 @@ class MariaDB extends Adapter
             $attribute = "`{$attribute}`{$length} {$order}";
         }
 
-        try {
-            $success = $this->getPDO()
-                ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
-                ->execute();
-        } catch (PDOException $e) {
-            switch ($e->getCode()) {
-                case 42000:
-                    throw new IndexLimit('Index limit reached. Cannot create new index.');
-                    break;
-                default:
-                    throw $e;
-                    break;
-            }
-        }
-
-        return $success;
+        return $this->getPDO()
+            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+            ->execute();
     }
 
     /**
@@ -662,6 +649,33 @@ class MariaDB extends Adapter
     public function getSupportForFulltextIndex(): bool
     {
         return true;
+    }
+
+    /**
+     * Get current index count.
+     * 
+     * @param string $collection collectionID
+     * @return int
+     */
+    public function getIndexCount(string $collection): int
+    {
+        $name = $this->filter($collection);
+        
+        $stmt = $this->getPDO()->prepare("SHOW KEYS FROM {$this->getNamespace()}.{$name}");
+
+        $stmt->execute();
+
+        return \count($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Get maximum index limit.
+     * 
+     * @return int
+     */
+    public function getIndexLimit(): int
+    {
+        return 64;
     }
 
     /**

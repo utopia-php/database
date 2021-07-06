@@ -8,6 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\IndexLimit as IndexLimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -1154,10 +1155,13 @@ abstract class Base extends TestCase
         }
 
         // testing for indexLimit = 64
-        $this->expectException(\Utopia\Database\Exception\IndexLimit::class);
-        for ($i=0; $i < 64; $i++) {
+        // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
+        // Add up to the limit, then check if the next index throws IndexLimitException
+        for ($i=0; $i < 61; $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('exceptionLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
+        $this->expectException(IndexLimitException::class);
+        $this->assertEquals(false, static::getDatabase()->createIndex('exceptionLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
     }
 
     /**

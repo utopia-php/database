@@ -1150,13 +1150,13 @@ abstract class Base extends TestCase
 
         // add unique attributes for indexing
         for ($i=0; $i < 64; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createAttribute('exceptionLimit', "test{$i}", Database::VAR_STRING, 256, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute('exceptionLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
         // testing for indexLimit = 64
         $this->expectException(\Utopia\Database\Exception\IndexLimit::class);
         for ($i=0; $i < 64; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createIndex('exceptionLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [256]));
+            $this->assertEquals(true, static::getDatabase()->createIndex('exceptionLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
     }
 

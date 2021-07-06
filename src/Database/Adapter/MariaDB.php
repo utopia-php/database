@@ -660,7 +660,7 @@ class MariaDB extends Adapter
     public function getIndexCount(string $collection): int
     {
         $name = $this->filter($collection);
-        
+
         $stmt = $this->getPDO()->prepare("SHOW KEYS FROM {$this->getNamespace()}.{$name}");
 
         $stmt->execute();

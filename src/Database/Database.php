@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\IndexLimit as IndexLimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
 
@@ -526,6 +527,10 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+
+        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+            throw new IndexLimitException('Index limit reached. Cannot create new index.');
+        }
 
         $collection->setAttribute('indexes', new Document([
             '$id' => $id,

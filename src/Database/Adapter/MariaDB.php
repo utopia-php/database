@@ -164,6 +164,7 @@ class MariaDB extends Adapter
                 ->execute();
         }
 
+        // Update $this->getIndexCount when adding another default index
         return $this->createIndex($id, '_index2', $this->getIndexTypeForReadPermission(), ['_read'], [], []);
     }
 
@@ -304,6 +305,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
+        /** @var array $document */
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if(empty($document)) {
@@ -593,6 +595,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
+        /** @var array $result */
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $result['sum'] ?? 0;
@@ -646,6 +649,32 @@ class MariaDB extends Adapter
     public function getSupportForFulltextIndex(): bool
     {
         return true;
+    }
+
+    /**
+     * Get current index count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    public function getIndexCount(Document $collection): int
+    {
+        $indexes = $collection->getAttribute('indexes') ?? [];
+        $indexesInQueue = $collection->getAttribute('indexesInQueue') ?? [];
+
+        // +3 ==> hardcoded number of default indexes from createCollection
+        return \count($indexes) + \count($indexesInQueue) + 3;
+    }
+
+    /**
+     * Get maximum index limit.
+     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * 
+     * @return int
+     */
+    public function getIndexLimit(): int
+    {
+        return 64;
     }
 
     /**

@@ -109,8 +109,10 @@ class MongoDB extends Adapter
 
         // Mongo creates an index for _id; index _read,_write by default
         // Returns the name of the created index as a string.
+        // Update $this->getIndexCount when adding another default index
         $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
         $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
+
 
         if (!$read || !$write) {
             return false;
@@ -678,6 +680,32 @@ class MongoDB extends Adapter
     public function getSupportForFulltextIndex(): bool
     {
         return true;
+    }
+
+    /**
+     * Get current index count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    public function getIndexCount(Document $collection): int
+    {
+        $indexes = $collection->getAttribute('indexes') ?? [];
+        $indexesInQueue = $collection->getAttribute('indexesInQueue') ?? [];
+
+        // +3 ==> hardcoded number of default indexes from createCollection
+        return \count((array) $indexes) + \count((array) $indexesInQueue) + 3;
+    }
+
+    /**
+     * Get maximum index limit.
+     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
+     * 
+     * @return int
+     */
+    public function getIndexLimit(): int
+    {
+        return 64;
     }
 
     /**

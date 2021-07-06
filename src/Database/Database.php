@@ -528,6 +528,10 @@ class Database
 
         $collection = $this->getCollection($collection);
 
+        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+            throw new IndexLimitException('Index limit reached. Cannot create new index.');
+        }
+
         $collection->setAttribute('indexes', new Document([
             '$id' => $id,
             'type' => $type,
@@ -562,10 +566,6 @@ class Database
             default:
                 throw new Exception('Unknown index type: '.$type);
                 break;
-        }
-
-        if ($this->adapter->getIndexCount($collection->getId()) >= $this->adapter->getIndexLimit()) {
-            throw new IndexLimitException('Index limit reached. Cannot create new index.');
         }
 
         return $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);

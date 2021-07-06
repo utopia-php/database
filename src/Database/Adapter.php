@@ -285,12 +285,12 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
-     * Get current index count.
+     * Get current index count from collection document
      * 
-     * @param string $collection collectionID
+     * @param Document $collection
      * @return int
      */
-    abstract public function getIndexCount(string $collection): int;
+    abstract public function getIndexCount(Document $collection): int;
 
     /**
      * Get maximum index limit.

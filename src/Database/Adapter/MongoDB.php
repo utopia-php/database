@@ -709,6 +709,31 @@ class MongoDB extends Adapter
     }
 
     /**
+     * Get current attribute count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    public function getAttributeCount(Document $collection): int
+    {
+        $attributes = $collection->getAttribute('attributes') ?? [];
+        $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
+
+        return \count($attributes) + \count($attributesInQueue);
+    }
+
+    /**
+     * Get maximum column limit.
+     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * 
+     * @return int
+     */
+    public function getAttributeLimit(): int
+    {
+        return 0;
+    }
+
+    /**
      * Is casting supported?
      * 
      * @return bool

@@ -345,6 +345,12 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
+        if ($this->adapter->getAttributeLimit() > 0 && 
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
             'type' => $type,
@@ -460,6 +466,12 @@ class Database
     public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
+
+        if ($this->adapter->getAttributeLimit() > 0 && 
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
 
         $collection->setAttribute('attributesInQueue', new Document([
             '$id' => $id,

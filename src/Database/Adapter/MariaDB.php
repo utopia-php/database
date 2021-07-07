@@ -678,6 +678,32 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get current index count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    protected function getAttributeCount(Document $collection): int
+    {
+        $attributes = $collection->getAttribute('attributes') ?? [];
+        $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
+
+        // +1 ==> account for hidden `_id` column
+        return \count($attributes) + \count($attributesInQueue) + 1;
+    }
+
+    /**
+     * Get maximum column limit.
+     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * 
+     * @return int
+     */
+    protected function getAttributeLimit(): int
+    {
+        return 1017;
+    }
+
+    /**
      * Does the adapter handle casting?
      * 
      * @return bool

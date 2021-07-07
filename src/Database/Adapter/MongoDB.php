@@ -724,7 +724,7 @@ class MongoDB extends Adapter
 
     /**
      * Get maximum column limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * Returns 0 to indicate no limit
      * 
      * @return int
      */

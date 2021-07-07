@@ -8,17 +8,6 @@ use Utopia\Database\Database;
 class MySQL extends MariaDB
 {
     /**
-     * Get maximum column limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     * 
-     * @return int
-     */
-    public function getAttributeLimit(): int
-    {
-        return 4096;
-    }
-
-    /**
      * Returns the attribute type for read permissions
      *
      * @return string

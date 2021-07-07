@@ -1145,6 +1145,33 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testExceptionAttributeLimit()
+    {
+        if ($this->getAdapterName() === 'mariadb' || $this->getAdapterName() === 'mysql') {
+            // load the collection up to the limit
+            $attributes = [];
+            for ($i=0; $i < 1012; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test{$i}",
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+            $collection = static::getDatabase()->createCollection('attributeLimit', $attributes);
+
+            $this->expectException(LimitException::class);
+            $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
+        } 
+
+        // Default assertion for other adapters
+        $this->assertEquals(1,1);
+    }
+
     public function testExceptionIndexLimit()
     {
         static::getDatabase()->createCollection('indexLimit');

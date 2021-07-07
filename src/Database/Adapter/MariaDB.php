@@ -688,13 +688,15 @@ class MariaDB extends Adapter
         $attributes = $collection->getAttribute('attributes') ?? [];
         $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
 
-        // +1 ==> account for hidden `_id` column
-        return \count($attributes) + \count($attributesInQueue) + 1;
+        // +4 ==> account for default columns
+        // +1 ==> virtual columns count as total, so add as buffer
+        return \count($attributes) + \count($attributesInQueue) + 4 + 1;
     }
 
     /**
      * Get maximum column limit.
      * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * Can be inherited by MySQL since we utilize the InnoDB engine
      * 
      * @return int
      */

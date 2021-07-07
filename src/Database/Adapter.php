@@ -299,7 +299,6 @@ abstract class Adapter
      */
     abstract public function getAttributeCount(Document $collection): int;
 
-
     /**
      * Get current index count from collection document
      * 

@@ -8,7 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\IndexLimit as IndexLimitException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -1181,7 +1181,7 @@ abstract class Base extends TestCase
         for ($i=0; $i < 61; $i++) {
             $this->assertEquals(true, static::getDatabase()->addIndexInQueue('exceptionLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
-        $this->expectException(IndexLimitException::class);
+        $this->expectException(LimitException::class);
         $this->assertEquals(false, static::getDatabase()->addIndexInQueue('exceptionLimitInQueue', "index62", Database::INDEX_KEY, ["test62"], [16]));
     }
 

@@ -2,6 +2,6 @@
 
 namespace Utopia\Database\Exception;
 
-class IndexLimit extends \Exception
+class Limit extends \Exception
 {
 }

@@ -285,19 +285,19 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
-     * Get maximum column limit.
-     * 
-     * @return int
-     */
-    abstract public function getAttributeLimit(): int;
-
-    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection
      * @return int
      */
     abstract public function getAttributeCount(Document $collection): int;
+
+    /**
+     * Get maximum column limit.
+     * 
+     * @return int
+     */
+    abstract public function getAttributeLimit(): int;
 
     /**
      * Get current index count from collection document

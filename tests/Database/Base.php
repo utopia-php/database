@@ -1160,7 +1160,7 @@ abstract class Base extends TestCase
         for ($i=0; $i < 61; $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('exceptionLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
-        $this->expectException(IndexLimitException::class);
+        $this->expectException(LimitException::class);
         $this->assertEquals(false, static::getDatabase()->createIndex('exceptionLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
 
         static::getDatabase()->deleteCollection('exceptionLimit');

@@ -19,6 +19,11 @@ abstract class Base extends TestCase
      */
     abstract static protected function getDatabase(): Database;
 
+    /**
+     * @return string
+     */
+    abstract static protected function getAdapterName(): string;
+
     public function setUp(): void
     {
         Authorization::setRole('role:all');
@@ -1147,7 +1152,7 @@ abstract class Base extends TestCase
 
     public function testExceptionAttributeLimit()
     {
-        if ($this->getAdapterName() === 'mariadb' || $this->getAdapterName() === 'mysql') {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
             // load the collection up to the limit
             $attributes = [];
             for ($i=0; $i < 1012; $i++) {

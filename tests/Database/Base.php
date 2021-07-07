@@ -1177,6 +1177,50 @@ abstract class Base extends TestCase
         $this->assertEquals(1,1);
     }
 
+    public function testExceptionWidthLimit()
+    {
+        $this->assertEquals(true, static::getDatabase()->create());
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+            // load the collection up to the limit
+            // VARCHAR($size=256) uses 10 bytes
+            $attributes = [];
+            for ($i=0; $i < 31; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_string{$i}",
+                    'type' => Database::VAR_STRING,
+                    'size' => 512,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+            for ($i=0; $i < 833; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_bool{$i}",
+                    'type' => Database::VAR_BOOLEAN,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            $collection = static::getDatabase()->createCollection('widthLimit', $attributes);
+
+            // TODO@kodumbeats use correct exception
+            $this->expectException(\PDOException::class);
+            var_dump("primed for exception");
+            $this->assertEquals(false, static::getDatabase()->createAttribute('widthLimit', "breaking", Database::VAR_BOOLEAN, 0, true));
+        } 
+
+        // Default assertion for other adapters
+        $this->assertEquals(1,1);
+    }
+
     public function testExceptionIndexLimit()
     {
         static::getDatabase()->createCollection('indexLimit');

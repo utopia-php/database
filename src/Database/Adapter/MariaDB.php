@@ -678,12 +678,12 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Get current index count from collection document
+     * Get current attribute count from collection document
      * 
      * @param Document $collection
      * @return int
      */
-    protected function getAttributeCount(Document $collection): int
+    public function getAttributeCount(Document $collection): int
     {
         $attributes = $collection->getAttribute('attributes') ?? [];
         $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
@@ -698,7 +698,7 @@ class MariaDB extends Adapter
      * 
      * @return int
      */
-    protected function getAttributeLimit(): int
+    public function getAttributeLimit(): int
     {
         return 1017;
     }

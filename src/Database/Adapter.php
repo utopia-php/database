@@ -300,6 +300,14 @@ abstract class Adapter
     abstract public function getAttributeLimit(): int;
 
     /**
+     * Get maximum width, in bytes, allowed for a SQL row
+     * Return 0 when no restrictions apply
+     *
+     * @return int
+     */
+    abstract public function getRowLimit(): int;
+
+    /**
      * Get current index count from collection document
      * 
      * @param Document $collection

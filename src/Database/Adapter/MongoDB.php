@@ -734,6 +734,17 @@ class MongoDB extends Adapter
     }
 
     /**
+     * Get maximum width, in bytes, allowed for a SQL row
+     * Return 0 when no restrictions apply
+     *
+     * @return int
+     */
+    public function getRowLimit(): int
+    {
+        return 0;
+    }
+
+    /**
      * Is casting supported?
      * 
      * @return bool

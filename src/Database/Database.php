@@ -351,6 +351,12 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
+        if ($this->adapter->getRowLimit() > 0 && 
+            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
+
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
             'type' => $type,
@@ -471,6 +477,12 @@ class Database
             $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
         {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
+        if ($this->adapter->getRowLimit() > 0 && 
+            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
 
         $collection->setAttribute('attributesInQueue', new Document([
@@ -1127,6 +1139,76 @@ class Database
         }
 
         return $document;
+    }
+
+    /**
+     * Estimate maximum number of bytes required to store a document in $collection.
+     * Byte requirement varies based on column type and size.
+     * Needed to satisfy MariaDB/MySQL row width limit.
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    protected function getAttributeWidth(Document $collection): int
+    {
+        $total = 0;
+
+        /** @var array $attributes */
+        $attributes = $collection->getAttributes()['attributes'];
+        foreach ($attributes as $attribute) {
+            switch ($attribute['type']) {
+                case Database::VAR_STRING:
+                    // TODO@kodumbeats how to handle utf8mb4 chars in calculation?
+                    // $size = $size * 4; // Convert utf8mb4 size to bytes
+                    switch (true) {
+                        case ($attribute['size'] > 16777215):
+                            // 8 bytes length + 4 bytes for LONGTEXT
+                            $total += 12;
+                        break;
+
+                        case ($attribute['size'] > 65535):
+                            // 8 bytes length + 3 bytes for MEDIUMTEXT
+                            $total += 11;
+                        break;
+
+                        case ($attribute['size'] > 16383):
+                        case ($attribute['size'] > 255):
+                            // 8 bytes length + 2 bytes for TEXT
+                            // 8 bytes length + 2 bytes for VARCHAR(>255)
+                            $total += 10;
+                        break;
+
+                        default:
+                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
+                            $total += $attribute['size'] + 1;
+                        break;
+                    }
+                break;
+
+                case Database::VAR_INTEGER:
+                case Database::VAR_FLOAT:
+                    // INT takes 4 bytes
+                    // FLOAT(p) takes 4 bytes when p <= 24, 8 otherwise
+                    $total += 4;
+                break;
+
+                case Database::VAR_BOOLEAN:
+                    // TINYINT(1) takes one byte
+                    $total +=1;
+                break;
+
+                case Database::VAR_DOCUMENT:
+                    // CHAR(255)
+                    $total += 255;
+                break;
+
+                default:
+                    throw new Exception('Unknown Type');
+                break;
+            }
+        }
+
+        return $total;
     }
 
     /**

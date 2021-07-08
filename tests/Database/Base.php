@@ -1199,11 +1199,6 @@ abstract class Base extends TestCase
      */
     public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
-        // Only needed to run this test as standalone
-        if ($key === 0) {
-            $this->assertEquals(true, static::getDatabase()->create());
-        }
-
         if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
             $attributes = [];
 
@@ -1266,7 +1261,7 @@ abstract class Base extends TestCase
 
             $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
 
-            $this->expectException(\PDOException::class);
+            $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_BOOLEAN, 0, true));
         } 
 

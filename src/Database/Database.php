@@ -1156,6 +1156,7 @@ class Database
         // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
         // `_read` text => My math has this out to 98 bytes?
         // `_write` text => My math has this out to 98 bytes?
+        // but this number seems to vary, so we give a theoretical maximum
         $total = 1220;
 
         /** @var array $attributes */
@@ -1177,15 +1178,18 @@ class Database
                         break;
 
                         case ($attribute['size'] > 16383):
-                        case ($attribute['size'] > 255):
                             // 8 bytes length + 2 bytes for TEXT
+                            $total += 10;
+                        break;
+
+                        case ($attribute['size'] > 255):
                             // 8 bytes length + 2 bytes for VARCHAR(>255)
                             $total += ($attribute['size'] * 4) + 2;
                         break;
 
                         default:
                             // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += $attribute['size'] + 1;
+                            $total += ($attribute['size'] * 4) + 1;
                         break;
                     }
                 break;

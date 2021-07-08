@@ -1177,18 +1177,35 @@ abstract class Base extends TestCase
         $this->assertEquals(1,1);
     }
 
-    public function testExceptionWidthLimit()
+    /**
+     * Using phpunit dataProviders to check that all these combinations of types/sizes throw exceptions
+     * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
+     */
+    public function rowWidthExceedsMaximum()
+    {
+        return [
+            // [$key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount]
+            [0, 512, 31, 0, 0, 833],
+        ];
+    }
+
+    /**
+     * @dataProvider rowWidthExceedsMaximum
+     * @expectedException LimitException
+     */
+    public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
         $this->assertEquals(true, static::getDatabase()->create());
         if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
-            // load the collection up to the limit
-            // VARCHAR($size=256) uses 10 bytes
             $attributes = [];
-            for ($i=0; $i < 31; $i++) {
+
+            // Load the collection up to the limit
+            // Strings
+            for ($i=0; $i < $stringCount; $i++) {
                 $attributes[] = new Document([
                     '$id' => "test_string{$i}",
                     'type' => Database::VAR_STRING,
-                    'size' => 512,
+                    'size' => $stringSize,
                     'required' => false,
                     'default' => null,
                     'signed' => true,
@@ -1196,7 +1213,37 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ]);
             }
-            for ($i=0; $i < 833; $i++) {
+
+            // Integers
+            for ($i=0; $i < $intCount; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_bool{$i}",
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            // Floats
+            for ($i=0; $i < $floatCount; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_bool{$i}",
+                    'type' => Database::VAR_FLOAT,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            // Booleans
+            for ($i=0; $i < $boolCount; $i++) {
                 $attributes[] = new Document([
                     '$id' => "test_bool{$i}",
                     'type' => Database::VAR_BOOLEAN,
@@ -1209,12 +1256,10 @@ abstract class Base extends TestCase
                 ]);
             }
 
-            $collection = static::getDatabase()->createCollection('widthLimit', $attributes);
+            $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
 
-            // TODO@kodumbeats use correct exception
-            $this->expectException(\PDOException::class);
-            var_dump("primed for exception");
-            $this->assertEquals(false, static::getDatabase()->createAttribute('widthLimit', "breaking", Database::VAR_BOOLEAN, 0, true));
+            $this->expectException(LimitException::class);
+            $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_BOOLEAN, 0, true));
         } 
 
         // Default assertion for other adapters

@@ -1184,8 +1184,12 @@ abstract class Base extends TestCase
     public function rowWidthExceedsMaximum()
     {
         return [
+            // These combinations of attributes gets exactly to the 64k limit
             // [$key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount]
             [0, 512, 31, 0, 0, 833],
+            [1, 256, 62, 0, 128, 305],
+            [2, 128, 125, 30, 24, 2],
+            [3, 1024, 15, 0, 731, 3],
         ];
     }
 
@@ -1195,7 +1199,11 @@ abstract class Base extends TestCase
      */
     public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
-        $this->assertEquals(true, static::getDatabase()->create());
+        // Only needed to run this test as standalone
+        if ($key === 0) {
+            $this->assertEquals(true, static::getDatabase()->create());
+        }
+
         if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
             $attributes = [];
 
@@ -1217,7 +1225,7 @@ abstract class Base extends TestCase
             // Integers
             for ($i=0; $i < $intCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_bool{$i}",
+                    '$id' => "test_int{$i}",
                     'type' => Database::VAR_INTEGER,
                     'size' => 0,
                     'required' => false,
@@ -1231,7 +1239,7 @@ abstract class Base extends TestCase
             // Floats
             for ($i=0; $i < $floatCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_bool{$i}",
+                    '$id' => "test_float{$i}",
                     'type' => Database::VAR_FLOAT,
                     'size' => 0,
                     'required' => false,
@@ -1258,7 +1266,7 @@ abstract class Base extends TestCase
 
             $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
 
-            $this->expectException(LimitException::class);
+            $this->expectException(\PDOException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_BOOLEAN, 0, true));
         } 
 

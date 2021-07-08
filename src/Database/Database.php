@@ -1151,7 +1151,12 @@ class Database
      */
     protected function getAttributeWidth(Document $collection): int
     {
-        $total = 0;
+        // Default collection has:
+        // `_id` int(11) => 4 bytes
+        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
+        // `_read` text => My math has this out to 98 bytes?
+        // `_write` text => My math has this out to 98 bytes?
+        $total = 1220;
 
         /** @var array $attributes */
         $attributes = $collection->getAttributes()['attributes'];
@@ -1175,7 +1180,7 @@ class Database
                         case ($attribute['size'] > 255):
                             // 8 bytes length + 2 bytes for TEXT
                             // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += 10;
+                            $total += ($attribute['size'] * 4) + 2;
                         break;
 
                         default:

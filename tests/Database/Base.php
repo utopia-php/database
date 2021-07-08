@@ -1186,10 +1186,10 @@ abstract class Base extends TestCase
         return [
             // These combinations of attributes gets exactly to the 64k limit
             // [$key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount]
-            [0, 512, 31, 0, 0, 833],
-            [1, 256, 62, 0, 128, 305],
-            [2, 128, 125, 30, 24, 2],
-            [3, 1024, 15, 0, 731, 3],
+            [0, 1024, 15, 0, 731, 3],
+            [1, 512, 31, 0, 0, 833],
+            [2, 256, 62, 128, 0, 305],
+            [3, 128, 125, 30, 24, 2],
         ];
     }
 

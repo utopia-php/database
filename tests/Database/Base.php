@@ -1186,10 +1186,16 @@ abstract class Base extends TestCase
         return [
             // These combinations of attributes gets exactly to the 64k limit
             // [$key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount]
-            [0, 1024, 15, 0, 731, 3],
-            [1, 512, 31, 0, 0, 833],
-            [2, 256, 62, 128, 0, 305],
-            [3, 128, 125, 30, 24, 2],
+            // [0, 1024, 15, 0, 731, 3],
+            // [1, 512, 31, 0, 0, 833],
+            // [2, 256, 62, 128, 0, 305],
+            // [3, 128, 125, 30, 24, 2],
+            //
+            // Taken 100 bytes off for tests
+            [0, 1024, 15, 0, 706, 3],
+            [1, 512, 31, 0, 0, 733],
+            [2, 256, 62, 128, 0, 205],
+            [3, 128, 125, 5, 24, 2],
         ];
     }
 
@@ -1262,7 +1268,7 @@ abstract class Base extends TestCase
             $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
 
             $this->expectException(LimitException::class);
-            $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_BOOLEAN, 0, true));
+            $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
         } 
 
         // Default assertion for other adapters

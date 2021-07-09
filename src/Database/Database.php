@@ -1154,18 +1154,16 @@ class Database
         // Default collection has:
         // `_id` int(11) => 4 bytes
         // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
-        // `_read` text => My math has this out to 98 bytes?
-        // `_write` text => My math has this out to 98 bytes?
-        // but this number seems to vary, so we give a theoretical maximum
-        $total = 1220;
+        // `_read` text => 98 bytes? (estimate)
+        // `_write` text => 98 bytes? (estimate)
+        // but this number seems to vary, so we give a +100 byte buffer
+        $total = 1320;
 
         /** @var array $attributes */
         $attributes = $collection->getAttributes()['attributes'];
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
-                    // TODO@kodumbeats how to handle utf8mb4 chars in calculation?
-                    // $size = $size * 4; // Convert utf8mb4 size to bytes
                     switch (true) {
                         case ($attribute['size'] > 16777215):
                             // 8 bytes length + 4 bytes for LONGTEXT
@@ -1183,11 +1181,13 @@ class Database
                         break;
 
                         case ($attribute['size'] > 255):
+                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
                             // 8 bytes length + 2 bytes for VARCHAR(>255)
                             $total += ($attribute['size'] * 4) + 2;
                         break;
 
                         default:
+                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
                             // 8 bytes length + 1 bytes for VARCHAR(<=255)
                             $total += ($attribute['size'] * 4) + 1;
                         break;

@@ -205,7 +205,9 @@ class Database
      */
     public function create(): bool
     {
-        $this->adapter->create();
+        if (!$this->adapter->exists()) {
+            $this->adapter->create();
+        }
 
         /**
          * Create array of attribute documents

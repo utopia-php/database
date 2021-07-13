@@ -208,7 +208,9 @@ class Database
      */
     public function create(): bool
     {
-        $this->adapter->create();
+        if (!$this->adapter->exists()) {
+            $this->adapter->create();
+        }
 
         $this->createCollection(self::COLLECTIONS);
         $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 512, true);

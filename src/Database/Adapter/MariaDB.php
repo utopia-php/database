@@ -678,6 +678,45 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get current attribute count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    public function getAttributeCount(Document $collection): int
+    {
+        $attributes = $collection->getAttribute('attributes') ?? [];
+        $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
+
+        // +4 ==> account for default columns
+        // +1 ==> virtual columns count as total, so add as buffer
+        return \count($attributes) + \count($attributesInQueue) + 4 + 1;
+    }
+
+    /**
+     * Get maximum column limit.
+     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * Can be inherited by MySQL since we utilize the InnoDB engine
+     * 
+     * @return int
+     */
+    public function getAttributeLimit(): int
+    {
+        return 1017;
+    }
+
+    /**
+     * Get maximum width, in bytes, allowed for a SQL row
+     * Return 0 when no restrictions apply
+     *
+     * @return int
+     */
+    public static function getRowLimit(): int
+    {
+        return 65535;
+    }
+
+    /**
      * Does the adapter handle casting?
      * 
      * @return bool

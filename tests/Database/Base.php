@@ -24,6 +24,11 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterName(): string;
 
+    /**
+     * @return int
+     */
+    abstract static protected function getAdapterRowLimit(): int;
+
     public function setUp(): void
     {
         Authorization::setRole('role:all');
@@ -1205,7 +1210,7 @@ abstract class Base extends TestCase
      */
     public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
-        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+        if (static::getAdapterRowLimit() > 0) {
             $attributes = [];
 
             // Load the collection up to the limit

@@ -711,7 +711,7 @@ class MariaDB extends Adapter
      *
      * @return int
      */
-    public function getRowLimit(): int
+    public static function getRowLimit(): int
     {
         return 65535;
     }

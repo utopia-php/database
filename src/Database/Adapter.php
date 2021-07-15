@@ -305,7 +305,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function getRowLimit(): int;
+    abstract public static function getRowLimit(): int;
 
     /**
      * Get current index count from collection document

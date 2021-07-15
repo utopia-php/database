@@ -739,7 +739,7 @@ class MongoDB extends Adapter
      *
      * @return int
      */
-    public function getRowLimit(): int
+    public static function getRowLimit(): int
     {
         return 0;
     }

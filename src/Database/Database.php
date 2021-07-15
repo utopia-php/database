@@ -267,8 +267,8 @@ class Database
         if($id === self::COLLECTIONS) {
             return new Document($this->collection);
         }
-        
-        return $this->createDocument(Database::COLLECTIONS, new Document([
+
+        $collection = new Document([
             '$id' => $id,
             '$read' => ['role:all'],
             '$write' => ['role:all'],
@@ -277,7 +277,29 @@ class Database
             'indexes' => $indexes,
             'attributesInQueue' => [],
             'indexesInQueue' => [],
-        ]));
+        ]);
+
+        // Check index limits, if given
+        if ($indexes && $this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+            throw new LimitException('Index limit of ' . $this->adapter->getIndexLimit() . ' exceeded. Cannot create collection.');
+        }
+
+        // check attribute limits, if given
+        if ($attributes) {
+            if ($this->adapter->getAttributeLimit() > 0 && 
+                $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+            {
+                throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
+            }
+
+            if ($this->adapter->getRowLimit() > 0 && 
+                $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+            {
+                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+            }
+        }
+
+        return $this->createDocument(Database::COLLECTIONS, $collection);
     }
 
     /**

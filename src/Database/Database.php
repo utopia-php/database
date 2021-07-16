@@ -293,7 +293,7 @@ class Database
             }
 
             if ($this->adapter->getRowLimit() > 0 && 
-                $this->getAttributeWidth($collection) > $this->adapter->getRowLimit())
+                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit())
             {
                 throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
             }
@@ -385,7 +385,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if ($this->adapter->getRowLimit() > 0 && 
-            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
         {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
@@ -513,7 +513,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if ($this->adapter->getRowLimit() > 0 && 
-            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
         {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
@@ -1161,85 +1161,6 @@ class Database
         }
 
         return $document;
-    }
-
-    /**
-     * Estimate maximum number of bytes required to store a document in $collection.
-     * Byte requirement varies based on column type and size.
-     * Needed to satisfy MariaDB/MySQL row width limit.
-     * 
-     * @param Document $collection
-     * @return int
-     */
-    protected function getAttributeWidth(Document $collection): int
-    {
-        // Default collection has:
-        // `_id` int(11) => 4 bytes
-        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
-        // `_read` text => 98 bytes? (estimate)
-        // `_write` text => 98 bytes? (estimate)
-        // but this number seems to vary, so we give a +300 byte buffer
-        $total = 1500;
-
-        /** @var array $attributes */
-        $attributes = $collection->getAttributes()['attributes'];
-        foreach ($attributes as $attribute) {
-            switch ($attribute['type']) {
-                case Database::VAR_STRING:
-                    switch (true) {
-                        case ($attribute['size'] > 16777215):
-                            // 8 bytes length + 4 bytes for LONGTEXT
-                            $total += 12;
-                        break;
-
-                        case ($attribute['size'] > 65535):
-                            // 8 bytes length + 3 bytes for MEDIUMTEXT
-                            $total += 11;
-                        break;
-
-                        case ($attribute['size'] > 16383):
-                            // 8 bytes length + 2 bytes for TEXT
-                            $total += 10;
-                        break;
-
-                        case ($attribute['size'] > 255):
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += ($attribute['size'] * 4) + 2;
-                        break;
-
-                        default:
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += ($attribute['size'] * 4) + 1;
-                        break;
-                    }
-                break;
-
-                case Database::VAR_INTEGER:
-                case Database::VAR_FLOAT:
-                    // INT takes 4 bytes
-                    // FLOAT(p) takes 4 bytes when p <= 24, 8 otherwise
-                    $total += 4;
-                break;
-
-                case Database::VAR_BOOLEAN:
-                    // TINYINT(1) takes one byte
-                    $total +=1;
-                break;
-
-                case Database::VAR_DOCUMENT:
-                    // CHAR(255)
-                    $total += 255;
-                break;
-
-                default:
-                    throw new Exception('Unknown Type');
-                break;
-            }
-        }
-
-        return $total;
     }
 
     /**

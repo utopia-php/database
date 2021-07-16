@@ -308,6 +308,17 @@ abstract class Adapter
     abstract public static function getRowLimit(): int;
 
     /**
+     * Estimate maximum number of bytes required to store a document in $collection.
+     * Byte requirement varies based on column type and size.
+     * Needed to satisfy MariaDB/MySQL row width limit.
+     * Return 0 when no restrictions apply to row width
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    abstract public function getAttributeWidth(Document $collection): int;
+
+    /**
      * Get current index count from collection document
      * 
      * @param Document $collection

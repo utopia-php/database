@@ -280,20 +280,20 @@ class Database
         ]);
 
         // Check index limits, if given
-        if ($indexes && $this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit of ' . $this->adapter->getIndexLimit() . ' exceeded. Cannot create collection.');
         }
 
         // check attribute limits, if given
         if ($attributes) {
             if ($this->adapter->getAttributeLimit() > 0 && 
-                $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
             {
                 throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
             }
 
             if ($this->adapter->getRowLimit() > 0 && 
-                $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+                $this->getAttributeWidth($collection) > $this->adapter->getRowLimit())
             {
                 throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
             }
@@ -373,12 +373,6 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
-        if ($this->adapter->getRowLimit() > 0 && 
-            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
-        {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
-
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
             'type' => $type,
@@ -389,6 +383,12 @@ class Database
             'array' => $array,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getRowLimit() > 0 && 
+            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
     
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
@@ -501,12 +501,6 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
-        if ($this->adapter->getRowLimit() > 0 && 
-            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
-        {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
-
         $collection->setAttribute('attributesInQueue', new Document([
             '$id' => $id,
             'type' => $type,
@@ -517,6 +511,12 @@ class Database
             'array' => $array,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getRowLimit() > 0 && 
+            $this->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
     
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
@@ -1178,8 +1178,8 @@ class Database
         // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
         // `_read` text => 98 bytes? (estimate)
         // `_write` text => 98 bytes? (estimate)
-        // but this number seems to vary, so we give a +100 byte buffer
-        $total = 1320;
+        // but this number seems to vary, so we give a +300 byte buffer
+        $total = 1500;
 
         /** @var array $attributes */
         $attributes = $collection->getAttributes()['attributes'];

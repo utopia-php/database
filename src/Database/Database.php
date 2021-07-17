@@ -22,7 +22,7 @@ class Database
     const VAR_DOCUMENT = 'document';
     
     // Index Types
-    const INDEX_KEY = 'text';
+    const INDEX_KEY = 'key';
     const INDEX_FULLTEXT = 'fulltext';
     const INDEX_UNIQUE = 'unique';
     const INDEX_SPATIAL = 'spatial';

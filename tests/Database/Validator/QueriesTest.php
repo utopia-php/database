@@ -119,7 +119,7 @@ class QueriesTest extends TestCase
         'indexesInQueue' => [
             [
                 '$id' => 'testindex4',
-                'type' => 'tekeyxt',
+                'type' => 'key',
                 'attributes' => [
                     'price',
                     'title'

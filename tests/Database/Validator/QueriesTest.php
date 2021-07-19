@@ -76,7 +76,7 @@ class QueriesTest extends TestCase
         'indexes' => [
             [
                 '$id' => 'testindex',
-                'type' => 'text',
+                'type' => 'key',
                 'attributes' => [
                     'title',
                     'description'
@@ -88,7 +88,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'testindex2',
-                'type' => 'text',
+                'type' => 'key',
                 'attributes' => [
                     'title',
                     'description',
@@ -109,7 +109,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'testindex4',
-                'type' => 'text',
+                'type' => 'key',
                 'attributes' => [
                     'description'
                 ],
@@ -119,7 +119,7 @@ class QueriesTest extends TestCase
         'indexesInQueue' => [
             [
                 '$id' => 'testindex4',
-                'type' => 'text',
+                'type' => 'key',
                 'attributes' => [
                     'price',
                     'title'

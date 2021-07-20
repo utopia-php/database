@@ -873,12 +873,15 @@ class Database
     /**
      * @param string $collection
      * @param array $queries
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
      *
      * @return Document|bool
      */
-    public function findFirst(string $collection, array $queries = [])
+    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
     {
-        $results = $this->find($collection, $queries, /*limit*/ 1);
+        $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes);
         return \reset($results);
     }
 

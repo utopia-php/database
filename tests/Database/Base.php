@@ -8,7 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\IndexLimit as IndexLimitException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -18,6 +18,16 @@ abstract class Base extends TestCase
      * @return Adapter
      */
     abstract static protected function getDatabase(): Database;
+
+    /**
+     * @return string
+     */
+    abstract static protected function getAdapterName(): string;
+
+    /**
+     * @return int
+     */
+    abstract static protected function getAdapterRowLimit(): int;
 
     public function setUp(): void
     {
@@ -1145,44 +1155,169 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testExceptionAttributeLimit()
+    {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+            // load the collection up to the limit
+            $attributes = [];
+            for ($i=0; $i < 1012; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test{$i}",
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+            $collection = static::getDatabase()->createCollection('attributeLimit', $attributes);
+
+            $this->expectException(LimitException::class);
+            $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
+        } 
+
+        // Default assertion for other adapters
+        $this->assertEquals(1,1);
+    }
+
+    /**
+     * Using phpunit dataProviders to check that all these combinations of types/sizes throw exceptions
+     * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
+     */
+    public function rowWidthExceedsMaximum()
+    {
+        return [
+            // These combinations of attributes gets exactly to the 64k limit
+            // [$key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount]
+            // [0, 1024, 15, 0, 731, 3],
+            // [1, 512, 31, 0, 0, 833],
+            // [2, 256, 62, 128, 0, 305],
+            // [3, 128, 125, 30, 24, 2],
+            //
+            // Taken 500 bytes off for tests
+            [0, 1024, 15, 0, 606, 3],
+            [1, 512, 31, 0, 0, 333],
+            [2, 256, 62, 103, 0, 5],
+            [3, 128, 124, 30, 24, 14],
+        ];
+    }
+
+    /**
+     * @dataProvider rowWidthExceedsMaximum
+     * @expectedException LimitException
+     */
+    public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
+    {
+        if (static::getAdapterRowLimit() > 0) {
+            $attributes = [];
+
+            // Load the collection up to the limit
+            // Strings
+            for ($i=0; $i < $stringCount; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_string{$i}",
+                    'type' => Database::VAR_STRING,
+                    'size' => $stringSize,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            // Integers
+            for ($i=0; $i < $intCount; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_int{$i}",
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            // Floats
+            for ($i=0; $i < $floatCount; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_float{$i}",
+                    'type' => Database::VAR_FLOAT,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            // Booleans
+            for ($i=0; $i < $boolCount; $i++) {
+                $attributes[] = new Document([
+                    '$id' => "test_bool{$i}",
+                    'type' => Database::VAR_BOOLEAN,
+                    'size' => 0,
+                    'required' => false,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]);
+            }
+
+            $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
+
+            $this->expectException(LimitException::class);
+            $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
+        } 
+
+        // Default assertion for other adapters
+        $this->assertEquals(1,1);
+    }
+
     public function testExceptionIndexLimit()
     {
-        static::getDatabase()->createCollection('exceptionLimit');
+        static::getDatabase()->createCollection('indexLimit');
 
         // add unique attributes for indexing
         for ($i=0; $i < 64; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createAttribute('exceptionLimit', "test{$i}", Database::VAR_STRING, 16, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
         // testing for indexLimit = 64
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
         for ($i=0; $i < 61; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createIndex('exceptionLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
+            $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
-        $this->expectException(IndexLimitException::class);
-        $this->assertEquals(false, static::getDatabase()->createIndex('exceptionLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
+        $this->expectException(LimitException::class);
+        $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
 
-        static::getDatabase()->deleteCollection('exceptionLimit');
+        static::getDatabase()->deleteCollection('indexLimit');
     }
 
     public function testExceptionIndexLimitInQueue()
     {
-        static::getDatabase()->createCollection('exceptionLimitInQueue');
+        static::getDatabase()->createCollection('indexLimitInQueue');
 
         // add unique attributes for indexing
         for ($i=0; $i < 64; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createAttribute('exceptionLimitInQueue', "test{$i}", Database::VAR_STRING, 16, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimitInQueue', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
         // testing for indexLimit = 64
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
         for ($i=0; $i < 61; $i++) {
-            $this->assertEquals(true, static::getDatabase()->addIndexInQueue('exceptionLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
+            $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
-        $this->expectException(IndexLimitException::class);
-        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('exceptionLimitInQueue', "index62", Database::INDEX_KEY, ["test62"], [16]));
+        $this->expectException(LimitException::class);
+        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index62", Database::INDEX_KEY, ["test62"], [16]));
     }
 
     /**

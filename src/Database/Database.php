@@ -210,13 +210,36 @@ class Database
     {
         $this->adapter->create();
 
-        $this->createCollection(self::COLLECTIONS);
-        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 512, true);
-        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 1000000, false);
-        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 1000000, false);
-        $this->createAttribute(self::COLLECTIONS, 'attributesInQueue', self::VAR_STRING, 1000000, false);
-        $this->createAttribute(self::COLLECTIONS, 'indexesInQueue', self::VAR_STRING, 1000000, false);
-        $this->createIndex(self::COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
+
+        /**
+         * Create array of attribute documents
+         * @var Document[] $attributes
+         */
+        $attributes = array_map(function ($attribute) {
+            return new Document([
+                '$id' => $attribute[0],
+                'type' => $attribute[1],
+                'size' => $attribute[2],
+                'required' => $attribute[3],
+            ]);
+        }, [ // Array of [$id, $type, $size, $required]
+            ['name', self::VAR_STRING, 512, true],
+            ['attributes', self::VAR_STRING, 1000000, false],
+            ['indexes', self::VAR_STRING, 1000000, false],
+            ['attributesInQueue', self::VAR_STRING, 1000000, false],
+            ['indexesInQueue', self::VAR_STRING, 1000000, false],
+        ]);
+
+        /** @var Document[] $indexes*/
+        $indexes = [
+            new Document([
+                '$id' => '_key_1',
+                'type' => self::INDEX_UNIQUE,
+                'attributes' => ['name'],
+            ])
+        ];
+
+        $this->createCollection(self::COLLECTIONS, $attributes, $indexes);
 
         return true;
     }

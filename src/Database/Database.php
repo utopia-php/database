@@ -886,18 +886,6 @@ class Database
     }
 
     /**
-     * @param string $collection
-     * @param array $queries
-     *
-     * @return Document|false
-     */
-    public function findLast(string $collection, array $queries = [])
-    {
-        $results = $this->find($collection, $queries, /*limit*/ 1);
-        return \end($results);
-    }
-
-    /**
      * Count Documents
      * 
      * @param string $collection

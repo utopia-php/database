@@ -107,7 +107,7 @@ class MariaDB extends Adapter
         if (!empty($attributes) || !empty($indexes)) {
             foreach ($attributes as &$attribute) {
                 $attrId = $attribute->getId();
-                $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size'), $attribute->getAttribute('signed'));
+                $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
                 if($attribute->getAttribute('array')) {
                     $attrType = 'LONGTEXT';

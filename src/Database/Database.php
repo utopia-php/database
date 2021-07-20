@@ -880,7 +880,7 @@ class Database
      *
      * @return Document|bool
      */
-    public function findFirst(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
+    public function findFirst(string $collection, array $queries = [], int $limit = 1, int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
     {
         $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes);
         return \reset($results);

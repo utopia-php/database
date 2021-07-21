@@ -382,11 +382,12 @@ class Database
      * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
+     * @param string $format optional validation format of attribute
      * @param array $filters
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -404,6 +405,7 @@ class Database
             'default' => $default,
             'signed' => $signed,
             'array' => $array,
+            'format' => $format,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
 
@@ -510,11 +512,12 @@ class Database
      * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
+     * @param string $format optional validation format of attribute
      * @param array $filters
      * 
      * @return bool
      */
-    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -532,6 +535,7 @@ class Database
             'default' => $default,
             'signed' => $signed,
             'array' => $array,
+            'format' => $format,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
 
@@ -801,14 +805,15 @@ class Database
      * Create Document
      * 
      * @param string $collection
-     * @param Document $data
+     * @param Document $document
+     * @param array{name: string, validator: Validator, type: string} $formats
      *
      * @return Document
      *
      * @throws AuthorizationException
      * @throws StructureException
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(string $collection, Document $document, array $formats): Document
     {
         $validator = new Authorization($document, self::PERMISSION_WRITE);
 
@@ -825,7 +830,7 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection);
+        $validator = new Structure($collection, $formats);
 
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
@@ -844,12 +849,13 @@ class Database
      * @param string $collection
      * @param string $id
      * @param Document $document
+     * @param array{name: string, validator: Validator, type: string} $formats
      *
      * @return Document
      *
      * @throws Exception
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, array $formats): Document
     {
         if (!$document->getId() || !$id) {
             throw new Exception('Must define $id attribute');
@@ -874,7 +880,7 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection);
+        $validator = new Structure($collection, $formats);
 
         if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
             throw new StructureException($validator->getDescription());

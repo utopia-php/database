@@ -74,10 +74,15 @@ class Structure extends Validator
      * Structure constructor.
      *
      * @param Document $collection
+     * @param array{name: string, validator: Validator, type: string} $formats
      */
-    public function __construct(Document $collection)
+    public function __construct(Document $collection, array $formats = [])
     {
         $this->collection = $collection;
+
+        foreach ($formats as $format) {
+            self::addFormat($format['name'], $format['validator'], $format['type']);
+        }
     }
 
     /**
@@ -182,6 +187,7 @@ class Structure extends Validator
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
+            $format = $attribute['format'] ?? false;
 
             $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
 
@@ -278,8 +284,6 @@ class Structure extends Validator
                     }
                 }
             }
-
-            // TODO check for length / size
         }
 
         return true;

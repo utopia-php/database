@@ -18,7 +18,6 @@ abstract class Base extends TestCase
      * @return Adapter
      */
     abstract static protected function getDatabase(): Database;
-    abstract static function getAdapterName(): string;
 
     /**
      * @return string

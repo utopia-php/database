@@ -30,6 +30,16 @@ class MariaDBTest extends Base
     }
 
     /**
+     * Return row limit of adapter
+     *
+     * @return int
+     */
+    static function getAdapterRowLimit(): int
+    {
+        return MariaDB::getRowLimit();
+    }
+
+    /**
      * @return Adapter
      */
     static function getDatabase(): Database

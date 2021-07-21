@@ -6,7 +6,7 @@ use Exception;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\IndexLimit as IndexLimitException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
 
@@ -22,7 +22,7 @@ class Database
     const VAR_DOCUMENT = 'document';
 
     // Index Types
-    const INDEX_KEY = 'text';
+    const INDEX_KEY = 'key';
     const INDEX_FULLTEXT = 'fulltext';
     const INDEX_UNIQUE = 'unique';
     const INDEX_SPATIAL = 'spatial';
@@ -210,13 +210,36 @@ class Database
     {
         $this->adapter->create();
 
-        $this->createCollection(self::COLLECTIONS);
-        $this->createAttribute(self::COLLECTIONS, 'name', self::VAR_STRING, 512, true);
-        $this->createAttribute(self::COLLECTIONS, 'attributes', self::VAR_STRING, 1000000, false);
-        $this->createAttribute(self::COLLECTIONS, 'indexes', self::VAR_STRING, 1000000, false);
-        $this->createAttribute(self::COLLECTIONS, 'attributesInQueue', self::VAR_STRING, 1000000, false);
-        $this->createAttribute(self::COLLECTIONS, 'indexesInQueue', self::VAR_STRING, 1000000, false);
-        $this->createIndex(self::COLLECTIONS, '_key_1', self::INDEX_UNIQUE, ['name']);
+
+        /**
+         * Create array of attribute documents
+         * @var Document[] $attributes
+         */
+        $attributes = array_map(function ($attribute) {
+            return new Document([
+                '$id' => $attribute[0],
+                'type' => $attribute[1],
+                'size' => $attribute[2],
+                'required' => $attribute[3],
+            ]);
+        }, [ // Array of [$id, $type, $size, $required]
+            ['name', self::VAR_STRING, 512, true],
+            ['attributes', self::VAR_STRING, 1000000, false],
+            ['indexes', self::VAR_STRING, 1000000, false],
+            ['attributesInQueue', self::VAR_STRING, 1000000, false],
+            ['indexesInQueue', self::VAR_STRING, 1000000, false],
+        ]);
+
+        /** @var Document[] $indexes*/
+        $indexes = [
+            new Document([
+                '$id' => '_key_1',
+                'type' => self::INDEX_UNIQUE,
+                'attributes' => ['name'],
+            ])
+        ];
+
+        $this->createCollection(self::COLLECTIONS, $attributes, $indexes);
 
         return true;
     }
@@ -267,8 +290,8 @@ class Database
         if($id === self::COLLECTIONS) {
             return new Document($this->collection);
         }
-        
-        return $this->createDocument(Database::COLLECTIONS, new Document([
+
+        $collection = new Document([
             '$id' => $id,
             '$read' => ['role:all'],
             '$write' => ['role:all'],
@@ -277,7 +300,29 @@ class Database
             'indexes' => $indexes,
             'attributesInQueue' => [],
             'indexesInQueue' => [],
-        ]));
+        ]);
+
+        // Check index limits, if given
+        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
+            throw new LimitException('Index limit of ' . $this->adapter->getIndexLimit() . ' exceeded. Cannot create collection.');
+        }
+
+        // check attribute limits, if given
+        if ($attributes) {
+            if ($this->adapter->getAttributeLimit() > 0 && 
+                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
+            {
+                throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
+            }
+
+            if ($this->adapter->getRowLimit() > 0 && 
+                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit())
+            {
+                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+            }
+        }
+
+        return $this->createDocument(Database::COLLECTIONS, $collection);
     }
 
     /**
@@ -345,6 +390,12 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
+        if ($this->adapter->getAttributeLimit() > 0 && 
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
             'type' => $type,
@@ -355,6 +406,12 @@ class Database
             'array' => $array,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getRowLimit() > 0 && 
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
     
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
@@ -461,6 +518,12 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
+        if ($this->adapter->getAttributeLimit() > 0 && 
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
         $collection->setAttribute('attributesInQueue', new Document([
             '$id' => $id,
             'type' => $type,
@@ -471,6 +534,12 @@ class Database
             'array' => $array,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getRowLimit() > 0 && 
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
     
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
@@ -529,7 +598,7 @@ class Database
         $collection = $this->getCollection($collection);
 
         if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
-            throw new IndexLimitException('Index limit reached. Cannot create new index.');
+            throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
         $collection->setAttribute('indexes', new Document([
@@ -621,7 +690,7 @@ class Database
         $collection = $this->getCollection($collection);
 
         if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
-            throw new IndexLimitException('Index limit reached. Cannot create new index.');
+            throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
         $collection->setAttribute('indexesInQueue', new Document([

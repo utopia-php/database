@@ -292,10 +292,10 @@ class MariaDB extends Adapter
      *
      * @return Document
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, bool $includeInternals = false): Document
     {
         $name = $this->filter($collection);
-        
+
         $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}
             WHERE _uid = :_uid
             LIMIT 1;
@@ -315,10 +315,14 @@ class MariaDB extends Adapter
         $document['$id'] = $document['_uid'];
         $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
         $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
-        unset($document['_id']);
+
         unset($document['_uid']);
         unset($document['_read']);
         unset($document['_write']);
+
+        if (!$includeInternals) {
+            unset($document['_id']);
+        }
 
         return new Document($document);
     }
@@ -374,7 +378,7 @@ class MariaDB extends Adapter
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
                     break;
-                
+
                 default:
                     throw $e;
                     break;
@@ -384,7 +388,7 @@ class MariaDB extends Adapter
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         return $document;
     }
 
@@ -488,17 +492,40 @@ class MariaDB extends Adapter
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
         $orders = [];
-        
+        $applyOrderAfter = !empty($orderAfter) && array_key_exists(0, $orderAttributes);
+
+        if ($applyOrderAfter && is_null($orderAfter->getAttribute('_id', null))) {
+            throw new Exception("orderAfter Document is missing internal '_id' attribute.");
+        }
+
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             $orders[] = $attribute.' '.$orderType;
+
+            // Get most dominant/first order attribute
+            if ($i === 0 && $applyOrderAfter) {
+                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+                $where[] = "(
+                        {$attribute} {$this->getSQLOperator($orderOperator)} :after 
+                        OR (
+                            {$attribute} = :after 
+                            AND
+                            _id > {$orderAfter->getAttribute('_id')}
+                        )
+                    )";
+            }
+        }
+
+        if ($applyOrderAfter) {
+            $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
@@ -525,6 +552,14 @@ class MariaDB extends Adapter
             foreach($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
             }
+        }
+
+        if ($applyOrderAfter) {
+            $attribute = $orderAttributes[0];
+            if (is_null($orderAfter->getAttribute($attribute, null))) {
+                throw new Exception("Order attribute '{$attribute}' is empty.");
+            }
+            $stmt->bindValue(':after', $orderAfter->getAttribute($attribute), $this->getPDOType($orderAfter->getAttribute($attribute)));
         }
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -723,7 +758,7 @@ class MariaDB extends Adapter
                 if($size > 16777215) {
                     return 'LONGTEXT';
                 }
-                
+
                 if($size > 65535) {
                     return 'MEDIUMTEXT';
                 }
@@ -731,7 +766,7 @@ class MariaDB extends Adapter
                 if($size > 16383) {
                     return 'TEXT';
                 }
-                
+
                 return "VARCHAR({$size})";
             break;
 
@@ -752,7 +787,7 @@ class MariaDB extends Adapter
             case Database::VAR_DOCUMENT:
                 return 'CHAR(255)';
             break;
-            
+
             default:
                 throw new Exception('Unknown Type');
             break;
@@ -836,15 +871,15 @@ class MariaDB extends Adapter
             case Database::INDEX_ARRAY:
                 return 'INDEX';
             break;
-            
+
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
             break;
-            
+
             case Database::INDEX_FULLTEXT:
                 return 'FULLTEXT INDEX';
             break;
-            
+
             default:
                 throw new Exception('Unknown Index Type:' . $type);
             break;
@@ -868,15 +903,15 @@ class MariaDB extends Adapter
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
             break;
-            
+
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
             break;
-            
+
             case Database::INDEX_FULLTEXT:
                 $type = 'FULLTEXT INDEX';
             break;
-            
+
             default:
                 throw new Exception('Unknown Index Type:' . $type);
             break;
@@ -934,7 +969,7 @@ class MariaDB extends Adapter
             case 'NULL':
                 return PDO::PARAM_NULL;
             break;
-            
+
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
             break;

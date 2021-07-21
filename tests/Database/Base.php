@@ -18,6 +18,7 @@ abstract class Base extends TestCase
      * @return Adapter
      */
     abstract static protected function getDatabase(): Database;
+    abstract static function getAdapterName(): string;
 
     public function setUp(): void
     {
@@ -637,7 +638,7 @@ abstract class Base extends TestCase
 
         // TODO@kodumbeats hacky way to pass mariadb tests
         // Remove when $operator="contains" is supported
-        if ($this->getAdapterName() === "mongodb")
+        if (static::getAdapterName() === "mongodb")
         {
             /**
              * Array contains condition
@@ -657,7 +658,7 @@ abstract class Base extends TestCase
 
             $this->assertEquals(4, count($documents));
         }
-        
+
         /**
          * Fulltext search
          */
@@ -716,6 +717,44 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
         $this->assertEquals('Work in Progress 2', $documents[4]['name']);
         $this->assertEquals('Work in Progress', $documents[5]['name']);
+
+        /**
+         * ORDER BY - After
+         */
+        $movies = static::getDatabase()->find('movies', [], 25, 0, ['year'], [Database::ORDER_DESC]);
+        $movieOne = static::getDatabase()->getDocument($movies[1]->getCollection(), $movies[1]->getId(), true);
+        $movieTwo = static::getDatabase()->getDocument($movies[3]->getCollection(), $movies[3]->getId(), true);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movieOne);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Frozen II', $documents[0]['name']);
+        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movieTwo);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], $movieTwo);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
+
+        /**
+         * ORDER BY - Multiple After
+         */
+        $movies = static::getDatabase()->find('movies', [], 25, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC]);
+        $movieOne = static::getDatabase()->getDocument($movies[1]->getCollection(), $movies[1]->getId(), true);
+        $movieTwo = static::getDatabase()->getDocument($movies[3]->getCollection(), $movies[3]->getId(), true);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movieOne);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Captain Marvel', $documents[0]['name']);
+        $this->assertEquals('Captain America: The First Avenger', $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movieTwo);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Work in Progress', $documents[0]['name']);
+        $this->assertEquals('Work in Progress 2', $documents[1]['name']);
 
         /**
          * Limit

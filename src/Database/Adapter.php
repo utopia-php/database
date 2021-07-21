@@ -236,8 +236,8 @@ abstract class Adapter
      *
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array;
-    
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array;
+
     /**
      * Count Documents
      * 
@@ -319,7 +319,7 @@ abstract class Adapter
         if(\is_null($value)) {
             throw new Exception('Failed to filter key');
         }
-        
+
         return $value;
     }
 }

@@ -17,10 +17,10 @@ class Database
     const VAR_INTEGER = 'integer';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
-    
+
     // Relationships Types
     const VAR_DOCUMENT = 'document';
-    
+
     // Index Types
     const INDEX_KEY = 'text';
     const INDEX_FULLTEXT = 'fulltext';
@@ -304,9 +304,9 @@ class Database
     public function listCollections($limit = 25, $offset = 0): array
     {
         Authorization::disable();
-        
+
         $result = $this->find(self::COLLECTIONS, [], $limit, $offset);
-        
+
         Authorization::reset();
 
         return $result;
@@ -676,7 +676,7 @@ class Database
      *
      * @return Document
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, bool $includeInternals = false): Document
     {
         if($collection === self::COLLECTIONS && $id === self::COLLECTIONS) {
             return new Document($this->collection);
@@ -706,7 +706,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id);
+        $document = $this->adapter->getDocument($collection->getId(), $id, $includeInternals);
 
         $document->setAttribute('$collection', $collection->getId());
 
@@ -855,11 +855,11 @@ class Database
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
     {
         $collection = $this->getCollection($collection);
 
-        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes);
+        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
 
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);
@@ -880,9 +880,9 @@ class Database
      *
      * @return Document|bool
      */
-    public function findFirst(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
+    public function findFirst(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
     {
-        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes);
+        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
         return \reset($results);
     }
 
@@ -896,9 +896,9 @@ class Database
      *
      * @return Document|false
      */
-    public function findLast(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
+    public function findLast(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
     {
-        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes);
+        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
         return \end($results);
     }
 
@@ -1104,13 +1104,13 @@ class Database
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
-                    
+
                     default:
                         # code...
                         break;
                 }
             }
-            
+
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 

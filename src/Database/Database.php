@@ -806,14 +806,14 @@ class Database
      * 
      * @param string $collection
      * @param Document $document
-     * @param array{name: string, validator: Validator, type: string} $formats
+     * @param array{name: string, validator: Validator, type: string} $formats (optional) Array of format validators
      *
      * @return Document
      *
      * @throws AuthorizationException
      * @throws StructureException
      */
-    public function createDocument(string $collection, Document $document, array $formats): Document
+    public function createDocument(string $collection, Document $document, array $formats = []): Document
     {
         $validator = new Authorization($document, self::PERMISSION_WRITE);
 
@@ -849,13 +849,13 @@ class Database
      * @param string $collection
      * @param string $id
      * @param Document $document
-     * @param array{name: string, validator: Validator, type: string} $formats
+     * @param array{name: string, validator: Validator, type: string} $formats (optional) Array of format validators
      *
      * @return Document
      *
      * @throws Exception
      */
-    public function updateDocument(string $collection, string $id, Document $document, array $formats): Document
+    public function updateDocument(string $collection, string $id, Document $document, array $formats = []): Document
     {
         if (!$document->getId() || !$id) {
             throw new Exception('Must define $id attribute');

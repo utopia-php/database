@@ -74,7 +74,7 @@ class Structure extends Validator
      * Structure constructor.
      *
      * @param Document $collection
-     * @param array{name: string, validator: Validator, type: string} $formats
+     * @param array{name: string, validator: Validator, type: string} $formats (optional) Array of format validators
      */
     public function __construct(Document $collection, array $formats = [])
     {

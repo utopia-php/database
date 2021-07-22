@@ -952,34 +952,17 @@ class Database
     /**
      * @param string $collection
      * @param array $queries
-     * @param int $limit
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     *
-     * @return Document|bool
-     */
-    public function findFirst(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
-    {
-        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
-        return \reset($results);
-    }
-
-    /**
-     * @param string $collection
-     * @param array $queries
-     * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
      * @param string $orderAfter
-     *
-     * @return Document|false
+     * 
+     * @return Document|bool
      */
-    public function findLast(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], string $orderAfter = null)
+    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
     {
-        $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
-        return \end($results);
+        $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes, $orderAfter);
+        return \reset($results);
     }
 
     /**

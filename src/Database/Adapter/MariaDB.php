@@ -292,7 +292,7 @@ class MariaDB extends Adapter
      *
      * @return Document
      */
-    public function getDocument(string $collection, string $id, bool $includeInternals = false): Document
+    public function getDocument(string $collection, string $id): Document
     {
         $name = $this->filter($collection);
 
@@ -316,13 +316,10 @@ class MariaDB extends Adapter
         $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
         $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
 
+        unset($document['_id']);
         unset($document['_uid']);
         unset($document['_read']);
         unset($document['_write']);
-
-        if (!$includeInternals) {
-            unset($document['_id']);
-        }
 
         return new Document($document);
     }
@@ -441,7 +438,7 @@ class MariaDB extends Adapter
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         return $document;
     }
 
@@ -469,11 +466,11 @@ class MariaDB extends Adapter
             $this->getPDO()->rollBack();
             throw new Exception('Failed to clean document');
         }
-        
+
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         return true;
     }
 
@@ -498,11 +495,6 @@ class MariaDB extends Adapter
         $roles = Authorization::getRoles();
         $where = ['1=1'];
         $orders = [];
-        $applyOrderAfter = !empty($orderAfter) && array_key_exists(0, $orderAttributes);
-
-        if ($applyOrderAfter && is_null($orderAfter->getAttribute('_id', null))) {
-            throw new Exception("orderAfter Document is missing internal '_id' attribute.");
-        }
 
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
@@ -510,7 +502,7 @@ class MariaDB extends Adapter
             $orders[] = $attribute.' '.$orderType;
 
             // Get most dominant/first order attribute
-            if ($i === 0 && $applyOrderAfter) {
+            if ($i === 0 && !empty($orderAfter)) {
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 $where[] = "(
@@ -518,14 +510,15 @@ class MariaDB extends Adapter
                         OR (
                             {$attribute} = :after 
                             AND
-                            _id > {$orderAfter->getAttribute('_id')}
+                            _id > {$orderAfter->getInternalId()}
                         )
                     )";
             }
         }
+        $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
 
-        if ($applyOrderAfter) {
-            $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
+        if (empty($orderAttributes) && !empty($orderAfter)) {
+            $where[] = "( _id > {$orderAfter->getInternalId()} )"; // Allow after pagination without any order
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
@@ -554,7 +547,7 @@ class MariaDB extends Adapter
             }
         }
 
-        if ($applyOrderAfter) {
+        if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
             if (is_null($orderAfter->getAttribute($attribute, null))) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
@@ -634,6 +627,37 @@ class MariaDB extends Adapter
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $result['sum'] ?? 0;
+    }
+
+    /**
+     * Get internal ID for a document.
+     * 
+     * @param Document $document 
+     * @return int 
+     * @throws Exception 
+     * @throws PDOException 
+     */
+    public function getInternalId(Document $document): int
+    {
+        $name = $this->filter($document->getCollection());
+
+        $stmt = $this->getPDO()->prepare("SELECT _id FROM {$this->getNamespace()}.{$name}
+            WHERE _uid = :_uid
+            LIMIT 1;
+        ");
+
+        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        $stmt->execute();
+
+        /** @var array $document */
+        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if(empty($document)) {
+            throw new Exception("Document not found.");
+        }
+
+        return +$document['_id'];
     }
 
     /**

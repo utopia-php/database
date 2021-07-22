@@ -27,7 +27,7 @@ class Document extends ArrayObject
         if(isset($input['$read']) && !is_array($input['$read'])) {
             throw new Exception('$read permission must be of type array');
         }
-        
+
         if(isset($input['$write']) && !is_array($input['$write'])) {
             throw new Exception('$write permission must be of type array');
         }
@@ -55,6 +55,22 @@ class Document extends ArrayObject
     public function getId(): string
     {
         return $this->getAttribute('$id', '');
+    }
+
+    /**
+     * @return string
+     */
+    public function getInternalId(): int
+    {
+        return $this->getAttribute('$internalId', '');
+    }
+
+    /**
+     * @return string
+     */
+    public function setInternalId(int $internalId): void
+    {
+        $this->setAttribute('$internalId', $internalId);
     }
 
     /**
@@ -91,7 +107,7 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if(array_key_exists($attribute, ['$id' => true, '$collection' => true, '$read' => true, '$write' => []])) {
+            if(array_key_exists($attribute, ['$id' => true, '$internalId' => true, '$collection' => true, '$read' => true, '$write' => []])) {
                 continue;
             }
 

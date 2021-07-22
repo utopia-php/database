@@ -921,12 +921,22 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param string $orderAfter
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], string $orderAfter = null): array
     {
         $collection = $this->getCollection($collection);
+
+        if (!empty($orderAfter)) {
+            $orderAfter = $this->getDocument($collection->getId(), $orderAfter);
+            if ($orderAfter->isEmpty()) {
+                throw new Exception("orderAfter Document is not found.");
+            }
+            $internalId = $this->adapter->getInternalId($orderAfter);
+            $orderAfter->setInternalId($internalId);
+        }
 
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
 
@@ -962,10 +972,11 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param string $orderAfter
      *
      * @return Document|false
      */
-    public function findLast(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
+    public function findLast(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], string $orderAfter = null)
     {
         $results = $this->find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
         return \end($results);

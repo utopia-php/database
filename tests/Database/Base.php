@@ -753,24 +753,12 @@ abstract class Base extends TestCase
     /**
      * @depends testFind
      */
-    public function testFindFirst()
+    public function testFindOne()
     {
-        $document = static::getDatabase()->findFirst('movies', [], 4, 2, ['name']);
+        $document = static::getDatabase()->findOne('movies', [], 2, ['name']);
         $this->assertEquals('Frozen', $document['name']);
 
-        $document = static::getDatabase()->findFirst('movies', [], 4, 10);
-        $this->assertEquals(false, $document);
-    }
-
-    /**
-     * @depends testFind
-     */
-    public function testFindLast()
-    {
-        $document = static::getDatabase()->findLast('movies', [], 4, 2, ['name']);
-        $this->assertEquals('Work in Progress 2', $document['name']);
-
-        $document = static::getDatabase()->findLast('movies', [], 4, 10);
+        $document = static::getDatabase()->findOne('movies', [], 10);
         $this->assertEquals(false, $document);
     }
 

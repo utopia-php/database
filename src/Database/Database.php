@@ -806,7 +806,8 @@ class Database
      * 
      * @param string $collection
      * @param Document $document
-     * @param array{name: string, validator: Validator, type: string} $formats (optional) Array of format validators
+     * @param array $formats (optional) Array of format validators
+     * {name: string, validator: \Utopia\Validator, type: string}
      *
      * @return Document
      *
@@ -848,8 +849,8 @@ class Database
      * 
      * @param string $collection
      * @param string $id
-     * @param Document $document
-     * @param array{name: string, validator: Validator, type: string} $formats (optional) Array of format validators
+     * @param array $formats (optional) Array of format validators
+     * {name: string, validator: \Utopia\Validator, type: string}
      *
      * @return Document
      *

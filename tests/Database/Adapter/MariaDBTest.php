@@ -40,6 +40,15 @@ class MariaDBTest extends Base
     }
 
     /**
+     * 
+     * @return int 
+     */
+    static function getUsedIndexes(): int
+    {
+        return 3;
+    }
+
+    /**
      * @return Adapter
      */
     static function getDatabase(): Database

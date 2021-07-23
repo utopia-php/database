@@ -183,9 +183,9 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
     }
-    
+
     public function testUnknownKeys()
-    {    
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -200,13 +200,13 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-        $this->assertEquals('Invalid document structure: Unknown attribute: ""titlex"', $validator->getDescription());
-    }  
-            
+        $this->assertEquals('Invalid document structure: Unknown attribute: "titlex"', $validator->getDescription());
+    }
+
     public function testValidDocument()
-    { 
+    {
         $validator = new Structure(new Document($this->collection));
-        
+
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => 'posts',
             'title' => 'Demo Title',

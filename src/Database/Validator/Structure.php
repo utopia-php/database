@@ -193,7 +193,7 @@ class Structure extends Validator
 
         foreach ($structure as $key => $value) {
             if(!array_key_exists($key, $keys)) { // Check no unknown attributes are set
-                $this->message = 'Unknown attribute: "'. '"'.$key.'"';
+                $this->message = 'Unknown attribute: "'.$key.'"';
                 return false;
             }
 

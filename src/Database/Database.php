@@ -540,7 +540,7 @@ class Database
         {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
-    
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
@@ -608,7 +608,7 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
-    
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
@@ -631,7 +631,7 @@ class Database
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;
-            
+
             default:
                 throw new Exception('Unknown index type: '.$type);
                 break;

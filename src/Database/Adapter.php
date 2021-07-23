@@ -253,9 +253,9 @@ abstract class Adapter
      * Get internal ID of a document.
      * 
      * @param Document $document 
-     * @return int 
+     * @return mixed 
      */
-    abstract public function getInternalId(Document $document): int;
+    abstract public function getInternalId(Document $document);
 
     /**
      * Get max STRING limit

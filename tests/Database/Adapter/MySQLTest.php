@@ -40,6 +40,15 @@ class MySQLTest extends Base
     }
 
     /**
+     * 
+     * @return int 
+     */
+    static function getUsedIndexes(): int
+    {
+        return 3;
+    }
+
+    /**
      * @reture Adapter
      */
     static function getDatabase(): Database

@@ -29,6 +29,11 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterRowLimit(): int;
 
+    /**
+     * @return int
+     */
+    abstract static protected function getUsedIndexes(): int;
+
     public function setUp(): void
     {
         Authorization::setRole('role:all');
@@ -1325,12 +1330,13 @@ abstract class Base extends TestCase
 
         // testing for indexLimit = 64
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
+        // MongoDB create 4 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < 61; $i++) {
+        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
+        $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
 
         static::getDatabase()->deleteCollection('indexLimit');
     }
@@ -1347,11 +1353,11 @@ abstract class Base extends TestCase
         // testing for indexLimit = 64
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < 61; $i++) {
+        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
             $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index62", Database::INDEX_KEY, ["test62"], [16]));
+        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index61", Database::INDEX_KEY, ["test61"], [16]));
     }
 
     /**

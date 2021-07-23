@@ -60,15 +60,16 @@ class Document extends ArrayObject
     /**
      * @return string
      */
-    public function getInternalId(): int
+    public function getInternalId(): string
     {
         return $this->getAttribute('$internalId', '');
     }
 
     /**
-     * @return string
+     * @param mixed $internalId 
+     * @return void 
      */
-    public function setInternalId(int $internalId): void
+    public function setInternalId($internalId): void
     {
         $this->setAttribute('$internalId', $internalId);
     }

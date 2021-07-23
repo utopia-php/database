@@ -73,16 +73,10 @@ class Structure extends Validator
     /**
      * Structure constructor.
      *
-     * @param array $formats (optional) Array of format validators
-     * {name: string, validator: \Utopia\Validator, type: string}
      */
-    public function __construct(Document $collection, array $formats = [])
+    public function __construct(Document $collection)
     {
         $this->collection = $collection;
-
-        foreach ($formats as $format) {
-            self::addFormat($format['name'], $format['validator'], $format['type']);
-        }
     }
 
     /**

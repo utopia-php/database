@@ -806,15 +806,13 @@ class Database
      * 
      * @param string $collection
      * @param Document $document
-     * @param array $formats (optional) Array of format validators
-     * {name: string, validator: \Utopia\Validator, type: string}
      *
      * @return Document
      *
      * @throws AuthorizationException
      * @throws StructureException
      */
-    public function createDocument(string $collection, Document $document, array $formats = []): Document
+    public function createDocument(string $collection, Document $document): Document
     {
         $validator = new Authorization($document, self::PERMISSION_WRITE);
 
@@ -831,7 +829,7 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection, $formats);
+        $validator = new Structure($collection);
 
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
@@ -849,14 +847,12 @@ class Database
      * 
      * @param string $collection
      * @param string $id
-     * @param array $formats (optional) Array of format validators
-     * {name: string, validator: \Utopia\Validator, type: string}
      *
      * @return Document
      *
      * @throws Exception
      */
-    public function updateDocument(string $collection, string $id, Document $document, array $formats = []): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         if (!$document->getId() || !$id) {
             throw new Exception('Must define $id attribute');
@@ -881,7 +877,7 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection, $formats);
+        $validator = new Structure($collection);
 
         if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
             throw new StructureException($validator->getDescription());

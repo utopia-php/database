@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests;
 
+use Exception;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Database;
@@ -751,6 +752,12 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Work in Progress 2', $documents[0]['name']);
 
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[5]->getId());
+        $this->assertEmpty(count($documents));
+
+        $this->expectException(Exception::class);
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], 'unknown');
+
         /**
          * ORDER BY - Single Attribute After
          */
@@ -770,6 +777,12 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
 
+        $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], $movies[5]->getId());
+        $this->assertEmpty(count($documents));
+
+        $this->expectException(Exception::class);
+        $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], 'unknown');
+
         /**
          * ORDER BY - Multiple After
          */
@@ -788,6 +801,12 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[4]->getId());
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Work in Progress 2', $documents[0]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[5]->getId());
+        $this->assertEmpty(count($documents));
+
+        $this->expectException(Exception::class);
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], 'unknown');
 
         /**
          * Limit

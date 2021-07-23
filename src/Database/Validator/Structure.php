@@ -107,6 +107,22 @@ class Structure extends Validator
     }
 
     /**
+     * Check if validator has been added
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    static public function hasFormat(string $name, string $type): bool
+    {
+        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Get a Validator
      * 
      * @param string $name

@@ -233,6 +233,7 @@ abstract class Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param Document|null $orderAfter
      *
      * @return Document[]
      */

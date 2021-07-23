@@ -532,7 +532,7 @@ class MariaDB extends Adapter
             $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
-        $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
+        $order = 'ORDER BY '.implode(', ', $orders);
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
             WHERE {$permissions} AND ".implode(' AND ', $where)."

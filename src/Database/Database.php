@@ -745,7 +745,7 @@ class Database
      *
      * @return Document
      */
-    public function getDocument(string $collection, string $id, bool $includeInternals = false): Document
+    public function getDocument(string $collection, string $id): Document
     {
         if($collection === self::COLLECTIONS && $id === self::COLLECTIONS) {
             return new Document($this->collection);
@@ -775,7 +775,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id, $includeInternals);
+        $document = $this->adapter->getDocument($collection->getId(), $id);
 
         $document->setAttribute('$collection', $collection->getId());
 
@@ -928,17 +928,18 @@ class Database
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], string $orderAfter = null): array
     {
         $collection = $this->getCollection($collection);
+        $orderAfterDocument = null;
 
         if (!empty($orderAfter)) {
-            $orderAfter = $this->getDocument($collection->getId(), $orderAfter);
-            if ($orderAfter->isEmpty()) {
+            $orderAfterDocument = $this->getDocument($collection->getId(), $orderAfter);
+            if ($orderAfterDocument->isEmpty()) {
                 throw new Exception("orderAfter Document is not found.");
             }
-            $internalId = $this->adapter->getInternalId($orderAfter);
-            $orderAfter->setInternalId($internalId);
+            $internalId = $this->adapter->getInternalId($orderAfterDocument);
+            $orderAfterDocument->setInternalId($internalId);
         }
 
-        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
+        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfterDocument);
 
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);
@@ -955,11 +956,11 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param string $orderAfter
+     * @param string|null $orderAfter
      * 
      * @return Document|bool
      */
-    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
+    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], string $orderAfter = null)
     {
         $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes, $orderAfter);
         return \reset($results);

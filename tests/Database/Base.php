@@ -747,6 +747,13 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress', $documents[0]['name']);
         $this->assertEquals('Work in Progress 2', $documents[1]['name']);
 
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[4]->getId());
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Work in Progress 2', $documents[0]['name']);
+
+        /**
+         * ORDER BY - Single Attribute After
+         */
         $movies = static::getDatabase()->find('movies', [], 25, 0, ['year'], [Database::ORDER_DESC]);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[1]->getId());
@@ -777,6 +784,10 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
         $this->assertEquals('Work in Progress', $documents[0]['name']);
         $this->assertEquals('Work in Progress 2', $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[4]->getId());
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Work in Progress 2', $documents[0]['name']);
 
         /**
          * Limit

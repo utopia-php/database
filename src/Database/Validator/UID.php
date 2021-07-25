@@ -15,6 +15,6 @@ class UID extends Key
      */
     public function getDescription()
     {
-        return 'UID must contain only alphanumeric chars or non-leading underscore, shorter than 32 chars';
+        return 'UID must contain only alphanumeric chars or non-leading underscore, shorter than 36 chars';
     }
 }

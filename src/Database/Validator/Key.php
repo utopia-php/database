@@ -9,7 +9,7 @@ class Key extends Validator
     /**
      * @var string
      */
-    protected $message = 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars';
+    protected $message = 'Parameter must contain only letters with no spaces or special chars and be shorter than 36 chars';
 
     /**
      * Get Description.
@@ -46,7 +46,7 @@ class Key extends Validator
             return false;
         }
 
-        if (\mb_strlen($value) > 32) {
+        if (\mb_strlen($value) > 36) {
             return false;
         }
 

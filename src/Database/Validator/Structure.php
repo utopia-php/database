@@ -93,16 +93,19 @@ class Structure extends Validator
 
     /**
      * Add a new Validator
+     * Stores a callback and required params to create Validator
      * 
      * @param string $name
-     * @param Validator $validator
-     * @param string $type
+     * @param \Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
+     * @param string $type Primitive data type for validation
+     * @param string[] $params (optional) Attribute params required by the callback to instantiate Validator
      */
-    static public function addFormat(string $name, Validator $validator, string $type): void
+    static public function addFormat(string $name, \Closure $callback, string $type, array $params = []): void
     {
         self::$formats[$name] = [
-            'validator' => $validator,
+            'callback' => $callback,
             'type' => $type,
+            'params' => $params,
         ];
     }
 
@@ -123,20 +126,21 @@ class Structure extends Validator
     }
 
     /**
-     * Get a Validator
+     * Get a Format array to create Validator
      * 
      * @param string $name
+     * @param string $type
      * 
-     * @return Validator
+     * @return array
      */
-    static public function getFormat(string $name, string $type): Validator
+    static public function getFormat(string $name, string $type): array
     {
         if(isset(self::$formats[$name])) {
             if(self::$formats[$name]['type'] !== $type) {
                 throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
             }
 
-            return self::$formats[$name]['validator'];
+            return self::$formats[$name];
         }
 
         throw new Exception('Unknown format validator: "'.$name.'"');
@@ -197,7 +201,6 @@ class Structure extends Validator
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
-            $format = $attribute['format'] ?? false;
 
             $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
 
@@ -243,7 +246,7 @@ class Structure extends Validator
                     break;
             }
 
-            if($array) { // Validate attribute type
+            if($array && !$format) { // Validate attribute type for arrays - format for arrays handled separately
                 if(!is_array($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
                     return false;
@@ -272,7 +275,16 @@ class Structure extends Validator
             }
 
             if($format) {
-                $validator = self::getFormat($format, $type);
+                $format = self::getFormat($format, $type);
+                if ($format['params']) { // get attribute params required for validator constructor, if required
+                    $params = [];
+                    foreach ($format['params'] as $param) {
+                        $params[] = $attribute[$param] ?? '';
+                    }
+                    $validator = $format['callback'](...$params);
+                } else {
+                    $validator = $format['callback']();
+                }
 
                 if($array) { // Validate attribute type
                     if(!is_array($value)) {

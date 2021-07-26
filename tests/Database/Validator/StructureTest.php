@@ -94,7 +94,9 @@ class StructureTest extends TestCase
 
     public function setUp(): void
     {
-        Structure::addFormat('email', new Format(0), Database::VAR_STRING);
+        Structure::addFormat('email', function($size) {
+            return new Format($size);
+        }, Database::VAR_STRING, ['size']);
     }
 
     public function tearDown(): void

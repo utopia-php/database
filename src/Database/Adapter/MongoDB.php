@@ -563,7 +563,6 @@ class MongoDB extends Adapter
             $array[$to.'uid'] = $array[$from.'id'];
 
             if (array_key_exists($from.'internalId', $array)) {
-                $array[$to.'id'] = new \MongoDB\BSON\ObjectId($array[$from.'internalId']);
                 unset($array[$from.'internalId']);
             }
         }

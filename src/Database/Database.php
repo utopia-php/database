@@ -397,6 +397,10 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
+        if ($format && !Structure::hasFormat($format, $type)) {
+            throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
+        }
+
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
             'type' => $type,
@@ -525,6 +529,10 @@ class Database
             $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
         {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
+        if ($format && !Structure::hasFormat($format, $type)) {
+            throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
         }
 
         $collection->setAttribute('attributesInQueue', new Document([

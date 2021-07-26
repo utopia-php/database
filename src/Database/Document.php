@@ -66,15 +66,6 @@ class Document extends ArrayObject
     }
 
     /**
-     * @param mixed $internalId 
-     * @return void 
-     */
-    public function setInternalId($internalId): void
-    {
-        $this->setAttribute('$internalId', $internalId);
-    }
-
-    /**
      * @return string
      */
     public function getCollection(): string

@@ -925,21 +925,15 @@ class Database
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], string $orderAfter = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
     {
         $collection = $this->getCollection($collection);
-        $orderAfterDocument = null;
 
-        if (!empty($orderAfter)) {
-            $orderAfterDocument = $this->getDocument($collection->getId(), $orderAfter);
-            if ($orderAfterDocument->isEmpty()) {
-                throw new Exception("orderAfter Document is not found.");
-            }
-            $internalId = $this->adapter->getInternalId($orderAfterDocument);
-            $orderAfterDocument->setInternalId($internalId);
+        if (!empty($orderAfter) && $orderAfter->getCollection() !== $collection->getId()) {
+            throw new Exception("orderAfter Document must be from the same Collection.");
         }
 
-        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfterDocument);
+        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
 
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);

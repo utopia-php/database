@@ -107,7 +107,7 @@ class MongoDB extends Adapter
 
         $collection = $database->$id;
 
-        // Mongo creates an index for _id; _read and _write by default
+        // Mongo creates an index for _id; _uid, _read and _write index by default
         // Returns the name of the created index as a string.
         // Update $this->getIndexCount when adding another default index
         $uid = $collection->createIndex(['_uid' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_uid', 'unique' => true]);
@@ -551,23 +551,27 @@ class MongoDB extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
-        $array[$to.'id'] = $array[$from.'id'];
         $array[$to.'read'] = $array[$from.'read'];
         $array[$to.'write'] = $array[$from.'write'];
         $array[$to.'collection'] = $array[$from.'collection'];
+
+        if ($from === '_') { // convert internal to document ID
+            $array[$to.'id'] = $array[$from.'uid'];
+            $array[$to.'internalId'] = (string) $array[$from.'id'];
+            unset($array[$from.'uid']);
+        } else if ($from === '$') { // convert document to internal ID
+            $array[$to.'uid'] = $array[$from.'id'];
+
+            if (array_key_exists($from.'internalId', $array)) {
+                $array[$to.'id'] = new \MongoDB\BSON\ObjectId($array[$from.'internalId']);
+                unset($array[$from.'internalId']);
+            }
+        }
 
         unset($array[$from.'id']);
         unset($array[$from.'read']);
         unset($array[$from.'write']);
         unset($array[$from.'collection']);
-
-        if ($from === '_') { // convert internal to document ID
-            $array[$to.'id'] = $array[$from.'uid'];
-            unset($array[$from.'uid']);
-        } else if ($from === '$') { // convert document to internal ID
-            $array[$to.'uid'] = $array[$to.'id'];
-            unset($array[$to.'id']);
-        }
 
         return $array;
     }
@@ -673,29 +677,6 @@ class MongoDB extends Adapter
                 break;
         }
     }
-
-    /**
-     * Returns internal id.
-     * 
-     * @param Document $document 
-     * @return string 
-     * @throws Exception 
-     */
-     public function getInternalId(Document $document): string
-     {
-        $collection = $document->getCollection();
-        $collection = $this->getDatabase()->$collection;
-
-        $document = $collection->findOne([
-            '_uid' => $document->getId()
-        ]);
-
-        if(empty($document)) {
-            throw new Exception("Document not found.");
-        }
-
-        return (string) $document['_id'];
-     }
 
     /**
      * Get max STRING limit

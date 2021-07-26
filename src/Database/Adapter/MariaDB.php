@@ -563,10 +563,11 @@ class MariaDB extends Adapter
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
+            $value['$internalId'] = $value['_id'];
             $value['$read'] = (isset($value['_read'])) ? json_decode($value['_read'], true) : [];
             $value['$write'] = (isset($value['_write'])) ? json_decode($value['_write'], true) : [];
-            unset($value['_id']);
             unset($value['_uid']);
+            unset($value['_id']);
             unset($value['_read']);
             unset($value['_write']);
 
@@ -627,37 +628,6 @@ class MariaDB extends Adapter
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $result['sum'] ?? 0;
-    }
-
-    /**
-     * Get internal ID for a document.
-     * 
-     * @param Document $document 
-     * @return int 
-     * @throws Exception 
-     * @throws PDOException 
-     */
-    public function getInternalId(Document $document): int
-    {
-        $name = $this->filter($document->getCollection());
-
-        $stmt = $this->getPDO()->prepare("SELECT _id FROM {$this->getNamespace()}.{$name}
-            WHERE _uid = :_uid
-            LIMIT 1;
-        ");
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        $stmt->execute();
-
-        /** @var array $document */
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if(empty($document)) {
-            throw new Exception("Document not found.");
-        }
-
-        return +$document['_id'];
     }
 
     /**

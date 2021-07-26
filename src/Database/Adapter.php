@@ -251,14 +251,6 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], int $max = 0): int;
 
     /**
-     * Get internal ID of a document.
-     * 
-     * @param Document $document 
-     * @return mixed 
-     */
-    abstract public function getInternalId(Document $document);
-
-    /**
      * Get max STRING limit
      * 
      * @return int

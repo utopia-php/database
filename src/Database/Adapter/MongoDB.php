@@ -563,7 +563,7 @@ class MongoDB extends Adapter
             $array[$to.'uid'] = $array[$from.'id'];
 
             if (array_key_exists($from.'internalId', $array)) {
-                unset($array[$from.'internalId']);
+                unset($array[$from.'internalId']); // remove unnecessary internal ID
             }
         }
 

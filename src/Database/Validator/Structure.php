@@ -98,14 +98,12 @@ class Structure extends Validator
      * @param string $name
      * @param \Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
      * @param string $type Primitive data type for validation
-     * @param string[] $params (optional) Attribute params required by the callback to instantiate Validator
      */
-    static public function addFormat(string $name, \Closure $callback, string $type, array $params = []): void
+    static public function addFormat(string $name, \Closure $callback, string $type): void
     {
         self::$formats[$name] = [
             'callback' => $callback,
             'type' => $type,
-            'params' => $params,
         ];
     }
 

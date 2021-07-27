@@ -397,9 +397,12 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
-        if ($format && !Structure::hasFormat(json_decode($format, true)['name'], $type)) {
-            throw new Exception('Format ("'.json_decode($format, true)['name'].'") not available for this attribute type ("'.$type.'")');
-        }
+        if ($format) {
+            $name = \json_decode($format, true)['name'];
+            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
+                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            }
+        } 
 
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
@@ -531,9 +534,12 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
-        if ($format && !Structure::hasFormat($format, $type)) {
-            throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
-        }
+        if ($format) {
+            $name = \json_decode($format, true)['name'];
+            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
+                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            }
+        } 
 
         $collection->setAttribute('attributesInQueue', new Document([
             '$id' => $id,

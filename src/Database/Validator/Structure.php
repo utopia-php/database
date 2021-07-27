@@ -275,16 +275,11 @@ class Structure extends Validator
             }
 
             if($format) {
-                $format = self::getFormat($format, $type);
-                if ($format['params']) { // get attribute params required for validator constructor, if required
-                    $params = [];
-                    foreach ($format['params'] as $param) {
-                        $params[] = $attribute[$param] ?? '';
-                    }
-                    $validator = $format['callback'](...$params);
-                } else {
-                    $validator = $format['callback']();
-                }
+                // Format encoded as json string containing format name and relevant format options
+                // E.g. Range: json_encode(['name'=>$name, 'min'=>$min, 'max'=>]);
+                $format = json_decode($format, true);
+                $format = self::getFormat($format['name'], $type);
+                $validator = $format['callback']($attribute);
 
                 if($array) { // Validate attribute type
                     if(!is_array($value)) {

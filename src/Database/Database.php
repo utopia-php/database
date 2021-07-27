@@ -397,8 +397,8 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
-        if ($format && !Structure::hasFormat($format, $type)) {
-            throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
+        if ($format && !Structure::hasFormat(json_decode($format, true)['name'], $type)) {
+            throw new Exception('Format ("'.json_decode($format, true)['name'].'") not available for this attribute type ("'.$type.'")');
         }
 
         $collection->setAttribute('attributes', new Document([

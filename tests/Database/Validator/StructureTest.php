@@ -78,25 +78,29 @@ class StructureTest extends TestCase
                 'array' => true,
                 'filters' => [],
             ],
-            [
-                '$id' => 'feedback',
-                'type' => Database::VAR_STRING,
-                'format' => 'email',
-                'size' => 55,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
         ],
         'indexes' => [],
     ];
 
     public function setUp(): void
     {
-        Structure::addFormat('email', function($size) {
+        Structure::addFormat('email', function($attribute) {
+            $size = $attribute['size'] ?? 0;
             return new Format($size);
-        }, Database::VAR_STRING, ['size']);
+        }, Database::VAR_STRING);
+
+        // Cannot encode format when defining constants
+        // So add feedback attribute on startup
+        $this->collection['attributes'][] = [
+            '$id' => 'feedback',
+            'type' => Database::VAR_STRING,
+            'format' => \json_encode(['name'=>'email']),
+            'size' => 55,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ];
     }
 
     public function tearDown(): void

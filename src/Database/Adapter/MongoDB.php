@@ -115,7 +115,7 @@ class MongoDB extends Adapter
         $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
 
 
-        if (!$read || !$write || $uid) {
+        if (!$read || !$write || !$uid) {
             return false;
         }
 

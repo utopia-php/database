@@ -15,7 +15,7 @@ class Authorization extends Validator
     /**
      * @var Document
      */
-    protected $document;
+    protected $collection;
 
     /**
      * @var string
@@ -28,12 +28,30 @@ class Authorization extends Validator
     protected $message = 'Authorization Error';
 
     /**
+     * @return array
+     */
+    protected function getCollectionPermissions(): array
+    {
+        switch ($this->action){
+            case 'read':
+                return $this->collection->getRead();
+                break;
+            case 'write':
+                return $this->collection->getWrite();
+                break;
+            default:
+                return [];
+                break;
+        }
+    }
+
+    /**
      * @param Document $document
      * @param string   $action
      */
-    public function __construct(Document $document, $action)
+    public function __construct(Document $collection, $action)
     {
-        $this->document = $document;
+        $this->collection = $collection;
         $this->action = $action;
     }
 
@@ -72,6 +90,15 @@ class Authorization extends Validator
         $permission = '-';
 
         foreach ($permissions as $permission) {
+            if (!empty($this->getCollectionPermissions)) {
+                if (\array_key_exists($permission, $this->getCollectionPermissions())) {
+                    return true;
+                } else {
+                    $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only this scopes "'.\json_encode(self::getRoles()).'" are given and only this are allowed "'.\json_encode($this->getCollectionPermissions()).'".';
+                    return false;
+                }
+            }
+
             if (\array_key_exists($permission, self::$roles)) {
                 return true;
             }

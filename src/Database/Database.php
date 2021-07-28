@@ -293,8 +293,8 @@ class Database
 
         $collection = new Document([
             '$id' => $id,
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$read' => [],
+            '$write' => [],
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,

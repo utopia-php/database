@@ -20,13 +20,18 @@ class AuthorizationTest extends TestCase
 
     public function setUp(): void
     {
+        $this->object = new Authorization(new Document([
+            '$id' => 'authorizationtest',
+            '$read' => [],
+            '$write' => [],
+        ]), 'read');
+
         $this->document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$read' => ['user:123', 'team:123'],
             '$write' => ['role:all'],
         ]);
-        $this->object = new Authorization($this->document, 'read');
     }
 
     public function tearDown(): void
@@ -87,5 +92,69 @@ class AuthorizationTest extends TestCase
         Authorization::unsetRole('textX');
 
         $this->assertNotContains('textX', Authorization::getRoles());
+    }
+
+    public function testCollectionPermissions()
+    {
+        Authorization::cleanRoles();
+
+        // test for collection-level permissions
+        $this->object = new Authorization(new Document([
+            '$id' => 'authorizationtest',
+            '$read' => ['user:123', 'user:456'],
+            '$write' => ['user:123'],
+        ]), 'read');
+
+        $this->document = new Document([
+            '$id' => uniqid(),
+            '$collection' => uniqid(),
+            '$read' => ['user:456'],
+            '$write' => [],
+        ]);
+
+        $this->assertEquals(false, $this->object->isValid($this->document->getRead()));
+
+        Authorization::setRole('role:123');
+
+        $this->assertEquals(false, $this->object->isValid($this->document->getRead()));
+
+        Authorization::setRole('user:456');
+
+        $this->assertEquals(true, $this->object->isValid($this->document->getRead()));
+    }
+
+    public function testDocumentPermissions()
+    {
+        Authorization::cleanRoles();
+
+        // test for collection-level permissions
+        $this->object = new Authorization(new Document([
+            '$id' => 'authorizationtest',
+            '$read' => [],
+            '$write' => [],
+        ]), 'read');
+
+        $this->document = new Document([
+            '$id' => uniqid(),
+            '$collection' => uniqid(),
+            '$read' => ['user:789'],
+            '$write' => [],
+        ]);
+
+        $this->assertEquals(false, $this->object->isValid($this->document->getRead()));
+
+        Authorization::setRole('role:789');
+
+        $this->assertEquals(false, $this->object->isValid($this->document->getRead()));
+
+        Authorization::cleanRoles();
+        Authorization::setRole('user:789');
+
+        $this->assertEquals(true, $this->object->isValid($this->document->getRead()));
+
+        Authorization::cleanRoles();
+        Authorization::setRole('role:all');
+
+        $this->assertEquals(false, $this->object->isValid($this->document->getRead()));
     }
 }

@@ -686,15 +686,16 @@ class MongoDB extends Adapter
      * Get current index count from collection document
      * 
      * @param Document $collection
+     * @param bool $strict (optional) Only count indexes in collection, ignoring queue count
      * @return int
      */
-    public function getIndexCount(Document $collection): int
+    public function getIndexCount(Document $collection, bool $strict = false): int
     {
-        $indexes = $collection->getAttribute('indexes') ?? [];
-        $indexesInQueue = $collection->getAttribute('indexesInQueue') ?? [];
+        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
+        $indexesInQueue = ($strict) ? 0 : \count((array) $collection->getAttribute('indexesInQueue') ?? []);
 
         // +3 ==> hardcoded number of default indexes from createCollection
-        return \count((array) $indexes) + \count((array) $indexesInQueue) + 3;
+        return $indexes + $indexesInQueue + 3;
     }
 
     /**

@@ -322,9 +322,10 @@ abstract class Adapter
      * Get current index count from collection document
      * 
      * @param Document $collection
+     * @param bool $strict (optional) Only count indexes in collection, ignoring queue count
      * @return int
      */
-    abstract public function getIndexCount(Document $collection): int;
+    abstract public function getIndexCount(Document $collection, bool $strict = false): int;
 
     /**
      * Get maximum index limit.

@@ -597,7 +597,7 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+        if ($this->adapter->getIndexCount($collection, true) >= $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 

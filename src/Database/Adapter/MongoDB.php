@@ -713,14 +713,15 @@ class MongoDB extends Adapter
      * Get current attribute count from collection document
      * 
      * @param Document $collection
+     * @param bool $strict (optional) Only count attributes in collection, ignoring queue count
      * @return int
      */
-    public function getAttributeCount(Document $collection): int
+    public function getAttributeCount(Document $collection, bool $strict = false): int
     {
-        $attributes = $collection->getAttribute('attributes') ?? [];
-        $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
+        $attributes = \count($collection->getAttribute('attributes') ?? []);
+        $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
-        return \count($attributes) + \count($attributesInQueue);
+        return $attributes + $attributesInQueue;
     }
 
     /**

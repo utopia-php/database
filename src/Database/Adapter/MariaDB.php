@@ -682,17 +682,17 @@ class MariaDB extends Adapter
      * Get current attribute count from collection document
      * 
      * @param Document $collection
-     * @param bool $strict (optional) Only count indexes in collection, ignoring queue count
+     * @param bool $strict (optional) Only count attributes in collection, ignoring queue count
      * @return int
      */
     public function getAttributeCount(Document $collection, bool $strict = false): int
     {
-        $attributes = $collection->getAttribute('attributes') ?? [];
-        $attributesInQueue = $collection->getAttribute('attributesInQueue') ?? [];
+        $attributes = \count($collection->getAttribute('attributes') ?? []);
+        $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
         // +4 ==> account for default columns
         // +1 ==> virtual columns count as total, so add as buffer
-        return \count($attributes) + \count($attributesInQueue) + 4 + 1;
+        return $attributes + $attributesInQueue + 4 + 1;
     }
 
     /**

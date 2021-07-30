@@ -689,10 +689,6 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit reached. Cannot create new index.');
-        }
-
         $collection->setAttribute('indexesInQueue', new Document([
             '$id' => $id,
             'type' => $type,
@@ -700,7 +696,11 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
-    
+
+        if ($this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
+            throw new LimitException('Index limit reached. Cannot create new index.');
+        }
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }

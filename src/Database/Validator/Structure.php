@@ -73,7 +73,6 @@ class Structure extends Validator
     /**
      * Structure constructor.
      *
-     * @param Document $collection
      */
     public function __construct(Document $collection)
     {
@@ -94,34 +93,52 @@ class Structure extends Validator
 
     /**
      * Add a new Validator
+     * Stores a callback and required params to create Validator
      * 
      * @param string $name
-     * @param Validator $validator
-     * @param string $type
+     * @param \Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
+     * @param string $type Primitive data type for validation
      */
-    static public function addFormat(string $name, Validator $validator, string $type): void
+    static public function addFormat(string $name, \Closure $callback, string $type): void
     {
         self::$formats[$name] = [
-            'validator' => $validator,
+            'callback' => $callback,
             'type' => $type,
         ];
     }
 
     /**
-     * Get a Validator
+     * Check if validator has been added
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    static public function hasFormat(string $name, string $type): bool
+    {
+        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get a Format array to create Validator
      * 
      * @param string $name
+     * @param string $type
      * 
-     * @return Validator
+     * @return array
      */
-    static public function getFormat(string $name, string $type): Validator
+    static public function getFormat(string $name, string $type): array
     {
         if(isset(self::$formats[$name])) {
             if(self::$formats[$name]['type'] !== $type) {
                 throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
             }
 
-            return self::$formats[$name]['validator'];
+            return self::$formats[$name];
         }
 
         throw new Exception('Unknown format validator: "'.$name.'"');
@@ -227,7 +244,7 @@ class Structure extends Validator
                     break;
             }
 
-            if($array) { // Validate attribute type
+            if($array && !$format) { // Validate attribute type for arrays - format for arrays handled separately
                 if(!is_array($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
                     return false;
@@ -256,7 +273,11 @@ class Structure extends Validator
             }
 
             if($format) {
-                $validator = self::getFormat($format, $type);
+                // Format encoded as json string containing format name and relevant format options
+                // E.g. Range: json_encode(['name'=>$name, 'min'=>$min, 'max'=>$max]);
+                $format = json_decode($format, true);
+                $format = self::getFormat($format['name'], $type);
+                $validator = $format['callback']($attribute);
 
                 if($array) { // Validate attribute type
                     if(!is_array($value)) {
@@ -278,8 +299,6 @@ class Structure extends Validator
                     }
                 }
             }
-
-            // TODO check for length / size
         }
 
         return true;

@@ -205,8 +205,8 @@ class Database
      */
     public function create(): bool
     {
-        if (!$this->adapter->exists()) {
-            $this->adapter->create();
+        if ($this->adapter->exists()) {
+            throw new Exception('Cannot create a database that already exists');
         }
 
         /**

@@ -392,7 +392,7 @@ class Database
         $collection = $this->getCollection($collection);
 
         if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+            $this->adapter->getAttributeCount($collection, true) >= $this->adapter->getAttributeLimit())
         {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
@@ -528,12 +528,6 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
-        {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
         if ($format) {
             $name = \json_decode($format, true)['name'];
             if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
@@ -552,6 +546,12 @@ class Database
             'format' => $format,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getAttributeLimit() > 0 && 
+            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
 
         if ($this->adapter->getRowLimit() > 0 && 
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
@@ -615,7 +615,7 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+        if ($this->adapter->getIndexCount($collection, true) >= $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -707,10 +707,6 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit reached. Cannot create new index.');
-        }
-
         $collection->setAttribute('indexesInQueue', new Document([
             '$id' => $id,
             'type' => $type,
@@ -718,7 +714,11 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
-    
+
+        if ($this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
+            throw new LimitException('Index limit reached. Cannot create new index.');
+        }
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }

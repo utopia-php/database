@@ -1156,7 +1156,7 @@ class Database
             $value = $document->getAttribute($key, null);
 
             if($array) {
-                $value = (!is_string($value)) ? $value : json_decode($value, true);
+                $value = (!is_string($value)) ? ($value ?? []) : json_decode($value, true);
             }
             else {
                 $value = [$value];
@@ -1173,7 +1173,7 @@ class Database
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
-                    
+
                     default:
                         # code...
                         break;

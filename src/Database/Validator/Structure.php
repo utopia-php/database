@@ -32,6 +32,15 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
+            '$id' => '$internalId',
+            'type' => Database::VAR_STRING,
+            'size' => 64,
+            'required' => false,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
             '$id' => '$collection',
             'type' => Database::VAR_STRING,
             'size' => 64,
@@ -181,17 +190,17 @@ class Structure extends Validator
             $this->message = 'Value must be an instance of Document';
             return false;
         }
-        
+
         if (empty($document->getCollection())) {
             $this->message = 'Missing collection attribute $collection';
             return false;
         }
-        
+
         if (empty($this->collection->getId()) || Database::COLLECTIONS !== $this->collection->getCollection()) {
             $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
             return false;
         }
-        
+
         $keys = [];
         $structure = $document->getArrayCopy();
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
@@ -210,7 +219,7 @@ class Structure extends Validator
 
         foreach ($structure as $key => $value) {
             if(!array_key_exists($key, $keys)) { // Check no unknown attributes are set
-                $this->message = 'Unknown attribute: "'. '"'.$key.'"';
+                $this->message = 'Unknown attribute: "'.$key.'"';
                 return false;
             }
 

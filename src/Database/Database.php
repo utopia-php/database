@@ -17,10 +17,10 @@ class Database
     const VAR_INTEGER = 'integer';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
-    
+
     // Relationships Types
     const VAR_DOCUMENT = 'document';
-    
+
     // Index Types
     const INDEX_KEY = 'key';
     const INDEX_FULLTEXT = 'fulltext';
@@ -349,9 +349,9 @@ class Database
     public function listCollections($limit = 25, $offset = 0): array
     {
         Authorization::disable();
-        
+
         $result = $this->find(self::COLLECTIONS, [], $limit, $offset);
-        
+
         Authorization::reset();
 
         return $result;
@@ -558,7 +558,7 @@ class Database
         {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
-    
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
@@ -626,7 +626,7 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
-    
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
@@ -649,7 +649,7 @@ class Database
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;
-            
+
             default:
                 throw new Exception('Unknown index type: '.$type);
                 break;
@@ -938,14 +938,21 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param Document|null $orderAfter
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
     {
         $collection = $this->getCollection($collection);
 
-        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes);
+        if (!empty($orderAfter) && $orderAfter->getCollection() !== $collection->getId()) {
+            throw new Exception("orderAfter Document must be from the same Collection.");
+        }
+
+        $orderAfter = empty($orderAfter) ? [] : $orderAfter->getArrayCopy();
+
+        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
 
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);
@@ -962,12 +969,13 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     *
+     * @param Document|null $orderAfter
+     * 
      * @return Document|bool
      */
-    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [])
+    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
     {
-        $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes);
+        $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes, $orderAfter);
         return \reset($results);
     }
 
@@ -1179,7 +1187,7 @@ class Database
                         break;
                 }
             }
-            
+
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 

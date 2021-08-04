@@ -40,6 +40,15 @@ class MongoDBTest extends Base
     }
 
     /**
+     * 
+     * @return int 
+     */
+    static function getUsedIndexes(): int
+    {
+        return 4;
+    }
+
+    /**
      * @return Adapter
      */
     static function getDatabase(): Database

@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests;
 
+use Exception;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Database;
@@ -28,6 +29,11 @@ abstract class Base extends TestCase
      * @return int
      */
     abstract static protected function getAdapterRowLimit(): int;
+
+    /**
+     * @return int
+     */
+    abstract static protected function getUsedIndexes(): int;
 
     public function setUp(): void
     {
@@ -657,7 +663,7 @@ abstract class Base extends TestCase
 
         // TODO@kodumbeats hacky way to pass mariadb tests
         // Remove when $operator="contains" is supported
-        if ($this->getAdapterName() === "mongodb")
+        if (static::getAdapterName() === "mongodb")
         {
             /**
              * Array contains condition
@@ -677,7 +683,7 @@ abstract class Base extends TestCase
 
             $this->assertEquals(4, count($documents));
         }
-        
+
         /**
          * Fulltext search
          */
@@ -736,6 +742,73 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain America: The First Avenger', $documents[3]['name']);
         $this->assertEquals('Work in Progress 2', $documents[4]['name']);
         $this->assertEquals('Work in Progress', $documents[5]['name']);
+
+        /**
+         * ORDER BY - After
+         */
+        $movies = static::getDatabase()->find('movies', [], 25, 0, [], []);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[1]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[3]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[4]);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[5]);
+        $this->assertEmpty(count($documents));
+
+        /**
+         * ORDER BY - Single Attribute After
+         */
+        $movies = static::getDatabase()->find('movies', [], 25, 0, ['year'], [Database::ORDER_DESC]);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[1]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[3]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], $movies[3]);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], $movies[5]);
+        $this->assertEmpty(count($documents));
+
+
+        /**
+         * ORDER BY - Multiple After
+         */
+        $movies = static::getDatabase()->find('movies', [], 25, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC]);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[1]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[3]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[4]);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[5]);
+        $this->assertEmpty(count($documents));
 
         /**
          * Limit
@@ -1289,12 +1362,13 @@ abstract class Base extends TestCase
 
         // testing for indexLimit = 64
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
+        // MongoDB create 4 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < 61; $i++) {
+        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index62", Database::INDEX_KEY, ["test62"], [16]));
+        $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
 
         static::getDatabase()->deleteCollection('indexLimit');
     }
@@ -1311,11 +1385,11 @@ abstract class Base extends TestCase
         // testing for indexLimit = 64
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < 61; $i++) {
+        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
             $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index62", Database::INDEX_KEY, ["test62"], [16]));
+        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index61", Database::INDEX_KEY, ["test61"], [16]));
     }
 
     /**

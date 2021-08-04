@@ -295,7 +295,7 @@ class MariaDB extends Adapter
     public function getDocument(string $collection, string $id): Document
     {
         $name = $this->filter($collection);
-        
+
         $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}
             WHERE _uid = :_uid
             LIMIT 1;
@@ -315,6 +315,7 @@ class MariaDB extends Adapter
         $document['$id'] = $document['_uid'];
         $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
         $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
+
         unset($document['_id']);
         unset($document['_uid']);
         unset($document['_read']);
@@ -374,7 +375,7 @@ class MariaDB extends Adapter
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
                     break;
-                
+
                 default:
                     throw $e;
                     break;
@@ -384,7 +385,7 @@ class MariaDB extends Adapter
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         return $document;
     }
 
@@ -437,7 +438,7 @@ class MariaDB extends Adapter
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         return $document;
     }
 
@@ -465,11 +466,11 @@ class MariaDB extends Adapter
             $this->getPDO()->rollBack();
             throw new Exception('Failed to clean document');
         }
-        
+
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         return true;
     }
 
@@ -479,26 +480,47 @@ class MariaDB extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param bool $count
+     * @param array $orderAfter
      *
-     * @return Document[]
+     * @return array 
+     * @throws Exception 
+     * @throws PDOException 
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = ['1=1'];
         $orders = [];
-        
+
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             $orders[] = $attribute.' '.$orderType;
+
+            // Get most dominant/first order attribute
+            if ($i === 0 && !empty($orderAfter)) {
+                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+                $where[] = "(
+                        {$attribute} {$this->getSQLOperator($orderOperator)} :after 
+                        OR (
+                            {$attribute} = :after 
+                            AND
+                            _id > {$orderAfter['$internalId']}
+                        )
+                    )";
+            }
+        }
+        $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
+
+        if (empty($orderAttributes) && !empty($orderAfter)) {
+            $where[] = "( _id > {$orderAfter['$internalId']} )"; // Allow after pagination without any order
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
@@ -512,7 +534,7 @@ class MariaDB extends Adapter
             $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
-        $order = (!empty($orders)) ? 'ORDER BY '.implode(', ', $orders) : '';
+        $order = 'ORDER BY '.implode(', ', $orders);
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
             WHERE {$permissions} AND ".implode(' AND ', $where)."
@@ -527,6 +549,14 @@ class MariaDB extends Adapter
             }
         }
 
+        if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+            $attribute = $orderAttributes[0];
+            if (is_null($orderAfter[$attribute] ?? null)) {
+                throw new Exception("Order attribute '{$attribute}' is empty.");
+            }
+            $stmt->bindValue(':after', $orderAfter[$attribute], $this->getPDOType($orderAfter[$attribute]));
+        }
+
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
@@ -535,10 +565,11 @@ class MariaDB extends Adapter
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
+            $value['$internalId'] = $value['_id'];
             $value['$read'] = (isset($value['_read'])) ? json_decode($value['_read'], true) : [];
             $value['$write'] = (isset($value['_write'])) ? json_decode($value['_write'], true) : [];
-            unset($value['_id']);
             unset($value['_uid']);
+            unset($value['_id']);
             unset($value['_read']);
             unset($value['_write']);
 
@@ -554,7 +585,7 @@ class MariaDB extends Adapter
      * Count data set size using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array $queries
      * @param int $max
      *
      * @return int
@@ -843,7 +874,7 @@ class MariaDB extends Adapter
                 if($size > 16777215) {
                     return 'LONGTEXT';
                 }
-                
+
                 if($size > 65535) {
                     return 'MEDIUMTEXT';
                 }
@@ -851,7 +882,7 @@ class MariaDB extends Adapter
                 if($size > 16383) {
                     return 'TEXT';
                 }
-                
+
                 return "VARCHAR({$size})";
             break;
 
@@ -872,7 +903,7 @@ class MariaDB extends Adapter
             case Database::VAR_DOCUMENT:
                 return 'CHAR(255)';
             break;
-            
+
             default:
                 throw new Exception('Unknown Type');
             break;
@@ -956,15 +987,15 @@ class MariaDB extends Adapter
             case Database::INDEX_ARRAY:
                 return 'INDEX';
             break;
-            
+
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
             break;
-            
+
             case Database::INDEX_FULLTEXT:
                 return 'FULLTEXT INDEX';
             break;
-            
+
             default:
                 throw new Exception('Unknown Index Type:' . $type);
             break;
@@ -988,15 +1019,15 @@ class MariaDB extends Adapter
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
             break;
-            
+
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
             break;
-            
+
             case Database::INDEX_FULLTEXT:
                 $type = 'FULLTEXT INDEX';
             break;
-            
+
             default:
                 throw new Exception('Unknown Index Type:' . $type);
             break;
@@ -1054,7 +1085,7 @@ class MariaDB extends Adapter
             case 'NULL':
                 return PDO::PARAM_NULL;
             break;
-            
+
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
             break;

@@ -10,7 +10,6 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use MongoDB\Client as MongoClient;
-use MongoDB\Collection as MongoCollection;
 use MongoDB\Database as MongoDatabase;
 
 class MongoDB extends Adapter
@@ -40,6 +39,7 @@ class MongoDB extends Adapter
     public function create(): bool
     {
         $namespace = $this->getNamespace();
+
         return (!!$this->getClient()->$namespace);
     }
 
@@ -54,7 +54,7 @@ class MongoDB extends Adapter
         forEach ($this->getClient()->listDatabaseNames() as $key => $value) {
             if ($name === $value) {
                 return true;
-            } 
+            }
         }
 
         return false;
@@ -72,7 +72,7 @@ class MongoDB extends Adapter
         foreach ($this->getClient()->listDatabaseNames() as $key => $value) {
             $list[] = $value;
         }
-        
+
         return $list;
     }
 
@@ -107,14 +107,15 @@ class MongoDB extends Adapter
 
         $collection = $database->$id;
 
-        // Mongo creates an index for _id; index _read,_write by default
+        // Mongo creates an index for _id; _uid, _read and _write index by default
         // Returns the name of the created index as a string.
         // Update $this->getIndexCount when adding another default index
+        $uid = $collection->createIndex(['_uid' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_uid', 'unique' => true]);
         $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
         $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
 
 
-        if (!$read || !$write) {
+        if (!$read || !$write || !$uid) {
             return false;
         }
 
@@ -184,7 +185,7 @@ class MongoDB extends Adapter
         foreach ($this->getDatabase()->listCollectionNames() as $key => $value) {
             $list[] = $value;
         }
-        
+
         return $list;
     }
 
@@ -313,7 +314,7 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-        $result = $collection->findOne(['_id' => $id]);
+        $result = $collection->findOne(['_uid' => $id]);
 
         if(empty($result)) {
             return new Document([]);
@@ -335,7 +336,6 @@ class MongoDB extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-    
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
@@ -369,7 +369,7 @@ class MongoDB extends Adapter
         $collection = $this->getDatabase()->$name;
 
         $result = $collection->findOneAndUpdate(
-            ['_id' => $document->getId()],
+            ['_uid' => $document->getId()],
             ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
             ['returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER]
         );
@@ -392,7 +392,7 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-        $result = $collection->findOneAndDelete(['_id' => $id]);
+        $result = $collection->findOneAndDelete(['_uid' => $id]);
 
         return (!!$result);
     }
@@ -403,15 +403,16 @@ class MongoDB extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param array $orderAfter
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
@@ -428,8 +429,43 @@ class MongoDB extends Adapter
             $options['sort'][$attribute] = $orderType;
         }
 
+        $options['sort']['_id'] = $this->getOrder(Database::ORDER_ASC);
+
         // queries
         $filters = $this->buildFilters($queries);
+        if (empty($orderAttributes) && !empty($orderAfter)) {
+            $filters = array_merge($filters, [
+                '_id' => [
+                    $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
+                ]
+            ]);
+        }
+
+        if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+            $attribute = $orderAttributes[0];
+            if (is_null($orderAfter[$attribute] ?? null)) {
+                throw new Exception("Order attribute '{$attribute}' is empty.");
+            }
+
+            $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
+            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+            $filters = array_merge($filters, [
+                '$or' => [
+                    [
+                        $attribute => [
+                            $this->getQueryOperator($orderOperator) => $orderAfter[$attribute]
+                        ]
+                    ], [
+                        $attribute => $orderAfter[$attribute],
+                        '_id' => [
+                            $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
+                        ]
+
+                    ]
+                ]
+            ]);
+        }
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -449,7 +485,7 @@ class MongoDB extends Adapter
 
         return $found;
     }
-    
+
     /**
      * Count Documents
      * 
@@ -491,7 +527,7 @@ class MongoDB extends Adapter
     protected function getDatabase()
     {
         $namespace = $this->getNamespace();
-        
+
         return $this->getClient()->$namespace;
     }
 
@@ -516,10 +552,21 @@ class MongoDB extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
-        $array[$to.'id'] = $array[$from.'id'];
         $array[$to.'read'] = $array[$from.'read'];
         $array[$to.'write'] = $array[$from.'write'];
         $array[$to.'collection'] = $array[$from.'collection'];
+
+        if ($from === '_') { // convert internal to document ID
+            $array[$to.'id'] = $array[$from.'uid'];
+            $array[$to.'internalId'] = (string) $array[$from.'id'];
+            unset($array[$from.'uid']);
+        } else if ($from === '$') { // convert document to internal ID
+            $array[$to.'uid'] = $array[$from.'id'];
+
+            if (array_key_exists($from.'internalId', $array)) {
+                unset($array[$from.'internalId']); // remove unnecessary internal ID
+            }
+        }
 
         unset($array[$from.'id']);
         unset($array[$from.'read']);
@@ -695,7 +742,7 @@ class MongoDB extends Adapter
         $indexesInQueue = ($strict) ? 0 : \count((array) $collection->getAttribute('indexesInQueue') ?? []);
 
         // +3 ==> hardcoded number of default indexes from createCollection
-        return $indexes + $indexesInQueue + 3;
+        return $indexes + $indexesInQueue + 4;
     }
 
     /**

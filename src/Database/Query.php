@@ -12,7 +12,7 @@ class Query
     const TYPE_GREATEREQUAL = 'greaterEqual';
     const TYPE_CONTAINS = 'contains';
     const TYPE_SEARCH = 'search';
-    
+
     /**
      * @var string
      */

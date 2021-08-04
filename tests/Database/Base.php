@@ -740,17 +740,17 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[1]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
-        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[3]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Work in Progress', $documents[0]['name']);
-        $this->assertEquals('Work in Progress 2', $documents[1]['name']);
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[4]);
         $this->assertEquals(1, count($documents));
-        $this->assertEquals('Work in Progress 2', $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[5]);
         $this->assertEmpty(count($documents));
@@ -762,17 +762,17 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[1]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Frozen II', $documents[0]['name']);
-        $this->assertEquals('Captain Marvel', $documents[1]['name']);
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[3]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Frozen', $documents[0]['name']);
-        $this->assertEquals('Captain America: The First Avenger', $documents[1]['name']);
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], $movies[3]);
         $this->assertEquals(1, count($documents));
-        $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 1, 1, ['year'], [Database::ORDER_DESC], $movies[5]);
         $this->assertEmpty(count($documents));
@@ -785,17 +785,17 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[1]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Captain Marvel', $documents[0]['name']);
-        $this->assertEquals('Captain America: The First Avenger', $documents[1]['name']);
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[3]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Work in Progress', $documents[0]['name']);
-        $this->assertEquals('Work in Progress 2', $documents[1]['name']);
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[4]);
         $this->assertEquals(1, count($documents));
-        $this->assertEquals('Work in Progress 2', $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[5]);
         $this->assertEmpty(count($documents));

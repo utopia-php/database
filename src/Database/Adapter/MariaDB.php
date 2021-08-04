@@ -480,16 +480,18 @@ class MariaDB extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param bool $count
+     * @param array $orderAfter
      *
-     * @return Document[]
+     * @return array 
+     * @throws Exception 
+     * @throws PDOException 
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -510,7 +512,7 @@ class MariaDB extends Adapter
                         OR (
                             {$attribute} = :after 
                             AND
-                            _id > {$orderAfter->getInternalId()}
+                            _id > {$orderAfter['$internalId']}
                         )
                     )";
             }
@@ -518,7 +520,7 @@ class MariaDB extends Adapter
         $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
 
         if (empty($orderAttributes) && !empty($orderAfter)) {
-            $where[] = "( _id > {$orderAfter->getInternalId()} )"; // Allow after pagination without any order
+            $where[] = "( _id > {$orderAfter['$internalId']} )"; // Allow after pagination without any order
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
@@ -549,10 +551,10 @@ class MariaDB extends Adapter
 
         if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
-            if (is_null($orderAfter->getAttribute($attribute, null))) {
+            if (is_null($orderAfter[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
-            $stmt->bindValue(':after', $orderAfter->getAttribute($attribute), $this->getPDOType($orderAfter->getAttribute($attribute)));
+            $stmt->bindValue(':after', $orderAfter[$attribute], $this->getPDOType($orderAfter[$attribute]));
         }
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -583,7 +585,7 @@ class MariaDB extends Adapter
      * Count data set size using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array $queries
      * @param int $max
      *
      * @return int

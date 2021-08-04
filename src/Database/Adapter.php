@@ -233,11 +233,11 @@ abstract class Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param Document|null $orderAfter
+     * @param array $orderAfter
      *
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array;
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array;
 
     /**
      * Count Documents

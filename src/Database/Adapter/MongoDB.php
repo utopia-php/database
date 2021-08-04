@@ -403,15 +403,16 @@ class MongoDB extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
+     * @param array $orderAfter
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
@@ -435,14 +436,14 @@ class MongoDB extends Adapter
         if (empty($orderAttributes) && !empty($orderAfter)) {
             $filters = array_merge($filters, [
                 '_id' => [
-                    $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter->getInternalId())
+                    $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
                 ]
             ]);
         }
 
         if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
-            if (is_null($orderAfter->getAttribute($attribute, null))) {
+            if (is_null($orderAfter[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
@@ -453,12 +454,12 @@ class MongoDB extends Adapter
                 '$or' => [
                     [
                         $attribute => [
-                            $this->getQueryOperator($orderOperator) => $orderAfter->getAttribute($attribute)
+                            $this->getQueryOperator($orderOperator) => $orderAfter[$attribute]
                         ]
                     ], [
-                        $attribute => $orderAfter->getAttribute($attribute),
+                        $attribute => $orderAfter[$attribute],
                         '_id' => [
-                            $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter->getInternalId())
+                            $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
                         ]
 
                     ]

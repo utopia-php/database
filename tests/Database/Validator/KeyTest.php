@@ -43,10 +43,10 @@ class KeyTest extends TestCase
         $this->assertEquals(false, $this->object->isValid('as$$5dasdasdas'));
         $this->assertEquals(false, $this->object->isValid('as-5dasdasdas'));
 
-        // At most 32 chars
-        $this->assertEquals(true, $this->object->isValid('socialAccountForYoutubeSubscribe'));
-        $this->assertEquals(false, $this->object->isValid('socialAccountForYoutubeSubscribers'));
-        $this->assertEquals(true, $this->object->isValid('5f058a89258075f058a89258075f058t'));
-        $this->assertEquals(false, $this->object->isValid('5f058a89258075f058a89258075f058tx'));
+        // At most 36 chars
+        $this->assertEquals(true, $this->object->isValid('socialAccountForYoutubeSubscribersss'));
+        $this->assertEquals(false, $this->object->isValid('socialAccountForYoutubeSubscriberssss'));
+        $this->assertEquals(true, $this->object->isValid('5f058a89258075f058a89258075f058t9214'));
+        $this->assertEquals(false, $this->object->isValid('5f058a89258075f058a89258075f058tx9214'));
     }
 }

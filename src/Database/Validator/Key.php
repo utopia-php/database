@@ -9,7 +9,7 @@ class Key extends Validator
     /**
      * @var string
      */
-    protected $message = 'Parameter must contain only letters with no spaces or special chars and be shorter than 32 chars';
+    protected $message = 'Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore';
 
     /**
      * Get Description.
@@ -46,7 +46,7 @@ class Key extends Validator
             return false;
         }
 
-        if (\mb_strlen($value) > 32) {
+        if (\mb_strlen($value) > 36) {
             return false;
         }
 

@@ -382,19 +382,27 @@ class Database
      * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
+     * @param string $format optional validation format of attribute
      * @param array $filters
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
         if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+            $this->adapter->getAttributeCount($collection, true) >= $this->adapter->getAttributeLimit())
         {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
+
+        if ($format) {
+            $name = \json_decode($format, true)['name'];
+            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
+                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            }
+        } 
 
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
@@ -404,6 +412,7 @@ class Database
             'default' => $default,
             'signed' => $signed,
             'array' => $array,
+            'format' => $format,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
 
@@ -510,19 +519,21 @@ class Database
      * @param array|bool|callable|int|float|object|resource|string|null $default
      * @param bool $signed
      * @param bool $array
+     * @param string $format optional validation format of attribute
      * @param array $filters
      * 
      * @return bool
      */
-    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, array $filters = []): bool
+    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
-        {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
+        if ($format) {
+            $name = \json_decode($format, true)['name'];
+            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
+                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            }
+        } 
 
         $collection->setAttribute('attributesInQueue', new Document([
             '$id' => $id,
@@ -532,8 +543,15 @@ class Database
             'default' => $default,
             'signed' => $signed,
             'array' => $array,
+            'format' => $format,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getAttributeLimit() > 0 && 
+            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
 
         if ($this->adapter->getRowLimit() > 0 && 
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
@@ -597,7 +615,7 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+        if ($this->adapter->getIndexCount($collection, true) >= $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -689,10 +707,6 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit reached. Cannot create new index.');
-        }
-
         $collection->setAttribute('indexesInQueue', new Document([
             '$id' => $id,
             'type' => $type,
@@ -700,7 +714,11 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
-    
+
+        if ($this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
+            throw new LimitException('Index limit reached. Cannot create new index.');
+        }
+
         if($collection->getId() !== self::COLLECTIONS) {
             $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
         }
@@ -801,7 +819,7 @@ class Database
      * Create Document
      * 
      * @param string $collection
-     * @param Document $data
+     * @param Document $document
      *
      * @return Document
      *
@@ -843,7 +861,6 @@ class Database
      * 
      * @param string $collection
      * @param string $id
-     * @param Document $document
      *
      * @return Document
      *
@@ -1147,7 +1164,7 @@ class Database
             $value = $document->getAttribute($key, null);
 
             if($array) {
-                $value = (!is_string($value)) ? $value : json_decode($value, true);
+                $value = (!is_string($value)) ? ($value ?? []) : json_decode($value, true);
             }
             else {
                 $value = [$value];

@@ -179,11 +179,31 @@ abstract class Base extends TestCase
     }
 
     /**
-     * Ensure the collection is removed after use
-     * 
      * @depends testInvalidDefaultValues
      */
-    public function testCleanupInvalidDefaultValues()
+    public function testAttributeCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
+    }
+
+    /**
+     * @depends testAttributeCaseInsensitivity
+     */
+    public function testAttributeQueueCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitiveInQueue', Database::VAR_STRING, 128, true));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitiveInQueue', Database::VAR_STRING, 128, true));
+    }
+
+    /**
+     * Ensure the collection is removed after use
+     * 
+     * @depends testAttributeQueueCaseInsensitivity
+     */
+    public function testCleanupAttributeTests()
     {
         static::getDatabase()->deleteCollection('attributes');
         $this->assertEquals(1,1);

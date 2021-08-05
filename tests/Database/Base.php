@@ -64,6 +64,15 @@ abstract class Base extends TestCase
 
         $this->assertCount(1, static::getDatabase()->listCollections());
 
+        // Collection names should not be unique
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2'));
+        $this->assertCount(2, static::getDatabase()->listCollections());
+        $collection = static::getDatabase()->getCollection('actors2');
+        $collection->setAttribute('name', 'actors'); // change name to one that exists
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
+        $this->assertCount(1, static::getDatabase()->listCollections());
+
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());

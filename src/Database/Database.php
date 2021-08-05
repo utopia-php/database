@@ -534,6 +534,23 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
+        /** @var Document[] $attributes */
+        /** @var Document[] $attributesInQueue */
+        $attributes = $collection->getAttribute('attributes');
+        $attributesInQueue = $collection->getAttribute('attributesInQueue');
+
+        \array_walk($attributes, function ($attribute) use ($id) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new Duplicate('Attribute already exists', 400);
+            }
+        });
+
+        \array_walk($attributesInQueue, function ($attribute) use ($id) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new Duplicate('Attribute already exists in queue', 400);
+            }
+        });
+
         if ($format) {
             $name = \json_decode($format, true)['name'];
             if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {

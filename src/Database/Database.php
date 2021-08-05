@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
@@ -381,6 +382,20 @@ class Database
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
+
+        // attribute IDs are case insensitive
+        $attributes = $collection->getAttribute('attributes', []); /** @var Document[] $attributes */
+        \array_walk($attributes, function ($attribute) use ($id) {
+            if ($attribute instanceof Document) {
+                if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                    throw new Duplicate('Attribute already exists', 400);
+                }
+            } else {
+                if (\strtolower($attribute['$id']) === \strtolower($id)) {
+                    throw new Duplicate('Attribute already exists', 400);
+                }
+            }
+        });
 
         if ($this->adapter->getAttributeLimit() > 0 && 
             $this->adapter->getAttributeCount($collection, true) >= $this->adapter->getAttributeLimit())

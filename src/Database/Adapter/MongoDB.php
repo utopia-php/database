@@ -31,7 +31,10 @@ class MongoDB extends Adapter
         $this->client = $client;
     }
 
-    public static int $numberOfDefaultIndexes = 4;
+    public static function getNumberOfDefaultIndexes(): int
+    {
+        return 4;
+    }
 
     /**
      * Create Database
@@ -743,7 +746,7 @@ class MongoDB extends Adapter
         $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
         $indexesInQueue = ($strict) ? 0 : \count((array) $collection->getAttribute('indexesInQueue') ?? []);
 
-        return $indexes + $indexesInQueue + static::$numberOfDefaultIndexes;
+        return $indexes + $indexesInQueue + static::getNumberOfDefaultIndexes();
     }
 
     /**

@@ -88,11 +88,11 @@ abstract class Adapter
     }
 
     /**
-     * Number of indexes used by default.
+     * Returns number of indexes used by default.
      * 
-     * @var int
+     * @return int 
      */
-    public static int $numberOfDefaultIndexes;
+    abstract static public function getNumberOfDefaultIndexes(): int;
 
     /**
      * Create Database

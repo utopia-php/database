@@ -45,7 +45,7 @@ class MongoDBTest extends Base
      */
     static function getUsedIndexes(): int
     {
-        return 4;
+        return MongoDB::getNumberOfDefaultIndexes();
     }
 
     /**

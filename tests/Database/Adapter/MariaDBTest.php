@@ -45,7 +45,7 @@ class MariaDBTest extends Base
      */
     static function getUsedIndexes(): int
     {
-        return 3;
+        return MariaDB::getNumberOfDefaultIndexes();
     }
 
     /**

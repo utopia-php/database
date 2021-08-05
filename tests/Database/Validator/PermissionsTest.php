@@ -99,20 +99,20 @@ class PermissionsTest extends TestCase
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading underscores
         $this->assertEquals($object->isValid(['member:_1234']), false);
-        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
 
         // No special characters
         $this->assertEquals($object->isValid(['member:12$4']), false);
-        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
         $this->assertEquals($object->isValid(['user:12&4']), false);
-        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
         $this->assertEquals($object->isValid(['member:ab(124']), false);
-        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
 
         // Shorter than 36 chars
         $this->assertEquals($object->isValid(['user:aaaaaaaabbbbbbbbccccccccddddddddeeee']), true);
         $this->assertEquals($object->isValid(['user:aaaaaaaabbbbbbbbccccccccddddddddeeeee']), false);
-        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertEquals($object->isValid(['memmber:1234']), false);
@@ -126,7 +126,7 @@ class PermissionsTest extends TestCase
 
         // Team permission
         $this->assertEquals($object->isValid(['team:_abcd']), false);
-        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
         $this->assertEquals($object->isValid(['team:abcd/']), false);
         $this->assertEquals($object->getDescription(), 'Team role must not be empty.');
         $this->assertEquals($object->isValid(['team:/abcd']), false);
@@ -136,8 +136,8 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->isValid(['team:abcd/e/fgh']), false);
         $this->assertEquals($object->getDescription(), 'Permission roles may contain at most one "/" character.');
         $this->assertEquals($object->isValid(['team:ab&cd3/efgh']), false);
-        $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
         $this->assertEquals($object->isValid(['team:abcd/ef*gh']), false);
-        $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore');
+        $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, underscore, and space. Can\'t start with a leading underscore or have trailing spaces');
     }
 }

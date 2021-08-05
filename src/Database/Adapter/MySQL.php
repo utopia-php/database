@@ -39,23 +39,23 @@ class MySQL extends MariaDB
         switch ($type) {
             case Database::INDEX_KEY:
                 $type = 'INDEX';
-            break;
+                break;
 
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
-            break;
-            
+                break;
+
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
-            break;
-            
+                break;
+
             case Database::INDEX_FULLTEXT:
                 $type = 'FULLTEXT INDEX';
-            break;
-            
+                break;
+
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-            break;
+                break;
         }
 
         return $type;
@@ -76,30 +76,30 @@ class MySQL extends MariaDB
         switch ($type) {
             case Database::INDEX_KEY:
                 $type = 'INDEX';
-            break;
+                break;
 
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
 
                 foreach ($attributes as $key => &$value) {
-                    $value = '(CAST('.$value.' AS char(255) ARRAY))';
+                    $value = '(CAST(' . $value . ' AS char(255) ARRAY))';
                 }
-            break;
-            
+                break;
+
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
-            break;
-            
+                break;
+
             case Database::INDEX_FULLTEXT:
                 $type = 'FULLTEXT INDEX';
-            break;
-            
+                break;
+
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-            break;
+                break;
         }
 
-        return 'CREATE '.$type.' '.$id.' ON '.$this->getNamespace().'.'.$collection.' ( '.implode(', ', $attributes).' );';
+        return 'CREATE ' . $type . ' ' . $id . ' ON ' . $this->getNamespace() . '.' . $collection . ' ( ' . implode(', ', $attributes) . ' );';
     }
 
     /**
@@ -114,10 +114,10 @@ class MySQL extends MariaDB
      */
     protected function getSQLPermissions(array $roles): string
     {
-        foreach($roles as &$role) {
-            $role = 'JSON_CONTAINS(_read, '.$this->getPDO()->quote("\"".$role."\"").', \'$\')';
+        foreach ($roles as &$role) {
+            $role = 'JSON_CONTAINS(_read, ' . $this->getPDO()->quote("\"" . $role . "\"") . ', \'$\')';
         }
 
-        return '('.implode(' OR ', $roles).')';
+        return '(' . implode(' OR ', $roles) . ')';
     }
 }

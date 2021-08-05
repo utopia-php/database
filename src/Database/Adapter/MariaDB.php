@@ -30,6 +30,9 @@ class MariaDB extends Adapter
     {
         $this->pdo = $pdo;
     }
+
+    public static int $numberOfDefaultIndexes = 4;
+
     /**
      * Create Database
      * 
@@ -694,8 +697,7 @@ class MariaDB extends Adapter
         $indexes = \count($collection->getAttribute('indexes') ?? []);
         $indexesInQueue = ($strict) ? 0 : \count($collection->getAttribute('indexesInQueue') ?? []);
 
-        // +3 ==> hardcoded number of default indexes from createCollection
-        return $indexes + $indexesInQueue + 3;
+        return $indexes + $indexesInQueue + static::$numberOfDefaultIndexes;
     }
 
     /**
@@ -721,9 +723,8 @@ class MariaDB extends Adapter
         $attributes = \count($collection->getAttribute('attributes') ?? []);
         $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
-        // +4 ==> account for default columns
         // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + $attributesInQueue + 4 + 1;
+        return $attributes + $attributesInQueue + static::$numberOfDefaultIndexes + 1;
     }
 
     /**

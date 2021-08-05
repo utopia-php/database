@@ -811,6 +811,18 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
 
         /**
+         * ORDER BY - After Exception
+         */
+
+        $document = new Document([
+            '$collection' => 'other collection'
+        ]);
+
+        $this->expectException(Exception::class);
+        static::getDatabase()->find('movies', [], 2, 0, [], [], $document);
+
+
+        /**
          * Limit
          */
         $documents = static::getDatabase()->find('movies', [], 4, 0, ['name']);

@@ -388,11 +388,11 @@ class Database
         \array_walk($attributes, function ($attribute) use ($id) {
             if ($attribute instanceof Document) {
                 if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                    throw new Duplicate('Attribute already exists', 400);
+                    throw new DuplicateException('Attribute already exists', 400);
                 }
             } else {
                 if (\strtolower($attribute['$id']) === \strtolower($id)) {
-                    throw new Duplicate('Attribute already exists', 400);
+                    throw new DuplicateException('Attribute already exists', 400);
                 }
             }
         });
@@ -541,13 +541,13 @@ class Database
 
         \array_walk($attributes, function ($attribute) use ($id) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new Duplicate('Attribute already exists', 400);
+                throw new DuplicateException('Attribute already exists', 400);
             }
         });
 
         \array_walk($attributesInQueue, function ($attribute) use ($id) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new Duplicate('Attribute already exists in queue', 400);
+                throw new DuplicateException('Attribute already exists in queue', 400);
             }
         });
 

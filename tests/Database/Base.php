@@ -8,7 +8,7 @@ use stdClass;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
-use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -1418,7 +1418,7 @@ abstract class Base extends TestCase
      */
     public function testExceptionDuplicate(Document $document)
     {
-        $this->expectException(Duplicate::class);
+        $this->expectException(DuplicateException::class);
 
         $document->setAttribute('$id', 'duplicated');
         
@@ -1433,7 +1433,7 @@ abstract class Base extends TestCase
      */
     public function testUniqueIndexDuplicate()
     {
-        $this->expectException(Duplicate::class);
+        $this->expectException(DuplicateException::class);
 
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 

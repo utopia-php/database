@@ -230,16 +230,7 @@ class Database
             ['indexesInQueue', self::VAR_STRING, 1000000, false],
         ]);
 
-        /** @var Document[] $indexes*/
-        $indexes = [
-            new Document([
-                '$id' => '_key_1',
-                'type' => self::INDEX_UNIQUE,
-                'attributes' => ['name'],
-            ])
-        ];
-
-        $this->createCollection(self::COLLECTIONS, $attributes, $indexes);
+        $this->createCollection(self::COLLECTIONS, $attributes);
 
         return true;
     }

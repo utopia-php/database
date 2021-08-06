@@ -532,9 +532,7 @@ class MariaDB extends Adapter
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
         if(empty($orderAttributes) && !empty($orderTypes)) {
-            $attribute = $this->filter('_id');
-            $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
-            $orders[] = $attribute.' '.$orderType;
+            $orders[] = '_id '.$this->filter($orderTypes[0] ?? Database::ORDER_ASC);
         } else {
             $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
         }

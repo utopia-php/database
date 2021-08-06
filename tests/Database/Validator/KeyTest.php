@@ -36,12 +36,31 @@ class KeyTest extends TestCase
         $this->assertEquals(false, $this->object->isValid('_asdasdasdas'));
         $this->assertEquals(true, $this->object->isValid('a_sdasdasdas'));
 
-        // No Special characters
+        // Special chars allowed: underscore, period, hyphen
+        $this->assertEquals(true, $this->object->isValid('as5dadasdas_'));
+        $this->assertEquals(true, $this->object->isValid('as_5dasdasdas'));
+        $this->assertEquals(true, $this->object->isValid('.as5dasdasdas'));
+        $this->assertEquals(true, $this->object->isValid('as5dasdasdas.'));
+        $this->assertEquals(true, $this->object->isValid('as.5dasdasdas'));
+        $this->assertEquals(true, $this->object->isValid('-as5dasdasdas'));
+        $this->assertEquals(true, $this->object->isValid('as5dasdasdas-'));
+        $this->assertEquals(true, $this->object->isValid('as-5dasdasdas'));
+
         $this->assertEquals(false, $this->object->isValid('dasda asdasd'));
         $this->assertEquals(false, $this->object->isValid('asd"asd6sdas'));
         $this->assertEquals(false, $this->object->isValid('asd\'as0asdas'));
-        $this->assertEquals(false, $this->object->isValid('as$$5dasdasdas'));
-        $this->assertEquals(false, $this->object->isValid('as-5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as!5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as@5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as#5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as$5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as%5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as^5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as&5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as*5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as(5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as)5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as+5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('as=5dasdasdas'));
 
         // At most 36 chars
         $this->assertEquals(true, $this->object->isValid('socialAccountForYoutubeSubscribersss'));

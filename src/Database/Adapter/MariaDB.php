@@ -524,10 +524,19 @@ class MariaDB extends Adapter
                     )";
             }
         }
-        $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
 
+        // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($orderAfter)) {
-            $where[] = "( _id > {$orderAfter['$internalId']} )"; // Allow after pagination without any order
+            $where[] = "( _id > {$orderAfter['$internalId']} )";
+        }
+
+        // Allow order type without any order attribute, fallback to the natural order (_id)
+        if(empty($orderAttributes) && !empty($orderTypes)) {
+            $attribute = $this->filter('_id');
+            $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
+            $orders[] = $attribute.' '.$orderType;
+        } else {
+            $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required

@@ -740,6 +740,20 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[5]['name']);
 
         /**
+         * ORDER BY natural
+         */
+        $base = array_reverse(static::getDatabase()->find('movies', [], 25, 0));
+        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+
+        $this->assertEquals(6, count($documents));
+        $this->assertEquals($base[0]['name'], $documents[0]['name']);
+        $this->assertEquals($base[1]['name'], $documents[1]['name']);
+        $this->assertEquals($base[2]['name'], $documents[2]['name']);
+        $this->assertEquals($base[3]['name'], $documents[3]['name']);
+        $this->assertEquals($base[4]['name'], $documents[4]['name']);
+        $this->assertEquals($base[5]['name'], $documents[5]['name']);
+
+        /**
          * ORDER BY - Multiple attributes
          */
         $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC, Database::ORDER_DESC]);

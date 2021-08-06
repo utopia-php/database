@@ -438,12 +438,21 @@ class MongoDB extends Adapter
 
         // queries
         $filters = $this->buildFilters($queries);
-        if (empty($orderAttributes) && !empty($orderAfter)) {
-            $filters = array_merge($filters, [
-                '_id' => [
-                    $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
-                ]
-            ]);
+
+        if (empty($orderAttributes)) {
+            // Allow after pagination without any order
+            if(!empty($orderAfter)) {
+                $filters = array_merge($filters, [
+                    '_id' => [
+                        $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
+                    ]
+                ]);
+            }
+            // Allow order type without any order attribute, fallback to the natural order (_id)
+            if(!empty($orderTypes)) {
+                $orderType = $this->getOrder($this->filter($orderTypes[0] ?? Database::ORDER_ASC));
+                $options['sort']['_id'] = $orderType;
+            }
         }
 
         if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {

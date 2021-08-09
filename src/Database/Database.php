@@ -1122,7 +1122,7 @@ class Database
                     foreach (array_reverse($filters) as $filter) {
                         $node = $this->decodeAttribute($filter, $node);
 
-                        if (array_key_exists('$id', $node)) { // if `$id` exist, create a Document instance
+                        if (array_key_exists('$id', $node)) { // if `$id` exists, create a Document instance
                             $node = new Document($node);
                         }
                     }

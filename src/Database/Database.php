@@ -1114,17 +1114,21 @@ class Database
             if(is_null($value)) {
                 continue;
             }
-            
+
             $value = ($array) ? $value : [$value];
 
             foreach ($value as &$node) {
                 if (($node !== null)) {
                     foreach (array_reverse($filters) as $filter) {
                         $node = $this->decodeAttribute($filter, $node);
+
+                        if (array_key_exists('$id', $node)) { // if `$id` exist, create a Document instance
+                            $node = new Document($node);
+                        }
                     }
                 }
             }
-            
+
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 

@@ -164,7 +164,20 @@ class Database
                     return $value;
                 }
 
-                return json_decode($value, true);
+                $value = json_decode($value, true);
+
+                if(array_key_exists('$id', $value)) {
+                    return new Document($value);
+                } else {
+                    $value = array_map(function ($item) {
+                        if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
+                            return new Document($item);
+                        }
+                        return $item;
+                    }, $value);
+                }
+
+                return $value;
             }
         );
     }
@@ -1121,10 +1134,6 @@ class Database
                 if (($node !== null)) {
                     foreach (array_reverse($filters) as $filter) {
                         $node = $this->decodeAttribute($filter, $node);
-
-                        if ($filter === 'json' && array_key_exists('$id', $node)) { // if `$id` exists, create a Document instance
-                            $node = new Document($node);
-                        }
                     }
                 }
             }

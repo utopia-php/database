@@ -164,7 +164,20 @@ class Database
                     return $value;
                 }
 
-                return json_decode($value, true);
+                $value = json_decode($value, true);
+
+                if(array_key_exists('$id', $value)) {
+                    return new Document($value);
+                } else {
+                    $value = array_map(function ($item) {
+                        if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
+                            return new Document($item);
+                        }
+                        return $item;
+                    }, $value);
+                }
+
+                return $value;
             }
         );
     }
@@ -892,7 +905,6 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id);
-        $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy());
 
         return $document;
     }
@@ -1115,7 +1127,7 @@ class Database
             if(is_null($value)) {
                 continue;
             }
-            
+
             $value = ($array) ? $value : [$value];
 
             foreach ($value as &$node) {
@@ -1125,7 +1137,7 @@ class Database
                     }
                 }
             }
-            
+
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 

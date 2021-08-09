@@ -527,7 +527,9 @@ class MariaDB extends Adapter
 
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($orderAfter)) {
-            $where[] = "( _id > {$orderAfter['$internalId']} )";
+            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            $where[] = "( _id {$this->getSQLOperator($orderOperator)} {$orderAfter['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)

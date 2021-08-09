@@ -442,9 +442,11 @@ class MongoDB extends Adapter
         if (empty($orderAttributes)) {
             // Allow after pagination without any order
             if(!empty($orderAfter)) {
+                $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 $filters = array_merge($filters, [
                     '_id' => [
-                        $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
+                        $this->getQueryOperator($orderOperator) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
                     ]
                 ]);
             }

@@ -893,10 +893,6 @@ class Database
 
         $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id);
 
-        if (!empty($document->getInternalId())) { // Only save document into cache, when internal ID is present
-            $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy());
-        }
-
         return $document;
     }
 

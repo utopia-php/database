@@ -892,7 +892,10 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id);
-        $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy());
+
+        if (!empty($document->getInternalId())) { // Only save document into cache, when internal ID is present
+            $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy());
+        }
 
         return $document;
     }

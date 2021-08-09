@@ -1166,9 +1166,9 @@ abstract class Base extends TestCase
         $this->assertEquals([], $result->getAttribute('memberships'));
         $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
         $this->assertEquals([
-            ['$id' => '1', 'label' => 'x'],
-            ['$id' => '2', 'label' => 'y'],
-            ['$id' => '3', 'label' => 'z'],
+            new Document(['$id' => '1', 'label' => 'x']),
+            new Document(['$id' => '2', 'label' => 'y']),
+            new Document(['$id' => '3', 'label' => 'z']),
         ], $result->getAttribute('tags'));
     }
 

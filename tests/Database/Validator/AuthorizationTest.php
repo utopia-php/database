@@ -8,25 +8,8 @@ use PHPUnit\Framework\TestCase;
 
 class AuthorizationTest extends TestCase
 {
-    /**
-     * @var Authorization
-     */
-    protected $object = null;
-
-    /**
-     * @var Document
-     */
-    protected $document = null;
-
     public function setUp(): void
     {
-        $this->document = new Document([
-            '$id' => uniqid(),
-            '$collection' => uniqid(),
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
-        ]);
-        $this->object = new Authorization($this->document, 'read');
     }
 
     public function tearDown(): void
@@ -35,10 +18,18 @@ class AuthorizationTest extends TestCase
 
     public function testValues()
     {
-        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
-        $this->assertEquals($this->object->isValid(''), false);
-        $this->assertEquals($this->object->isValid([]), false);
-        $this->assertEquals($this->object->getDescription(), 'No permissions provided for action \'read\'');
+        $document = new Document([
+            '$id' => uniqid(),
+            '$collection' => uniqid(),
+            '$read' => ['user:123', 'team:123'],
+            '$write' => ['role:all'],
+        ]);
+        $object = new Authorization($document, 'read');
+
+        $this->assertEquals($object->isValid($document->getRead()), false);
+        $this->assertEquals($object->isValid(''), false);
+        $this->assertEquals($object->isValid([]), false);
+        $this->assertEquals($object->getDescription(), 'No permissions provided for action \'read\'');
         
         Authorization::setRole('user:456');
         Authorization::setRole('user:123');
@@ -48,37 +39,37 @@ class AuthorizationTest extends TestCase
         $this->assertEquals(Authorization::isRole(''), false);
         $this->assertEquals(Authorization::isRole('role:all'), true);
 
-        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getRead()), true);
         
         Authorization::cleanRoles();
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
+        $this->assertEquals($object->isValid($document->getRead()), false);
 
         Authorization::setRole('team:123');
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getRead()), true);
         
         Authorization::cleanRoles();
         Authorization::disable();
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getRead()), true);
 
         Authorization::reset();
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
+        $this->assertEquals($object->isValid($document->getRead()), false);
 
         Authorization::setDefaultStatus(false);
         Authorization::disable();
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getRead()), true);
 
         Authorization::reset();
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), true);
+        $this->assertEquals($object->isValid($document->getRead()), true);
 
         Authorization::enable();
         
-        $this->assertEquals($this->object->isValid($this->document->getRead()), false);
+        $this->assertEquals($object->isValid($document->getRead()), false);
 
         Authorization::setRole('textX');
 
@@ -87,5 +78,9 @@ class AuthorizationTest extends TestCase
         Authorization::unsetRole('textX');
 
         $this->assertNotContains('textX', Authorization::getRoles());
+
+        // Test skip method
+        $this->assertEquals($object->isValid($document->getRead()), false);
+        $this->assertEquals(Authorization::skip(function() use ($object, $document) {return $object->isValid($document->getRead());}), true);
     }
 }

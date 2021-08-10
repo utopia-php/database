@@ -397,17 +397,11 @@ class Database
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []); /** @var Document[] $attributes */
-        \array_walk($attributes, function ($attribute) use ($id) {
-            if ($attribute instanceof Document) {
-                if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                    throw new DuplicateException('Attribute already exists', 400);
-                }
-            } else {
-                if (\strtolower($attribute['$id']) === \strtolower($id)) {
-                    throw new DuplicateException('Attribute already exists', 400);
-                }
+        foreach ($attributes as $attribute) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists');
             }
-        });
+        }
 
         if ($this->adapter->getAttributeLimit() > 0 && 
             $this->adapter->getAttributeCount($collection, true) >= $this->adapter->getAttributeLimit())
@@ -551,17 +545,17 @@ class Database
         $attributes = $collection->getAttribute('attributes');
         $attributesInQueue = $collection->getAttribute('attributesInQueue');
 
-        \array_walk($attributes, function ($attribute) use ($id) {
+        foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists', 400);
+                throw new DuplicateException('Attribute already exists');
             }
-        });
+        }
 
-        \array_walk($attributesInQueue, function ($attribute) use ($id) {
+        foreach ($attributesInQueue as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists in queue', 400);
+                throw new DuplicateException('Attribute already exists in queue');
             }
-        });
+        }
 
         if ($format) {
             $name = \json_decode($format, true)['name'];

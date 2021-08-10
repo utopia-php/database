@@ -211,9 +211,31 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testAttributeQueueCaseInsensitivity
+     */
+
+    public function testIndexCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+    }
+
+    /**
+     * @depends testIndexCaseInsensitivity
+     */
+
+    public function testIndexQueueCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitiveInQueue', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitiveInQueue', Database::INDEX_KEY, ['caseSensitive'], [128]));
+    }
+
+    /**
      * Ensure the collection is removed after use
      * 
-     * @depends testAttributeQueueCaseInsensitivity
+     * @depends testIndexQueueCaseInsensitivity
      */
     public function testCleanupAttributeTests()
     {

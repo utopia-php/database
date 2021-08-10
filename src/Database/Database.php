@@ -644,6 +644,14 @@ class Database
 
         $collection = $this->getCollection($collection);
 
+        // index IDs are case insensitive
+        $indexes = $collection->getAttribute('indexes', []); /** @var Document[] $indexes */
+        foreach ($indexes as $index) {
+            if (\strtolower($index->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Index already exists');
+            }
+        }
+
         if ($this->adapter->getIndexCount($collection, true) >= $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
@@ -735,6 +743,22 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+
+        // index IDs are case insensitive
+        $indexes = $collection->getAttribute('indexes', []); /** @var Document[] $indexes */
+        $indexesInQueue = $collection->getAttribute('indexesInQueue', []); /** @var Document[] $indexesInQueue */
+
+        foreach ($indexes as $index) {
+            if (\strtolower($index->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Index already exists');
+            }
+        }
+
+        foreach ($indexesInQueue as $index) {
+            if (\strtolower($index->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Index already exists in queue');
+            }
+        }
 
         $collection->setAttribute('indexesInQueue', new Document([
             '$id' => $id,

@@ -223,7 +223,6 @@ class Database
     {
         $this->adapter->create();
 
-
         /**
          * Create array of attribute documents
          * @var Document[] $attributes

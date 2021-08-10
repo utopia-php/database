@@ -141,6 +141,18 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(0, $collection->getAttribute('attributes'));
 
+        // Test for custom chars in ID
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as_5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas_', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '.as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as.5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas.', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '-as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as-5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas-', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
+
         // Using this collection to test invalid default values
         // static::getDatabase()->deleteCollection('attributes');
     }
@@ -760,6 +772,20 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[5]['name']);
 
         /**
+         * ORDER BY natural
+         */
+        $base = array_reverse(static::getDatabase()->find('movies', [], 25, 0));
+        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+
+        $this->assertEquals(6, count($documents));
+        $this->assertEquals($base[0]['name'], $documents[0]['name']);
+        $this->assertEquals($base[1]['name'], $documents[1]['name']);
+        $this->assertEquals($base[2]['name'], $documents[2]['name']);
+        $this->assertEquals($base[3]['name'], $documents[3]['name']);
+        $this->assertEquals($base[4]['name'], $documents[4]['name']);
+        $this->assertEquals($base[5]['name'], $documents[5]['name']);
+
+        /**
          * ORDER BY - Multiple attributes
          */
         $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC, Database::ORDER_DESC]);
@@ -792,6 +818,28 @@ abstract class Base extends TestCase
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[5]);
+        $this->assertEmpty(count($documents));
+
+        /**
+         * ORDER BY - After by natural order
+         */
+        $movies = array_reverse(static::getDatabase()->find('movies', [], 25, 0, [], []));
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[1]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[2]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[3]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[3]);
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals($movies[4]['name'], $documents[0]['name']);
+        $this->assertEquals($movies[5]['name'], $documents[1]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[4]);
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals($movies[5]['name'], $documents[0]['name']);
+
+        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[5]);
         $this->assertEmpty(count($documents));
 
         /**
@@ -1138,9 +1186,9 @@ abstract class Base extends TestCase
         $this->assertEquals([], $result->getAttribute('memberships'));
         $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
         $this->assertEquals([
-            ['$id' => '1', 'label' => 'x'],
-            ['$id' => '2', 'label' => 'y'],
-            ['$id' => '3', 'label' => 'z'],
+            new Document(['$id' => '1', 'label' => 'x']),
+            new Document(['$id' => '2', 'label' => 'y']),
+            new Document(['$id' => '3', 'label' => 'z']),
         ], $result->getAttribute('tags'));
     }
 

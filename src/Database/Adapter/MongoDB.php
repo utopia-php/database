@@ -112,10 +112,19 @@ class MongoDB extends Adapter
 
         $collection = $database->$id;
 
-        // Mongo creates an index for _id; _uid, _read and _write index by default
+        // Mongo creates an index for _id; _uid (unique, case insensitive), _read and _write index by default
         // Returns the name of the created index as a string.
-        // Update $this->getIndexCount when adding another default index
-        $uid = $collection->createIndex(['_uid' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_uid', 'unique' => true]);
+        $uid = $collection->createIndex([
+            '_uid' => $this->getOrder(Database::ORDER_DESC)],
+            [
+                'name' => '_uid',
+                'unique' => true,
+                'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
+                    'locale' => 'en',
+                    'strength' => 1
+                ],
+            ]
+        );
         $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
         $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
 

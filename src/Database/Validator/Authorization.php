@@ -155,6 +155,22 @@ class Authorization extends Validator
     }
 
     /**
+     * Skip Authorization
+     * 
+     * Skips authorization for the code to be executed inside the callback
+     * 
+     * @return mixed
+     */
+    public static function skip(callable $callback)
+    {
+        self::disable();
+        $result = $callback();
+        self::reset();
+
+        return $result;
+    }
+
+    /**
      * Enable Authorization checks
      * 
      * @return void

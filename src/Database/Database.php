@@ -984,6 +984,8 @@ class Database
     /**
      * Count Documents
      * 
+     * Count the number of documents. Pass $max=0 for unlimited count
+     * 
      * @param string $collection
      * @param Query[] $queries
      * @param int $max

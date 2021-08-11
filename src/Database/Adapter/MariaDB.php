@@ -31,11 +31,6 @@ class MariaDB extends Adapter
         $this->pdo = $pdo;
     }
 
-    public static function getNumberOfDefaultIndexes(): int
-    {
-        return 4;
-    }
-
     /**
      * Create Database
      * 
@@ -737,7 +732,7 @@ class MariaDB extends Adapter
         $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
         // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + $attributesInQueue + static::getNumberOfDefaultIndexes() + 1;
+        return $attributes + $attributesInQueue + static::getNumberOfDefaultAttributes() + 1;
     }
 
     /**
@@ -761,6 +756,16 @@ class MariaDB extends Adapter
     public static function getRowLimit(): int
     {
         return 65535;
+    }
+
+    public static function getNumberOfDefaultAttributes(): int
+    {
+        return 4;
+    }
+
+    public static function getNumberOfDefaultIndexes(): int
+    {
+        return 3;
     }
 
     /**

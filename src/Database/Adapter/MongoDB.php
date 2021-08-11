@@ -31,11 +31,6 @@ class MongoDB extends Adapter
         $this->client = $client;
     }
 
-    public static function getNumberOfDefaultIndexes(): int
-    {
-        return 4;
-    }
-
     /**
      * Create Database
      * 
@@ -782,7 +777,7 @@ class MongoDB extends Adapter
         $attributes = \count($collection->getAttribute('attributes') ?? []);
         $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
-        return $attributes + $attributesInQueue;
+        return $attributes + $attributesInQueue + static::getNumberOfDefaultAttributes();
     }
 
     /**
@@ -805,6 +800,16 @@ class MongoDB extends Adapter
     public static function getRowLimit(): int
     {
         return 0;
+    }
+
+    public static function getNumberOfDefaultAttributes(): int
+    {
+        return 4;
+    }
+
+    public static function getNumberOfDefaultIndexes(): int
+    {
+        return 3;
     }
 
     /**

@@ -24,7 +24,7 @@ class AuthorizationTest extends TestCase
             '$read' => ['user:123', 'team:123'],
             '$write' => ['role:all'],
         ]);
-        $object = new Authorization($document, 'read');
+        $object = new Authorization('read');
 
         $this->assertEquals($object->isValid($document->getRead()), false);
         $this->assertEquals($object->isValid(''), false);

@@ -8,7 +8,7 @@ use stdClass;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
-use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -191,11 +191,53 @@ abstract class Base extends TestCase
     }
 
     /**
-     * Ensure the collection is removed after use
-     * 
      * @depends testInvalidDefaultValues
      */
-    public function testCleanupInvalidDefaultValues()
+    public function testAttributeCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
+    }
+
+    /**
+     * @depends testAttributeCaseInsensitivity
+     */
+    public function testAttributeQueueCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitiveInQueue', Database::VAR_STRING, 128, true));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitiveInQueue', Database::VAR_STRING, 128, true));
+    }
+
+    /**
+     * @depends testAttributeQueueCaseInsensitivity
+     */
+
+    public function testIndexCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+    }
+
+    /**
+     * @depends testIndexCaseInsensitivity
+     */
+
+    public function testIndexQueueCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitiveInQueue', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        $this->expectException(DuplicateException::class);
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitiveInQueue', Database::INDEX_KEY, ['caseSensitive'], [128]));
+    }
+
+    /**
+     * Ensure the collection is removed after use
+     * 
+     * @depends testIndexQueueCaseInsensitivity
+     */
+    public function testCleanupAttributeTests()
     {
         static::getDatabase()->deleteCollection('attributes');
         $this->assertEquals(1,1);
@@ -1466,7 +1508,7 @@ abstract class Base extends TestCase
      */
     public function testExceptionDuplicate(Document $document)
     {
-        $this->expectException(Duplicate::class);
+        $this->expectException(DuplicateException::class);
 
         $document->setAttribute('$id', 'duplicated');
         
@@ -1481,7 +1523,7 @@ abstract class Base extends TestCase
      */
     public function testUniqueIndexDuplicate()
     {
-        $this->expectException(Duplicate::class);
+        $this->expectException(DuplicateException::class);
 
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 

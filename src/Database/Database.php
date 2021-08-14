@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
@@ -394,6 +395,14 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
+        // attribute IDs are case insensitive
+        $attributes = $collection->getAttribute('attributes', []); /** @var Document[] $attributes */
+        foreach ($attributes as $attribute) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists');
+            }
+        }
+
         if ($this->adapter->getAttributeLimit() > 0 && 
             $this->adapter->getAttributeCount($collection, true) >= $this->adapter->getAttributeLimit())
         {
@@ -531,6 +540,23 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
+        /** @var Document[] $attributes */
+        /** @var Document[] $attributesInQueue */
+        $attributes = $collection->getAttribute('attributes');
+        $attributesInQueue = $collection->getAttribute('attributesInQueue');
+
+        foreach ($attributes as $attribute) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists');
+            }
+        }
+
+        foreach ($attributesInQueue as $attribute) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists in queue');
+            }
+        }
+
         if ($format) {
             $name = \json_decode($format, true)['name'];
             if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
@@ -617,6 +643,14 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+
+        // index IDs are case insensitive
+        $indexes = $collection->getAttribute('indexes', []); /** @var Document[] $indexes */
+        foreach ($indexes as $index) {
+            if (\strtolower($index->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Index already exists');
+            }
+        }
 
         if ($this->adapter->getIndexCount($collection, true) >= $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
@@ -709,6 +743,22 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+
+        // index IDs are case insensitive
+        $indexes = $collection->getAttribute('indexes', []); /** @var Document[] $indexes */
+        $indexesInQueue = $collection->getAttribute('indexesInQueue', []); /** @var Document[] $indexesInQueue */
+
+        foreach ($indexes as $index) {
+            if (\strtolower($index->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Index already exists');
+            }
+        }
+
+        foreach ($indexesInQueue as $index) {
+            if (\strtolower($index->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Index already exists in queue');
+            }
+        }
 
         $collection->setAttribute('indexesInQueue', new Document([
             '$id' => $id,

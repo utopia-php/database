@@ -88,13 +88,6 @@ abstract class Adapter
     }
 
     /**
-     * Returns number of indexes used by default.
-     * 
-     * @return int 
-     */
-    abstract static public function getNumberOfDefaultIndexes(): int;
-
-    /**
      * Create Database
      *
      * @return bool
@@ -315,6 +308,20 @@ abstract class Adapter
      * @return int
      */
     abstract public static function getRowLimit(): int;
+
+    /**
+     * Returns number of attributes used by default.
+     *
+     * @return int
+     */
+    abstract static public function getNumberOfDefaultAttributes(): int;
+
+    /**
+     * Returns number of indexes used by default.
+     *
+     * @return int
+     */
+    abstract static public function getNumberOfDefaultIndexes(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.

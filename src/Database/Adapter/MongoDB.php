@@ -31,11 +31,6 @@ class MongoDB extends Adapter
         $this->client = $client;
     }
 
-    public static function getNumberOfDefaultIndexes(): int
-    {
-        return 4;
-    }
-
     /**
      * Create Database
      * 
@@ -112,15 +107,14 @@ class MongoDB extends Adapter
 
         $collection = $database->$id;
 
-        // Mongo creates an index for _id; _uid, _read and _write index by default
+        // Mongo creates an index for _id; _uid and _read index by default
         // Returns the name of the created index as a string.
         // Update $this->getIndexCount when adding another default index
         $uid = $collection->createIndex(['_uid' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_uid', 'unique' => true]);
         $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
-        $write = $collection->createIndex(['_write' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_write_permissions']);
 
 
-        if (!$read || !$write || !$uid) {
+        if (!$uid || !$read) {
             return false;
         }
 
@@ -783,7 +777,7 @@ class MongoDB extends Adapter
         $attributes = \count($collection->getAttribute('attributes') ?? []);
         $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
-        return $attributes + $attributesInQueue;
+        return $attributes + $attributesInQueue + static::getNumberOfDefaultAttributes();
     }
 
     /**
@@ -806,6 +800,16 @@ class MongoDB extends Adapter
     public static function getRowLimit(): int
     {
         return 0;
+    }
+
+    public static function getNumberOfDefaultAttributes(): int
+    {
+        return 4;
+    }
+
+    public static function getNumberOfDefaultIndexes(): int
+    {
+        return 3;
     }
 
     /**

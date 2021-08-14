@@ -985,7 +985,7 @@ abstract class Base extends TestCase
     public function testEncodeDecode()
     {
         $collection = new Document([
-            '$collection' => Database::COLLECTIONS,
+            '$collection' => Database::METADATA,
             '$id' => 'users',
             'name' => 'Users',
             'attributes' => [

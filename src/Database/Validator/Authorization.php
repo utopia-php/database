@@ -13,11 +13,6 @@ class Authorization extends Validator
     static $roles = ['role:all' => true];
 
     /**
-     * @var Document
-     */
-    protected $document;
-
-    /**
      * @var string
      */
     protected $action = '';
@@ -28,12 +23,10 @@ class Authorization extends Validator
     protected $message = 'Authorization Error';
 
     /**
-     * @param Document $document
-     * @param string   $action
+     * @param string $action
      */
-    public function __construct(Document $document, $action)
+    public function __construct($action)
     {
-        $this->document = $document;
         $this->action = $action;
     }
 
@@ -152,6 +145,22 @@ class Authorization extends Validator
     {
         self::$statusDefault = $status;
         self::$status = $status;
+    }
+
+    /**
+     * Skip Authorization
+     * 
+     * Skips authorization for the code to be executed inside the callback
+     * 
+     * @return mixed
+     */
+    public static function skip(callable $callback)
+    {
+        self::disable();
+        $result = $callback();
+        self::reset();
+
+        return $result;
     }
 
     /**

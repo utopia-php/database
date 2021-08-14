@@ -833,7 +833,7 @@ class Database
         // TODO@kodumbeats Check if returned cache id matches request
         if ($cache = $this->cache->load('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, self::TTL)) {
             $document = new Document($cache);
-            $validator = new Authorization($document, self::PERMISSION_READ);
+            $validator = new Authorization(self::PERMISSION_READ);
 
             if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
                 return new Document();
@@ -850,7 +850,7 @@ class Database
 
         $document->setAttribute('$collection', $collection->getId());
 
-        $validator = new Authorization($document, self::PERMISSION_READ);
+        $validator = new Authorization(self::PERMISSION_READ);
 
         if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
             return new Document();
@@ -881,7 +881,7 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $validator = new Authorization($document, self::PERMISSION_WRITE);
+        $validator = new Authorization(self::PERMISSION_WRITE);
 
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -932,7 +932,7 @@ class Database
         // $data['$id'] = $old->getId();
         // $data['$collection'] = $old->getCollection();
 
-        $validator = new Authorization($old, 'write');
+        $validator = new Authorization('write');
 
         if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -970,7 +970,7 @@ class Database
     {
         $document = $this->getDocument($collection, $id);
 
-        $validator = new Authorization($document, 'write');
+        $validator = new Authorization('write');
 
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -1033,6 +1033,8 @@ class Database
 
     /**
      * Count Documents
+     * 
+     * Count the number of documents. Pass $max=0 for unlimited count
      * 
      * @param string $collection
      * @param Query[] $queries

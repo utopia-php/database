@@ -487,13 +487,14 @@ class MariaDB extends Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param array $orderAfter
+     * @param array $cursor
+     * @param string $cursorDirection
      *
      * @return array 
      * @throws Exception 
      * @throws PDOException 
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -503,35 +504,54 @@ class MariaDB extends Adapter
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $orders[] = $attribute.' '.$orderType;
 
             // Get most dominant/first order attribute
-            if ($i === 0 && !empty($orderAfter)) {
+            if ($i === 0 && !empty($cursor)) {
+                $orderOperatorInternalId = Query::TYPE_GREATER;
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+                if ($cursorDirection === Database::CURSOR_BEFORE) {
+                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                    $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                }
 
                 $where[] = "(
                         {$attribute} {$this->getSQLOperator($orderOperator)} :after 
                         OR (
                             {$attribute} = :after 
                             AND
-                            _id > {$orderAfter['$internalId']}
+                            _id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
                         )
                     )";
+            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
+
+            $orders[] = $attribute.' '.$orderType;
         }
 
         // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($orderAfter)) {
+        if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-            $where[] = "( _id {$this->getSQLOperator($orderOperator)} {$orderAfter['$internalId']} )";
+            $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            );
+            $where[] = "( _id {$this->getSQLOperator($orderOperator)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
         if(empty($orderAttributes) && !empty($orderTypes)) {
-            $orders[] = '_id '.$this->filter($orderTypes[0] ?? Database::ORDER_ASC);
+            $order = $orderTypes[0] ?? Database::ORDER_ASC;
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+
+            $orders[] = '_id '.$this->filter($order);
         } else {
-            $orders[] = '_id '.Database::ORDER_ASC; // Enforce last ORDER by '_id'
+            $orders[] = '_id '.($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
@@ -560,12 +580,12 @@ class MariaDB extends Adapter
             }
         }
 
-        if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
-            if (is_null($orderAfter[$attribute] ?? null)) {
+            if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
-            $stmt->bindValue(':after', $orderAfter[$attribute], $this->getPDOType($orderAfter[$attribute]));
+            $stmt->bindValue(':after', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -585,6 +605,10 @@ class MariaDB extends Adapter
             unset($value['_write']);
 
             $value = new Document($value);
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $results = array_reverse($results);
         }
 
         return $results;

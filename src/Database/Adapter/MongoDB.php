@@ -416,11 +416,12 @@ class MongoDB extends Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param array $orderAfter
+     * @param array $cursor
+     * @param array $cursorDirection
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
@@ -433,52 +434,70 @@ class MongoDB extends Adapter
         // orders
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
-            $orderType = $this->getOrder($this->filter($orderTypes[$i] ?? Database::ORDER_ASC));
-            $options['sort'][$attribute] = $orderType;
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+            $options['sort'][$attribute] = $this->getOrder($orderType);
         }
 
-        $options['sort']['_id'] = $this->getOrder(Database::ORDER_ASC);
+        $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
 
         // queries
         $filters = $this->buildFilters($queries);
 
         if (empty($orderAttributes)) {
             // Allow after pagination without any order
-            if(!empty($orderAfter)) {
+            if(!empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? (
+                    $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+                ) : (
+                    $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+                );
+
                 $filters = array_merge($filters, [
                     '_id' => [
-                        $this->getQueryOperator($orderOperator) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
+                        $this->getQueryOperator($orderOperator) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                     ]
                 ]);
             }
             // Allow order type without any order attribute, fallback to the natural order (_id)
             if(!empty($orderTypes)) {
-                $orderType = $this->getOrder($this->filter($orderTypes[0] ?? Database::ORDER_ASC));
-                $options['sort']['_id'] = $orderType;
+                $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
+                if ($cursorDirection === Database::CURSOR_BEFORE) {
+                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                }
+                $options['sort']['_id'] = $this->getOrder($orderType);
             }
         }
 
-        if (!empty($orderAfter) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
-            if (is_null($orderAfter[$attribute] ?? null)) {
+            if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
+            $orderOperatorInternalId = Query::TYPE_GREATER;
             $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
             $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            }
 
             $filters = array_merge($filters, [
                 '$or' => [
                     [
                         $attribute => [
-                            $this->getQueryOperator($orderOperator) => $orderAfter[$attribute]
+                            $this->getQueryOperator($orderOperator) => $cursor[$attribute]
                         ]
                     ], [
-                        $attribute => $orderAfter[$attribute],
+                        $attribute => $cursor[$attribute],
                         '_id' => [
-                            $this->getQueryOperator(Query::TYPE_GREATER) => new \MongoDB\BSON\ObjectId($orderAfter['$internalId'])
+                            $this->getQueryOperator($orderOperatorInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                         ]
 
                     ]
@@ -500,6 +519,10 @@ class MongoDB extends Adapter
 
         foreach($results as $i => $result) {
             $found[] = new Document($this->replaceChars('_', '$', $result));
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $found = array_reverse($found);
         }
 
         return $found;

@@ -38,7 +38,7 @@ class Database
     const PERMISSION_WRITE = 'write';
 
     // Collections
-    const COLLECTIONS = 'collections';
+    const METADATA = '_metadata';
 
     // Lengths
     const LENGTH_KEY = 255;
@@ -73,8 +73,8 @@ class Database
      * @var array
      */
     protected $collection = [
-        '$id' => self::COLLECTIONS,
-        '$collection' => self::COLLECTIONS,
+        '$id' => self::METADATA,
+        '$collection' => self::METADATA,
         'name' => 'collections',
         'attributes' => [
             [
@@ -243,7 +243,7 @@ class Database
             ['indexesInQueue', self::VAR_STRING, 1000000, false],
         ]);
 
-        $this->createCollection(self::COLLECTIONS, $attributes);
+        $this->createCollection(self::METADATA, $attributes);
 
         return true;
     }
@@ -291,7 +291,7 @@ class Database
     {
         $this->adapter->createCollection($id, $attributes, $indexes);
 
-        if($id === self::COLLECTIONS) {
+        if($id === self::METADATA) {
             return new Document($this->collection);
         }
 
@@ -326,7 +326,7 @@ class Database
             }
         }
 
-        return $this->createDocument(Database::COLLECTIONS, $collection);
+        return $this->createDocument(self::METADATA, $collection);
     }
 
     /**
@@ -339,7 +339,7 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        return $this->getDocument(self::COLLECTIONS, $id);
+        return $this->getDocument(self::METADATA, $id);
     }
 
     /**
@@ -354,7 +354,7 @@ class Database
     {
         Authorization::disable();
 
-        $result = $this->find(self::COLLECTIONS, [], $limit, $offset);
+        $result = $this->find(self::METADATA, [], $limit, $offset);
 
         Authorization::reset();
 
@@ -372,7 +372,7 @@ class Database
     {
         $this->adapter->deleteCollection($id);
 
-        return $this->deleteDocument(self::COLLECTIONS, $id);
+        return $this->deleteDocument(self::METADATA, $id);
     }
 
     /**
@@ -434,8 +434,8 @@ class Database
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
     
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
  
         switch ($type) {
@@ -513,8 +513,8 @@ class Database
 
         $collection->setAttribute('attributes', $attributes);
     
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return $this->adapter->deleteAttribute($collection->getId(), $id);
@@ -588,8 +588,8 @@ class Database
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
 
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return true;
@@ -617,8 +617,8 @@ class Database
 
         $collection->setAttribute('attributesInQueue', $attributes);
     
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return true;
@@ -664,8 +664,8 @@ class Database
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
 
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         switch ($type) {
@@ -717,8 +717,8 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
     
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return $this->adapter->deleteIndex($collection->getId(), $id);
@@ -772,8 +772,8 @@ class Database
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return true;
@@ -801,8 +801,8 @@ class Database
 
         $collection->setAttribute('indexesInQueue', $indexes);
     
-        if($collection->getId() !== self::COLLECTIONS) {
-            $this->updateDocument(self::COLLECTIONS, $collection->getId(), $collection);
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return true;
@@ -818,7 +818,7 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
-        if($collection === self::COLLECTIONS && $id === self::COLLECTIONS) {
+        if($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
         }
 
@@ -835,7 +835,7 @@ class Database
             $document = new Document($cache);
             $validator = new Authorization(self::PERMISSION_READ);
 
-            if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
+            if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
                 return new Document();
             }
 
@@ -852,7 +852,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
 
-        if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::COLLECTIONS) { // Check if user has read access to this document
+        if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
             return new Document();
         }
 

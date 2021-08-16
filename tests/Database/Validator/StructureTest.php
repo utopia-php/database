@@ -14,8 +14,8 @@ class StructureTest extends TestCase
      * @var array
      */
     protected $collection = [
-        '$id' => Database::COLLECTIONS,
-        '$collection' => Database::COLLECTIONS,
+        '$id' => Database::METADATA,
+        '$collection' => Database::METADATA,
         'name' => 'collections',
         'attributes' => [
             [

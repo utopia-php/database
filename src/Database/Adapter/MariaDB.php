@@ -644,6 +644,60 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Sum an Attribute
+     *
+     * Sum an attribute using chosen queries
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param array $queries
+     * @param int $max
+     *
+     * @return int|float
+     */
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $limit = ($max === 0) ? '' : 'LIMIT :max';
+
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+            }
+
+            $where[] = implode(' OR ', $conditions);
+        }
+
+        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum FROM (SELECT {$attribute} FROM {$this->getNamespace()}.{$name} table_main
+            WHERE {$permissions} AND ".implode(' AND ', $where)."
+            {$limit}) table_count
+        ");
+
+        foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        if($max !== 0) {
+            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
+        $stmt->execute();
+
+        /** @var array $result */
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result['sum'] ?? 0;
+    }
+
+    /**
      * Get max STRING limit
      * 
      * @return int

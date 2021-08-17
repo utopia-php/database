@@ -1049,6 +1049,25 @@ class Database
         return $count;
     }
 
+    /**
+     * Sum an attribute
+     * 
+     * Sum an attribute for all the documents. Pass $max=0 for unlimited count
+     * 
+     * @param string $collection
+     * @param string $attribute
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int|float
+     */
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    {
+        $count = $this->adapter->sum($collection, $attribute, $queries, $max);
+
+        return $count;
+    }
+
     // /**
     //  * @param array $data
     //  *

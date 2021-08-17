@@ -518,7 +518,6 @@ class MongoDB extends Adapter
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
-        $roles = Authorization::getRoles();
 
         $filters = [];
 
@@ -536,6 +535,49 @@ class MongoDB extends Adapter
         }
 
         return $collection->countDocuments($filters, $options);
+    }
+
+    /**
+     * Sum an attribute
+     * 
+     * @param string $collection
+     * @param string $attribute
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int|float
+     */
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    {
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        $filters = [];
+
+        $options = [];
+
+        // set max limit
+        $options['limit'] = ($max) ? $max : null;
+
+        // queries
+        $filters = $this->buildFilters($queries);
+
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $filters['_read']['$in'] = Authorization::getRoles();
+        }
+
+        $pipeline = [];
+        if(!empty($queries)) {
+            $pipeline[] = ['$match' => $filters];
+        }
+        $pipeline[] = [
+                '$group' => [
+                    '_id' => null,
+                    'total' => ['$sum' => '$' . $attribute],
+                ],
+        ];
+        return ($collection->aggregate($pipeline, $options)->toArray()[0] ?? [])['total'] ?? 0;
     }
 
     /**

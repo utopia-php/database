@@ -3,6 +3,7 @@
 namespace Utopia\Tests;
 
 use Exception;
+use PharIo\Manifest\Author;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Database;
@@ -980,6 +981,32 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies', [], 3);
         $this->assertEquals(3, $count);
         Authorization::reset();
+    }
+
+    /**
+     * @depends testFind
+     */
+    public function testSum()
+    {
+        Authorization::setRole('userx');
+        $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2019+2019, $count);
+        $count = static::getDatabase()->sum('movies', 'year');
+        $this->assertEquals(2013+2019+2011+2019+2025+2026, $count);
+        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
+        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
+
+        Authorization::unsetRole('userx');
+        $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2019+2019, $count);
+        $count = static::getDatabase()->sum('movies', 'year');
+        $this->assertEquals(2013+2019+2011+2019+2025, $count);
+        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
+        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
     }
 
     public function testEncodeDecode()

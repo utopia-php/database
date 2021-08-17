@@ -517,9 +517,9 @@ class MariaDB extends Adapter
                 }
 
                 $where[] = "(
-                        {$attribute} {$this->getSQLOperator($orderOperator)} :after 
+                        {$attribute} {$this->getSQLOperator($orderOperator)} :cursor 
                         OR (
-                            {$attribute} = :after 
+                            {$attribute} = :cursor 
                             AND
                             _id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
                         )
@@ -585,7 +585,7 @@ class MariaDB extends Adapter
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
-            $stmt->bindValue(':after', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
+            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);

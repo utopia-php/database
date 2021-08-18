@@ -249,7 +249,7 @@ abstract class Adapter
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0);
+    abstract public function count(string $collection, string $attribute, array $queries = [], int $max = 0);
 
     /**
      * Sum an attribute
@@ -260,7 +260,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], int $max = 0): int;
+    abstract public function sum(string $collection, array $queries = [], int $max = 0): int;
 
     /**
      * Get max STRING limit

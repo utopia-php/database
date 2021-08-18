@@ -5,6 +5,7 @@ namespace Utopia\Tests\Validator;
 use Utopia\Database\Validator\QueryValidator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
 
@@ -73,63 +74,8 @@ class QueriesTest extends TestCase
                 'filters' => [],
             ],
         ],
-        'indexes' => [
-            [
-                '$id' => 'testindex',
-                'type' => 'key',
-                'attributes' => [
-                    'title',
-                    'description'
-                ],
-                'orders' => [
-                    'ASC',
-                    'DESC'
-                ],
-            ],
-            [
-                '$id' => 'testindex2',
-                'type' => 'key',
-                'attributes' => [
-                    'title',
-                    'description',
-                    'price'
-                ],
-                'orders' => [
-                    'ASC',
-                    'DESC'
-                ],
-            ],
-            [
-                '$id' => 'testindex3',
-                'type' => 'fulltext',
-                'attributes' => [
-                    'title'
-                ],
-                'orders' => []
-            ],
-            [
-                '$id' => 'testindex4',
-                'type' => 'key',
-                'attributes' => [
-                    'description'
-                ],
-                'orders' => []
-            ],
-        ],
-        'indexesInQueue' => [
-            [
-                '$id' => 'testindex4',
-                'type' => 'key',
-                'attributes' => [
-                    'price',
-                    'title'
-                ],
-                'orders' => [
-                    'ASC',
-                    'DESC'
-                ]
-            ],
-        ]
+        'indexes' => [],
+        'indexesInQueue' => []
     ];
 
 
@@ -151,6 +97,67 @@ class QueriesTest extends TestCase
         $query2 = Query::parse('description.equal("Best movie ever")');
 
         array_push($this->queries, $query1, $query2);
+
+        // Constructor expects Document[] $indexes
+        // Object property declaration cannot initialize a Document object
+        // Add Document[] $indexes separately
+        $index1 = new Document([
+            '$id' => 'testindex',
+            'type' => 'key',
+            'attributes' => [
+                'title',
+                'description'
+            ],
+            'orders' => [
+                'ASC',
+                'DESC'
+            ],
+        ]);
+
+        $index2 = new Document([
+            '$id' => 'testindex2',
+            'type' => 'key',
+            'attributes' => [
+                'title',
+                'description',
+                'price'
+            ],
+            'orders' => [
+                'ASC',
+                'DESC'
+            ],
+        ]);
+        $index3 = new Document([
+            '$id' => 'testindex3',
+            'type' => 'fulltext',
+            'attributes' => [
+                'title'
+            ],
+            'orders' => []
+        ]);
+        $index4 = new Document([
+            '$id' => 'testindex4',
+            'type' => 'key',
+            'attributes' => [
+                'description'
+            ],
+            'orders' => []
+        ]);
+        $indexInQueue = new Document([
+            '$id' => 'testindex4',
+            'type' => 'key',
+            'attributes' => [
+                'price',
+                'title'
+            ],
+            'orders' => [
+                'ASC',
+                'DESC'
+            ]
+        ]);
+
+        $this->collection['indexes'] = [$index1, $index2, $index3, $index4];
+        $this->collection['indexesInQueue'] = [$indexInQueue];
     }
 
     public function tearDown(): void

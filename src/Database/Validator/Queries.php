@@ -4,6 +4,7 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Validator\QueryValidator;
 use Utopia\Database\Query;
 
@@ -38,15 +39,21 @@ class Queries extends Validator
      * Queries constructor
      *
      * @param QueryValidator $validator
-     * @param array $indexes
-     * @param array $indexesInQueue
+     * @param Document[] $indexes
+     * @param Document[] $indexesInQueue
      * @param bool $strict
      */
     public function __construct($validator, $indexes, $indexesInQueue, $strict = true)
     {
         $this->validator = $validator;
-        $this->indexes = $indexes;
-        $this->indexesInQueue = $indexesInQueue;
+
+        foreach ($indexes as $index) {
+            $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
+        }
+        foreach ($indexesInQueue as $index) {
+            $this->indexesInQueue[] = $index->getArrayCopy(['attributes', 'type']);
+        }
+
         $this->strict = $strict;
     }
 

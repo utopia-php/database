@@ -97,11 +97,15 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->getDescription(), 'Permission roles must be one of: all, guest, member');
 
         // team:$value, member:$value and user:$value must have valid Key for $value
-        // No leading underscores
+        // No leading special chars
         $this->assertEquals($object->isValid(['member:_1234']), false);
         $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char');
+        $this->assertEquals($object->isValid(['member:-1234']), false);
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char');
+        $this->assertEquals($object->isValid(['member:.1234']), false);
+        $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char');
 
-        // No special characters
+        // No unsupported special characters
         $this->assertEquals($object->isValid(['member:12$4']), false);
         $this->assertEquals($object->getDescription(), '[role:$id] $id must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char');
         $this->assertEquals($object->isValid(['user:12&4']), false);

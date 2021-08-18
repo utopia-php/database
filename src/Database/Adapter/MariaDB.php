@@ -375,7 +375,7 @@ class MariaDB extends Adapter
                 case 1062:
                 case 23000:
                     $this->getPDO()->rollBack();
-                    throw new Duplicate('Duplicated document: '.$e->getMessage()); // TODO add test for catching this exception
+                    throw new Duplicate('Duplicated document: '.$e->getMessage());
                     break;
 
                 default:
@@ -434,7 +434,21 @@ class MariaDB extends Adapter
         }
 
         if(!empty($attributes)) {
-            $stmt->execute();
+            try {
+                $stmt->execute();
+            } catch (PDOException $e) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        $this->getPDO()->rollBack();
+                        throw new Duplicate('Duplicated document: '.$e->getMessage());
+                        break;
+
+                    default:
+                        throw $e;
+                        break;
+                }
+            }
         }
 
         if(!$this->getPDO()->commit()) {

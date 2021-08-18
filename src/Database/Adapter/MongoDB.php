@@ -376,11 +376,22 @@ class MongoDB extends Adapter
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
 
-        $result = $collection->findOneAndUpdate(
-            ['_uid' => $document->getId()],
-            ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
-            ['returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER]
-        );
+        try {
+            $result = $collection->findOneAndUpdate(
+                ['_uid' => $document->getId()],
+                ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
+                ['returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER]
+            );
+        } catch (\MongoDB\Driver\Exception\CommandException $e) {
+            switch ($e->getCode()) {
+                case 11000:
+                    throw new Duplicate('Duplicated document: '.$e->getMessage());
+                    break;
+                default:
+                    throw $e;
+                    break;
+            }
+        }
 
         $result = $this->replaceChars('_', '$', $result);
 

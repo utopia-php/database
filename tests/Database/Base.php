@@ -3,7 +3,6 @@
 namespace Utopia\Tests;
 
 use Exception;
-use PharIo\Manifest\Author;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Database;

@@ -1567,4 +1567,26 @@ abstract class Base extends TestCase
             'generes' => ['animation', 'kids'],
         ]));
     }
+
+    /**
+     * @depends testUniqueIndexDuplicate
+     */
+    public function testUniqueIndexDuplicateUpdate()
+    {
+        // create document then update to conflict with index
+        $document = static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Frozen 5',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
+
+        $this->expectException(DuplicateException::class);
+
+        static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name',  'Frozen'));
+    }
 }

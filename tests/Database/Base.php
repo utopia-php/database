@@ -988,27 +988,27 @@ abstract class Base extends TestCase
     public function testSum()
     {
         Authorization::setRole('userx');
-        $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(2019+2019, $count);
-        $count = static::getDatabase()->sum('movies', 'year');
-        $this->assertEquals(2013+2019+2011+2019+2025+2026, $count);
-        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
-        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2019+2019, $sum);
+        $sum = static::getDatabase()->sum('movies', 'year');
+        $this->assertEquals(2013+2019+2011+2019+2025+2026, $sum);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
         
-        $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
-        $this->assertEquals(2019, $count);
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
+        $this->assertEquals(2019, $sum);
 
         Authorization::unsetRole('userx');
-        $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(2019+2019, $count);
-        $count = static::getDatabase()->sum('movies', 'year');
-        $this->assertEquals(2013+2019+2011+2019+2025, $count);
-        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
-        $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2019+2019, $sum);
+        $sum = static::getDatabase()->sum('movies', 'year');
+        $this->assertEquals(2013+2019+2011+2019+2025, $sum);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
     }
 
     public function testEncodeDecode()

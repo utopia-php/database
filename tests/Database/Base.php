@@ -996,6 +996,9 @@ abstract class Base extends TestCase
         $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
         $count = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(round(39.50+25.99, 2), round($count, 2));
+        
+        $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
+        $this->assertEquals(2019, $count);
 
         Authorization::unsetRole('userx');
         $count = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);

@@ -554,11 +554,6 @@ class MongoDB extends Adapter
 
         $filters = [];
 
-        $options = [];
-
-        // set max limit
-        $options['limit'] = ($max) ? $max : null;
-
         // queries
         $filters = $this->buildFilters($queries);
 
@@ -567,9 +562,20 @@ class MongoDB extends Adapter
             $filters['_read']['$in'] = Authorization::getRoles();
         }
 
+        // using aggregation to get sum an attribute as described in
+        // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/
+        // Pipeline consists of stages to aggregation, so first we set $match
+        // that will load only documents that matches the filters provided and passes to the next stage
+        // then we set $limit (if $max is provided) so that only $max documents will be passed to the next stage
+        // finally we use $group stage to sum the provided attribute that matches the given filters and max
+        // We pass the $pipeline to the aggregate method, which returns a cursor, then we get
+        // the array of results from the cursor and we return the total sum of the attribute
         $pipeline = [];
-        if(!empty($queries)) {
+        if(!empty($filters)) {
             $pipeline[] = ['$match' => $filters];
+        }
+        if(!empty($max)) {
+            $pipeline[] = ['$limit' => $max];
         }
         $pipeline[] = [
                 '$group' => [
@@ -577,7 +583,7 @@ class MongoDB extends Adapter
                     'total' => ['$sum' => '$' . $attribute],
                 ],
         ];
-        return ($collection->aggregate($pipeline, $options)->toArray()[0] ?? [])['total'] ?? 0;
+        return ($collection->aggregate($pipeline)->toArray()[0] ?? [])['total'] ?? 0;
     }
 
     /**

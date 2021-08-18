@@ -518,7 +518,6 @@ class MongoDB extends Adapter
     {
         $name = $this->filter($collection);
         $collection = $this->getDatabase()->$name;
-        $roles = Authorization::getRoles();
 
         $filters = [];
 
@@ -536,6 +535,55 @@ class MongoDB extends Adapter
         }
 
         return $collection->countDocuments($filters, $options);
+    }
+
+    /**
+     * Sum an attribute
+     * 
+     * @param string $collection
+     * @param string $attribute
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int|float
+     */
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    {
+        $name = $this->filter($collection);
+        $collection = $this->getDatabase()->$name;
+
+        $filters = [];
+
+        // queries
+        $filters = $this->buildFilters($queries);
+
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $filters['_read']['$in'] = Authorization::getRoles();
+        }
+
+        // using aggregation to get sum an attribute as described in
+        // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/
+        // Pipeline consists of stages to aggregation, so first we set $match
+        // that will load only documents that matches the filters provided and passes to the next stage
+        // then we set $limit (if $max is provided) so that only $max documents will be passed to the next stage
+        // finally we use $group stage to sum the provided attribute that matches the given filters and max
+        // We pass the $pipeline to the aggregate method, which returns a cursor, then we get
+        // the array of results from the cursor and we return the total sum of the attribute
+        $pipeline = [];
+        if(!empty($filters)) {
+            $pipeline[] = ['$match' => $filters];
+        }
+        if(!empty($max)) {
+            $pipeline[] = ['$limit' => $max];
+        }
+        $pipeline[] = [
+                '$group' => [
+                    '_id' => null,
+                    'total' => ['$sum' => '$' . $attribute],
+                ],
+        ];
+        return ($collection->aggregate($pipeline)->toArray()[0] ?? [])['total'] ?? 0;
     }
 
     /**

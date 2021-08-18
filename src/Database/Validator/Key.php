@@ -9,7 +9,7 @@ class Key extends Validator
     /**
      * @var string
      */
-    protected $message = 'Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a leading underscore';
+    protected $message = 'Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
 
     /**
      * Get Description.
@@ -38,8 +38,9 @@ class Key extends Validator
             return false;
         }
 
-        // no leading underscores
-        if(mb_substr($value, 0, 1) === '_') {
+        // no leading special characters
+        $leading = \mb_substr($value, 0, 1);
+        if($leading === '_' || $leading === '.' || $leading === '-') {
             return false;
         }
 

@@ -650,7 +650,7 @@ class MariaDB extends Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param array $queries
+     * @param Query[] $queries
      * @param int $max
      *
      * @return int|float

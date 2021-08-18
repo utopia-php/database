@@ -240,7 +240,7 @@ abstract class Adapter
     abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array;
 
     /**
-     * Count Documents
+     * Sum an attribute
      * 
      * @param string $collection
      * @param string $attribute
@@ -249,10 +249,10 @@ abstract class Adapter
      *
      * @return int|float
      */
-    abstract public function count(string $collection, string $attribute, array $queries = [], int $max = 0);
+    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0);
 
     /**
-     * Sum an attribute
+     * Count Documents
      * 
      * @param string $collection
      * @param Query[] $queries
@@ -260,7 +260,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function sum(string $collection, array $queries = [], int $max = 0): int;
+    abstract public function count(string $collection, array $queries = [], int $max = 0): int;
 
     /**
      * Get max STRING limit

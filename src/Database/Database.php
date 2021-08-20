@@ -1172,10 +1172,11 @@ class Database
             $value = $document->getAttribute($key, null);
             
             $value = ($array) ? $value : [$value];
+            $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
                 foreach (array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node);
+                    $node = $this->decodeAttribute($filter, $node, $document, $collection);
                 }
             }
 
@@ -1266,17 +1267,19 @@ class Database
      * 
      * @param string $name
      * @param mixed $value
+     * @param Document $document
+     * @param Document $collection
      * 
      * @return mixed
      */
-    protected function decodeAttribute(string $name, $value)
+    protected function decodeAttribute(string $name, $value, Document $document, Document $collection)
     {
         if (!isset(self::$filters[$name])) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value);
+            $value = self::$filters[$name]['decode']($value, $document, $collection, $this);
         } catch (\Throwable $th) {
             throw $th;
         }

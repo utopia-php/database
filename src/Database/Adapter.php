@@ -289,10 +289,9 @@ abstract class Adapter
      * Get current attribute count from collection document
      * 
      * @param Document $collection
-     * @param bool $strict (optional) Only count attributes in collection, ignoring queue count
      * @return int
      */
-    abstract public function getAttributeCount(Document $collection, bool $strict = true): int;
+    abstract public function getAttributeCount(Document $collection): int;
 
     /**
      * Get maximum column limit.
@@ -338,10 +337,9 @@ abstract class Adapter
      * Get current index count from collection document
      * 
      * @param Document $collection
-     * @param bool $strict (optional) Only count indexes in collection, ignoring queue count
      * @return int
      */
-    abstract public function getIndexCount(Document $collection, bool $strict = false): int;
+    abstract public function getIndexCount(Document $collection): int;
 
     /**
      * Get maximum index limit.

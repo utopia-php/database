@@ -955,6 +955,8 @@ class Database
     }
 
     /**
+     * Delete Document 
+     * 
      * @param string $collection
      * @param string $id
      *
@@ -975,6 +977,19 @@ class Database
         $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
 
         return $this->adapter->deleteDocument($collection, $id);
+    }
+
+    /**
+     * Cleans the Document from Cache
+     * 
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function purgeDocument(string $collection, string $id): bool
+    {
+        return $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
     }
 
     /**

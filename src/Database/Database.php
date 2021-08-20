@@ -839,10 +839,6 @@ class Database
                 return new Document();
             }
 
-            if($document->isEmpty()) {
-                return $document;
-            }
-
             return $document;
         }
 
@@ -862,7 +858,7 @@ class Database
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
-
+        
         $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
@@ -1174,18 +1170,12 @@ class Database
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
-
-            if(is_null($value)) {
-                continue;
-            }
-
+            
             $value = ($array) ? $value : [$value];
 
             foreach ($value as &$node) {
-                if (($node !== null)) {
-                    foreach (array_reverse($filters) as $filter) {
-                        $node = $this->decodeAttribute($filter, $node);
-                    }
+                foreach (array_reverse($filters) as $filter) {
+                    $node = $this->decodeAttribute($filter, $node);
                 }
             }
 

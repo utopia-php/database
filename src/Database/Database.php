@@ -410,9 +410,8 @@ class Database
         }
 
         if ($format) {
-            $name = \json_decode($format, true)['name'];
-            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
-                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            if (!Structure::hasFormat($format, $type)) {
+                throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
             }
         } 
 

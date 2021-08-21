@@ -979,7 +979,7 @@ class Database
 
             foreach ($value as &$node) {
                 foreach (array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document, $collection);
+                    $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }
 
@@ -1068,21 +1068,23 @@ class Database
     /**
      * Decode Attribute
      * 
+     * Passes the attribute $value, and $document context to a predefined filter
+     *  that allow you to manipulate the output format of the given attribute.
+     * 
      * @param string $name
      * @param mixed $value
      * @param Document $document
-     * @param Document $collection
      * 
      * @return mixed
      */
-    protected function decodeAttribute(string $name, $value, Document $document, Document $collection)
+    protected function decodeAttribute(string $name, $value, Document $document)
     {
         if (!isset(self::$filters[$name])) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value, $document, $collection, $this);
+            $value = self::$filters[$name]['decode']($value, $document, $this);
         } catch (\Throwable $th) {
             throw $th;
         }

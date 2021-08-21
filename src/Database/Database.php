@@ -831,7 +831,7 @@ class Database
         $cache = null;
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, self::TTL)) {
+        if ($cache = $this->cache->load('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, self::TTL)) {
             $document = new Document($cache);
             $validator = new Authorization(self::PERMISSION_READ);
 
@@ -863,7 +863,7 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -953,7 +953,7 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id);
+        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id);
 
         return $document;
     }
@@ -976,7 +976,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
+        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }

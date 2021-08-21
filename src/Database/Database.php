@@ -363,11 +363,12 @@ class Database
      * @param bool $signed
      * @param bool $array
      * @param string $format optional validation format of attribute
+     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
      * 
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
@@ -386,9 +387,8 @@ class Database
         }
 
         if ($format) {
-            $name = \json_decode($format, true)['name'];
-            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
-                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+            if (!Structure::hasFormat($format, $type)) {
+                throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
             }
         } 
 
@@ -401,6 +401,7 @@ class Database
             'signed' => $signed,
             'array' => $array,
             'format' => $format,
+            'formatOptions' => $formatOptions,
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
 
@@ -619,7 +620,7 @@ class Database
         $cache = null;
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, self::TTL)) {
+        if ($cache = $this->cache->load('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, self::TTL)) {
             $document = new Document($cache);
             $validator = new Authorization(self::PERMISSION_READ);
 
@@ -646,7 +647,8 @@ class Database
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
-        $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
+
+        $this->cache->save('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -736,7 +738,7 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id);
+        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id);
 
         return $document;
     }
@@ -761,7 +763,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
+        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }
@@ -843,6 +845,25 @@ class Database
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
         $count = $this->adapter->count($collection, $queries, $max);
+
+        return $count;
+    }
+
+    /**
+     * Sum an attribute
+     * 
+     * Sum an attribute for all the documents. Pass $max=0 for unlimited count
+     * 
+     * @param string $collection
+     * @param string $attribute
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int|float
+     */
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    {
+        $count = $this->adapter->sum($collection, $attribute, $queries, $max);
 
         return $count;
     }

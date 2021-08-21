@@ -32,17 +32,16 @@ class KeyTest extends TestCase
         $this->assertEquals(true, $this->object->isValid('asdas7as9as'));
         $this->assertEquals(true, $this->object->isValid('5f058a8925807'));
 
-        // No leading underscore
+        // No leading special chars
         $this->assertEquals(false, $this->object->isValid('_asdasdasdas'));
-        $this->assertEquals(true, $this->object->isValid('a_sdasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('.as5dasdasdas'));
+        $this->assertEquals(false, $this->object->isValid('-as5dasdasdas'));
 
         // Special chars allowed: underscore, period, hyphen
         $this->assertEquals(true, $this->object->isValid('as5dadasdas_'));
         $this->assertEquals(true, $this->object->isValid('as_5dasdasdas'));
-        $this->assertEquals(true, $this->object->isValid('.as5dasdasdas'));
         $this->assertEquals(true, $this->object->isValid('as5dasdasdas.'));
         $this->assertEquals(true, $this->object->isValid('as.5dasdasdas'));
-        $this->assertEquals(true, $this->object->isValid('-as5dasdasdas'));
         $this->assertEquals(true, $this->object->isValid('as5dasdasdas-'));
         $this->assertEquals(true, $this->object->isValid('as-5dasdasdas'));
 

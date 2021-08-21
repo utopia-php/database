@@ -884,6 +884,35 @@ abstract class Base extends TestCase
         Authorization::reset();
     }
 
+    /**
+     * @depends testFind
+     */
+    public function testSum()
+    {
+        Authorization::setRole('userx');
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2019+2019, $sum);
+        $sum = static::getDatabase()->sum('movies', 'year');
+        $this->assertEquals(2013+2019+2011+2019+2025+2026, $sum);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
+        $this->assertEquals(2019, $sum);
+
+        Authorization::unsetRole('userx');
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(2019+2019, $sum);
+        $sum = static::getDatabase()->sum('movies', 'year');
+        $this->assertEquals(2013+2019+2011+2019+2025, $sum);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+    }
+
     public function testEncodeDecode()
     {
         $collection = new Document([
@@ -1391,11 +1420,24 @@ abstract class Base extends TestCase
      */
     public function testExceptionDuplicate(Document $document)
     {
-        $this->expectException(DuplicateException::class);
-
         $document->setAttribute('$id', 'duplicated');
-        
         static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionCaseInsensitiveDuplicate(Document $document)
+    {
+        $document->setAttribute('$id', 'caseSensitive');
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        $document->setAttribute('$id', 'CaseSensitive');
+
+        $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
         
         return $document;
@@ -1420,5 +1462,27 @@ abstract class Base extends TestCase
             'active' => true,
             'generes' => ['animation', 'kids'],
         ]));
+    }
+
+    /**
+     * @depends testUniqueIndexDuplicate
+     */
+    public function testUniqueIndexDuplicateUpdate()
+    {
+        // create document then update to conflict with index
+        $document = static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Frozen 5',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
+
+        $this->expectException(DuplicateException::class);
+
+        static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name',  'Frozen'));
     }
 }

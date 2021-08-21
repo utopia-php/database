@@ -646,7 +646,6 @@ class Database
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
-        
         $this->cache->save('cache-'.$this->getNamespace().'-'.$collection->getId().'-'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;

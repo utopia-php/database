@@ -1537,11 +1537,24 @@ abstract class Base extends TestCase
      */
     public function testExceptionDuplicate(Document $document)
     {
-        $this->expectException(DuplicateException::class);
-
         $document->setAttribute('$id', 'duplicated');
-        
         static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionCaseInsensitiveDuplicate(Document $document)
+    {
+        $document->setAttribute('$id', 'caseSensitive');
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        $document->setAttribute('$id', 'CaseSensitive');
+
+        $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
         
         return $document;

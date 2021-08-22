@@ -104,28 +104,8 @@ class Database
                 'array' => false,
                 'filters' => ['json'],
             ],
-            [
-                '$id' => 'attributesInQueue',
-                'type' => self::VAR_STRING,
-                'size' => 1000000,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => ['json'],
-            ],
-            [
-                '$id' => 'indexesInQueue',
-                'type' => self::VAR_STRING,
-                'size' => 1000000,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => ['json'],
-            ],
         ],
         'indexes' => [],
-        'attributesInQueue' => [],
-        'indexesInQueue' => [],
     ];
 
     /**
@@ -239,8 +219,6 @@ class Database
             ['name', self::VAR_STRING, 512, true],
             ['attributes', self::VAR_STRING, 1000000, false],
             ['indexes', self::VAR_STRING, 1000000, false],
-            ['attributesInQueue', self::VAR_STRING, 1000000, false],
-            ['indexesInQueue', self::VAR_STRING, 1000000, false],
         ]);
 
         $this->createCollection(self::METADATA, $attributes);
@@ -302,8 +280,6 @@ class Database
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
-            'attributesInQueue' => [],
-            'indexesInQueue' => [],
         ]);
 
         // Check index limits, if given
@@ -405,7 +381,7 @@ class Database
         }
 
         if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection, true) >= $this->adapter->getAttributeLimit())
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
         {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
@@ -522,110 +498,6 @@ class Database
     }
 
     /**
-     * Add Attribute in Queue
-     * 
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
-     * @param bool $required
-     * @param array|bool|callable|int|float|object|resource|string|null $default
-     * @param bool $signed
-     * @param bool $array
-     * @param string $format optional validation format of attribute
-     * @param array $filters
-     * 
-     * @return bool
-     */
-    public function addAttributeInQueue(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $filters = []): bool
-    {
-        $collection = $this->getCollection($collection);
-
-        /** @var Document[] $attributes */
-        /** @var Document[] $attributesInQueue */
-        $attributes = $collection->getAttribute('attributes');
-        $attributesInQueue = $collection->getAttribute('attributesInQueue');
-
-        foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists');
-            }
-        }
-
-        foreach ($attributesInQueue as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists in queue');
-            }
-        }
-
-        if ($format) {
-            $name = \json_decode($format, true)['name'];
-            if (!Structure::hasFormat(json_decode($format, true)['name'], $type)) {
-                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
-            }
-        } 
-
-        $collection->setAttribute('attributesInQueue', new Document([
-            '$id' => $id,
-            'type' => $type,
-            'size' => $size,
-            'required' => $required,
-            'default' => $default,
-            'signed' => $signed,
-            'array' => $array,
-            'format' => $format,
-            'filters' => $filters,
-        ]), Document::SET_TYPE_APPEND);
-
-        if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
-        {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if ($this->adapter->getRowLimit() > 0 && 
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
-        {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
-
-        if($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
-
-        return true;
-    }
-
-    /**
-     * Remove Attribute in Queue
-     * 
-     * @param string $collection
-     * @param string $id
-     * 
-     * @return bool
-     */
-    public function removeAttributeInQueue(string $collection, string $id): bool
-    {
-        $collection = $this->getCollection($collection);
-
-        $attributes = $collection->getAttribute('attributesInQueue', []);
-
-        foreach ($attributes as $key => $value) {
-            if(isset($value['$id']) && $value['$id'] === $id) {
-                unset($attributes[$key]);
-            }
-        }
-
-        $collection->setAttribute('attributesInQueue', $attributes);
-    
-        if($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
-
-        return true;
-    }
-
-    /**
      * Create Index
      *
      * @param string $collection
@@ -653,7 +525,7 @@ class Database
             }
         }
 
-        if ($this->adapter->getIndexCount($collection, true) >= $this->adapter->getIndexLimit()) {
+        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -726,90 +598,6 @@ class Database
     }
 
     /**
-     * Add Index in Queue
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     *
-     * @return bool
-     */
-    public function addIndexInQueue(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
-    {
-        if(empty($attributes)) {
-            throw new Exception('Missing attributes');
-        }
-
-        $collection = $this->getCollection($collection);
-
-        // index IDs are case insensitive
-        $indexes = $collection->getAttribute('indexes', []); /** @var Document[] $indexes */
-        $indexesInQueue = $collection->getAttribute('indexesInQueue', []); /** @var Document[] $indexesInQueue */
-
-        foreach ($indexes as $index) {
-            if (\strtolower($index->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Index already exists');
-            }
-        }
-
-        foreach ($indexesInQueue as $index) {
-            if (\strtolower($index->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Index already exists in queue');
-            }
-        }
-
-        $collection->setAttribute('indexesInQueue', new Document([
-            '$id' => $id,
-            'type' => $type,
-            'attributes' => $attributes,
-            'lengths' => $lengths,
-            'orders' => $orders,
-        ]), Document::SET_TYPE_APPEND);
-
-        if ($this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit reached. Cannot create new index.');
-        }
-
-        if($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
-
-        return true;
-    }
-
-    /**
-     * Remove Index in Queue
-     *
-     * @param string $collection
-     * @param string $id
-     *
-     * @return bool
-     */
-    public function removeIndexInQueue(string $collection, string $id): bool
-    {
-        $collection = $this->getCollection($collection);
-
-        $indexes = $collection->getAttribute('indexesInQueue', []);
-
-        foreach ($indexes as $key => $value) {
-            if(isset($value['$id']) && $value['$id'] === $id) {
-                unset($indexes[$key]);
-            }
-        }
-
-        $collection->setAttribute('indexesInQueue', $indexes);
-    
-        if($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
-
-        return true;
-    }
-
-    /**
      * Get Document
      * 
      * @param string $collection
@@ -838,10 +626,6 @@ class Database
 
             if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
                 return new Document();
-            }
-
-            if($document->isEmpty()) {
-                return $document;
             }
 
             return $document;
@@ -960,6 +744,8 @@ class Database
     }
 
     /**
+     * Delete Document 
+     * 
      * @param string $collection
      * @param string $id
      *
@@ -980,6 +766,19 @@ class Database
         $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
 
         return $this->adapter->deleteDocument($collection, $id);
+    }
+
+    /**
+     * Cleans the Document from Cache
+     * 
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function purgeDocument(string $collection, string $id): bool
+    {
+        return $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
     }
 
     /**
@@ -1194,18 +993,13 @@ class Database
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
-
-            if(is_null($value)) {
-                continue;
-            }
-
+            
             $value = ($array) ? $value : [$value];
+            $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
-                if (($node !== null)) {
-                    foreach (array_reverse($filters) as $filter) {
-                        $node = $this->decodeAttribute($filter, $node);
-                    }
+                foreach (array_reverse($filters) as $filter) {
+                    $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }
 
@@ -1294,19 +1088,23 @@ class Database
     /**
      * Decode Attribute
      * 
+     * Passes the attribute $value, and $document context to a predefined filter
+     *  that allow you to manipulate the output format of the given attribute.
+     * 
      * @param string $name
      * @param mixed $value
+     * @param Document $document
      * 
      * @return mixed
      */
-    protected function decodeAttribute(string $name, $value)
+    protected function decodeAttribute(string $name, $value, Document $document)
     {
         if (!isset(self::$filters[$name])) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value);
+            $value = self::$filters[$name]['decode']($value, $document, $this);
         } catch (\Throwable $th) {
             throw $th;
         }

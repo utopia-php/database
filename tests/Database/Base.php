@@ -203,17 +203,6 @@ abstract class Base extends TestCase
     /**
      * @depends testAttributeCaseInsensitivity
      */
-    public function testAttributeQueueCaseInsensitivity()
-    {
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitiveInQueue', Database::VAR_STRING, 128, true));
-        $this->expectException(DuplicateException::class);
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitiveInQueue', Database::VAR_STRING, 128, true));
-    }
-
-    /**
-     * @depends testAttributeQueueCaseInsensitivity
-     */
-
     public function testIndexCaseInsensitivity()
     {
         $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
@@ -222,20 +211,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @depends testIndexCaseInsensitivity
-     */
-
-    public function testIndexQueueCaseInsensitivity()
-    {
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitiveInQueue', Database::INDEX_KEY, ['caseSensitive'], [128]));
-        $this->expectException(DuplicateException::class);
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitiveInQueue', Database::INDEX_KEY, ['caseSensitive'], [128]));
-    }
-
-    /**
      * Ensure the collection is removed after use
      * 
-     * @depends testIndexQueueCaseInsensitivity
+     * @depends testIndexCaseInsensitivity
      */
     public function testCleanupAttributeTests()
     {
@@ -251,54 +229,6 @@ abstract class Base extends TestCase
     {
         $this->expectException(\Exception::class);
         $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, json_encode(['name'=>'url'])));
-    }
-
-    public function testAddRemoveAttribute()
-    {
-        static::getDatabase()->createCollection('attributesInQueue');
-
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string2', Database::VAR_STRING, 16383+1, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string3', Database::VAR_STRING, 65535+1, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string4', Database::VAR_STRING, 16777215+1, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'boolean', Database::VAR_BOOLEAN, 0, true));
-
-        $collection = static::getDatabase()->getCollection('attributesInQueue');
-        $this->assertCount(7, $collection->getAttribute('attributesInQueue'));
-
-        // Array
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'string_list', Database::VAR_STRING, 128, true, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'integer_list', Database::VAR_INTEGER, 0, true, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'float_list', Database::VAR_FLOAT, 0, true, true));
-        $this->assertEquals(true, static::getDatabase()->addAttributeInQueue('attributesInQueue', 'boolean_list', Database::VAR_BOOLEAN, 0, true, true));
-
-        $collection = static::getDatabase()->getCollection('attributesInQueue');
-        $this->assertCount(11, $collection->getAttribute('attributesInQueue'));
-
-        // Delete
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string1'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string2'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string3'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string4'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'integer'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'float'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'boolean'));
-
-        $collection = static::getDatabase()->getCollection('attributesInQueue');
-        $this->assertCount(4, $collection->getAttribute('attributesInQueue'));
-
-        // Delete Array
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'string_list'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'integer_list'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'float_list'));
-        $this->assertEquals(true, static::getDatabase()->removeAttributeInQueue('attributesInQueue', 'boolean_list'));
-
-        $collection = static::getDatabase()->getCollection('attributesInQueue');
-        $this->assertCount(0, $collection->getAttribute('attributesInQueue'));
-
-        static::getDatabase()->deleteCollection('attributesInQueue');
     }
 
     public function testCreateDeleteIndex()
@@ -329,34 +259,6 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         static::getDatabase()->deleteCollection('indexes');
-    }
-
-    public function testAddRemoveIndexInQueue()
-    {
-        static::getDatabase()->createCollection('indexesInQueue');
-
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexesInQueue', 'boolean', Database::VAR_BOOLEAN, 0, true));
-
-        // Indexes
-        $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexesInQueue', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexesInQueue', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
-        $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexesInQueue', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
-        
-        $collection = static::getDatabase()->getCollection('indexesInQueue');
-        $this->assertCount(3, $collection->getAttribute('indexesInQueue'));
-
-        // Delete Indexes
-        $this->assertEquals(true, static::getDatabase()->removeIndexInQueue('indexesInQueue', 'index1'));
-        $this->assertEquals(true, static::getDatabase()->removeIndexInQueue('indexesInQueue', 'index2'));
-        $this->assertEquals(true, static::getDatabase()->removeIndexInQueue('indexesInQueue', 'index3'));
-
-        $collection = static::getDatabase()->getCollection('indexesInQueue');
-        $this->assertCount(0, $collection->getAttribute('indexesInQueue'));
-
-        static::getDatabase()->deleteCollection('indexesInQueue');
     }
 
     public function testCreateCollectionWithSchema()
@@ -1511,25 +1413,6 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
 
         static::getDatabase()->deleteCollection('indexLimit');
-    }
-
-    public function testExceptionIndexLimitInQueue()
-    {
-        static::getDatabase()->createCollection('indexLimitInQueue');
-
-        // add unique attributes for indexing
-        for ($i=0; $i < 64; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimitInQueue', "test{$i}", Database::VAR_STRING, 16, true));
-        }
-
-        // testing for indexLimit = 64
-        // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
-        // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
-            $this->assertEquals(true, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
-        }
-        $this->expectException(LimitException::class);
-        $this->assertEquals(false, static::getDatabase()->addIndexInQueue('indexLimitInQueue', "index61", Database::INDEX_KEY, ["test61"], [16]));
     }
 
     /**

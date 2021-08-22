@@ -765,15 +765,12 @@ class MariaDB extends Adapter
      * Get current index count from collection document
      * 
      * @param Document $collection
-     * @param bool $strict (optional) Only count indexes in collection, ignoring queue count
      * @return int
      */
-    public function getIndexCount(Document $collection, bool $strict = false): int
+    public function getIndexCount(Document $collection): int
     {
         $indexes = \count($collection->getAttribute('indexes') ?? []);
-        $indexesInQueue = ($strict) ? 0 : \count($collection->getAttribute('indexesInQueue') ?? []);
-
-        return $indexes + $indexesInQueue + static::getNumberOfDefaultIndexes();
+        return $indexes + static::getNumberOfDefaultIndexes();
     }
 
     /**
@@ -791,16 +788,14 @@ class MariaDB extends Adapter
      * Get current attribute count from collection document
      * 
      * @param Document $collection
-     * @param bool $strict (optional) Only count attributes in collection, ignoring queue count
      * @return int
      */
-    public function getAttributeCount(Document $collection, bool $strict = false): int
+    public function getAttributeCount(Document $collection): int
     {
         $attributes = \count($collection->getAttribute('attributes') ?? []);
-        $attributesInQueue = ($strict) ? 0 : \count($collection->getAttribute('attributesInQueue') ?? []);
 
         // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + $attributesInQueue + static::getNumberOfDefaultAttributes() + 1;
+        return $attributes + static::getNumberOfDefaultAttributes() + 1;
     }
 
     /**

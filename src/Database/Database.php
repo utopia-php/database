@@ -79,6 +79,7 @@ class Database
         'attributes' => [
             [
                 '$id' => 'name',
+                'key' => 'name',
                 'type' => self::VAR_STRING,
                 'size' => 256,
                 'required' => true,
@@ -88,6 +89,7 @@ class Database
             ],
             [
                 '$id' => 'attributes',
+                'key' => 'attributes',
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
                 'required' => false,
@@ -97,6 +99,7 @@ class Database
             ],
             [
                 '$id' => 'indexes',
+                'key' => 'indexes',
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
                 'required' => false,
@@ -394,6 +397,7 @@ class Database
 
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
+            'key' => $id,
             'type' => $type,
             'size' => $size,
             'required' => $required,
@@ -531,6 +535,7 @@ class Database
 
         $collection->setAttribute('indexes', new Document([
             '$id' => $id,
+            'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
             'lengths' => $lengths,
@@ -778,7 +783,7 @@ class Database
      */
     public function purgeDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
+        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
     }
 
     /**

@@ -228,7 +228,7 @@ abstract class Base extends TestCase
     public function testUnknownFormat()
     {
         $this->expectException(\Exception::class);
-        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, json_encode(['name'=>'url'])));
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
     }
 
     public function testCreateDeleteIndex()

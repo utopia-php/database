@@ -94,7 +94,7 @@ class StructureTest extends TestCase
         $this->collection['attributes'][] = [
             '$id' => 'feedback',
             'type' => Database::VAR_STRING,
-            'format' => \json_encode(['name'=>'email']),
+            'format' => 'email',
             'size' => 55,
             'required' => true,
             'signed' => true,

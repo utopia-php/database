@@ -283,9 +283,7 @@ class Structure extends Validator
 
             if($format) {
                 // Format encoded as json string containing format name and relevant format options
-                // E.g. Range: json_encode(['name'=>$name, 'min'=>$min, 'max'=>$max]);
-                $format = json_decode($format, true);
-                $format = self::getFormat($format['name'], $type);
+                $format = self::getFormat($format, $type);
                 $validator = $format['callback']($attribute);
 
                 if($array) { // Validate attribute type

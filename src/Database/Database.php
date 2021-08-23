@@ -535,6 +535,7 @@ class Database
 
         $collection->setAttribute('indexes', new Document([
             '$id' => $id,
+            'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
             'lengths' => $lengths,

@@ -782,7 +782,7 @@ class Database
      */
     public function purgeDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-'.$this->getNamespace().'-'.$collection.'-'.$id);
+        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
     }
 
     /**

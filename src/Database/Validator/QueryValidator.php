@@ -71,7 +71,7 @@ class QueryValidator extends Validator
         }
 
         // Search for attribute in schema
-        $attributeIndex = array_search($query->getAttribute(), array_column($this->schema, '$id'));
+        $attributeIndex = array_search($query->getAttribute(), array_column($this->schema, 'key'));
 
         if ($attributeIndex === false) {
             $this->message = 'Attribute not found in schema: ' . $query->getAttribute();

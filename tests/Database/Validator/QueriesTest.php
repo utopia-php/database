@@ -21,6 +21,7 @@ class QueriesTest extends TestCase
         'attributes' => [
             [
                 '$id' => 'title',
+                'key' => 'title',
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => true,
@@ -30,6 +31,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'description',
+                'key' => 'description',
                 'type' => Database::VAR_STRING,
                 'size' => 1000000,
                 'required' => true,
@@ -39,6 +41,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'rating',
+                'key' => 'rating',
                 'type' => Database::VAR_INTEGER,
                 'size' => 5,
                 'required' => true,
@@ -48,6 +51,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'price',
+                'key' => 'price',
                 'type' => Database::VAR_FLOAT,
                 'size' => 5,
                 'required' => true,
@@ -57,6 +61,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'published',
+                'key' => 'published',
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 5,
                 'required' => true,
@@ -66,6 +71,7 @@ class QueriesTest extends TestCase
             ],
             [
                 '$id' => 'tags',
+                'key' => 'tags',
                 'type' => Database::VAR_STRING,
                 'size' => 55,
                 'required' => true,
@@ -75,7 +81,6 @@ class QueriesTest extends TestCase
             ],
         ],
         'indexes' => [],
-        'indexesInQueue' => []
     ];
 
 
@@ -143,21 +148,8 @@ class QueriesTest extends TestCase
             ],
             'orders' => []
         ]);
-        $indexInQueue = new Document([
-            '$id' => 'testindex4',
-            'type' => 'key',
-            'attributes' => [
-                'price',
-                'title'
-            ],
-            'orders' => [
-                'ASC',
-                'DESC'
-            ]
-        ]);
 
         $this->collection['indexes'] = [$index1, $index2, $index3, $index4];
-        $this->collection['indexesInQueue'] = [$indexInQueue];
     }
 
     public function tearDown(): void
@@ -167,7 +159,7 @@ class QueriesTest extends TestCase
     public function testQueries()
     {
         // test for SUCCESS
-        $validator = new Queries($this->queryValidator, $this->collection['indexes'], $this->collection['indexesInQueue']);
+        $validator = new Queries($this->queryValidator, $this->collection['indexes']);
 
         $this->assertEquals(true, $validator->isValid($this->queries));
 
@@ -188,7 +180,7 @@ class QueriesTest extends TestCase
 
         $this->queries = [$query1, $query2];
         $this->assertEquals(false, $validator->isValid($this->queries));
-        $this->assertEquals("Index still in creation queue: price,title", $validator->getDescription());
+        $this->assertEquals("Index not found: price,title", $validator->getDescription());
 
         // test fulltext
 
@@ -200,11 +192,11 @@ class QueriesTest extends TestCase
 
     public function testIsStrict()
     {
-        $validator = new Queries($this->queryValidator, $this->collection['indexes'], $this->collection['indexesInQueue']);
+        $validator = new Queries($this->queryValidator, $this->collection['indexes']);
 
         $this->assertEquals(true, $validator->isStrict());
 
-        $validator = new Queries($this->queryValidator, $this->collection['indexes'], $this->collection['indexesInQueue'], false);
+        $validator = new Queries($this->queryValidator, $this->collection['indexes'], false);
 
         $this->assertEquals(false, $validator->isStrict());
     }

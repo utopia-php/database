@@ -26,11 +26,6 @@ class Queries extends Validator
     protected $indexes = [];
 
     /**
-     * @var array
-     */
-    protected $indexesInQueue = [];
-
-    /**
      * @var bool
      */
     protected $strict;
@@ -40,18 +35,14 @@ class Queries extends Validator
      *
      * @param QueryValidator $validator
      * @param Document[] $indexes
-     * @param Document[] $indexesInQueue
      * @param bool $strict
      */
-    public function __construct($validator, $indexes, $indexesInQueue, $strict = true)
+    public function __construct($validator, $indexes, $strict = true)
     {
         $this->validator = $validator;
 
         foreach ($indexes as $index) {
             $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
-        }
-        foreach ($indexesInQueue as $index) {
-            $this->indexesInQueue[] = $index->getArrayCopy(['attributes', 'type']);
         }
 
         $this->strict = $strict;
@@ -95,11 +86,6 @@ class Queries extends Validator
             }
         }
 
-        /**
-         * @var string
-         */
-        $indexId = null;
-
         $found = null;
 
         // Return false if attributes do not exactly match an index
@@ -107,20 +93,11 @@ class Queries extends Validator
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
                 if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
-                    // $indexId = $index['$id']; 
                     $found = $index; 
                 }
             }
 
             if (!$found) {
-                // check against the indexesInQueue
-                foreach ($this->indexesInQueue as $index) {
-                    if ($this->arrayMatch($index['attributes'], array_keys($queries))) {
-                        $this->message = 'Index still in creation queue: ' . implode(",", array_keys($queries));
-                        return false;
-                    }
-                }
-
                 $this->message = 'Index not found: ' . implode(",", array_keys($queries));
                 return false;
             }

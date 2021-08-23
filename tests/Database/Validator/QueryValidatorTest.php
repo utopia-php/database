@@ -15,6 +15,7 @@ class QueryValidatorTest extends TestCase
     protected $schema = [
         [
             '$id' => 'title',
+            'key' => 'title',
             'type' => Database::VAR_STRING,
             'size' => 256,
             'required' => true,
@@ -24,6 +25,7 @@ class QueryValidatorTest extends TestCase
         ],
         [
             '$id' => 'description',
+            'key' => 'description',
             'type' => Database::VAR_STRING,
             'size' => 1000000,
             'required' => true,
@@ -33,6 +35,7 @@ class QueryValidatorTest extends TestCase
         ],
         [
             '$id' => 'rating',
+            'key' => 'rating',
             'type' => Database::VAR_INTEGER,
             'size' => 5,
             'required' => true,
@@ -42,6 +45,7 @@ class QueryValidatorTest extends TestCase
         ],
         [
             '$id' => 'price',
+            'key' => 'price',
             'type' => Database::VAR_FLOAT,
             'size' => 5,
             'required' => true,
@@ -51,6 +55,7 @@ class QueryValidatorTest extends TestCase
         ],
         [
             '$id' => 'published',
+            'key' => 'published',
             'type' => Database::VAR_BOOLEAN,
             'size' => 5,
             'required' => true,
@@ -60,6 +65,7 @@ class QueryValidatorTest extends TestCase
         ],
         [
             '$id' => 'tags',
+            'key' => 'tags',
             'type' => Database::VAR_STRING,
             'size' => 55,
             'required' => true,

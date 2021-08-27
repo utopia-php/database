@@ -1069,9 +1069,13 @@ class Database
 
     /**
      * Encode Attribute
+     *
+     * Passes the attribute $value, and $document context to a predefined filter
+     *  that allow you to manipulate the input format of the given attribute.
      * 
      * @param string $name
      * @param mixed $value
+     * @param Document $document
      * 
      * @return mixed
      */

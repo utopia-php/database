@@ -966,7 +966,7 @@ class Database
             foreach ($value as &$node) {
                 if (($node !== null)) {
                     foreach ($filters as $filter) {
-                        $node = $this->encodeAttribute($filter, $node);
+                        $node = $this->encodeAttribute($filter, $node, $document);
                     }
                 }
             }
@@ -1075,14 +1075,14 @@ class Database
      * 
      * @return mixed
      */
-    protected function encodeAttribute(string $name, $value)
+    protected function encodeAttribute(string $name, $value, Document $document)
     {
         if (!isset(self::$filters[$name])) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['encode']($value);
+            $value = self::$filters[$name]['encode']($value, $document, $this);
         } catch (\Throwable $th) {
             throw $th;
         }

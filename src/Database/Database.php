@@ -16,7 +16,7 @@ class Database
     // Simple Types
     const VAR_STRING = 'string';
     const VAR_INTEGER = 'integer';
-    const VAR_FLOAT = 'double';
+    const VAR_FLOAT = 'float';
     const VAR_BOOLEAN = 'boolean';
 
     // Relationships Types

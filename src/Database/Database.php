@@ -774,14 +774,26 @@ class Database
     }
 
     /**
-     * Cleans the Document from Cache
+     * Cleans the all the collection's documents from the cache
+     * 
+     * @param string $collection
+     *
+     * @return bool
+     */
+    public function deleteCachedCollection(string $collection): bool
+    {
+        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':*');
+    }
+
+    /**
+     * Cleans a specific document from cache
      * 
      * @param string $collection
      * @param string $id
      *
      * @return bool
      */
-    public function purgeDocument(string $collection, string $id): bool
+    public function deleteCachedDocument(string $collection, string $id): bool
     {
         return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
     }

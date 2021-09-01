@@ -473,6 +473,40 @@ class Database
     }
 
     /**
+     * Checks if attribute can be added to collection.
+     * Used to check attribute limits without asking the database
+     * Returns true if attribute can be added to collection, throws exception otherwise
+     *
+     * @param Document $collection
+     * @param Document $attribute
+     *
+     * @throws LimitException
+     * @return bool
+     */
+    public function checkAttribute(Document $collection, Document $attribute): bool
+    {
+        $collection = clone $collection;
+
+        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+
+        if ($this->adapter->getAttributeLimit() > 0 &&
+            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
+        {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+            return false;
+        }
+
+        if ($this->adapter->getRowLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
+        {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Delete Attribute
      * 
      * @param string $collection

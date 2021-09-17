@@ -30,11 +30,6 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterRowLimit(): int;
 
-    /**
-     * @return int
-     */
-    abstract static protected function getUsedIndexes(): int;
-
     public function setUp(): void
     {
         Authorization::setRole('role:all');

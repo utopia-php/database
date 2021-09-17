@@ -1538,4 +1538,18 @@ abstract class Base extends TestCase
 
         static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name',  'Frozen'));
     }
+
+    public function testGetAttributeLimit()
+    {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+            $this->assertEquals(1012, $this->getDatabase()->getAttributeLimit());
+        } else {
+            $this->assertEquals(0, $this->getDatabase()->getAttributeLimit());
+        }
+    }
+
+    public function testGetIndexLimit()
+    {
+        $this->assertEquals(61, $this->getDatabase()->getIndexLimit());
+    }
 }

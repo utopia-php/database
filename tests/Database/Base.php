@@ -1268,7 +1268,7 @@ abstract class Base extends TestCase
         if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
             // load the collection up to the limit
             $attributes = [];
-            for ($i=0; $i < 1012; $i++) {
+            for ($i=0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
                 $attributes[] = new Document([
                     '$id' => "test{$i}",
                     'type' => Database::VAR_INTEGER,
@@ -1459,7 +1459,7 @@ abstract class Base extends TestCase
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // MongoDB create 4 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
+        for ($i=0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);

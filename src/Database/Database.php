@@ -1164,4 +1164,27 @@ class Database
     {
         return \uniqid();
     }
+
+    /**
+     * Get adapter attribute limit, accounting for internal metadata
+     * Returns 0 to indicate no limit
+     *
+     * @return int
+     */
+    public function getAttributeLimit()
+    {
+        // If negative, return 0
+        // -1 ==> virtual columns count as total, so treat as buffer
+        return \max($this->adapter->getAttributeLimit() - $this->adapter->getNumberOfDefaultAttributes() - 1, 0);
+    }
+
+    /**
+     * Get adapter index limit
+     *
+     * @return int
+     */
+    public function getIndexLimit()
+    {
+        return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
+    }
 }

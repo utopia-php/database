@@ -1296,6 +1296,35 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testExceptionAttributeLimit
+     */
+    public function testCheckAttributeCountLimit()
+    {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+            $collection = static::getDatabase()->getCollection('attributeLimit');
+
+            // create same attribute in testExceptionAttributeLimit
+            $attribute = new Document([
+                    '$id' => 'breaking',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 0,
+                    'required' => true,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+            ]);
+
+            $this->expectException(LimitException::class);
+            $this->assertEquals(false, static::getDatabase()->checkAttribute($collection, $attribute));
+        }
+
+        // Default assertion for other adapters
+        $this->assertEquals(1,1);
+
+    }
+
+    /**
      * Using phpunit dataProviders to check that all these combinations of types/sizes throw exceptions
      * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
      */
@@ -1388,6 +1417,35 @@ abstract class Base extends TestCase
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
         } 
+
+        // Default assertion for other adapters
+        $this->assertEquals(1,1);
+    }
+
+    /**
+     * @dataProvider rowWidthExceedsMaximum
+     * @depends testExceptionWidthLimit
+     */
+    public function testCheckAttributeWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
+    {
+        if (static::getAdapterRowLimit() > 0) {
+            $collection = static::getDatabase()->getCollection("widthLimit{$key}");
+
+            // create same attribute in testExceptionWidthLimit
+            $attribute = new Document([
+                    '$id' => 'breaking',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                    'default' => null,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+            ]);
+
+            $this->expectException(LimitException::class);
+            $this->assertEquals(false, static::getDatabase()->checkAttribute($collection, $attribute));
+        }
 
         // Default assertion for other adapters
         $this->assertEquals(1,1);

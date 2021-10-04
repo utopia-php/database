@@ -894,7 +894,7 @@ abstract class Base extends TestCase
         /**
          * ORDER BY - Before by natural order
          */
-        $movies = array_reverse(static::getDatabase()->find('movies', [], 25, 0, [], []));
+        $movies = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[5], Database::CURSOR_BEFORE);
         $this->assertEquals(2, count($documents));

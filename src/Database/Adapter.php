@@ -233,11 +233,12 @@ abstract class Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param array $orderAfter
+     * @param array $cursor Array copy of document used for before/after pagination
+     * @param string $cursorDirection
      *
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $orderAfter = []): array;
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
     /**
      * Sum an attribute

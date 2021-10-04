@@ -40,6 +40,10 @@ class Database
     // Collections
     const METADATA = '_metadata';
 
+    // Cursor
+    const CURSOR_BEFORE = 'before';
+    const CURSOR_AFTER = 'after';
+
     // Lengths
     const LENGTH_KEY = 255;
 
@@ -841,21 +845,22 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param Document|null $orderAfter
+     * @param Document|null $cursor
+     * @param string $cursorDirection
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = self::CURSOR_AFTER): array
     {
         $collection = $this->getCollection($collection);
 
-        if (!empty($orderAfter) && $orderAfter->getCollection() !== $collection->getId()) {
-            throw new Exception("orderAfter Document must be from the same Collection.");
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new Exception("cursor Document must be from the same Collection.");
         }
 
-        $orderAfter = empty($orderAfter) ? [] : $orderAfter->getArrayCopy();
+        $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
 
-        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $orderAfter);
+        $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);
@@ -872,13 +877,14 @@ class Database
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param Document|null $orderAfter
+     * @param Document|null $cursor
+     * @param string $cursorDirection
      * 
      * @return Document|bool
      */
-    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $orderAfter = null)
+    public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = Database::CURSOR_AFTER)
     {
-        $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes, $orderAfter);
+        $results = $this->find($collection, $queries, /*limit*/ 1, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
         return \reset($results);
     }
 

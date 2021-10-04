@@ -1004,7 +1004,7 @@ class Database
         $collection = $this->getCollection($collection);
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new Exception("orderAfter Document must be from the same Collection.");
+            throw new Exception("cursor Document must be from the same Collection.");
         }
 
         $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();

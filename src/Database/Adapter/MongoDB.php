@@ -428,7 +428,7 @@ class MongoDB extends Adapter
      * @param array $orderAttributes
      * @param array $orderTypes
      * @param array $cursor
-     * @param array $cursorDirection
+     * @param string $cursorDirection
      *
      * @return Document[]
      */

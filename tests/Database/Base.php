@@ -30,11 +30,6 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterRowLimit(): int;
 
-    /**
-     * @return int
-     */
-    abstract static protected function getUsedIndexes(): int;
-
     public function setUp(): void
     {
         Authorization::setRole('role:all');
@@ -1270,10 +1265,10 @@ abstract class Base extends TestCase
 
     public function testExceptionAttributeLimit()
     {
-        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+        if ($this->getDatabase()->getAttributeLimit() > 0) {
             // load the collection up to the limit
             $attributes = [];
-            for ($i=0; $i < 1012; $i++) {
+            for ($i=0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
                 $attributes[] = new Document([
                     '$id' => "test{$i}",
                     'type' => Database::VAR_INTEGER,
@@ -1300,7 +1295,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeCountLimit()
     {
-        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+        if ($this->getDatabase()->getAttributeLimit() > 0) {
             $collection = static::getDatabase()->getCollection('attributeLimit');
 
             // create same attribute in testExceptionAttributeLimit
@@ -1464,7 +1459,7 @@ abstract class Base extends TestCase
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // MongoDB create 4 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < (64 - static::getUsedIndexes()); $i++) {
+        for ($i=0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
@@ -1542,5 +1537,19 @@ abstract class Base extends TestCase
         $this->expectException(DuplicateException::class);
 
         static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name',  'Frozen'));
+    }
+
+    public function testGetAttributeLimit()
+    {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+            $this->assertEquals(1012, $this->getDatabase()->getAttributeLimit());
+        } else {
+            $this->assertEquals(0, $this->getDatabase()->getAttributeLimit());
+        }
+    }
+
+    public function testGetIndexLimit()
+    {
+        $this->assertEquals(61, $this->getDatabase()->getIndexLimit());
     }
 }

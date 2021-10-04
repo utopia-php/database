@@ -40,15 +40,6 @@ class MongoDBTest extends Base
     }
 
     /**
-     * 
-     * @return int 
-     */
-    static function getUsedIndexes(): int
-    {
-        return MongoDB::getNumberOfDefaultIndexes();
-    }
-
-    /**
      * @return Adapter
      */
     static function getDatabase(): Database

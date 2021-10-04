@@ -608,7 +608,7 @@ class MariaDB extends Adapter
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results);
+            $results = array_reverse($results); //TODO: check impact on array_reverse
         }
 
         return $results;

@@ -1295,7 +1295,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeCountLimit()
     {
-        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+        if ($this->getDatabase()->getAttributeLimit() > 0) {
             $collection = static::getDatabase()->getCollection('attributeLimit');
 
             // create same attribute in testExceptionAttributeLimit

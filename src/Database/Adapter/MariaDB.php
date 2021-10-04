@@ -507,7 +507,7 @@ class MariaDB extends Adapter
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
-                $orderOperatorInternalId = Query::TYPE_GREATER;
+                $orderOperatorInternalId = Query::TYPE_GREATER; // To preserve natural order
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 if ($cursorDirection === Database::CURSOR_BEFORE) {

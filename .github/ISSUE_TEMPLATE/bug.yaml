@@ -32,16 +32,27 @@ body:
       description: "What did actually happen? Add screenshots, if applicable."
       placeholder: "It actually ..."
   - type: dropdown
-    id: database-version
+    id: utopia-version
     attributes:
-      label: "🎲 Utopia database version"
-      description: "What version of Database are you running?"
+      label: "🎲 Utopia Database version"
+      description: "What version of Utopia are you running?"
       options:
         - Version 0.10.x
         - Version 0.9.x
         - Version 0.8.x
         - Version 0.7.x
         - Version 0.6.x
+        - Different version (specify in environment)
+    validations:
+      required: true
+  - type: dropdown
+    id: php-version
+    attributes:
+      label: "🐘 PHP Version"
+      description: "What version of PHP are you running?"
+      options:
+        - PHP 7.3.x
+        - PHP 7.4.x
         - Different version (specify in environment)
     validations:
       required: true

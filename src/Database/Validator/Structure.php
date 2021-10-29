@@ -254,6 +254,9 @@ class Structure extends Validator
             }
 
             if($array && !$format) { // Validate attribute type for arrays - format for arrays handled separately
+                if($required == false && is_null($value)) {
+                    continue;
+                }
                 if(!is_array($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
                     return false;

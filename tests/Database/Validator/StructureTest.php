@@ -325,7 +325,7 @@ class StructureTest extends TestCase
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
-            'price' => 2,
+            'price' => '2.5',
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',

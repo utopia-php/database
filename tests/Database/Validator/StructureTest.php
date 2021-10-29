@@ -49,6 +49,16 @@ class StructureTest extends TestCase
                 'filters' => [],
             ],
             [
+                '$id' => 'reviews',
+                'type' => Database::VAR_INTEGER,
+                'format' => '',
+                'size' => 5,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+                'filters' => [],
+            ],
+            [
                 '$id' => 'price',
                 'type' => Database::VAR_FLOAT,
                 'format' => '',
@@ -314,6 +324,61 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
+    }
+
+    public function testArrayOfIntegersValidation()
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'reviews' => [3, 4, 4, 5],
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'reviews' => [],
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'reviews' => null,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'reviews' => ['', 4, 4, 5],
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "reviews[\'0\']" has invalid type. Value must be a valid integer', $validator->getDescription());
     }
 
     public function testFloatValidation()

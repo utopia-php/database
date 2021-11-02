@@ -1048,11 +1048,9 @@ class Database
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
-            $required = $attribute['required'] ?? true;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
             
-            $wasNull = \is_null($value);
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
@@ -1060,12 +1058,6 @@ class Database
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document);
                 }
-            }
-            // An optional, empty array attribute should return null, not []
-            if ($array && !$required && $wasNull) {
-                $document->setAttribute($key, null);
-            } else {
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
         }
 

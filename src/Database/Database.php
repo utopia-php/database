@@ -1059,6 +1059,8 @@ class Database
                     $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }
+
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
         return $document;

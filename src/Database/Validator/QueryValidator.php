@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 
 class QueryValidator extends Validator
@@ -34,11 +35,13 @@ class QueryValidator extends Validator
     /**
      * Expression constructor
      *
-     * @param array $schema
+     * @param array $attributes
      */
-    public function __construct($schema)
+    public function __construct($attributes)
     {
-        $this->schema = $schema;
+        foreach ($attributes as $attribute) {
+            $this->schema[] = $attribute->getArrayCopy();
+        }
     }
 
     /**

@@ -229,31 +229,46 @@ class Structure extends Validator
             $format = $attribute['format'] ?? '';
             $required = $attribute['required'] ?? false;
 
+            if ($required === false && is_null($value)) { // Allow null value to optional params
+                continue;
+            }
+
             switch ($type) {
                 case Database::VAR_STRING:
                     $validator = new Text(0);
                     break;
-                
+
                 case Database::VAR_INTEGER:
                     $validator = new Integer();
                     break;
-                
+
                 case Database::VAR_FLOAT:
                     $validator = new FloatValidator();
                     break;
-                
-                
+
                 case Database::VAR_BOOLEAN:
                     $validator = new Boolean();
                     break;
-                
+
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;
                     break;
             }
 
-            if($array && !$format) { // Validate attribute type for arrays - format for arrays handled separately
+            /** @var string $label Error messasage label, either 'format' or 'type' */
+            $label = ($format) ? 'format' : 'type';
+
+            if ($format) {
+                // Format encoded as json string containing format name and relevant format options
+                $format = self::getFormat($format, $type);
+                $validator = $format['callback']($attribute);
+            }
+
+            if($array) { // Validate attribute type for arrays - format for arrays handled separately
+                if($required == false && empty($value)) { // Allow both null and [] for optional arrays
+                    continue;
+                }
                 if(!is_array($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
                     return false;
@@ -265,45 +280,15 @@ class Structure extends Validator
                     }
 
                     if(!$validator->isValid($child)) {
-                        $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid type. '.$validator->getDescription();
+                        $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
                         return false;
                     }
                 }
             }
             else {
-                if($required == false && is_null($value)) { // Allow null value to optional params
-                    continue;
-                }
-
                 if(!$validator->isValid($value)) {
-                    $this->message = 'Attribute "'.$key.'" has invalid type. '.$validator->getDescription();
+                    $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
                     return false;
-                }
-            }
-
-            if($format) {
-                // Format encoded as json string containing format name and relevant format options
-                $format = self::getFormat($format, $type);
-                $validator = $format['callback']($attribute);
-
-                if($array) { // Validate attribute type
-                    if(!is_array($value)) {
-                        $this->message = 'Attribute "'.$key.'" must be an array';
-                        return false;
-                    }
-
-                    foreach ($value as $x => $child) {
-                        if(!$validator->isValid($child)) {
-                            $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid format. '.$validator->getDescription();
-                            return false;
-                        }
-                    }
-                }
-                else {
-                    if(!$validator->isValid($value)) {
-                        $this->message = 'Attribute "'.$key.'" has invalid format. '.$validator->getDescription();
-                        return false;
-                    }
                 }
             }
         }

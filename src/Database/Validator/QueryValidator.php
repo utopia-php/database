@@ -35,9 +35,9 @@ class QueryValidator extends Validator
     /**
      * Expression constructor
      *
-     * @param array $attributes
+     * @param Document[] $attributes
      */
-    public function __construct($attributes)
+    public function __construct(array $attributes)
     {
         foreach ($attributes as $attribute) {
             $this->schema[] = $attribute->getArrayCopy();

@@ -37,9 +37,10 @@ class QueryBuilder
     protected $limit;
 
     /**
+     * TODO@kodumbeats make PDO required
      * @param PDO $pdo
      */
-    public function __construct(PDO $pdo)
+    public function __construct(PDO $pdo = null)
     {
         $this->reset();
         $this->pdo = $pdo;
@@ -85,12 +86,10 @@ class QueryBuilder
      */
     public function createDatabase(string $name): self
     {
-        $name = $this->filter($name);
-
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        $this->queryTemplate = "CREATE DATABASE {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
+        $this->queryTemplate = "CREATE DATABASE `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
 
         return $this;
     }
@@ -103,12 +102,10 @@ class QueryBuilder
      */
     public function createTable(string $name): self
     {
-        $name = $this->filter($name);
-
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        $this->queryTemplate = "CREATE TABLE IF NOT EXISTS {$name};";
+        $this->queryTemplate = "CREATE TABLE IF NOT EXISTS `{$name}`;";
 
         return $this;
     }
@@ -123,9 +120,6 @@ class QueryBuilder
      */
     public function drop(string $type, string $name): self
     {
-        $type = $this->filter($type);
-        $name = $this->filter($name);
-
         //TODO@kodumbeats with PHP8.1, use enums
         if ($type !== self::TYPE_DATABASE && $type !== self::TYPE_TABLE) {
             throw new Exception('Invalid type');
@@ -149,9 +143,10 @@ class QueryBuilder
      */
     public function from(string $table, array $keys = ['*']): self
     {
-        $table = $this->filter($table);
         foreach ($keys as &$key) {
-            $key = $this->filter($key);
+            if ($key !== '*') {
+                $key = '`'.$this->filter($key).'`';
+            }
         }
 
         if ($this->statement) {
@@ -168,11 +163,10 @@ class QueryBuilder
      * @param string $key
      * @param string $condition
      * @param string $value
-     * @param bool $quotedKey
      *
      * @return QueryBuilder
      */
-    public function where($key, $condition, $value, $quotedKey = false): self
+    public function where($key, $condition, $value): self
     {
         // strip trailing semicolon if present
         if (\mb_substr($this->getTemplate(), -1) === ';') {
@@ -181,17 +175,9 @@ class QueryBuilder
 
         $count = \count($this->getParams());
 
-        // TODO@kodumbeats find a better way to solve this for keys 
-        // that cannot be quoted like SCHEMA_NAME
-        if ($quotedKey) {
-            $key = $this->filter($key);
-            $this->queryTemplate .= " WHERE {$key} {$condition} :value{$count};";
-            $this->params[":value{$count}"] = $value;
-        } else {
-            $this->queryTemplate .= " WHERE :key{$count} {$condition} :value{$count};";
-            $this->params[":key{$count}"] = $key;
-            $this->params[":value{$count}"] = $value;
-        }
+        $key = $this->filter($key);
+        $this->queryTemplate .= " WHERE {$key} {$condition} :value{$count};";
+        $this->params[":value{$count}"] = $value;
 
         return $this;
     }
@@ -223,6 +209,14 @@ class QueryBuilder
      */
     public function execute(): bool
     {
+        if (!\is_null($this->limit)) {
+            // strip trailing semicolon if present
+            if (\mb_substr($this->getTemplate(), -1) === ';') {
+                $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+            }
+            $this->queryTemplate .= " LIMIT {$this->limit};";
+        }
+
         $this->statement = $this->pdo->prepare($this->getTemplate());
 
         try {
@@ -236,7 +230,7 @@ class QueryBuilder
     {
         $this->queryTemplate = '';
         $this->params = [];
-        $this->limit = 25;
+        $this->limit = null;
     }
 
     /**
@@ -255,4 +249,5 @@ class QueryBuilder
 
         return $value;
     }
+
 }

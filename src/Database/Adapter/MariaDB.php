@@ -57,7 +57,7 @@ class MariaDB extends Adapter
         $builder = new QueryBuilder($this->getPDO());
         $builder
             ->from('INFORMATION_SCHEMA.SCHEMATA', ['SCHEMA_NAME'])
-            ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name, true)
+            ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name)
             ->execute();
 
         $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
@@ -174,10 +174,10 @@ class MariaDB extends Adapter
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);
+        $name = $this->getNamespace();
+        $builder = new QueryBuilder($this->getPDO());
 
-        return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getNamespace()}.{$id};")
-            ->execute();
+        return $builder->drop(QueryBuilder::TYPE_TABLE, "{$name}.{$id}")->execute();
     }
 
     /**
@@ -293,17 +293,15 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}
-            WHERE _uid = :_uid
-            LIMIT 1;
-        ");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        $stmt->execute();
+        $builder = new QueryBuilder($this->getPDO());
+        $builder
+            ->from("{$this->getNamespace()}.{$name}")
+            ->where('_uid', $this->getSQLOperator(Query::TYPE_EQUAL), $id)
+            ->one()
+            ->execute();
 
         /** @var array $document */
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
 
         if(empty($document)) {
             return new Document([]);

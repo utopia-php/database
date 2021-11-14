@@ -56,7 +56,7 @@ class MariaDB extends Adapter
 
         $builder = new QueryBuilder($this->getPDO());
         $builder
-            ->from('INFORMATION_SCHEMA.SCHEMATA')
+            ->from('INFORMATION_SCHEMA.SCHEMATA', ['SCHEMA_NAME'])
             ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name)
             ->execute();
 

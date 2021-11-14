@@ -85,11 +85,11 @@ class QueryBuilder
      */
     public function createDatabase(string $name): self
     {
+        $name = $this->filter($name);
+
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        // $this->queryTemplate = 'CREATE DATABASE `:name` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;';
-        // $this->params['name'] = $name;
         $this->queryTemplate = "CREATE DATABASE {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
 
         return $this;
@@ -103,11 +103,12 @@ class QueryBuilder
      */
     public function createTable(string $name): self
     {
+        $name = $this->filter($name);
+
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        $this->queryTemplate = 'CREATE TABLE IF NOT EXISTS :name;';
-        $this->params[':name'] = $name;
+        $this->queryTemplate = "CREATE TABLE IF NOT EXISTS {$name};";
 
         return $this;
     }
@@ -122,6 +123,9 @@ class QueryBuilder
      */
     public function drop(string $type, string $name): bool
     {
+        $type = $this->filter($type);
+        $name = $this->filter($name);
+
         //TODO@kodumbeats with PHP8.1, use enums
         if ($type !== self::TYPE_DATABASE && $type !== self::TYPE_TABLE) {
             throw new Exception('Invalid type');
@@ -131,32 +135,31 @@ class QueryBuilder
             throw new Exception('Multiple statements detected - not supported yet');
         }
 
-        // $this->queryTemplate = "{$this->statement} {$type} :name;";
-        // $this->params['name'] = $name;
-        $this->queryTemplate = "{$this->statement} {$type} {$name};";
+        $this->queryTemplate = "DROP {$type} {$name};";
 
         return $this->execute();
     }
 
     /**
      * @param string $table
-     * @param string $key
+     * @param string[] $keys
      *
      * @throws Exception
      * @return QueryBuilder
      */
-    public function from(string $table, string $thing = '*'): self
+    public function from(string $table, array $keys = ['*']): self
     {
+        $table = $this->filter($table);
+        foreach ($keys as &$key) {
+            $key = $this->filter($key);
+        }
+
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
 
-        if ($thing === '*') {
-            $this->queryTemplate = "SELECT * FROM {$table};";
-        } else {
-            $this->queryTemplate = "SELECT :thing FROM {$table};";
-            $this->params['thing'] = $thing;
-        }
+        $keys = \implode(", ", $keys);
+        $this->queryTemplate = "SELECT {$keys} FROM {$table};";
 
         return $this;
     }
@@ -177,8 +180,8 @@ class QueryBuilder
 
         $count = \count($this->getParams());
         $this->queryTemplate .= " WHERE :key{$count} {$condition} :value{$count};";
-        $this->params["key{$count}"] = $key;
-        $this->params["value{$count}"] = $value;
+        $this->params[":key{$count}"] = $key;
+        $this->params[":value{$count}"] = $value;
 
         return $this;
     }
@@ -225,5 +228,22 @@ class QueryBuilder
         $this->queryTemplate = '';
         $this->params = [];
         $this->limit = 25;
+    }
+
+    /**
+     * Filter Keys
+     * 
+     * @throws Exception
+     * @return string
+     */
+    public function filter(string $value): string
+    {
+        $value = preg_replace("/[^A-Za-z0-9]_/", '', $value);
+
+        if(\is_null($value)) {
+            throw new Exception('Failed to filter key');
+        }
+
+        return $value;
     }
 }

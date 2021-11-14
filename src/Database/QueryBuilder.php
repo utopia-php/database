@@ -183,6 +183,75 @@ class QueryBuilder
 
     /**
      * @param string $key
+     * @param string $type
+     *
+     * @return QueryBuilder
+     */
+    public function addColumn($key, $type): self
+    {
+        // strip trailing semicolon if present
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+
+        $this->queryTemplate .= " ADD COLUMN `{$key}` {$type};";
+
+        return $this;
+    }
+
+    /**
+     * @param string $key
+     *
+     * @return QueryBuilder
+     */
+    public function dropColumn($key): self
+    {
+        // strip trailing semicolon if present
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+
+        $this->queryTemplate .= " DROP COLUMN `{$key}`;";
+
+        return $this;
+    }
+
+    /**
+     * @param string $key
+     *
+     * @return QueryBuilder
+     */
+    public function dropIndex($key): self
+    {
+        // strip trailing semicolon if present
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+
+        $this->queryTemplate .= " DROP INDEX `{$key}`;";
+
+        return $this;
+    }
+
+    /**
+     * @param string $table
+     *
+     * @throws Exception
+     * @return QueryBuilder
+     */
+    public function alterTable(string $table): self
+    {
+        if ($this->statement) {
+            throw new Exception('Multiple statements detected - not supported yet');
+        }
+
+        $this->queryTemplate = "ALTER TABLE {$table};";
+
+        return $this;
+    }
+
+    /**
+     * @param string $key
      * @param string $condition
      * @param string $value
      *

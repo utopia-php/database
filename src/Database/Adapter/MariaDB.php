@@ -201,9 +201,11 @@ class MariaDB extends Adapter
             $type = 'LONGTEXT';
         }
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
-                ADD COLUMN `{$id}` {$type};")
+        $builder = new QueryBuilder($this->getPDO());
+
+        return $builder
+            ->alterTable("{$this->getNamespace()}.{$name}")
+            ->addColumn($id, $type)
             ->execute();
     }
 
@@ -221,9 +223,11 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
-                DROP COLUMN `{$id}`;")
+        $builder = new QueryBuilder($this->getPDO());
+
+        return $builder
+            ->alterTable("{$this->getNamespace()}.{$name}")
+            ->dropColumn($id)
             ->execute();
     }
 
@@ -275,9 +279,11 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
-                DROP INDEX `{$id}`;")
+        $builder = new QueryBuilder($this->getPDO());
+
+        return $builder
+            ->alterTable("{$this->getNamespace()}.{$name}")
+            ->dropIndex($id)
             ->execute();
     }
 

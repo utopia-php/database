@@ -119,9 +119,9 @@ class QueryBuilder
      * @param string $name
      *
      * @throws Exception
-     * @return bool
+     * @return QueryBuilder
      */
-    public function drop(string $type, string $name): bool
+    public function drop(string $type, string $name): self
     {
         $type = $this->filter($type);
         $name = $this->filter($name);
@@ -137,7 +137,7 @@ class QueryBuilder
 
         $this->queryTemplate = "DROP {$type} {$name};";
 
-        return $this->execute();
+        return $this;
     }
 
     /**
@@ -168,10 +168,11 @@ class QueryBuilder
      * @param string $key
      * @param string $condition
      * @param string $value
+     * @param bool $quotedKey
      *
      * @return QueryBuilder
      */
-    public function where($key, $condition, $value): self
+    public function where($key, $condition, $value, $quotedKey = false): self
     {
         // strip trailing semicolon if present
         if (\mb_substr($this->getTemplate(), -1) === ';') {
@@ -179,9 +180,18 @@ class QueryBuilder
         }
 
         $count = \count($this->getParams());
-        $this->queryTemplate .= " WHERE :key{$count} {$condition} :value{$count};";
-        $this->params[":key{$count}"] = $key;
-        $this->params[":value{$count}"] = $value;
+
+        // TODO@kodumbeats find a better way to solve this for keys 
+        // that cannot be quoted like SCHEMA_NAME
+        if ($quotedKey) {
+            $key = $this->filter($key);
+            $this->queryTemplate .= " WHERE {$key} {$condition} :value{$count};";
+            $this->params[":value{$count}"] = $value;
+        } else {
+            $this->queryTemplate .= " WHERE :key{$count} {$condition} :value{$count};";
+            $this->params[":key{$count}"] = $key;
+            $this->params[":value{$count}"] = $value;
+        }
 
         return $this;
     }
@@ -213,7 +223,6 @@ class QueryBuilder
      */
     public function execute(): bool
     {
-        var_dump($this->getTemplate(), $this->getParams());
         $this->statement = $this->pdo->prepare($this->getTemplate());
 
         try {

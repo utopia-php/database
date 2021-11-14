@@ -57,11 +57,10 @@ class MariaDB extends Adapter
         $builder = new QueryBuilder($this->getPDO());
         $builder
             ->from('INFORMATION_SCHEMA.SCHEMATA', ['SCHEMA_NAME'])
-            ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name)
+            ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name, true)
             ->execute();
 
         $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
-        var_dump($document);
 
         return (($document['SCHEMA_NAME'] ?? '') == $name);
     }
@@ -87,7 +86,7 @@ class MariaDB extends Adapter
         $name = $this->getNamespace();
         $builder = new QueryBuilder($this->getPDO());
 
-        return $builder->drop(QueryBuilder::TYPE_DATABASE, $name);
+        return $builder->drop(QueryBuilder::TYPE_DATABASE, $name)->execute();
     }
 
     /**

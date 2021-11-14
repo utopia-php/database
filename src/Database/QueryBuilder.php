@@ -46,6 +46,11 @@ class QueryBuilder
         $this->pdo = $pdo;
     }
 
+    public function getPDO(): PDO
+    {
+        return $this->pdo;
+    }
+
     /**
      * @return PDOStatement
      */
@@ -160,6 +165,23 @@ class QueryBuilder
     }
 
     /**
+     * @param string $table
+     *
+     * @throws Exception
+     * @return QueryBuilder
+     */
+    public function deleteFrom(string $table): self
+    {
+        if ($this->statement) {
+            throw new Exception('Multiple statements detected - not supported yet');
+        }
+
+        $this->queryTemplate = "DELETE FROM {$table};";
+
+        return $this;
+    }
+
+    /**
      * @param string $key
      * @param string $condition
      * @param string $value
@@ -217,11 +239,15 @@ class QueryBuilder
             $this->queryTemplate .= " LIMIT {$this->limit};";
         }
 
-        $this->statement = $this->pdo->prepare($this->getTemplate());
+        $this->getPDO()->beginTransaction();
+
+        $this->statement = $this->getPDO()->prepare($this->getTemplate());
 
         try {
-            return $this->getStatement()->execute($this->getParams());
+            $this->getStatement()->execute($this->getParams());
+            return $this->getPDO()->commit();
         } catch (\Throwable $th) {
+            $this->getPDO()->rollBack();
             throw new Exception($th->getMessage());
         }
     }

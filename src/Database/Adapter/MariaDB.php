@@ -464,24 +464,13 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        $this->getPDO()->beginTransaction();
+        $builder = new QueryBuilder($this->getPDO());
 
-        $stmt = $this->getPDO()
-            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}
-                WHERE _uid = :_uid LIMIT 1");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        if(!$stmt->execute()) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to clean document');
-        }
-
-        if(!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
-        }
-
-        return true;
+        return $builder
+            ->deleteFrom("{$this->getNamespace()}.{$name}")
+            ->where('_uid', $this->getSQLOperator(Query::TYPE_EQUAL), $id)
+            ->one()
+            ->execute();
     }
 
     /**

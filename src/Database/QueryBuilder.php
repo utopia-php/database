@@ -32,11 +32,6 @@ class QueryBuilder
     protected $params;
 
     /**
-     * @var int
-     */
-    protected $limit;
-
-    /**
      * TODO@kodumbeats make PDO required
      * @param PDO $pdo
      */
@@ -73,14 +68,6 @@ class QueryBuilder
     public function getParams(): array
     {
         return $this->params;
-    }
-
-    /**
-     * @return string
-     */
-    public function getLimit(): string
-    {
-        return $this->limit;
     }
 
     /**
@@ -280,7 +267,12 @@ class QueryBuilder
      */
     public function limit(int $limit): self
     {
-        $this->limit = $limit;
+        // strip trailing semicolon if present
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+
+        $this->queryTemplate .= " LIMIT {$limit};";
 
         return $this;
     }
@@ -289,7 +281,12 @@ class QueryBuilder
      */
     public function one(): self
     {
-        $this->limit = 1;
+        // strip trailing semicolon if present
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+
+        $this->queryTemplate .= " LIMIT 1;";
 
         return $this;
     }
@@ -300,14 +297,6 @@ class QueryBuilder
      */
     public function execute(): bool
     {
-        if (!\is_null($this->limit)) {
-            // strip trailing semicolon if present
-            if (\mb_substr($this->getTemplate(), -1) === ';') {
-                $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-            }
-            $this->queryTemplate .= " LIMIT {$this->limit};";
-        }
-
         $this->getPDO()->beginTransaction();
 
         $this->statement = $this->getPDO()->prepare($this->getTemplate());

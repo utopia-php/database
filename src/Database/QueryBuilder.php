@@ -4,19 +4,20 @@ namespace Utopia\Database;
 
 use Exception;
 use PDO;
+use PDOStatement;
 
 class QueryBuilder
 {
-    const TYPE_CREATE = 'CREATE';
-    const TYPE_DROP = 'DROP';
-    const TYPE_INSERT = 'INSERT';
-    const TYPE_SELECT = 'SELECT';
-
     const TYPE_DATABASE = 'DATABASE';
     const TYPE_TABLE = 'TABLE';
 
     /**
-     * @var string $statement one of SELECT, INSERT, CREATE, ALTER, DROP
+     * @var PDO
+     */
+    protected $pdo;
+
+    /**
+     * @var PDOStatement
      */
     protected $statement;
 
@@ -35,15 +36,19 @@ class QueryBuilder
      */
     protected $limit;
 
-    public function __construct()
+    /**
+     * @param PDO $pdo
+     */
+    public function __construct(PDO $pdo)
     {
         $this->reset();
+        $this->pdo = $pdo;
     }
 
     /**
-     * @return string
+     * @return PDOStatement
      */
-    public function getStatement(): string
+    public function getStatement(): PDOStatement
     {
         return $this->statement;
     }
@@ -83,9 +88,9 @@ class QueryBuilder
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        $this->statement = $this::TYPE_CREATE;
-        $this->queryTemplate = 'CREATE DATABASE :name /*!40100 DEFAULT CHARACTER SET utf8mb4 */;';
-        $this->params['name'] = $name;
+        // $this->queryTemplate = 'CREATE DATABASE `:name` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;';
+        // $this->params['name'] = $name;
+        $this->queryTemplate = "CREATE DATABASE {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
 
         return $this;
     }
@@ -101,9 +106,8 @@ class QueryBuilder
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        $this->statement = $this::TYPE_CREATE;
         $this->queryTemplate = 'CREATE TABLE IF NOT EXISTS :name;';
-        $this->params['name'] = $name;
+        $this->params[':name'] = $name;
 
         return $this;
     }
@@ -114,9 +118,9 @@ class QueryBuilder
      * @param string $name
      *
      * @throws Exception
-     * @return QueryBuilder
+     * @return bool
      */
-    public function drop(string $type, string $name): self
+    public function drop(string $type, string $name): bool
     {
         //TODO@kodumbeats with PHP8.1, use enums
         if ($type !== self::TYPE_DATABASE && $type !== self::TYPE_TABLE) {
@@ -127,11 +131,11 @@ class QueryBuilder
             throw new Exception('Multiple statements detected - not supported yet');
         }
 
-        $this->statement = $this::TYPE_DROP;
-        $this->queryTemplate = "{$this->statement} {$type} :name;";
-        $this->params['name'] = $name;
+        // $this->queryTemplate = "{$this->statement} {$type} :name;";
+        // $this->params['name'] = $name;
+        $this->queryTemplate = "{$this->statement} {$type} {$name};";
 
-        return $this;
+        return $this->execute();
     }
 
     /**
@@ -141,16 +145,18 @@ class QueryBuilder
      * @throws Exception
      * @return QueryBuilder
      */
-    public function from(string $table, string $key = '*'): self
+    public function from(string $table, string $thing = '*'): self
     {
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
 
-        $this->statement = self::TYPE_SELECT;
-        $this->queryTemplate = 'SELECT :key FROM :table;';
-        $this->params['key'] = $key;
-        $this->params['table'] = $table;
+        if ($thing === '*') {
+            $this->queryTemplate = "SELECT * FROM {$table};";
+        } else {
+            $this->queryTemplate = "SELECT :thing FROM {$table};";
+            $this->params['thing'] = $thing;
+        }
 
         return $this;
     }
@@ -159,13 +165,22 @@ class QueryBuilder
      * @param string $key
      * @param string $condition
      * @param string $value
+     *
+     * @return QueryBuilder
      */
-    public function where($key, $condition, $value)
+    public function where($key, $condition, $value): self
     {
         // strip trailing semicolon if present
         if (\mb_substr($this->getTemplate(), -1) === ';') {
             $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
         }
+
+        $count = \count($this->getParams());
+        $this->queryTemplate .= " WHERE :key{$count} {$condition} :value{$count};";
+        $this->params["key{$count}"] = $key;
+        $this->params["value{$count}"] = $value;
+
+        return $this;
     }
 
     /**
@@ -191,11 +206,15 @@ class QueryBuilder
 
     /**
      * @throws Exception
+     * @return PDOStatement
      */
-    public function execute()
+    public function execute(): bool
     {
+        var_dump($this->getTemplate(), $this->getParams());
+        $this->statement = $this->pdo->prepare($this->getTemplate());
+
         try {
-            // TODO@kodumbeats prepare PDO statement from template and params and execute
+            return $this->getStatement()->execute($this->getParams());
         } catch (\Throwable $th) {
             throw new Exception($th->getMessage());
         }

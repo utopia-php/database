@@ -10,6 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
+use Utopia\Database\QueryBuilder;
 use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends Adapter
@@ -39,10 +40,9 @@ class MariaDB extends Adapter
     public function create(): bool
     {
         $name = $this->getNamespace();
+        $builder = new QueryBuilder($this->getPDO());
 
-        return $this->getPDO()
-            ->prepare("CREATE DATABASE {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
-            ->execute();
+        return $builder->createDatabase($name)->execute();
     }
 
     /**
@@ -54,16 +54,14 @@ class MariaDB extends Adapter
     {
         $name = $this->getNamespace();
 
-        $stmt = $this->getPDO()
-            ->prepare("SELECT SCHEMA_NAME
-                FROM INFORMATION_SCHEMA.SCHEMATA
-                WHERE SCHEMA_NAME = :schema;");
-            
-        $stmt->bindValue(':schema', $name, PDO::PARAM_STR);
+        $builder = new QueryBuilder($this->getPDO());
+        $builder
+            ->from('INFORMATION_SCHEMA.SCHEMATA')
+            ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name)
+            ->execute();
 
-        $stmt->execute();
-        
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
+        var_dump($document);
 
         return (($document['SCHEMA_NAME'] ?? '') == $name);
     }
@@ -87,10 +85,9 @@ class MariaDB extends Adapter
     public function delete(): bool
     {
         $name = $this->getNamespace();
+        $builder = new QueryBuilder($this->getPDO());
 
-        return $this->getPDO()
-            ->prepare("DROP DATABASE {$name};")
-            ->execute();
+        return $builder->drop(QueryBuilder::TYPE_DATABASE, $name);
     }
 
     /**

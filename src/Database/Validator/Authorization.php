@@ -170,7 +170,7 @@ class Authorization extends Validator
     /**
      * @var bool
      */
-    public $authStatus = null;
+    protected $authStatus = null;
 
     /**
      * Enable Authorization checks for this instance

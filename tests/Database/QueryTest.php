@@ -121,4 +121,26 @@ class QueryTest extends TestCase
         $this->assertContains('Iron Man', $query['values']);
     }
 
+    public function testIsOperator()
+    {
+        $this->assertEquals(true, Query::isOperator('equal'));
+        $this->assertEquals(true, Query::isOperator('notEqual'));
+        $this->assertEquals(true, Query::isOperator('lesser'));
+        $this->assertEquals(true, Query::isOperator('lesserEqual'));
+        $this->assertEquals(true, Query::isOperator('greater'));
+        $this->assertEquals(true, Query::isOperator('greaterEqual'));
+        $this->assertEquals(true, Query::isOperator('contains'));
+        $this->assertEquals(true, Query::isOperator('search'));
+
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_EQUAL));
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_NOTEQUAL));
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_LESSER));
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_LESSEREQUAL));
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_GREATER));
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_GREATEREQUAL));
+        $this->assertEquals(true, Query::isOperator(Query::TYPE_CONTAINS));
+        $this->assertEquals(true, Query::isOperator(QUERY::TYPE_SEARCH));
+
+        $this->assertEquals(false, Query::isOperator('invalid'));
+    }
 }

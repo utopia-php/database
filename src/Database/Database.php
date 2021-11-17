@@ -121,12 +121,12 @@ class Database
     static protected $filters = [];
 
     /**
-     * @var Utopia\Database\Validator\Authorization
+     * @var \Utopia\Database\Validator\Authorization
      */
     protected $read;
 
     /**
-     * @var Utopia\Database\Validator\Authorization
+     * @var \Utopia\Database\Validator\Authorization
      */
     protected $write;
 

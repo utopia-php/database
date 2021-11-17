@@ -121,6 +121,32 @@ class Database
     static protected $filters = [];
 
     /**
+     * @var Utopia\Database\Validator\Authorization
+     */
+    protected $read;
+
+    /**
+     * @var Utopia\Database\Validator\Authorization
+     */
+    protected $write;
+
+    /**
+     * Get read authorization
+     */
+    public function getRead()
+    {
+        return $this->read;
+    }
+
+    /**
+     * Get write authorization
+     */
+    public function getWrite()
+    {
+        return $this->write;
+    }
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
@@ -128,6 +154,8 @@ class Database
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        $this->read = new Authorization(self::PERMISSION_READ);
+        $this->write = new Authorization(self::PERMISSION_WRITE);
 
         self::addFilter('json',
             /**
@@ -665,7 +693,7 @@ class Database
         // TODO@kodumbeats Check if returned cache id matches request
         if ($cache = $this->cache->load('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, self::TTL)) {
             $document = new Document($cache);
-            $validator = new Authorization(self::PERMISSION_READ);
+            $validator = $this->read;
 
             if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
                 return new Document();
@@ -678,7 +706,7 @@ class Database
 
         $document->setAttribute('$collection', $collection->getId());
 
-        $validator = new Authorization(self::PERMISSION_READ);
+        $validator = $this->read;
 
         if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
             return new Document();
@@ -709,7 +737,7 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $validator = new Authorization(self::PERMISSION_WRITE);
+        $validator = $this->write;
 
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -760,7 +788,7 @@ class Database
         // $data['$id'] = $old->getId();
         // $data['$collection'] = $old->getCollection();
 
-        $validator = new Authorization('write');
+        $validator = $this->write;
 
         if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -800,7 +828,7 @@ class Database
     {
         $document = $this->getDocument($collection, $id);
 
-        $validator = new Authorization('write');
+        $validator = $this->write;
 
         if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());

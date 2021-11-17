@@ -1277,6 +1277,39 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testReadPermissionsSuccess
+     */
+    public function testPermissionDisableClone() {
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        $this->assertEquals(false, $document->isEmpty());
+
+        $database = clone static::getDatabase();
+        $database->getRead()->disableAuth();
+        Authorization::cleanRoles();
+
+        $document = $database->getDocument($document->getCollection(), $document->getId());
+
+        $this->assertEquals(false, $document->isEmpty());
+
+        $document1 = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
+
+        $this->assertEquals(true, $document1->isEmpty());
+        
+        Authorization::setRole('role:all');
+
+        return $document;
+    }
+
+    /**
      * @depends testCreateDocument
      */
     public function testReadPermissionsFailure(Document $document)
@@ -1312,6 +1345,42 @@ abstract class Base extends TestCase
         ]));
 
         $this->assertEquals(false, $document->isEmpty());
+
+        return $document;
+    }
+    /**
+     * @depends testWritePermissionsSuccess
+     */
+    public function testWritePermissionsCloneSuccess(Document $document)
+    {
+        $database = clone static::getDatabase();
+        $database->getWrite()->disableAuth();
+        
+        Authorization::cleanRoles();
+        $document = $database->createDocument('documents', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        $this->assertEquals(false, $document->isEmpty());
+
+        $this->expectException(ExceptionAuthorization::class);
+
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'string' => 'text📝',
+            'integer' => 5,
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
 
         return $document;
     }

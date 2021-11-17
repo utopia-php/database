@@ -198,6 +198,12 @@ class Database
         );
     }
 
+    public function __clone()
+    {
+        $this->read = clone $this->read;
+        $this->write = clone $this->write;
+    }
+
     /**
      * Set Namespace.
      *

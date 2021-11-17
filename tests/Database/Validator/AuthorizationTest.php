@@ -50,24 +50,24 @@ class AuthorizationTest extends TestCase
         $this->assertEquals($object->isValid($document->getRead()), true);
         
         Authorization::cleanRoles();
-        Authorization::disable();
+        $object->disable();
         
         $this->assertEquals($object->isValid($document->getRead()), true);
 
-        Authorization::reset();
+        $object->reset();
         
         $this->assertEquals($object->isValid($document->getRead()), false);
 
         Authorization::setDefaultStatus(false);
-        Authorization::disable();
+        $object->disable();
         
         $this->assertEquals($object->isValid($document->getRead()), true);
 
-        Authorization::reset();
+        $object->reset();
         
         $this->assertEquals($object->isValid($document->getRead()), true);
 
-        Authorization::enable();
+        $object->enable();
         
         $this->assertEquals($object->isValid($document->getRead()), false);
 

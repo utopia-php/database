@@ -369,11 +369,9 @@ class Database
      */
     public function listCollections($limit = 25, $offset = 0): array
     {
-        Authorization::disable();
-
-        $result = $this->find(self::METADATA, [], $limit, $offset);
-
-        Authorization::reset();
+        $result = Authorization::skip(function() use ($limit, $offset) {
+            return $this->find(self::METADATA, [], $limit, $offset);
+        });
 
         return $result;
     }

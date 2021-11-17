@@ -160,9 +160,9 @@ class Authorization extends Validator
      */
     public static function skip(callable $callback)
     {
-        self::disable();
+        self::$status = false;
         $result = $callback();
-        self::reset();
+        self::$status = self::$statusDefault;
 
         return $result;
     }
@@ -177,7 +177,7 @@ class Authorization extends Validator
      * 
      * @return void
      */
-    public function disableAuth(): void
+    public function disable(): void
     {
         $this->authStatus = false;
     }
@@ -187,39 +187,19 @@ class Authorization extends Validator
      * 
      * @return void
      */
-    public function enableAuth(): void
+    public function enable(): void
     {
         $this->authStatus = true;
     }
 
     /**
-     * Enable Authorization checks
-     * 
-     * @return void
-     */
-    public static function enable(): void
-    {
-        self::$status = true;
-    }
-
-    /**
      * Disable Authorization checks
      * 
      * @return void
      */
-    public static function disable(): void
+    public function reset(): void
     {
-        self::$status = false;
-    }
-
-    /**
-     * Disable Authorization checks
-     * 
-     * @return void
-     */
-    public static function reset(): void
-    {
-        self::$status = self::$statusDefault;
+        $this->authStatus = self::$statusDefault;
     }
 
     /**

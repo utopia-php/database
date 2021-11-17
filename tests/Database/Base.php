@@ -37,7 +37,6 @@ abstract class Base extends TestCase
 
     public function tearDown(): void
     {
-        Authorization::reset();
     }
 
     public function testCreateExistsDelete()
@@ -976,15 +975,15 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
         
-        Authorization::disable();
-        $count = static::getDatabase()->count('movies');
+        $count = Authorization::skip(function() {
+            return static::getDatabase()->count('movies');
+        });
         $this->assertEquals(6, $count);
-        Authorization::reset();
         
-        Authorization::disable();
-        $count = static::getDatabase()->count('movies', [], 3);
+        $count = Authorization::skip(function() {
+            return static::getDatabase()->count('movies', [], 3);
+        });
         $this->assertEquals(3, $count);
-        Authorization::reset();
     }
 
     /**
@@ -1293,7 +1292,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $document->isEmpty());
 
         $database = clone static::getDatabase();
-        $database->getRead()->disableAuth();
+        $database->getRead()->disable();
         Authorization::cleanRoles();
 
         $document = $database->getDocument($document->getCollection(), $document->getId());
@@ -1354,7 +1353,7 @@ abstract class Base extends TestCase
     public function testWritePermissionsCloneSuccess(Document $document)
     {
         $database = clone static::getDatabase();
-        $database->getWrite()->disableAuth();
+        $database->getWrite()->disable();
         
         Authorization::cleanRoles();
         $document = $database->createDocument('documents', new Document([

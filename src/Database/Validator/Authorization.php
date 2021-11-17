@@ -57,6 +57,10 @@ class Authorization extends Validator
             return true;
         }
 
+        if($this->authStatus !== null && $this->authStatus === false) {
+            return true;
+        }
+
         if(empty($permissions)) {
             $this->message = 'No permissions provided for action \''.$this->action.'\'';
             return false;
@@ -161,6 +165,31 @@ class Authorization extends Validator
         self::reset();
 
         return $result;
+    }
+
+    /**
+     * @var bool
+     */
+    public $authStatus = null;
+
+    /**
+     * Enable Authorization checks for this instance
+     * 
+     * @return void
+     */
+    public function disableAuth(): void
+    {
+        $this->authStatus = false;
+    }
+
+    /**
+     * Disable Authorization checks for this instance
+     * 
+     * @return void
+     */
+    public function enableAuth(): void
+    {
+        $this->authStatus = true;
     }
 
     /**

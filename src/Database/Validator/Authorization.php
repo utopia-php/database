@@ -57,7 +57,7 @@ class Authorization extends Validator
             return true;
         }
 
-        if($this->authStatus !== null && $this->authStatus === false) {
+        if(!$this->authStatus) {
             return true;
         }
 
@@ -128,6 +128,11 @@ class Authorization extends Validator
      * @var bool
      */
     public static $status = true;
+
+    /**
+     * @var bool
+     */
+    protected $authStatus = true;
     
     /**
      * Default value in case we need
@@ -166,11 +171,6 @@ class Authorization extends Validator
 
         return $result;
     }
-
-    /**
-     * @var bool
-     */
-    protected $authStatus = null;
 
     /**
      * Enable Authorization checks for this instance

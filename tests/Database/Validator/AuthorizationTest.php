@@ -68,6 +68,7 @@ class AuthorizationTest extends TestCase
         $this->assertEquals($object->isValid($document->getRead()), true);
 
         $object->enable();
+        Authorization::setDefaultStatus(true);
         
         $this->assertEquals($object->isValid($document->getRead()), false);
 

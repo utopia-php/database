@@ -121,27 +121,31 @@ class Database
     static protected $filters = [];
 
     /**
-     * @var \Utopia\Database\Validator\Authorization
+     * @var Authorization
      */
-    protected $read;
+    protected Authorization $read;
 
     /**
-     * @var \Utopia\Database\Validator\Authorization
+     * @var Authorization
      */
-    protected $write;
+    protected Authorization $write;
 
     /**
      * Get read authorization
+     * 
+     * @return Authorization
      */
-    public function getRead()
+    public function getRead(): Authorization
     {
         return $this->read;
     }
 
     /**
      * Get write authorization
+     * 
+     * @return Authorization
      */
-    public function getWrite()
+    public function getWrite(): Authorization
     {
         return $this->write;
     }

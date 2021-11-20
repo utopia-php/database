@@ -302,6 +302,7 @@ class QueryBuilder
         $count = \count($this->getParams());
 
         $key = $this->filter($key);
+        $condition = $this->getSQLOperator($condition);
         $this->queryTemplate .= " WHERE {$key} {$condition} :value{$count};";
         $this->params[":value{$count}"] = $value;
 
@@ -433,6 +434,46 @@ class QueryBuilder
 
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
+            break;
+        }
+    }
+
+    /**
+     * Get SQL Operator
+     *
+     * @param string $operator
+     *
+     * @return string
+     */
+    protected function getSQLOperator(string $operator): string
+    {
+        switch ($operator) {
+            case Query::TYPE_EQUAL:
+                return '=';
+            break;
+
+            case Query::TYPE_NOTEQUAL:
+                return '!=';
+            break;
+
+            case Query::TYPE_LESSER:
+                return '<';
+            break;
+
+            case Query::TYPE_LESSEREQUAL:
+                return '<=';
+            break;
+
+            case Query::TYPE_GREATER:
+                return '>';
+            break;
+
+            case Query::TYPE_GREATEREQUAL:
+                return '>=';
+            break;
+
+            default:
+                throw new Exception('Unknown Operator:' . $operator);
             break;
         }
     }

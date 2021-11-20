@@ -57,7 +57,7 @@ class MariaDB extends Adapter
         $builder = new QueryBuilder($this->getPDO());
         $builder
             ->from('INFORMATION_SCHEMA.SCHEMATA', ['SCHEMA_NAME'])
-            ->where('SCHEMA_NAME', $this->getSQLOperator(Query::TYPE_EQUAL), $name)
+            ->where('SCHEMA_NAME', Query::TYPE_EQUAL, $name)
             ->execute();
 
         $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
@@ -302,7 +302,7 @@ class MariaDB extends Adapter
         $builder = new QueryBuilder($this->getPDO());
         $builder
             ->from("{$this->getNamespace()}.{$name}")
-            ->where('_uid', $this->getSQLOperator(Query::TYPE_EQUAL), $id)
+            ->where('_uid', Query::TYPE_EQUAL, $id)
             ->one()
             ->execute();
 
@@ -474,7 +474,7 @@ class MariaDB extends Adapter
 
         return $builder
             ->deleteFrom("{$this->getNamespace()}.{$name}")
-            ->where('_uid', $this->getSQLOperator(Query::TYPE_EQUAL), $id)
+            ->where('_uid', Query::TYPE_EQUAL, $id)
             ->one()
             ->execute();
     }

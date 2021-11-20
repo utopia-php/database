@@ -60,7 +60,8 @@ class MariaDB extends Adapter
             ->where('SCHEMA_NAME', Query::TYPE_EQUAL, $name)
             ->execute();
 
-        $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
+        /** @var array $document */
+        $document = $builder->fetch();
 
         return (($document['SCHEMA_NAME'] ?? '') == $name);
     }
@@ -296,7 +297,7 @@ class MariaDB extends Adapter
             ->execute();
 
         /** @var array $document */
-        $document = $builder->getStatement()->fetch(PDO::FETCH_ASSOC);
+        $document = $builder->fetch();
 
         if(empty($document)) {
             return new Document([]);

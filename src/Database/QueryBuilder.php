@@ -74,6 +74,16 @@ class QueryBuilder
     }
 
     /**
+     * @param int $mode PDO fetch mode, defaults to PDO::FETCH_ASSOC
+     *
+     * @return PDOStatement
+     */
+    public function fetch(int $mode = PDO::FETCH_ASSOC)
+    {
+        return $this->getStatement()->fetch($mode);
+    }
+
+    /**
      * @param string $name
      *
      * @throws Exception

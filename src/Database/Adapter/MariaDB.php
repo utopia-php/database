@@ -248,21 +248,10 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        foreach($attributes as $key => &$attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '('.(int)$length.')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if(Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
-
-            $attribute = "`{$attribute}`{$length} {$order}";
-        }
-
-        return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+        $builder = new QueryBuilder($this->getPDO());
+        return $builder
+            ->createIndex($id, $type)
+            ->createIndexParams("{$this->getNamespace()}.{$name}", $type, $attributes, $lengths, $orders)
             ->execute();
     }
 
@@ -1040,40 +1029,6 @@ class MariaDB extends Adapter
                 throw new Exception('Unknown Index Type:' . $type);
             break;
         }
-    }
-
-    /**
-     * Get SQL Index
-     * 
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * 
-     * @return string
-     */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
-    {
-        switch ($type) {
-            case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
-                $type = 'INDEX';
-            break;
-
-            case Database::INDEX_UNIQUE:
-                $type = 'UNIQUE INDEX';
-            break;
-
-            case Database::INDEX_FULLTEXT:
-                $type = 'FULLTEXT INDEX';
-            break;
-
-            default:
-                throw new Exception('Unknown Index Type:' . $type);
-            break;
-        }
-
-        return 'CREATE '.$type.' '.$id.' ON '.$this->getNamespace().'.'.$collection.' ( '.implode(', ', $attributes).' );';
     }
 
     /**

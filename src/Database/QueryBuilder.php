@@ -179,10 +179,7 @@ class QueryBuilder
      */
     public function addColumn($key, $type): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $this->queryTemplate .= " ADD COLUMN `{$key}` {$type};";
 
@@ -196,12 +193,95 @@ class QueryBuilder
      */
     public function dropColumn($key): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $this->queryTemplate .= " DROP COLUMN `{$key}`;";
+
+        return $this;
+    }
+
+    /**
+     * Index should be created with following syntax
+     * $builder
+     *     ->createIndex($key, $type)
+     *     ->on($builder::createIndexParams($attributes, $lengths, $orders);
+     *
+     * @param string $key
+     * @param string $type
+     *
+     * @return QueryBuilder
+     */
+    public function createIndex($key, $type): self
+    {
+        if ($this->statement) {
+            throw new Exception('Multiple statements detected - not supported yet');
+        }
+
+        switch ($type) {
+            case Database::INDEX_KEY:
+            case Database::INDEX_ARRAY:
+                $type = 'INDEX';
+                break;
+            case Database::INDEX_UNIQUE:
+                $type = 'UNIQUE INDEX';
+                break;
+            case Database::INDEX_FULLTEXT:
+                $type = 'FULLTEXT INDEX';
+                break;
+            default:
+                throw new Exception('Unknown Index Type:' . $type);
+                break;
+        }
+
+        $this->queryTemplate = "CREATE {$type} {$key};";
+
+        return $this;
+    }
+
+    /**
+     * @param string $table
+     * @param string $type
+     * @param string[] $attributes
+     * @param string[] $lengths
+     * @param array $orders
+     *
+     * @return QueryBuilder
+     */
+    public function createIndexParams(string $table, string $type, array $attributes, array $lengths, array $orders): self
+    {
+        foreach($attributes as $i => &$attribute) {
+            $length = $lengths[$i] ?? '';
+            $length = (empty($length)) ? '' : '('.(int)$length.')';
+            $order = $orders[$i] ?? '';
+            $attribute = $this->filter($attribute);
+
+            // TODO@kodumbeats find way to guarantee $orders[$i] will be empty,
+            // then can remove redundant $type param
+            if($type === Database::INDEX_FULLTEXT ) {
+                $order = '';
+            }
+
+            $attribute = "`{$attribute}` {$length} {$order}";
+        }
+
+        return $this->on($table, $attributes);
+    }
+
+    /**
+     * Implodes string[] $values,
+     * and surrounds with parentheses
+     *
+     * @param string $table
+     * @param string[] $values
+     *
+     * @return QueryBuilder
+     */
+    public function on(string $table, array $values): self
+    {
+        $this->stripSemicolon();
+
+        $values = \implode(', ', $values);
+        $this->queryTemplate .= " ON {$table} ($values);";
 
         return $this;
     }
@@ -213,10 +293,7 @@ class QueryBuilder
      */
     public function dropIndex($key): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $this->queryTemplate .= " DROP INDEX `{$key}`;";
 
@@ -281,10 +358,7 @@ class QueryBuilder
      */
     public function set(array $values): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $this->queryTemplate .= " SET ";
 
@@ -311,10 +385,7 @@ class QueryBuilder
      */
     public function where($key, $condition, $value): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $count = \count($this->getParams());
 
@@ -333,10 +404,7 @@ class QueryBuilder
      */
     public function limit(int $limit): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $this->queryTemplate .= " LIMIT {$limit};";
 
@@ -347,10 +415,7 @@ class QueryBuilder
      */
     public function one(): self
     {
-        // strip trailing semicolon if present
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
+        $this->stripSemicolon();
 
         $this->queryTemplate .= " LIMIT 1;";
 
@@ -417,6 +482,17 @@ class QueryBuilder
 
         return $value;
     }
+
+    /**
+     * Strip trailing semicolon from template if present
+     */
+    private function stripSemicolon(): void
+    {
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+    }
+
 
     /**
      * Get PDO Type

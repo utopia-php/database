@@ -84,7 +84,7 @@ class QueryBuilderTest extends TestCase
 
     public function testWhere(): void
     {
-        $this->builder->where('key', '=', 'testValue');
+        $this->builder->where('key', \Utopia\Database\Query::TYPE_EQUAL, 'testValue');
         $this->assertEquals(' WHERE key = :value0;', $this->builder->getTemplate());
         $this->assertArrayHasKey(':value0', $this->builder->getParams());
         $this->assertEquals('testValue', $this->builder->getParams()[':value0']);

@@ -5,6 +5,9 @@ namespace Utopia\Database;
 use Exception;
 use PDO;
 use PDOStatement;
+use PDOException;
+use Throwable;
+use Utopia\Database\Exception\Duplicate;
 
 class QueryBuilder
 {
@@ -233,6 +236,23 @@ class QueryBuilder
         }
 
         $this->queryTemplate = "ALTER TABLE {$table};";
+
+        return $this;
+    }
+
+    /**
+     * @param string $table
+     *
+     * @throws Exception
+     * @return QueryBuilder
+     */
+    public function update(string $table): self
+    {
+        if ($this->statement) {
+            throw new Exception('Multiple statements detected - not supported yet');
+        }
+
+        $this->queryTemplate = "UPDATE {$table};";
 
         return $this;
     }

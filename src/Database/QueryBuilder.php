@@ -74,6 +74,18 @@ class QueryBuilder
     }
 
     /**
+     * @param string $key
+     * @param $value
+     */
+    protected function setParam($key, $value): void
+    {
+        if (\array_key_exists($key, $this->getParams())) {
+            throw new Exception("Cannot set two of the same named param: `{$key}");
+        }
+        $this->params[$key] = $value;
+    }
+
+    /**
      * @param int $mode PDO fetch mode, defaults to PDO::FETCH_ASSOC
      *
      * @return PDOStatement
@@ -141,7 +153,7 @@ class QueryBuilder
 
     /**
      * @param string $table
-     * @param string[] $keys
+     * @param array $keys
      *
      * @throws Exception
      * @return QueryBuilder
@@ -149,9 +161,14 @@ class QueryBuilder
     public function from(string $table, array $keys = ['*']): self
     {
         foreach ($keys as &$key) {
-            if ($key !== '*') {
-                $key = '`'.$this->filter($key).'`';
+            if ($key === '*') { // wildcard
+                continue;
             }
+            if ($key === 1) { // for count
+                continue;
+            }
+
+            $key = '`'.$this->filter($key).'`';
         }
 
         if ($this->statement) {
@@ -181,8 +198,7 @@ class QueryBuilder
         return $this;
     }
 
-    /**
-     * @param string $key
+    /** * @param string $key
      * @param string $type
      *
      * @return QueryBuilder
@@ -375,7 +391,7 @@ class QueryBuilder
         foreach ($values as $key => $value) {
             $key = $this->filter($key);
             $this->queryTemplate .= "`{$key}` = :{$key},";
-            $this->params[":{$key}"] = $value;
+            $this->setParam(":{$key}", $value);
         }
 
         // replace trailing comma with semicolon
@@ -402,9 +418,46 @@ class QueryBuilder
         $key = $this->filter($key);
         $condition = $this->getSQLOperator($condition);
         $this->queryTemplate .= " WHERE {$key} {$condition} :value{$count};";
-        $this->params[":value{$count}"] = $value;
+        $this->setParam(":value{$count}", $value);
 
         return $this;
+    }
+
+     /**
+     * @param string $key
+     * @param string $condition
+     * @param string $value
+     *
+     * @return QueryBuilder
+     */
+    public function and($key, $condition, $value): self
+    {
+        $this->stripSemicolon();
+
+        $count = \count($this->getParams());
+
+        $key = $this->filter($key);
+        $condition = $this->getSQLOperator($condition);
+        $this->queryTemplate .= " AND {$key} {$condition} :value{$count};";
+        $this->setParam(":value{$count}", $value);
+
+        return $this;
+    }
+
+
+     /**
+     * @param string $key
+     * @param string $value
+     *
+     * @return QueryBuilder
+     */
+    public function whereMatch($key, $value): self
+    {
+        $this->stripSemicolon();
+        $this->queryTemplate .= " WHERE MATCH ({$key}) AGAINST ({$value} IN BOOLEAN MODE);";
+
+        return $this;
+
     }
 
     /**
@@ -416,7 +469,8 @@ class QueryBuilder
     {
         $this->stripSemicolon();
 
-        $this->queryTemplate .= " LIMIT {$limit};";
+        $this->queryTemplate .= ' LIMIT :limit;';
+        $this->setParam(':limit', $limit);
 
         return $this;
     }

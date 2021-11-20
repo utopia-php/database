@@ -258,6 +258,34 @@ class QueryBuilder
     }
 
     /**
+     * @param array $values assoc array of columns to update with their values
+     *
+     * @return QueryBuilder
+     */
+    public function set(array $values): self
+    {
+        // strip trailing semicolon if present
+        if (\mb_substr($this->getTemplate(), -1) === ';') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
+        }
+
+        $this->queryTemplate .= " SET ";
+
+        foreach ($values as $key => $value) {
+            $key = $this->filter($key);
+            $this->queryTemplate .= "`{$key}` = :{$key},";
+            $this->params[":{$key}"] = $value;
+        }
+
+        // replace trailing comma with semicolon
+        if (\mb_substr($this->getTemplate(), -1) === ',') {
+            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1) . ';';
+        }
+
+        return $this;
+    }
+
+    /**
      * @param string $key
      * @param string $condition
      * @param string $value

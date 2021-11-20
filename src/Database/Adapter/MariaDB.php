@@ -338,25 +338,7 @@ class MariaDB extends Adapter
     {
         $attributes = $document->getAttributes();
         $name = $this->filter($collection);
-        $columns = '';
-
-        $this->getPDO()->beginTransaction();
-
-        /**
-         * Insert Attributes
-         */
-        foreach ($attributes as $attribute => $value) { // Parse statement
-            $column = $this->filter($attribute);
-            $columns .= "`{$column}`" . '=:' . $column . ',';
-        }
-
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
-                SET {$columns} _uid = :_uid, _read = :_read, _write = :_write");
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
-        $stmt->bindValue(':_write', json_encode($document->getWrite()), PDO::PARAM_STR);
+        $columns = [];
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -365,28 +347,19 @@ class MariaDB extends Adapter
 
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $columns[$attribute] = $value;
         }
 
-        try {
-            $stmt->execute();
-        } catch (PDOException $e) {
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    $this->getPDO()->rollBack();
-                    throw new Duplicate('Duplicated document: '.$e->getMessage());
-                    break;
+        $columns['_uid'] = $document->getId();
+        $columns['_read'] = json_encode($document->getRead());
+        $columns['_write'] = json_encode($document->getWrite());
 
-                default:
-                    throw $e;
-                    break;
-            }
-        }
+        $builder = new QueryBuilder($this->getPDO());
 
-        if(!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
-        }
+        $builder
+            ->insertInto("{$this->getNamespace()}.{$name}")
+            ->set($columns)
+            ->execute();
 
         return $document;
     }

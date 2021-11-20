@@ -229,6 +229,23 @@ class QueryBuilder
      * @throws Exception
      * @return QueryBuilder
      */
+    public function insertInto(string $table): self
+    {
+        if ($this->statement) {
+            throw new Exception('Multiple statements detected - not supported yet');
+        }
+
+        $this->queryTemplate = "INSERT INTO {$table};";
+
+        return $this;
+    }
+
+    /**
+     * @param string $table
+     *
+     * @throws Exception
+     * @return QueryBuilder
+     */
     public function alterTable(string $table): self
     {
         if ($this->statement) {

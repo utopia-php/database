@@ -349,10 +349,28 @@ class QueryBuilder
 
         $this->statement = $this->getPDO()->prepare($this->getTemplate());
 
+        foreach ($this->getParams() as $key => $value) {
+            $this->getStatement()->bindValue($key, $value, $this->getPDOType($value));
+        }
+
         try {
-            $this->getStatement()->execute($this->getParams());
-            return $this->getPDO()->commit();
-        } catch (\Throwable $th) {
+            $this->getStatement()->execute();
+            if(!$this->getPDO()->commit()) {
+                throw new Exception('Failed to commit transaction');
+            }
+            return true;
+        } catch (PDOException $e) {
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    $this->getPDO()->rollBack();
+                    throw new Duplicate('Duplicated document: '.$e->getMessage());
+                    break;
+                default:
+                    throw new Exception ($e->getMessage());;
+                    break;
+            }
+        } catch (Throwable $th) {
             $this->getPDO()->rollBack();
             throw new Exception($th->getMessage());
         }
@@ -382,4 +400,40 @@ class QueryBuilder
         return $value;
     }
 
+    /**
+     * Get PDO Type
+     *
+     * @param mixed $value
+     *
+     * @return int
+     */
+    protected function getPDOType($value): int
+    {
+        switch (gettype($value)) {
+            case 'string':
+                return PDO::PARAM_STR;
+            break;
+
+            case 'boolean':
+                return PDO::PARAM_INT;
+            break;
+
+            //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
+            case 'double':
+                return PDO::PARAM_STR;
+            break;
+
+            case 'integer':
+                return PDO::PARAM_INT;
+            break;
+
+            case 'NULL':
+                return PDO::PARAM_NULL;
+            break;
+
+            default:
+                throw new Exception('Unknown PDO Type for ' . gettype($value));
+            break;
+        }
+    }
 }

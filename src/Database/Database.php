@@ -1174,13 +1174,14 @@ class Database
     }
 
     /**
-     * Get 13 Chars Unique ID.
+     * Get Unique ID of varying length
      * 
      * @return string
      */
-    public function getId(): string
+    public function getId(int $length = 13): string
     {
-        return \uniqid();
+        $bytes = \random_bytes(\ceil($length / 2)); // one byte expands to two chars
+        return \substr(\bin2hex($bytes), 0, $length);
     }
 
     /**

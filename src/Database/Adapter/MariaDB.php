@@ -654,7 +654,8 @@ class MariaDB extends Adapter
                 $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
 
-            $where[] = implode(' OR ', $conditions);
+            $condition = implode(' OR ', $conditions);
+            $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
         $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main

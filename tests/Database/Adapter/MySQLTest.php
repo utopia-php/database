@@ -57,10 +57,10 @@ class MySQLTest extends Base
             return self::$database;
         }
 
-        $dbHost = 'mysql';
-        $dbPort = '3307';
-        $dbUser = 'root';
-        $dbPass = 'password';
+        $dbHost = getenv('MYSQL_HOST') ?: 'mysql';
+        $dbPort = getenv('MYSQL_PORT') ?: '3307';
+        $dbUser = getenv('MYSQL_USER') ?: 'root';
+        $dbPass = getenv('MYSQL_PASS') ?: 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, array(
             PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
@@ -72,8 +72,10 @@ class MySQLTest extends Base
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);   // Return arrays
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);        // Handle all errors with exceptions
 
+        $redisHost = getenv('REDIS_HOST') ?: 'redis';
+
         $redis = new Redis();
-        $redis->connect('redis', 6379);
+        $redis->connect($redisHost, 6379);
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 

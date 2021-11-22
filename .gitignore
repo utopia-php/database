@@ -1,3 +1,5 @@
+.hatch
+.envrc
 /vendor/
 /.idea/
 .DS_Store

@@ -49,16 +49,18 @@ class MongoDBTest extends Base
         }
 
         $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-        $client = new Client('mongodb://mongo/',
+        $client = new Client('mongodb://'.(getenv('MONGO_HOST') ?: 'mongo').'/',
             [
-                'username' => 'root',
-                'password' => 'example',
+                'username' => getenv('MONGO_USER') ?: 'root',
+                'password' => getenv('MONGO_PASS') ?: 'example',
             ],
             $options
         );
 
+        $redisHost = getenv('REDIS_HOST') ?: 'redis';
+
         $redis = new Redis();
-        $redis->connect('redis', 6379);
+        $redis->connect($redisHost, 6379);
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 

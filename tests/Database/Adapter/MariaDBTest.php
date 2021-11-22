@@ -48,10 +48,10 @@ class MariaDBTest extends Base
             return self::$database;
         }
 
-        $dbHost = 'mariadb';
-        $dbPort = '3306';
-        $dbUser = 'root';
-        $dbPass = 'password';
+        $dbHost = getenv('MARIA_HOST') ?: 'mariadb';
+        $dbPort = getenv('MARIA_PORT') ?: '3307';
+        $dbUser = getenv('MARIA_USER') ?: 'root';
+        $dbPass = getenv('MARIA_PASS') ?: 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
             PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
@@ -61,8 +61,10 @@ class MariaDBTest extends Base
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         ]);
 
+        $redisHost = getenv('REDIS_HOST') ?: 'redis';
+
         $redis = new Redis();
-        $redis->connect('redis', 6379);
+        $redis->connect($redisHost, 6379);
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 

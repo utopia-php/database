@@ -1,7 +1,19 @@
 <?xml version="1.0"?>
-<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" backupGlobals="false" backupStaticAttributes="false" bootstrap="vendor/autoload.php" colors="true" convertErrorsToExceptions="true" convertNoticesToExceptions="true" convertWarningsToExceptions="true" processIsolation="false" stopOnFailure="false" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd">
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+  backupGlobals="false" 
+  backupStaticAttributes="false" 
+  bootstrap="vendor/autoload.php" 
+  colors="true" 
+  convertErrorsToExceptions="true" 
+  convertNoticesToExceptions="true" 
+  convertWarningsToExceptions="true" 
+  processIsolation="false" 
+  stopOnFailure="false" 
+  xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd"
+>
   <coverage processUncoveredFiles="true">
     <include>
+      <directory suffix=".php">./src/</directory>
       <directory suffix=".php">./tests/</directory>
     </include>
   </coverage>

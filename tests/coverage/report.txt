@@ -1,10 +1,48 @@
 
 
-Code Coverage Report:  
-  2021-11-22 21:06:19  
-                       
- Summary:              
-  Classes:        (0/0)
-  Methods:        (0/0)
-  Lines:          (0/0)
+Code Coverage Report:        
+  2021-11-22 21:27:50        
+                             
+ Summary:                    
+  Classes:  6.67% (1/15)     
+  Methods: 63.37% (128/202)  
+  Lines:   89.40% (1290/1443)
 
+Utopia\Database\Adapter
+  Methods:   0.00% ( 0/ 6)   Lines:  50.00% (  8/ 16)
+Utopia\Database\Adapter\MariaDB
+  Methods:  69.05% (29/42)   Lines:  92.44% (367/397)
+Utopia\Database\Adapter\MongoDB
+  Methods:  69.23% (27/39)   Lines:  88.00% (220/250)
+Utopia\Database\Adapter\MySQL
+  Methods:  60.00% ( 3/ 5)   Lines:  72.41% ( 21/ 29)
+Utopia\Database\Database
+  Methods:  60.00% (21/35)   Lines:  90.03% (307/341)
+Utopia\Database\Document
+  Methods:  81.25% (13/16)   Lines:  94.00% ( 94/100)
+Utopia\Database\Exception\Authorization
+  Methods:  ( 0/ 0)   Lines:  (  0/  0)
+Utopia\Database\Exception\Duplicate
+  Methods:  ( 0/ 0)   Lines:  (  0/  0)
+Utopia\Database\Exception\Limit
+  Methods:  ( 0/ 0)   Lines:  (  0/  0)
+Utopia\Database\Exception\Structure
+  Methods:  ( 0/ 0)   Lines:  (  0/  0)
+Utopia\Database\Query
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 53/ 53)
+Utopia\Database\Validator\Authorization
+  Methods:  86.67% (13/15)   Lines:  94.59% ( 35/ 37)
+Utopia\Database\Validator\DocumentId
+  Methods:   0.00% ( 0/ 5)   Lines:   0.00% (  0/ 12)
+Utopia\Database\Validator\Key
+  Methods:  50.00% ( 2/ 4)   Lines:  84.62% ( 11/ 13)
+Utopia\Database\Validator\Permissions
+  Methods:  50.00% ( 2/ 4)   Lines:  96.61% ( 57/ 59)
+Utopia\Database\Validator\Queries
+  Methods:  57.14% ( 4/ 7)   Lines:  87.50% ( 28/ 32)
+Utopia\Database\Validator\QueryValidator
+  Methods:  60.00% ( 3/ 5)   Lines:  90.91% ( 20/ 22)
+Utopia\Database\Validator\Structure
+  Methods:  30.00% ( 3/10)   Lines:  85.19% ( 69/ 81)
+Utopia\Database\Validator\UID
+  Methods:   0.00% ( 0/ 1)   Lines:   0.00% (  0/  1)

@@ -1182,14 +1182,14 @@ class Database
      */
     public function getId(int $padding = 0): string
     {
-        $padding = '';
+        $uniqid = \uniqid();
 
         if ($padding > 0) {
             $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
-            $padding = \substr(\bin2hex($bytes), 0, $padding);
+            $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
         }
 
-        return \uniqid() . $padding;
+        return $uniqid;
     }
 
     /**

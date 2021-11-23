@@ -49,7 +49,7 @@ class MariaDBTest extends Base
         }
 
         $dbHost = getenv('MARIA_HOST') ?: 'mariadb';
-        $dbPort = getenv('MARIA_PORT') ?: '3307';
+        $dbPort = getenv('MARIA_PORT') ?: '3306';
         $dbUser = getenv('MARIA_USER') ?: 'root';
         $dbPass = getenv('MARIA_PASS') ?: 'password';
 

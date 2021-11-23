@@ -89,6 +89,28 @@ class Query
     }
 
     /**
+     * Check if operator is supported
+     *
+     * @return bool
+     */
+    public static function isOperator($value): bool
+    {
+        switch ($value) {
+            case self::TYPE_EQUAL:
+            case self::TYPE_NOTEQUAL:
+            case self::TYPE_LESSER:
+            case self::TYPE_LESSEREQUAL:
+            case self::TYPE_GREATER:
+            case self::TYPE_GREATEREQUAL:
+            case self::TYPE_CONTAINS:
+            case self::TYPE_SEARCH:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
      * Parse query filter
      *
      * @param string $filter 

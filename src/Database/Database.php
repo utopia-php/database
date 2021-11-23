@@ -135,7 +135,7 @@ class Database
      * 
      * @return Authorization
      */
-    public function getRead(): Authorization
+    public function getReadValidator(): Authorization
     {
         return $this->read;
     }

@@ -53,11 +53,9 @@ RUN \
   && ./configure \
   && make && make install
 
-FROM php:8.0-cli-alpine as final
+FROM compile as final
 
 LABEL maintainer="team@appwrite.io"
-
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /usr/src/code
 
@@ -72,7 +70,7 @@ RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
 RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
-COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/yasd.so* /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
+COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20200930/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 COPY --from=mongodb /usr/local/lib/php/extensions/no-debug-non-zts-20200930/mongodb.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 

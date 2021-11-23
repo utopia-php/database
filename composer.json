@@ -22,7 +22,7 @@
         "psr-4": {"Utopia\\Tests\\": "tests/Database"}
     },
     "require": {
-        "php": ">=7.1",
+        "php": ">=8.0",
         "ext-pdo": "*",
         "ext-redis": "*",
         "ext-mongodb": "*",

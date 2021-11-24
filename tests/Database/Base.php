@@ -1312,7 +1312,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $document->isEmpty());
 
         $database = clone static::getDatabase();
-        $database->getRead()->disable();
+        $database->getReadValidator()->disable();
         Authorization::cleanRoles();
 
         $document = $database->getDocument($document->getCollection(), $document->getId());
@@ -1373,7 +1373,7 @@ abstract class Base extends TestCase
     public function testWritePermissionsCloneSuccess(Document $document)
     {
         $database = clone static::getDatabase();
-        $database->getWrite()->disable();
+        $database->getWriteValidator()->disable();
         
         Authorization::cleanRoles();
         $document = $database->createDocument('documents', new Document([

@@ -145,7 +145,7 @@ class Database
      * 
      * @return Authorization
      */
-    public function getWrite(): Authorization
+    public function getWriteValidator(): Authorization
     {
         return $this->write;
     }

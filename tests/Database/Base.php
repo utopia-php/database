@@ -1680,4 +1680,15 @@ abstract class Base extends TestCase
     {
         $this->assertEquals(61, $this->getDatabase()->getIndexLimit());
     }
+
+    public function testGetId()
+    {
+        $this->assertEquals(13, strlen($this->getDatabase()->getId()));
+        $this->assertEquals(13, strlen($this->getDatabase()->getId(0)));
+        $this->assertEquals(13, strlen($this->getDatabase()->getId(-1)));
+        $this->assertEquals(23, strlen($this->getDatabase()->getId(10)));
+
+        // ensure two sequential calls to getId do not give the same result
+        $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
+    }
 }

@@ -1683,7 +1683,7 @@ abstract class Base extends TestCase
 
     public function testGetId()
     {
-        $this->assertEquals(13, strlen($this->getDatabase()->getId()));
+        $this->assertEquals(20, strlen($this->getDatabase()->getId()));
         $this->assertEquals(13, strlen($this->getDatabase()->getId(0)));
         $this->assertEquals(13, strlen($this->getDatabase()->getId(-1)));
         $this->assertEquals(23, strlen($this->getDatabase()->getId(10)));

@@ -1180,7 +1180,7 @@ class Database
      *
      * @return string
      */
-    public function getId(int $padding = 0): string
+    public function getId(int $padding = 7): string
     {
         $uniqid = \uniqid();
 

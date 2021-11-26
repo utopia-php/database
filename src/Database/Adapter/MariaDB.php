@@ -616,40 +616,35 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $builder = new QueryBuilder($this->getPDO());
+        $builder->from("{$this->getNamespace()}.{$name} table_main", [$attribute]);
 
-        foreach($queries as $i => $query) {
-            $conditions = [];
-            foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
-            }
-
-            $where[] = implode(' OR ', $conditions);
+        if (Authorization::$status) { // Skip permission check when no authorization required
+            $builder->whereMatch('table_main._read', $this->getPermissions($roles));
+        } else {
+            $builder->where(1, Query::TYPE_EQUAL, 1);
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum FROM (SELECT {$attribute} FROM {$this->getNamespace()}.{$name} table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
-            {$limit}) table_count
-        ");
-
-        foreach($queries as $i => $query) {
-            if($query->getOperator() === Query::TYPE_SEARCH) continue;
-            foreach($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
-            }
+        foreach ($queries as $query) {
+            $count = \count($query->getValues());
+            $builder->or(
+                \array_fill(0, $count, 'table_main.' . $query->getAttribute()),
+                \array_fill(0, $count, $query->getOperator()),
+                $query->getValues(),
+            );
         }
 
         if($max !== 0) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+            $builder->limit($max);
         }
 
-        $stmt->execute();
+        $builder
+            ->sum($attribute)
+            ->execute()
+        ;
 
-        /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $builder->fetch();
 
         return $result['sum'] ?? 0;
     }

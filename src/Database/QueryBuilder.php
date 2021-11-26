@@ -486,6 +486,7 @@ class QueryBuilder
         return $this;
 
     }
+
     /**
      * @return QueryBuilder
      */
@@ -498,6 +499,24 @@ class QueryBuilder
         $this->stripSemicolon();
 
         $this->queryTemplate = "SELECT COUNT(1) as sum FROM ({$this->queryTemplate}) table_count;";
+
+        return $this;
+    }
+
+    /**
+     * @param string $attribute
+     *
+     * @return QueryBuilder
+     */
+    public function sum($attribute): self
+    {
+        if ($this->getTemplate() === '') {
+            throw new Exception('Count method must be executed after logic');
+        }
+
+        $this->stripSemicolon();
+
+        $this->queryTemplate = "SELECT SUM({$attribute}) as sum FROM ({$this->queryTemplate}) table_count;";
 
         return $this;
     }

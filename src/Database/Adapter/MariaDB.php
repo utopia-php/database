@@ -238,9 +238,9 @@ class MariaDB extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param string[] $attributes
+     * @param int[] $lengths
+     * @param string[] $orders
      * 
      * @return bool
      */
@@ -249,10 +249,25 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        foreach($attributes as $i => &$attribute) {
+            $length = $lengths[$i] ?? '';
+            $length = (empty($length)) ? '' : '('.(int)$length.')';
+            $order = $orders[$i] ?? '';
+            $attribute = $this->filter($attribute);
+
+            if($type === Database::INDEX_FULLTEXT ) {
+                $order = '';
+                $length = '';
+            }
+
+            $attribute = "`{$attribute}` {$length} {$order}";
+        }
+
         $builder = new QueryBuilder($this->getPDO());
         return $builder
             ->createIndex($id, $type)
-            ->createIndexParams("{$this->getNamespace()}.{$name}", $type, $attributes, $lengths, $orders)
+            ->on("{$this->getNamespace()}.{$name}")
+            ->group($attributes)
             ->execute();
     }
 

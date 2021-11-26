@@ -227,11 +227,6 @@ class QueryBuilder
     }
 
     /**
-     * Index should be created with following syntax
-     * $builder
-     *     ->createIndex($key, $type)
-     *     ->on($builder::createIndexParams($attributes, $lengths, $orders);
-     *
      * @param string $key
      * @param string $type
      *
@@ -266,48 +261,14 @@ class QueryBuilder
 
     /**
      * @param string $table
-     * @param string $type
-     * @param string[] $attributes
-     * @param string[] $lengths
-     * @param array $orders
      *
      * @return QueryBuilder
      */
-    public function createIndexParams(string $table, string $type, array $attributes, array $lengths, array $orders): self
-    {
-        foreach($attributes as $i => &$attribute) {
-            $length = $lengths[$i] ?? '';
-            $length = (empty($length)) ? '' : '('.(int)$length.')';
-            $order = $orders[$i] ?? '';
-            $attribute = $this->filter($attribute);
-
-            // TODO@kodumbeats find way to guarantee $orders[$i] will be empty,
-            // then can remove redundant $type param
-            if($type === Database::INDEX_FULLTEXT ) {
-                $order = '';
-            }
-
-            $attribute = "`{$attribute}` {$length} {$order}";
-        }
-
-        return $this->on($table, $attributes);
-    }
-
-    /**
-     * Implodes string[] $values,
-     * and surrounds with parentheses
-     *
-     * @param string $table
-     * @param string[] $values
-     *
-     * @return QueryBuilder
-     */
-    public function on(string $table, array $values): self
+    public function on(string $table): self
     {
         $this->stripSemicolon();
 
-        $values = \implode(', ', $values);
-        $this->queryTemplate .= " ON {$table} ($values);";
+        $this->queryTemplate .= " ON {$table};";
 
         return $this;
     }
@@ -468,6 +429,24 @@ class QueryBuilder
 
         }
         $this->queryTemplate .= ' AND (' . \implode(' OR ', $or) . ');';
+
+        return $this;
+    }
+
+    /**
+     * Surround value with parentheses
+     *
+     * @param array $values
+     *
+     * @return QueryBuilder
+     */
+    public function group(array $values): self
+    {
+        $this->stripSemicolon();
+
+        $values = \implode(', ', $values);
+
+        $this->queryTemplate .= " ({$values});";
 
         return $this;
     }

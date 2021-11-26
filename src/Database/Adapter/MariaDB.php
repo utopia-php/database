@@ -558,7 +558,7 @@ class MariaDB extends Adapter
      * Count data set size using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param Query[] $queries
      * @param int $max
      *
      * @return int
@@ -567,40 +567,35 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $builder = new QueryBuilder($this->getPDO());
+        $builder->from("{$this->getNamespace()}.{$name} table_main", [1]);
 
-        foreach($queries as $i => $query) {
-            $conditions = [];
-            foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
-            }
-
-            $where[] = implode(' OR ', $conditions);
+        if (Authorization::$status) { // Skip permission check when no authorization required
+            $builder->whereMatch('table_main._read', $this->getPermissions($roles));
+        } else {
+            $builder->where(1, Query::TYPE_EQUAL, 1);
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
-            {$limit}) table_count
-        ");
-
-        foreach($queries as $i => $query) {
-            if($query->getOperator() === Query::TYPE_SEARCH) continue;
-            foreach($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
-            }
+        foreach ($queries as $query) {
+            $count = \count($query->getValues());
+            $builder->or(
+                \array_fill(0, $count, 'table_main.' . $query->getAttribute()),
+                \array_fill(0, $count, $query->getOperator()),
+                $query->getValues(),
+            );
         }
 
         if($max !== 0) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+            $builder->limit($max);
         }
 
-        $stmt->execute();
+        $builder
+            ->count()
+            ->execute()
+        ;
 
-        /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $builder->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -1049,6 +1044,15 @@ class MariaDB extends Adapter
         }
 
         return "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
+    }
+
+    protected function getPermissions(array $roles): string
+    {
+        foreach($roles as &$role) { // Add surrounding quotes after escaping, use + as placeholder after getPDO()->quote()
+            $role = "+".str_replace('+', ' ', $role)."+";
+        }
+
+        return str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)));
     }
 
     /**

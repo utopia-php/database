@@ -88,7 +88,7 @@ class QueryBuilder
     /**
      * @param int $mode PDO fetch mode, defaults to PDO::FETCH_ASSOC
      *
-     * @return PDOStatement
+     * @return array
      */
     public function fetch(int $mode = PDO::FETCH_ASSOC)
     {
@@ -423,7 +423,7 @@ class QueryBuilder
         return $this;
     }
 
-     /**
+    /**
      * @param string $key
      * @param string $condition
      * @param string $value
@@ -438,14 +438,41 @@ class QueryBuilder
 
         $key = $this->filter($key);
         $condition = $this->getSQLOperator($condition);
-        $this->queryTemplate .= " AND {$key} {$condition} :value{$count};";
+        $this->queryTemplate .= " AND ({$key} {$condition} :value{$count});";
         $this->setParam(":value{$count}", $value);
 
         return $this;
     }
 
+    /**
+     * @param array $keys
+     * @param array $conditions
+     * @param array $values
+     *
+     * @return QueryBuilder
+     */
+    public function or($keys, $conditions, $values): self
+    {
+        $this->stripSemicolon();
 
-     /**
+        $or = [];
+        foreach ($keys as $i => $key) {
+            $key = $this->filter($key);
+            $condition = $this->getSQLOperator($conditions[$i]);
+            $value = $values[$i];
+
+            $count = \count($this->getParams());
+
+            $or[] = "({$key} {$condition} :value{$count})";
+            $this->setParam(":value{$count}", $value);
+
+        }
+        $this->queryTemplate .= ' AND (' . \implode(' OR ', $or) . ');';
+
+        return $this;
+    }
+
+    /**
      * @param string $key
      * @param string $value
      *
@@ -458,6 +485,21 @@ class QueryBuilder
 
         return $this;
 
+    }
+    /**
+     * @return QueryBuilder
+     */
+    public function count(): self
+    {
+        if ($this->getTemplate() === '') {
+            throw new Exception('Count method must be executed after logic');
+        }
+
+        $this->stripSemicolon();
+
+        $this->queryTemplate = "SELECT COUNT(1) as sum FROM ({$this->queryTemplate}) table_count;";
+
+        return $this;
     }
 
     /**

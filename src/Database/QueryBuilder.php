@@ -66,6 +66,32 @@ class QueryBuilder
     }
 
     /**
+     * @param string $value
+     *
+     * @return QueryBuilder
+     */
+    public function setTemplate($value): self
+    {
+        $this->queryTemplate = $value;
+        return $this;
+    }
+
+    /**
+     * Append string to query template with a space
+     * @param string$value
+     *
+     * @return QueryBuilder
+     */
+    public function append($value): self
+    {
+        $this->stripSemicolon();
+
+        $this->queryTemplate .= ' ' . $value . ';';
+
+        return $this;
+    }
+
+    /**
      * @return array
      */
     public function getParams(): array
@@ -205,11 +231,7 @@ class QueryBuilder
      */
     public function addColumn($key, $type): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= " ADD COLUMN `{$key}` {$type};";
-
-        return $this;
+        return $this->append("ADD COLUMN `{$key}` {$type}");
     }
 
     /**
@@ -219,11 +241,7 @@ class QueryBuilder
      */
     public function dropColumn($key): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= " DROP COLUMN `{$key}`;";
-
-        return $this;
+        return $this->append("DROP COLUMN `{$key}`");
     }
 
     /**
@@ -266,11 +284,7 @@ class QueryBuilder
      */
     public function on(string $table): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= " ON {$table};";
-
-        return $this;
+        return $this->append("ON {$table}");
     }
 
     /**
@@ -280,11 +294,7 @@ class QueryBuilder
      */
     public function dropIndex($key): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= " DROP INDEX `{$key}`;";
-
-        return $this;
+        return $this->append("DROP INDEX `{$key}`");
     }
 
     /**
@@ -345,22 +355,15 @@ class QueryBuilder
      */
     public function set(array $values): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= " SET ";
-
+        $set = [];
         foreach ($values as $key => $value) {
             $key = $this->filter($key);
-            $this->queryTemplate .= "`{$key}` = :{$key},";
+            $set[] = "`{$key}` = :{$key}";
+
             $this->setParam(":{$key}", $value);
         }
 
-        // replace trailing comma with semicolon
-        if (\mb_substr($this->getTemplate(), -1) === ',') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1) . ';';
-        }
-
-        return $this;
+        return $this->append('SET ' . \implode(', ', $set));
     }
 
     /**
@@ -372,13 +375,11 @@ class QueryBuilder
      */
     public function where($key, $condition, $value): self
     {
-        $this->stripSemicolon();
-
-        $count = \count($this->getParams());
-
         $key = $this->filter($key);
         $condition = $this->getSQLOperator($condition);
-        $this->queryTemplate .= " WHERE {$key} {$condition} :value{$count};";
+        $count = \count($this->getParams());
+
+        $this->append("WHERE {$key} {$condition} :value{$count}");
         $this->setParam(":value{$count}", $value);
 
         return $this;
@@ -393,13 +394,11 @@ class QueryBuilder
      */
     public function and($key, $condition, $value): self
     {
-        $this->stripSemicolon();
-
-        $count = \count($this->getParams());
-
         $key = $this->filter($key);
         $condition = $this->getSQLOperator($condition);
-        $this->queryTemplate .= " AND ({$key} {$condition} :value{$count});";
+        $count = \count($this->getParams());
+
+        $this->append("AND ({$key} {$condition} :value{$count})");
         $this->setParam(":value{$count}", $value);
 
         return $this;
@@ -414,8 +413,6 @@ class QueryBuilder
      */
     public function or($keys, $conditions, $values): self
     {
-        $this->stripSemicolon();
-
         $or = [];
         foreach ($keys as $i => $key) {
             $key = $this->filter($key);
@@ -428,9 +425,8 @@ class QueryBuilder
             $this->setParam(":value{$count}", $value);
 
         }
-        $this->queryTemplate .= ' AND (' . \implode(' OR ', $or) . ');';
 
-        return $this;
+        return $this->append('AND (' . \implode(' OR ', $or) . ')');
     }
 
     /**
@@ -442,13 +438,9 @@ class QueryBuilder
      */
     public function group(array $values): self
     {
-        $this->stripSemicolon();
-
         $values = \implode(', ', $values);
 
-        $this->queryTemplate .= " ({$values});";
-
-        return $this;
+        return $this->append("({$values})");
     }
 
     /**
@@ -459,11 +451,7 @@ class QueryBuilder
      */
     public function whereMatch($key, $value): self
     {
-        $this->stripSemicolon();
-        $this->queryTemplate .= " WHERE MATCH ({$key}) AGAINST ({$value} IN BOOLEAN MODE);";
-
-        return $this;
-
+        return $this->append("WHERE MATCH ({$key}) AGAINST ({$value} IN BOOLEAN MODE)");
     }
 
     /**
@@ -477,9 +465,7 @@ class QueryBuilder
 
         $this->stripSemicolon();
 
-        $this->queryTemplate = "SELECT COUNT(1) as sum FROM ({$this->queryTemplate}) table_count;";
-
-        return $this;
+        return $this->setTemplate("SELECT COUNT(1) as sum FROM ({$this->getTemplate()}) table_count;");
     }
 
     /**
@@ -495,9 +481,7 @@ class QueryBuilder
 
         $this->stripSemicolon();
 
-        $this->queryTemplate = "SELECT SUM({$attribute}) as sum FROM ({$this->queryTemplate}) table_count;";
-
-        return $this;
+        return $this->setTemplate("SELECT SUM({$attribute}) as sum FROM ({$this->queryTemplate}) table_count;");
     }
 
     /**
@@ -507,9 +491,7 @@ class QueryBuilder
      */
     public function limit(int $limit): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= ' LIMIT :limit;';
+        $this->append('LIMIT :limit');
         $this->setParam(':limit', $limit);
 
         return $this;
@@ -519,11 +501,7 @@ class QueryBuilder
      */
     public function one(): self
     {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= " LIMIT 1;";
-
-        return $this;
+        return $this->append('LIMIT 1');
     }
 
     /**

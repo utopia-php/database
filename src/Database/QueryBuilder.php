@@ -148,7 +148,7 @@ class QueryBuilder
         if ($this->statement) {
             throw new Exception('Multiple statements detected - not supported yet');
         }
-        $this->queryTemplate = "CREATE TABLE IF NOT EXISTS `{$name}`;";
+        $this->queryTemplate = "CREATE TABLE IF NOT EXISTS {$name};";
 
         return $this;
     }
@@ -532,7 +532,7 @@ class QueryBuilder
                     throw new Duplicate('Duplicated document: '.$e->getMessage());
                     break;
                 default:
-                    throw new Exception ($e->getMessage());;
+                    throw new Exception($e->getMessage());
                     break;
             }
         } catch (Throwable $th) {

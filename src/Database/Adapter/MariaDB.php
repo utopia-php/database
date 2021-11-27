@@ -133,7 +133,6 @@ class MariaDB extends Adapter
                 }
 
                 $index = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
-
             }
 
             $this->getPDO()
@@ -150,15 +149,18 @@ class MariaDB extends Adapter
                 ->execute();
 
         } else {
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
-                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                    `_uid` CHAR(255) NOT NULL,
-                    `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
-                    `_write` TEXT NOT NULL,
-                    PRIMARY KEY (`_id`),
-                    UNIQUE KEY `_index1` (`_uid`)
-                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+            $builder = new QueryBuilder($this->getPDO());
+            $builder
+                ->createTable("{$this->getNamespace()}.{$id}")
+                ->group([
+                    '`_id` int(11) unsigned NOT NULL AUTO_INCREMENT',
+                    '`_uid` CHAR(255) NOT NULL',
+                    '`_read` ' . $this->getTypeForReadPermission() . ' NOT NULL',
+                    '`_write` TEXT NOT NULL',
+                    'PRIMARY KEY (`_id`)',
+                    'UNIQUE KEY `_index1` (`_uid`)'
+                ])
+                ->append("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4")
                 ->execute();
         }
 

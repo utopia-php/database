@@ -96,7 +96,13 @@ class QueriesTest extends TestCase
 
     public function setUp(): void
     {
-        $this->queryValidator = new QueryValidator($this->collection['attributes']);
+        // Query validator expects Document[]
+        $attributes = []; /** @var Document[] $attributes */
+        foreach ($this->collection['attributes'] as $attribute) {
+            $attributes[] = new Document($attribute);
+        }
+
+        $this->queryValidator = new QueryValidator($attributes);
 
         $query1 = Query::parse('title.notEqual("Iron Man", "Ant Man")');
         $query2 = Query::parse('description.equal("Best movie ever")');

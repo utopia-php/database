@@ -5,14 +5,20 @@ namespace Utopia\Tests\Validator;
 use Utopia\Database\Validator\QueryValidator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 
 class QueryValidatorTest extends TestCase
 {
     /**
-     * @var array 
+     * @var Document[]
      */
-    protected $schema = [
+    protected $schema;
+
+    /**
+     * @var array
+     */
+    protected $attributes = [
         [
             '$id' => 'title',
             'key' => 'title',
@@ -77,6 +83,10 @@ class QueryValidatorTest extends TestCase
 
     public function setUp(): void
     {
+        // Query validator expects Document[]
+        foreach ($this->attributes as $attribute) {
+            $this->schema[] = new Document($attribute);
+        }
     }
 
     public function tearDown(): void

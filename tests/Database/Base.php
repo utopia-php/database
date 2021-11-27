@@ -916,17 +916,6 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
 
         /**
-         * ORDER BY - After Exception
-         */
-
-        $document = new Document([
-            '$collection' => 'other collection'
-        ]);
-
-        $this->expectException(Exception::class);
-        static::getDatabase()->find('movies', [], 2, 0, [], [], $document);
-
-        /**
          * Limit
          */
         $documents = static::getDatabase()->find('movies', [], 4, 0, ['name']);
@@ -947,6 +936,26 @@ abstract class Base extends TestCase
         $this->assertEquals('Frozen II', $documents[1]['name']);
         $this->assertEquals('Work in Progress', $documents[2]['name']);
         $this->assertEquals('Work in Progress 2', $documents[3]['name']);
+
+        /**
+         * Test that OR queries are handled correctly
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
+            new Query('year', Query::TYPE_EQUAL, [2025]),
+        ]);
+        $this->assertEquals(1, count($documents));
+
+        /**
+         * ORDER BY - After Exception
+         * Must be last assertion in test
+         */
+        $document = new Document([
+            '$collection' => 'other collection'
+        ]);
+
+        $this->expectException(Exception::class);
+        static::getDatabase()->find('movies', [], 2, 0, [], [], $document);
     }
 
     /**
@@ -984,6 +993,17 @@ abstract class Base extends TestCase
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [], 3);
         $this->assertEquals(3, $count);
+        Authorization::reset();
+
+        /**
+         * Test that OR queries are handled correctly
+         */
+        Authorization::disable();
+        $count = static::getDatabase()->count('movies', [
+            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
+            new Query('year', Query::TYPE_EQUAL, [2025]),
+        ]);
+        $this->assertEquals(1, $count);
         Authorization::reset();
     }
 
@@ -1659,5 +1679,16 @@ abstract class Base extends TestCase
     public function testGetIndexLimit()
     {
         $this->assertEquals(61, $this->getDatabase()->getIndexLimit());
+    }
+
+    public function testGetId()
+    {
+        $this->assertEquals(20, strlen($this->getDatabase()->getId()));
+        $this->assertEquals(13, strlen($this->getDatabase()->getId(0)));
+        $this->assertEquals(13, strlen($this->getDatabase()->getId(-1)));
+        $this->assertEquals(23, strlen($this->getDatabase()->getId(10)));
+
+        // ensure two sequential calls to getId do not give the same result
+        $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
     }
 }

@@ -1174,13 +1174,22 @@ class Database
     }
 
     /**
-     * Get 13 Chars Unique ID.
-     * 
+     * Get Unique ID
+     *
+     * @param int $padding extra random bytes to append to 13-char uniqid
+     *
      * @return string
      */
-    public function getId(): string
+    public function getId(int $padding = 7): string
     {
-        return \uniqid();
+        $uniqid = \uniqid();
+
+        if ($padding > 0) {
+            $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
+            $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
+        }
+
+        return $uniqid;
     }
 
     /**

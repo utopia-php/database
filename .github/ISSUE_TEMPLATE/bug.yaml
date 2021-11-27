@@ -53,6 +53,7 @@ body:
       options:
         - PHP 7.3.x
         - PHP 7.4.x
+        - PHP 8.0.x
         - Different version (specify in environment)
     validations:
       required: true

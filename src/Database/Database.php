@@ -1051,8 +1051,11 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
             
+            if(is_null($value)) {
+                continue;
+            }
+
             $value = ($array) ? $value : [$value];
-            $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
                 foreach (array_reverse($filters) as $filter) {

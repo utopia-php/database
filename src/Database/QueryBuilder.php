@@ -13,16 +13,31 @@ class QueryBuilder
 {
     const TYPE_DATABASE = 'DATABASE';
     const TYPE_TABLE = 'TABLE';
-
     /**
      * @var PDO
      */
     protected $pdo;
 
+    private bool $debug = false;
+
+    public function setDebug(): self
+    {
+        $this->debug = true;
+
+        return $this;
+    }
+
     /**
      * @var PDOStatement
      */
     protected $statement;
+
+    protected ?string $select = null;
+    protected ?string $from = null;
+    protected array $orders = [];
+    protected array $conditions = [];
+    protected ?int $limit = null;
+    protected ?int $offset = null;
 
     /**
      * @var string
@@ -40,9 +55,23 @@ class QueryBuilder
      */
     public function __construct(PDO $pdo = null)
     {
-        $this->reset();
         $this->pdo = $pdo;
     }
+
+    // public function __call($name, $args) {
+    //     $name = \strtolower($name);
+    //
+    //     // lets do where magic
+    //     // $foo[0] is empty, $foo[1] is action
+    //     if (\str_contains($name, 'where') && !empty($args)) {
+    //         $clause = \explode('where', $name)[1];
+    //         if (\in_array($clause, Query::$operators)) {
+    //
+    //         }
+    //     }
+
+    //     var_dump($name, $args);
+    // }
 
     public function getPDO(): PDO
     {
@@ -179,30 +208,48 @@ class QueryBuilder
 
     /**
      * @param string $table
-     * @param array $keys
      *
-     * @throws Exception
      * @return QueryBuilder
      */
-    public function from(string $table, array $keys = ['*']): self
+    public function from(string $table): self
+    {
+        $this->from = $table;
+
+        return $this;
+    }
+
+    /**
+     * @var array $keys
+     *
+     * @return QueryBuilder
+     */
+    public function select(array $keys): self
     {
         foreach ($keys as &$key) {
-            if ($key === '*') { // wildcard
+            if ($key === '*' | $key === 1) {
                 continue;
             }
-            if ($key === 1) { // for count
-                continue;
-            }
-
-            $key = '`'.$this->filter($key).'`';
+            $key = ''.$this->filter($key).'';
         }
 
-        if ($this->statement) {
-            throw new Exception('Multiple statements detected - not supported yet');
-        }
+        $this->select = \implode(', ', $keys);
 
-        $keys = \implode(", ", $keys);
-        $this->queryTemplate = "SELECT {$keys} FROM {$table};";
+        return $this;
+    }
+
+
+    /**
+     * @param array $keyvalues
+     * @param mixed $by
+     *
+     * @return QueryBuilder
+     */
+    public function order(array $keyvalues /* ,$by = null */): self
+    {
+        foreach ($keyvalues as $key => $value)
+        {
+            $this->orders[$key] = $value;
+        }
 
         return $this;
     }
@@ -367,121 +414,47 @@ class QueryBuilder
     }
 
     /**
-     * @param string $key
      * @param string $condition
-     * @param string $value
      *
      * @return QueryBuilder
      */
-    public function where($key, $condition, $value): self
+    public function where($condition): self
     {
-        $key = $this->filter($key);
-        $condition = $this->getSQLOperator($condition);
-        $count = \count($this->getParams());
-
-        $this->append("WHERE {$key} {$condition} :value{$count}");
-        $this->setParam(":value{$count}", $value);
+        \array_push($this->conditions,
+            '(',
+            $condition,
+            ')',
+        );
 
         return $this;
     }
 
     /**
-     * @param string $key
-     * @param string $condition
-     * @param string $value
+     * @param $conditions
      *
      * @return QueryBuilder
      */
-    public function and($key, $condition, $value): self
+    public function or(...$conditions): self
     {
-        $key = $this->filter($key);
-        $condition = $this->getSQLOperator($condition);
-        $count = \count($this->getParams());
-
-        $this->append("AND ({$key} {$condition} :value{$count})");
-        $this->setParam(":value{$count}", $value);
+        \array_push($this->conditions, 
+            'OR', 
+            '(', 
+            \implode(' AND ', $conditions), 
+            ')',
+        );
 
         return $this;
     }
 
-    /**
-     * @param array $keys
-     * @param array $conditions
-     * @param array $values
-     *
-     * @return QueryBuilder
-     */
-    public function or($keys, $conditions, $values): self
+    public function open()
     {
-        $or = [];
-        foreach ($keys as $i => $key) {
-            $key = $this->filter($key);
-            $condition = $this->getSQLOperator($conditions[$i]);
-            $value = $values[$i];
-
-            $count = \count($this->getParams());
-
-            $or[] = "({$key} {$condition} :value{$count})";
-            $this->setParam(":value{$count}", $value);
-
-        }
-
-        return $this->append('AND (' . \implode(' OR ', $or) . ')');
+        $this->conditions[] = 'AND (';
+        return $this;
     }
-
-    /**
-     * Surround value with parentheses
-     *
-     * @param array $values
-     *
-     * @return QueryBuilder
-     */
-    public function group(array $values): self
+    public function close()
     {
-        $values = \implode(', ', $values);
-
-        return $this->append("({$values})");
-    }
-
-    /**
-     * @param string $key
-     * @param string $value
-     *
-     * @return QueryBuilder
-     */
-    public function whereMatch($key, $value): self
-    {
-        return $this->append("WHERE MATCH ({$key}) AGAINST ({$value} IN BOOLEAN MODE)");
-    }
-
-    /**
-     * @return QueryBuilder
-     */
-    public function count(): self
-    {
-        if ($this->getTemplate() === '') {
-            throw new Exception('Count method must be executed after logic');
-        }
-
-        $this->stripSemicolon();
-
-        return $this->setTemplate("SELECT COUNT(1) as sum FROM ({$this->getTemplate()}) table_count;");
-    }
-
-    /**
-     * @param string $attribute
-     *
-     * @return QueryBuilder
-     */
-    public function sum($attribute): self
-    {
-        if ($this->getTemplate() === '') {
-            throw new Exception('Count method must be executed after logic');
-        }
-
-        $this->stripSemicolon();
-
-        return $this->setTemplate("SELECT SUM({$attribute}) as sum FROM ({$this->queryTemplate}) table_count;");
+        $this->conditions[] = ')';
+        return $this;
     }
 
     /**
@@ -491,17 +464,69 @@ class QueryBuilder
      */
     public function limit(int $limit): self
     {
-        $this->append('LIMIT :limit');
-        $this->setParam(':limit', $limit);
+        $this->limit = $limit;
 
         return $this;
     }
+
     /**
      * @return QueryBuilder
      */
     public function one(): self
     {
-        return $this->append('LIMIT 1');
+        return $this->limit(1);
+    }
+
+    /**
+     * @param int $offset
+     *
+     * @return QueryBuilder
+     */
+    public function offset(int $offset): self
+    {
+        $this->offset = $offset;
+
+        return $this;
+    }
+
+    private function buildQuery(): string
+    {
+        /** @var string[] */
+        $template = [
+            'SELECT',
+            $this->select,
+            'FROM',
+            $this->from,
+        ];
+
+        if ((!empty($this->conditions)) && $template[\count($template) - 1] !== 'WHERE') {
+            $template[] = 'WHERE';
+        }
+
+        if (!empty($this->conditions)) {
+            $template[] = \implode(' ', $this->conditions);
+        }
+
+        if (!empty($this->orders)) {
+            /** @var string[] */
+            $orderings = [];
+
+            foreach($this->orders as $key=>$val) {
+                $orderings[] = implode(" ", [$key, $val]);
+            }
+
+            $template[] = 'ORDER BY ' . implode(', ', $orderings);
+        }
+
+        if (!\is_null($this->limit)) {
+            $template[] = "LIMIT {$this->limit}";
+        }
+
+        if (!\is_null($this->offset)) {
+            $template[] = "OFFSET {$this->offset}";
+        }
+
+        return implode(' ', $template) . ';';
     }
 
     /**
@@ -510,9 +535,14 @@ class QueryBuilder
      */
     public function execute(): bool
     {
+        if ($this->debug) {
+            echo "\n";
+            print_r($this->buildQuery());
+            return true;
+        }
         $this->getPDO()->beginTransaction();
 
-        $this->statement = $this->getPDO()->prepare($this->getTemplate());
+        $this->statement = $this->getPDO()->prepare($this->buildQuery());
 
         foreach ($this->getParams() as $key => $value) {
             $this->getStatement()->bindValue($key, $value, $this->getPDOType($value));
@@ -543,9 +573,15 @@ class QueryBuilder
 
     public function reset()
     {
+        $this->select = null;
+        $this->from = null;
+        $this->orders = [];
+        $this->conditions = [];
+        $this->limit = null;
+        $this->offset = null;
+
         $this->queryTemplate = '';
         $this->params = [];
-        $this->limit = null;
     }
 
     /**
@@ -574,7 +610,6 @@ class QueryBuilder
             $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
         }
     }
-
 
     /**
      * Get PDO Type

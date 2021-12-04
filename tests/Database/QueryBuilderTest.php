@@ -15,11 +15,11 @@ class QueryBuilderTest extends TestCase
     public function setUp(): void
     {
         $this->builder = new QueryBuilder();
+        $this->builder->setDebug();
     }
 
     public function tearDown(): void
     {
-        $this->builder->reset();
     }
 
     public function testCreateDatabase(): void
@@ -97,5 +97,51 @@ class QueryBuilderTest extends TestCase
              ->limit(10);
 
         $this->assertEquals('SELECT `somekey` FROM test LIMIT 10;', $this->builder->getTemplate());
+    }
+
+    public function testFind(): void
+    {
+        /**
+SQL: [493] SELECT table_main.* FROM myapp_61aa46b197c1f.movies table_main
+            WHERE MATCH (table_main._read) AGAINST ('"role:all" "userx"' IN BOOLEAN MODE) AND 1=1 AND (
+                        price > :cursor
+                        OR (
+                            price = :cursor
+                            AND
+                            _id < 1
+                        )
+                    )
+            ORDER BY price ASC, year DESC, _id DESC
+            LIMIT :offset, :limit;
+
+Sent SQL: [480] SELECT table_main.* FROM myapp_61aa46b197c1f.movies table_main
+            WHERE (MATCH (table_main._read) AGAINST ('"role:all" "userx"' IN BOOLEAN MODE)) AND 1=1 AND (
+                        price > '39.5'
+                        OR (
+                            price = '39.5'
+                            AND
+                            _id < 1
+                        )
+                    )
+            ORDER BY price ASC, year DESC, _id DESC
+            LIMIT 0, 2;
+         */
+        $this->builder
+            ->from('myapp_61aa46b197c1f.movies table_main')
+            ->select(['table_main.*'])
+            ->where('MATCH (table_main._read) AGAINST ("role:all" "userx" IN BOOLEAN MODE)')
+            ->open()
+            ->where('price > 39.5')
+            ->or('price = 39.5', '_id < 1')
+            ->close()
+            ->order([
+                'price' => 'ASC',
+                'year' => 'DESC',
+                '_id' => 'DESC',
+            ])
+            ->limit(0)
+            ->offset(2)
+            ->execute();
+        $this->assertEquals(1,1);
     }
 }

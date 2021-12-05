@@ -124,12 +124,15 @@ class Authorization extends Validator
         return (\array_key_exists($role, self::$roles));
     }
 
-    /**
+    /** 
+     * Static status for Authorization validator
+     *  used across multiple instances
      * @var bool
      */
     public static $status = true;
 
     /**
+     * Instance level status for authorization validator
      * @var bool
      */
     protected $authStatus = true;

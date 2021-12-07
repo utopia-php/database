@@ -214,7 +214,7 @@ class QueryBuilder
             if ($key === '*' | $key === 1) {
                 continue;
             }
-            $key = ''.$this->filter($key).'';
+            $key = '' . $this->filter($key) . '';
         }
 
         $this->select = \implode(', ', $keys);
@@ -231,8 +231,7 @@ class QueryBuilder
      */
     public function order(array $keyvalues /* ,$by = null */): self
     {
-        foreach ($keyvalues as $key => $value)
-        {
+        foreach ($keyvalues as $key => $value) {
             $this->orders[$key] = $value;
         }
 
@@ -405,11 +404,12 @@ class QueryBuilder
      */
     public function where(...$conditions): self
     {
-        if (!empty($this->conditions) && $this->conditions[count($this->conditions) -1] !== '(') {
+        if (!empty($this->conditions) && $this->conditions[count($this->conditions) - 1] !== '(') {
             $this->conditions[] = 'AND';
         }
 
-        \array_push($this->conditions,
+        \array_push(
+            $this->conditions,
             '(',
             \implode(' OR ', $conditions),
             ')',
@@ -425,10 +425,11 @@ class QueryBuilder
      */
     public function or(...$conditions): self
     {
-        \array_push($this->conditions, 
-            'OR', 
-            '(', 
-            \implode(' AND ', $conditions), 
+        \array_push(
+            $this->conditions,
+            'OR',
+            '(',
+            \implode(' AND ', $conditions),
             ')',
         );
 
@@ -437,7 +438,8 @@ class QueryBuilder
 
     public function open()
     {
-        \array_push($this->conditions,
+        \array_push(
+            $this->conditions,
             'AND',
             '(',
         );
@@ -503,7 +505,7 @@ class QueryBuilder
             /** @var string[] */
             $orderings = [];
 
-            foreach($this->orders as $key=>$val) {
+            foreach ($this->orders as $key => $val) {
                 $orderings[] = implode(" ", [$key, $val]);
             }
 
@@ -543,7 +545,7 @@ class QueryBuilder
 
         try {
             $this->getStatement()->execute();
-            if(!$this->getPDO()->commit()) {
+            if (!$this->getPDO()->commit()) {
                 throw new Exception('Failed to commit transaction');
             }
             return true;
@@ -552,7 +554,7 @@ class QueryBuilder
                 case 1062:
                 case 23000:
                     $this->getPDO()->rollBack();
-                    throw new Duplicate('Duplicated document: '.$e->getMessage());
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
                     break;
                 default:
                     throw new Exception($e->getMessage());
@@ -587,7 +589,7 @@ class QueryBuilder
     {
         $value = preg_replace("/[^A-Za-z0-9]_/", '', $value);
 
-        if(\is_null($value)) {
+        if (\is_null($value)) {
             throw new Exception('Failed to filter key');
         }
 
@@ -606,28 +608,28 @@ class QueryBuilder
         switch (gettype($value)) {
             case 'string':
                 return PDO::PARAM_STR;
-            break;
+                break;
 
             case 'boolean':
                 return PDO::PARAM_INT;
-            break;
+                break;
 
-            //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
+                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
             case 'double':
                 return PDO::PARAM_STR;
-            break;
+                break;
 
             case 'integer':
                 return PDO::PARAM_INT;
-            break;
+                break;
 
             case 'NULL':
                 return PDO::PARAM_NULL;
-            break;
+                break;
 
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
-            break;
+                break;
         }
     }
 
@@ -643,31 +645,31 @@ class QueryBuilder
         switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '=';
-            break;
+                break;
 
             case Query::TYPE_NOTEQUAL:
                 return '!=';
-            break;
+                break;
 
             case Query::TYPE_LESSER:
                 return '<';
-            break;
+                break;
 
             case Query::TYPE_LESSEREQUAL:
                 return '<=';
-            break;
+                break;
 
             case Query::TYPE_GREATER:
                 return '>';
-            break;
+                break;
 
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
-            break;
+                break;
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
-            break;
+                break;
         }
     }
 }

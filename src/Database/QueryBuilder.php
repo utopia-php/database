@@ -18,14 +18,6 @@ class QueryBuilder
      */
     protected $pdo;
 
-    private bool $debug = false;
-
-    public function setDebug(): self
-    {
-        $this->debug = true;
-
-        return $this;
-    }
 
     /**
      * @var PDOStatement
@@ -38,6 +30,15 @@ class QueryBuilder
     protected array $conditions = [];
     protected ?int $limit = null;
     protected ?int $offset = null;
+
+    private bool $debug = false;
+
+    public function setDebug(): self
+    {
+        $this->debug = true;
+
+        return $this;
+    }
 
     /**
      * @var string
@@ -95,32 +96,6 @@ class QueryBuilder
     }
 
     /**
-     * @param string $value
-     *
-     * @return QueryBuilder
-     */
-    public function setTemplate($value): self
-    {
-        $this->queryTemplate = $value;
-        return $this;
-    }
-
-    /**
-     * Append string to query template with a space
-     * @param string$value
-     *
-     * @return QueryBuilder
-     */
-    public function append($value): self
-    {
-        $this->stripSemicolon();
-
-        $this->queryTemplate .= ' ' . $value . ';';
-
-        return $this;
-    }
-
-    /**
      * @return array
      */
     public function getParams(): array
@@ -148,6 +123,16 @@ class QueryBuilder
     public function fetch(int $mode = PDO::FETCH_ASSOC)
     {
         return $this->getStatement()->fetch($mode);
+    }
+
+    /**
+     * @param int $mode PDO fetch mode, defaults to PDO::FETCH_ASSOC
+     *
+     * @return array
+     */
+    public function fetchAll(int $mode = PDO::FETCH_ASSOC)
+    {
+        return $this->getStatement()->fetchAll($mode);
     }
 
     /**
@@ -418,11 +403,15 @@ class QueryBuilder
      *
      * @return QueryBuilder
      */
-    public function where($condition): self
+    public function where(...$conditions): self
     {
+        if (!empty($this->conditions) && $this->conditions[count($this->conditions) -1] !== '(') {
+            $this->conditions[] = 'AND';
+        }
+
         \array_push($this->conditions,
             '(',
-            $condition,
+            \implode(' OR ', $conditions),
             ')',
         );
 
@@ -448,7 +437,10 @@ class QueryBuilder
 
     public function open()
     {
-        $this->conditions[] = 'AND (';
+        \array_push($this->conditions,
+            'AND',
+            '(',
+        );
         return $this;
     }
     public function close()
@@ -499,7 +491,7 @@ class QueryBuilder
             $this->from,
         ];
 
-        if ((!empty($this->conditions)) && $template[\count($template) - 1] !== 'WHERE') {
+        if ((!empty($this->conditions))/* && $template[\count($template) - 1] !== 'WHERE'*/) {
             $template[] = 'WHERE';
         }
 
@@ -536,17 +528,18 @@ class QueryBuilder
     public function execute(): bool
     {
         if ($this->debug) {
-            echo "\n";
+            echo "\n\n";
+            print_r($this->conditions);
             print_r($this->buildQuery());
-            return true;
+            echo "\n\n";
         }
         $this->getPDO()->beginTransaction();
 
         $this->statement = $this->getPDO()->prepare($this->buildQuery());
 
-        foreach ($this->getParams() as $key => $value) {
-            $this->getStatement()->bindValue($key, $value, $this->getPDOType($value));
-        }
+        // foreach ($this->getParams() as $key => $value) {
+        //     $this->getStatement()->bindValue($key, $value, $this->getPDOType($value));
+        // }
 
         try {
             $this->getStatement()->execute();
@@ -599,16 +592,6 @@ class QueryBuilder
         }
 
         return $value;
-    }
-
-    /**
-     * Strip trailing semicolon from template if present
-     */
-    private function stripSemicolon(): void
-    {
-        if (\mb_substr($this->getTemplate(), -1) === ';') {
-            $this->queryTemplate = \mb_substr($this->getTemplate(), 0, -1);
-        }
     }
 
     /**

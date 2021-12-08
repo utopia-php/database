@@ -24,6 +24,8 @@ class QueryBuilder
      */
     protected $statement;
 
+    protected ?string $method = null; // SELECT, DELETE
+
     protected ?string $select = null;
     protected ?string $from = null;
     protected array $orders = [];
@@ -212,9 +214,20 @@ class QueryBuilder
      */
     public function select(array $keys): self
     {
+        $this->method = 'SELECT';
         $this->select = \implode(', ', $keys);
 
         return $this;
+    }
+
+    /**
+     * @return QueryBuilder
+     */
+    public function deleteOne(): self
+    {
+        $this->method = 'DELETE';
+
+        return $this->one();
     }
 
 
@@ -508,12 +521,19 @@ class QueryBuilder
     private function buildQuery(): string
     {
         /** @var string[] */
-        $template = [
-            'SELECT',
-            $this->select,
-            'FROM',
-            $this->from,
-        ];
+        $template[] = $this->method;
+
+        if ($this->method === 'SELECT') {
+            $template[] = $this->select;
+        }
+
+        if (!\is_null($this->from)) {
+            \array_push(
+                $template,
+                'FROM',
+                $this->from,
+            );
+        }
 
         if ((!empty($this->conditions))/* && $template[\count($template) - 1] !== 'WHERE'*/) {
             $template[] = 'WHERE';

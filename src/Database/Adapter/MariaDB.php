@@ -349,26 +349,17 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        // $builder = new QueryBuilder($this->getPDO());
-        // $builder
-        //     ->from("{$this->getNamespace()}.{$name}")
-        //     ->where('_uid', Query::TYPE_EQUAL, $id)
-        //     ->one()
-        //     ->execute();
-
-        // /** @var array $document */
-        // $document = $builder->fetch();
-        $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}
-            WHERE _uid = :_uid
-            LIMIT 1;
-        ");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        $stmt->execute();
+        $builder = new QueryBuilder($this->getPDO());
+        $builder
+            ->setDebug()
+            ->from("{$this->getNamespace()}.{$name}")
+            ->select(['*'])
+            ->where("_uid = '{$id}'")
+            ->one()
+            ->execute();
 
         /** @var array $document */
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $builder->fetch();
 
         if (empty($document)) {
             return new Document([]);
@@ -580,32 +571,14 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        // $builder = new QueryBuilder($this->getPDO());
+        $builder = new QueryBuilder($this->getPDO());
 
-        // return $builder
-        //     ->deleteFrom("{$this->getNamespace()}.{$name}")
-        //     ->where('_uid', Query::TYPE_EQUAL, $id)
-        //     ->one()
-        //     ->execute();
-
-        $this->getPDO()->beginTransaction();
-
-        $stmt = $this->getPDO()
-            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}
-                WHERE _uid = :_uid LIMIT 1");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        if (!$stmt->execute()) {
-            $this->getPDO()->rollBack();
-            throw new Exception('Failed to clean document');
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
-        }
-
-        return true;
+        return $builder
+            ->deleteOne()
+            ->from("{$this->getNamespace()}.{$name}")
+            ->where("_uid = '{$id}'")
+            ->one()
+            ->execute();
     }
 
     /**
@@ -634,7 +607,6 @@ class MariaDB extends Adapter
 
         $builder = new QueryBuilder($this->getPDO());
         $builder
-            ->setDebug()
             ->from("{$this->getNamespace()}.{$name} table_main")
             ->select(['table_main.*']);
 
@@ -737,7 +709,6 @@ class MariaDB extends Adapter
 
         $builder = new QueryBuilder($this->getPDO());
         $builder
-            ->setDebug()
             ->from("{$this->getNamespace()}.{$name} table_main")
             ->select([1]);
 
@@ -779,7 +750,6 @@ class MariaDB extends Adapter
 
         $builder = new QueryBuilder($this->getPDO());
         $builder
-            ->setDebug()
             ->from("{$this->getNamespace()}.{$name} table_main")
             ->select([$attribute]);
 
@@ -810,6 +780,7 @@ class MariaDB extends Adapter
      */
     private function compileQueries($builder, $queries): QueryBuilder
     {
+        // TODO@kodumbeats should we pass $builder by reference?
         foreach ($queries as $query) {
             $or = [];
 
@@ -817,12 +788,13 @@ class MariaDB extends Adapter
                 if ($query->getOperator() === Query::TYPE_SEARCH) {
                     $builder->where('MATCH(' . $query->getAttribute() . ') AGAINST(' . $this->getPDO()->quote($value) . ')');
                     continue;
-                } else {
-                    if ($this->getPDOType($value) === PDO::PARAM_STR) {
-                        $value = $this->getPDO()->quote($value);
-                    }
-                    $or[] = $query->getAttribute() . ' ' . $this->getSQLOperator($query->getOperator()) . ' ' . $value;
                 }
+
+                if ($this->getPDOType($value) === PDO::PARAM_STR) {
+                    $value = $this->getPDO()->quote($value);
+                }
+
+                $or[] = $query->getAttribute() . ' ' . $this->getSQLOperator($query->getOperator()) . ' ' . $value;
             }
 
             if (!empty($or)) {

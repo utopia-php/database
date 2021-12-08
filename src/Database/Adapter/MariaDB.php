@@ -689,25 +689,7 @@ class MariaDB extends Adapter
             $orders['_id'] = $cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC;
         }
 
-        foreach ($queries as $i => $query) {
-            $or = [];
-
-            foreach ($query->getValues() as $key => $value) {
-                if ($query->getOperator() === Query::TYPE_SEARCH) {
-                    $builder->where('MATCH(' . $query->getAttribute() . ') AGAINST(' . $this->getPDO()->quote($value) . ')');
-                    continue;
-                } else {
-                    if ($this->getPDOType($value) === PDO::PARAM_STR) {
-                        $value = $this->getPDO()->quote($value);
-                    }
-                    $or[] = $query->getAttribute() . ' ' . $this->getSQLOperator($query->getOperator()) . ' ' . $value;
-                }
-            }
-
-            if (!empty($or)) {
-                $builder->where(...$or);
-            }
-        }
+        $builder = $this->compileQueries($builder, $queries);
 
         $builder
             ->order($orders)
@@ -750,74 +732,30 @@ class MariaDB extends Adapter
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        // $name = $this->filter($collection);
-        // $roles = Authorization::getRoles();
-
-        // $builder = new QueryBuilder($this->getPDO());
-        // $builder->from("{$this->getNamespace()}.{$name} table_main", [1]);
-
-        // if (Authorization::$status) { // Skip permission check when no authorization required
-        //     $builder->whereMatch('table_main._read', $this->getPermissions($roles));
-        // } else {
-        //     $builder->where(1, Query::TYPE_EQUAL, 1);
-        // }
-
-        // foreach ($queries as $query) {
-        //     $count = \count($query->getValues());
-        //     $builder->or(
-        //         \array_fill(0, $count, 'table_main.' . $query->getAttribute()),
-        //         \array_fill(0, $count, $query->getOperator()),
-        //         $query->getValues(),
-        //     );
-        // }
-
-        // if($max !== 0) {
-        //     $builder->limit($max);
-        // }
-
-        // $builder
-        //     ->count()
-        //     ->execute()
-        // ;
-
-        // $result = $builder->fetch();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $builder = new QueryBuilder($this->getPDO());
+        $builder
+            ->setDebug()
+            ->from("{$this->getNamespace()}.{$name} table_main")
+            ->select([1]);
 
-        foreach ($queries as $i => $query) {
-            $conditions = [];
-            foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
-            }
-
-            $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '(' . $condition . ')';
+        if (Authorization::$status) {
+            $builder->where($this->getSQLPermissions($roles));
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
-            WHERE {$permissions} AND " . implode(' AND ', $where) . "
-            {$limit}) table_count
-        ");
-
-        foreach ($queries as $i => $query) {
-            if ($query->getOperator() === Query::TYPE_SEARCH) continue;
-            foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
-            }
-        }
+        $builder = $this->compileQueries($builder, $queries);
 
         if ($max !== 0) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+            $builder->limit($max);
         }
 
-        $stmt->execute();
+        $builder
+            ->count()
+            ->execute();
 
-        /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $builder->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -836,75 +774,63 @@ class MariaDB extends Adapter
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        // $name = $this->filter($collection);
-        // $roles = Authorization::getRoles();
-
-        // $builder = new QueryBuilder($this->getPDO());
-        // $builder->from("{$this->getNamespace()}.{$name} table_main", [$attribute]);
-
-        // if (Authorization::$status) { // Skip permission check when no authorization required
-        //     $builder->whereMatch('table_main._read', $this->getPermissions($roles));
-        // } else {
-        //     $builder->where(1, Query::TYPE_EQUAL, 1);
-        // }
-
-        // foreach ($queries as $query) {
-        //     $count = \count($query->getValues());
-        //     $builder->or(
-        //         \array_fill(0, $count, 'table_main.' . $query->getAttribute()),
-        //         \array_fill(0, $count, $query->getOperator()),
-        //         $query->getValues(),
-        //     );
-        // }
-
-        // if($max !== 0) {
-        //     $builder->limit($max);
-        // }
-
-        // $builder
-        //     ->sum($attribute)
-        //     ->execute()
-        // ;
-
-        // $result = $builder->fetch();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $builder = new QueryBuilder($this->getPDO());
+        $builder
+            ->setDebug()
+            ->from("{$this->getNamespace()}.{$name} table_main")
+            ->select([$attribute]);
 
-        foreach ($queries as $i => $query) {
-            $conditions = [];
-            foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
-            }
-
-            $where[] = implode(' OR ', $conditions);
+        if (Authorization::$status) {
+            $builder->where($this->getSQLPermissions($roles));
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum FROM (SELECT {$attribute} FROM {$this->getNamespace()}.{$name} table_main
-            WHERE {$permissions} AND " . implode(' AND ', $where) . "
-            {$limit}) table_count
-        ");
-
-        foreach ($queries as $i => $query) {
-            if ($query->getOperator() === Query::TYPE_SEARCH) continue;
-            foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
-            }
-        }
+        $builder = $this->compileQueries($builder, $queries);
 
         if ($max !== 0) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+            $builder->limit($max);
         }
 
-        $stmt->execute();
+        $builder
+            ->sum($attribute)
+            ->execute();
 
-        /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $builder->fetch();
 
         return $result['sum'] ?? 0;
+    }
+
+    /**
+     * @param QueryBuilder $builder
+     * @param Query[] $queries
+     *
+     * @return QueryBuilder
+     */
+    private function compileQueries($builder, $queries): QueryBuilder
+    {
+        foreach ($queries as $query) {
+            $or = [];
+
+            foreach ($query->getValues() as $key => $value) {
+                if ($query->getOperator() === Query::TYPE_SEARCH) {
+                    $builder->where('MATCH(' . $query->getAttribute() . ') AGAINST(' . $this->getPDO()->quote($value) . ')');
+                    continue;
+                } else {
+                    if ($this->getPDOType($value) === PDO::PARAM_STR) {
+                        $value = $this->getPDO()->quote($value);
+                    }
+                    $or[] = $query->getAttribute() . ' ' . $this->getSQLOperator($query->getOperator()) . ' ' . $value;
+                }
+            }
+
+            if (!empty($or)) {
+                $builder->where(...$or);
+            }
+        }
+
+        return $builder;
     }
 
     /**

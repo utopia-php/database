@@ -30,6 +30,8 @@ class QueryBuilder
     protected array $conditions = [];
     protected ?int $limit = null;
     protected ?int $offset = null;
+    protected bool $count = false;
+    protected ?string $sum = null;
 
     private bool $debug = false;
 
@@ -210,13 +212,6 @@ class QueryBuilder
      */
     public function select(array $keys): self
     {
-        foreach ($keys as &$key) {
-            if ($key === '*' | $key === 1) {
-                continue;
-            }
-            $key = '' . $this->filter($key) . '';
-        }
-
         $this->select = \implode(', ', $keys);
 
         return $this;
@@ -398,7 +393,7 @@ class QueryBuilder
     }
 
     /**
-     * @param string $condition
+     * @param string $conditions
      *
      * @return QueryBuilder
      */
@@ -419,7 +414,7 @@ class QueryBuilder
     }
 
     /**
-     * @param $conditions
+     * @param string $conditions
      *
      * @return QueryBuilder
      */
@@ -436,7 +431,30 @@ class QueryBuilder
         return $this;
     }
 
-    public function open()
+    /**
+     * @return QueryBuilder
+     */
+    public function count(): self
+    {
+        $this->count = true;
+
+        return $this;
+    }
+
+    /**
+     * @return QueryBuilder
+     */
+    public function sum($attribute): self
+    {
+        $this->sum = $attribute;
+
+        return $this;
+    }
+
+    /**
+     * @return QueryBuilder
+     */
+    public function open(): self
     {
         \array_push(
             $this->conditions,
@@ -445,7 +463,11 @@ class QueryBuilder
         );
         return $this;
     }
-    public function close()
+
+    /**
+     * @return QueryBuilder
+     */
+    public function close(): self
     {
         $this->conditions[] = ')';
         return $this;
@@ -520,6 +542,42 @@ class QueryBuilder
             $template[] = "OFFSET {$this->offset}";
         }
 
+        if ($this->count) {
+            \array_unshift(
+                $template,
+                'SELECT',
+                'COUNT(1)',
+                'as',
+                'sum',
+                'FROM',
+                '(',
+            );
+
+            \array_push(
+                $template,
+                ')',
+                'table_count',
+            );
+        }
+
+        if (!\is_null($this->sum)) {
+            \array_unshift(
+                $template,
+                'SELECT',
+                "SUM({$this->sum})",
+                'as',
+                'sum',
+                'FROM',
+                '(',
+            );
+
+            \array_push(
+                $template,
+                ')',
+                'table_count',
+            );
+        }
+
         return implode(' ', $template) . ';';
     }
 
@@ -587,7 +645,7 @@ class QueryBuilder
      */
     public function filter(string $value): string
     {
-        $value = preg_replace("/[^A-Za-z0-9]_/", '', $value);
+        $value = preg_replace('/[^A-Za-z0-9\_\.\-]/', '', $value);
 
         if (\is_null($value)) {
             throw new Exception('Failed to filter key');

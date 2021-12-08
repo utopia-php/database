@@ -162,7 +162,7 @@ Below is a list of supported adapters, and thier compatibly tested versions alon
 
 ## System Requirements
 
-Utopia Framework requires PHP 7.3 or later. We recommend using the latest PHP version whenever possible.
+Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP version whenever possible.
 
 ## Tests
 

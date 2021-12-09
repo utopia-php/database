@@ -1,11 +1,19 @@
 <?php
-
 namespace Utopia\Database;
+
+use Swoole\Database\PDOConfig;
+use Swoole\Database\PDOPool;
 
 use Exception;
 
 abstract class Adapter
 {
+  /**
+   * @var PDOPool
+   * @access protected
+   */    
+    protected $_pool;
+
     /**
      * @var string
      */
@@ -15,6 +23,7 @@ abstract class Adapter
      * @var array
      */
     protected $debug = [];
+
 
     /**
      * @param string $key
@@ -85,6 +94,75 @@ abstract class Adapter
         }
 
         return $this->namespace;
+    }
+
+    public function __construct(
+      string $host = 'localhost',
+      string $user,
+      string $password,
+      string $schema,
+      int $port,
+    ) {
+      $this->host = $host;
+      $this->user = $user;
+      $this->password = $password;
+      $this->schema = $schema;
+      $this->port = $port;
+    }
+
+    protected function initPool() {
+      if(isset($this->_pool)) {
+        return;
+      }
+
+      $this->_pool = new PDOPool((new PDOConfig())
+        ->withHost($this->host)
+        ->withPort($this->port)
+        ->withDbName($this->schema)
+        ->withCharset('utf8mb4')
+        ->withUsername($this->user)
+        ->withPassword($this->password)
+        ->withOptions([
+            PDO::ATTR_ERRMODE => App::isDevelopment() 
+            ? PDO::ERRMODE_WARNING 
+            : PDO::ERRMODE_SILENT, // If in production mode, warnings are not displayed
+        ]), 16
+      );
+    }
+
+    protected function getPool(): PDOPool
+    {
+        if (empty($this->_pool)) {
+          $this->initPool();
+        }
+
+        return $this->_pool;
+    }
+    
+    /**
+     * Connect to database.
+     * Connects to the database (defaulting to PDO)
+     * 
+     * @param string $host
+     * @param string $user
+     * @param string $password
+     * @param string $schema
+     * @param int $port
+     */
+    public function connect() {
+      $this->initPool();
+    }
+
+    /**
+     * Get Database Connection.
+     * Pulls and returns a connection from the pool
+     */
+    public function getConnection() {
+      return $this->pool->get();
+    }
+
+    public function returnConnection($client) {
+      $this->pool->put($client);
     }
 
     /**

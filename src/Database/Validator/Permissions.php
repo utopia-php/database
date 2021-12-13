@@ -38,7 +38,7 @@ class Permissions extends Validator
      *
      * @return string
      */
-    public function getDescription()
+    public function getDescription(): string
     {
         return $this->message;
     }
@@ -52,7 +52,7 @@ class Permissions extends Validator
      *
      * @return bool
      */
-    public function isValid($roles)
+    public function isValid($roles): bool
     {
         if(!is_array($roles)) {
             $this->message = 'Permissions roles must be an array of strings.';

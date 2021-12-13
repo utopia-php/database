@@ -37,7 +37,7 @@ class Authorization extends Validator
      *
      * @return string
      */
-    public function getDescription()
+    public function getDescription(): string
     {
         return $this->message;
     }
@@ -51,7 +51,7 @@ class Authorization extends Validator
      *
      * @return bool
      */
-    public function isValid($permissions)
+    public function isValid($permissions): bool
     {
         if (!self::$status) {
             return true;

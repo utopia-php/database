@@ -51,7 +51,7 @@ class QueryValidator extends Validator
      *
      * @return string
      */
-    public function getDescription()
+    public function getDescription(): string
     {
         return $this->message;
     }
@@ -65,7 +65,7 @@ class QueryValidator extends Validator
      *
      * @return bool
      */
-    public function isValid($query)
+    public function isValid($query): bool
     {
         // Validate operator
         if (!in_array($query->getOperator(), $this->operators)) {

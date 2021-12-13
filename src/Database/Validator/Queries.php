@@ -55,7 +55,7 @@ class Queries extends Validator
      *
      * @return string
      */
-    public function getDescription()
+    public function getDescription(): string
     {
         return $this->message;
     }
@@ -67,7 +67,7 @@ class Queries extends Validator
      * @param mixed $value as array of Query objects
      * @return bool
      */
-    public function isValid($value)
+    public function isValid($value): bool
     {
         /**
          * Array of attributes from Query->getAttribute()

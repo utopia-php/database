@@ -170,7 +170,7 @@ class Structure extends Validator
      *
      * @return string
      */
-    public function getDescription()
+    public function getDescription(): string
     {
         return 'Invalid document structure: '.$this->message;
     }
@@ -184,7 +184,7 @@ class Structure extends Validator
      *
      * @return bool
      */
-    public function isValid($document)
+    public function isValid($document): bool
     {
         if(!$document instanceof Document) {
             $this->message = 'Value must be an instance of Document';

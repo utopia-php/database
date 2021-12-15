@@ -910,8 +910,13 @@ class MariaDB extends Adapter
                 break;
 
                 case Database::VAR_INTEGER:
+                    if ($attribute['size'] >= 8) {
+                        $total += 8; // BIGINT takes 8 bytes
+                    } else {
+                        $total += 4; // INT takes 4 bytes
+                    }
+                break;
                 case Database::VAR_FLOAT:
-                    // INT takes 4 bytes
                     // FLOAT(p) takes 4 bytes when p <= 24, 8 otherwise
                     $total += 4;
                 break;
@@ -995,6 +1000,11 @@ class MariaDB extends Adapter
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
+
+                if($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
+                    return 'BIGINT'.$signed;
+                }
+
                 return 'INT'.$signed;
             break;
 

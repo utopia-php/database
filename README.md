@@ -123,7 +123,7 @@ $documents = static::getDatabase()->find('movies', [
 
 ### Adapters
 
-Below is a list of supported adapters, and thier compatibly tested versions alongside a list of supported features and relevant limits.
+Below is a list of supported adapters, and their compatibly tested versions alongside a list of supported features and relevant limits.
 
 | Adapter | Status | Version |
 |---------|---------|---|

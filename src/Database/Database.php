@@ -13,8 +13,8 @@ use Utopia\Cache\Cache;
 
 class Database
 {
-    // Simple Types
     const VAR_STRING = 'string';
+    // Simple Types
     const VAR_INTEGER = 'integer';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
@@ -203,13 +203,45 @@ class Database
     }
 
     /**
-     * Create Database
+     * Set database to use for current scope
+     *
+     * @param string $database
+     * @param bool $reset
+     *
+     * @throws Exception
      *
      * @return bool
      */
-    public function create(): bool
+    public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
-        $this->adapter->create();
+        return $this->adapter->setDefaultDatabase($name, $reset);
+    }
+
+    /**
+     * Get Database.
+     *
+     * Get Database from current scope
+     *
+     * @throws Exception
+     *
+     * @return string
+     */
+    public function getDefaultDatabase(): string
+    {
+        return $this->adapter->getDefaultDatabase();
+    }
+
+    /**
+     * Create Database
+     *
+     * @param string $database
+     *
+     * @return bool
+     */
+    public function create(string $name): bool
+    {
+        $this->adapter->create($name);
+        $this->setDefaultDatabase($name);
 
         /**
          * Create array of attribute documents
@@ -229,6 +261,7 @@ class Database
         ]);
 
         $this->createCollection(self::METADATA, $attributes);
+        $this->setDefaultDatabase('', reset: true);
 
         return true;
     }
@@ -238,9 +271,9 @@ class Database
      *
      * @return bool
      */
-    public function exists(): bool
+    public function exists(string $name): bool
     {
-        return $this->adapter->exists();
+        return $this->adapter->exists($name);
     }
 
     /**
@@ -256,11 +289,13 @@ class Database
     /**
      * Delete Database
      *
+     * @param string $name
+     *
      * @return bool
      */
-    public function delete(): bool
+    public function delete(string $name): bool
     {
-        return $this->adapter->delete();
+        return $this->adapter->delete($name);
     }
 
     /**

@@ -12,6 +12,11 @@ abstract class Adapter
     protected $namespace = '';
 
     /**
+     * @var string
+     */
+    protected $defaultDatabase = '';
+
+    /**
      * @var array
      */
     protected $debug = [];
@@ -64,7 +69,7 @@ abstract class Adapter
             throw new Exception('Missing namespace');
         }
 
-        $this->namespace = $namespace;
+        $this->namespace = $this->filter($namespace);
 
         return true;
     }
@@ -88,18 +93,61 @@ abstract class Adapter
     }
 
     /**
+     * Set Database.
+     *
+     * Set database to use for current scope
+     *
+     * @param string $name
+     * @param bool $reset
+     *
+     * @throws Exception
+     */
+    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    {
+        if (empty($name) && $reset === false) {
+            throw new Exception('Missing database');
+        }
+
+        $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
+
+        return true;
+    }
+
+    /**
+     * Get Database.
+     *
+     * Get Database from current scope
+     *
+     * @throws Exception
+     *
+     * @return string
+     */
+    public function getDefaultDatabase(): string
+    {
+        if (empty($this->defaultDatabase)) {
+            throw new Exception('Missing database');
+        }
+
+        return $this->defaultDatabase;
+    }
+
+    /**
      * Create Database
+     *
+     * @param string $name
      *
      * @return bool
      */
-    abstract public function create(): bool;
+    abstract public function create(string $name): bool;
 
     /**
      * Check if database exists
      *
+     * @param string $name
+     *
      * @return bool
      */
-    abstract public function exists(): bool;
+    abstract public function exists(string $name): bool;
 
     /**
      * List Databases
@@ -111,9 +159,11 @@ abstract class Adapter
     /**
      * Delete Database
      *
+     * @param string $name
+     *
      * @return bool
      */
-    abstract public function delete(): bool;
+    abstract public function delete(string $name): bool;
 
     /**
      * Create Collection

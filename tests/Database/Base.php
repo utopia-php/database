@@ -40,14 +40,18 @@ abstract class Base extends TestCase
         Authorization::reset();
     }
 
+    protected string $testDatabase = 'utopiaTests';
+
     public function testCreateExistsDelete()
     {
-        $this->assertEquals(false, static::getDatabase()->exists());
-        $this->assertEquals(true, static::getDatabase()->create());
-        $this->assertEquals(true, static::getDatabase()->exists());
-        $this->assertEquals(true, static::getDatabase()->delete());
-        $this->assertEquals(false, static::getDatabase()->exists());
-        $this->assertEquals(true, static::getDatabase()->create());
+        // $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
+        $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+
+        $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
     /**

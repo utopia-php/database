@@ -44,7 +44,7 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete()
     {
-        // $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
+        $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));

@@ -44,8 +44,8 @@ class Key extends Validator
             return false;
         }
 
-        // Valid chars: A-Z, a-z, 0-9, underscore, period, hyphen, space
-        if (\preg_match('/[^A-Za-z0-9\_\.\-]/', $value)) {
+        // Valid chars: A-Z, a-z, 0-9, underscore, hyphen, period
+        if (\preg_match('/[^A-Za-z0-9\_\-\.]/', $value)) {
             return false;
         }
 

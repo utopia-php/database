@@ -115,7 +115,7 @@ class MariaDB extends Adapter
 
         if (!empty($attributes) || !empty($indexes)) {
             foreach ($attributes as &$attribute) {
-                $attrId = $attribute->getId();
+                $attrId = $this->filter($attribute->getId());
                 $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
                 if($attribute->getAttribute('array')) {

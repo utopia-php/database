@@ -67,6 +67,7 @@ class MariaDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MariaDB($pdo), $cache);
+        $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;

@@ -241,12 +241,21 @@ class Database
     public function create(string $name): bool
     {
         $this->adapter->create($name);
-
-        // Temporarily change defaultDatabase to create metadata collection
-        $defaultDatabase = $this->getDefaultDatabase();
-
         $this->setDefaultDatabase($name);
+        $this->createMetadata();
 
+        return true;
+    }
+
+    /**
+     * Create Metadata collection.
+     * @return bool 
+     * @throws LimitException 
+     * @throws AuthorizationException 
+     * @throws StructureException 
+     */
+    public function createMetadata(): bool
+    {
         /**
          * Create array of attribute documents
          * @var Document[] $attributes
@@ -265,7 +274,6 @@ class Database
         ]);
 
         $this->createCollection(self::METADATA, $attributes);
-        $this->setDefaultDatabase($defaultDatabase);
 
         return true;
     }

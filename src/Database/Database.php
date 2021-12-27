@@ -241,6 +241,10 @@ class Database
     public function create(string $name): bool
     {
         $this->adapter->create($name);
+
+        // Temporarily change defaultDatabase to create metadata collection
+        $defaultDatabase = $this->getDefaultDatabase();
+
         $this->setDefaultDatabase($name);
 
         /**
@@ -261,7 +265,7 @@ class Database
         ]);
 
         $this->createCollection(self::METADATA, $attributes);
-        $this->setDefaultDatabase('', reset: true);
+        $this->setDefaultDatabase($defaultDatabase);
 
         return true;
     }

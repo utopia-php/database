@@ -63,6 +63,7 @@ class MongoDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MongoDB($client), $cache);
+        $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;

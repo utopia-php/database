@@ -33,26 +33,30 @@ class MariaDB extends Adapter
 
     /**
      * Create Database
+     *
+     * @param string $name
      * 
      * @return bool
      */
-    public function create(): bool
+    public function create(string $name): bool
     {
-        $name = $this->getNamespace();
+        $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("CREATE DATABASE {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
+            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
             ->execute();
     }
 
     /**
      * Check if database exists
      *
+     * @param string $name
+     *
      * @return bool
      */
-    public function exists(): bool
+    public function exists(string $name): bool
     {
-        $name = $this->getNamespace();
+        $name = $this->filter($name);
 
         $stmt = $this->getPDO()
             ->prepare("SELECT SCHEMA_NAME
@@ -62,7 +66,7 @@ class MariaDB extends Adapter
         $stmt->bindValue(':schema', $name, PDO::PARAM_STR);
 
         $stmt->execute();
-        
+
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return (($document['SCHEMA_NAME'] ?? '') == $name);
@@ -82,14 +86,16 @@ class MariaDB extends Adapter
     /**
      * Delete Database
      * 
+     * @param string $name
+     *
      * @return bool
      */
-    public function delete(): bool
+    public function delete(string $name): bool
     {
-        $name = $this->getNamespace();
+        $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("DROP DATABASE {$name};")
+            ->prepare("DROP DATABASE `{$name}`;")
             ->execute();
     }
 
@@ -103,11 +109,13 @@ class MariaDB extends Adapter
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
+        $database = $this->getDefaultDatabase();
+        $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
         if (!empty($attributes) || !empty($indexes)) {
             foreach ($attributes as &$attribute) {
-                $attrId = $attribute->getId();
+                $attrId = $this->filter($attribute->getId());
                 $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
                 if($attribute->getAttribute('array')) {
@@ -140,7 +148,7 @@ class MariaDB extends Adapter
             }
 
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
+                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_uid` CHAR(255) NOT NULL,
                     `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
@@ -154,7 +162,7 @@ class MariaDB extends Adapter
 
         } else {
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getNamespace()}.{$id} (
+                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_uid` CHAR(255) NOT NULL,
                     `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
@@ -180,7 +188,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getNamespace()}.{$id};")
+            ->prepare("DROP TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`;")
             ->execute();
     }
 
@@ -206,7 +214,7 @@ class MariaDB extends Adapter
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 ADD COLUMN `{$id}` {$type};")
             ->execute();
     }
@@ -226,7 +234,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 DROP COLUMN `{$id}`;")
             ->execute();
     }
@@ -280,7 +288,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getNamespace()}.{$name}
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 DROP INDEX `{$id}`;")
             ->execute();
     }
@@ -297,7 +305,8 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        $stmt = $this->getPDO()->prepare("SELECT * FROM {$this->getNamespace()}.{$name}
+        $stmt = $this->getPDO()->prepare("SELECT *
+            FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
             WHERE _uid = :_uid
             LIMIT 1;
         ");
@@ -351,7 +360,7 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getNamespace()}.{$name}
+            ->prepare("INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 SET {$columns} _uid = :_uid, _read = :_read, _write = :_write");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
@@ -416,7 +425,7 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()
-            ->prepare("UPDATE {$this->getNamespace()}.{$name}
+            ->prepare("UPDATE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
@@ -473,7 +482,7 @@ class MariaDB extends Adapter
         $this->getPDO()->beginTransaction();
 
         $stmt = $this->getPDO()
-            ->prepare("DELETE FROM {$this->getNamespace()}.{$name}
+            ->prepare("DELETE FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 WHERE _uid = :_uid LIMIT 1");
 
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
@@ -581,7 +590,7 @@ class MariaDB extends Adapter
 
         $order = 'ORDER BY '.implode(', ', $orders);
 
-        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getNamespace()}.{$name} table_main
+        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
             WHERE {$permissions} AND ".implode(' AND ', $where)."
             {$order}
             LIMIT :offset, :limit;
@@ -658,7 +667,7 @@ class MariaDB extends Adapter
             $where[] = empty($condition) ? '' : '('.$condition.')';
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM {$this->getNamespace()}.{$name} table_main
+        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
             WHERE {$permissions} AND ".implode(' AND ', $where)."
             {$limit}) table_count
         ");
@@ -712,10 +721,13 @@ class MariaDB extends Adapter
             $where[] = implode(' OR ', $conditions);
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum FROM (SELECT {$attribute} FROM {$this->getNamespace()}.{$name} table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
-            {$limit}) table_count
-        ");
+        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum
+            FROM (
+                SELECT {$attribute}
+                FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
+                WHERE {$permissions} AND ".implode(' AND ', $where)."
+                {$limit}
+            ) table_count");
 
         foreach($queries as $i => $query) {
             if($query->getOperator() === Query::TYPE_SEARCH) continue;
@@ -1140,7 +1152,7 @@ class MariaDB extends Adapter
             break;
         }
 
-        return 'CREATE '.$type.' '.$id.' ON '.$this->getNamespace().'.'.$collection.' ( '.implode(', ', $attributes).' );';
+        return 'CREATE '.$type.' '.$id.' ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
 
     /**

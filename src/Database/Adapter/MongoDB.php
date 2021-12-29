@@ -33,24 +33,28 @@ class MongoDB extends Adapter
 
     /**
      * Create Database
+     *
+     * @param string $name
      * 
      * @return bool
      */
-    public function create(): bool
+    public function create(string $name): bool
     {
-        $namespace = $this->getNamespace();
+        $name = $this->filter($name);
 
-        return (!!$this->getClient()->$namespace);
+        return (!!$this->getClient()->selectDatabase($name));
     }
 
     /**
      * Check if database exists
      *
+     * @param string $name
+     *
      * @return bool
      */
-    public function exists(): bool
+    public function exists(string $name): bool
     {
-        $name = $this->getNamespace();
+        $name = $this->filter($name);
         forEach ($this->getClient()->listDatabaseNames() as $key => $value) {
             if ($name === $value) {
                 return true;
@@ -78,12 +82,15 @@ class MongoDB extends Adapter
 
     /**
      * Delete Database
-     * 
+     *
+     * @param string $name
+     *
      * @return bool
      */
-    public function delete(): bool
+    public function delete(string $name): bool
     {
-        return (!!$this->getClient()->dropDatabase($this->getNamespace()));
+        $name = $this->filter($name);
+        return (!!$this->getClient()->dropDatabase($name));
     }
 
     /**
@@ -96,7 +103,7 @@ class MongoDB extends Adapter
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->filter($name);
+        $id = $this->getNamespace() .'_'. $this->filter($name);
 
         $database = $this->getDatabase();
 
@@ -105,7 +112,7 @@ class MongoDB extends Adapter
             return false;
         }
 
-        $collection = $database->$id;
+        $collection = $database->selectCollection($id);
 
         // Mongo creates an index for _id; _uid (unique, case insensitive) and _read index by default
         // Returns the name of the created index as a string.
@@ -205,7 +212,7 @@ class MongoDB extends Adapter
      */
     public function deleteCollection(string $id): bool
     {
-        $id = $this->filter($id);
+        $id = $this->getNamespace() .'_'. $this->filter($id);
 
         return (!!$this->getDatabase()->dropCollection($id));
     }
@@ -253,9 +260,9 @@ class MongoDB extends Adapter
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        $name = $this->filter($collection);
+        $name = $this->getNamespace() .'_'.$this->filter($collection);
         $id = $this->filter($id);
-        $collection = $this->getDatabase()->$name;
+        $collection = $this->getDatabase()->selectCollection($name);
 
         $indexes = [];
         $options = [];
@@ -302,9 +309,9 @@ class MongoDB extends Adapter
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $name = $this->filter($collection);
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
         $id = $this->filter($id);
-        $collection = $this->getDatabase()->$name;
+        $collection = $this->getDatabase()->selectCollection($name);
 
         return (!!$collection->dropIndex($id));
     }
@@ -319,8 +326,8 @@ class MongoDB extends Adapter
      */
     public function getDocument(string $collection, string $id): Document
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         $result = $collection->findOne(['_uid' => $id]);
 
@@ -344,8 +351,8 @@ class MongoDB extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         try {
             $collection->insertOne($this->replaceChars('$', '_', $document->getArrayCopy()));
@@ -373,8 +380,8 @@ class MongoDB extends Adapter
      */
     public function updateDocument(string $collection, Document $document): Document
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         try {
             $result = $collection->findOneAndUpdate(
@@ -408,8 +415,8 @@ class MongoDB extends Adapter
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         $result = $collection->findOneAndDelete(['_uid' => $id]);
 
@@ -434,9 +441,8 @@ class MongoDB extends Adapter
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
-        $roles = Authorization::getRoles();
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         $filters = [];
 
@@ -550,8 +556,8 @@ class MongoDB extends Adapter
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         $filters = [];
 
@@ -583,8 +589,8 @@ class MongoDB extends Adapter
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        $name = $this->filter($collection);
-        $collection = $this->getDatabase()->$name;
+        $name = $this->getNamespace() .'_'. $this->filter($collection);
+        $collection = $this->getDatabase()->selectCollection($name);
 
         $filters = [];
 
@@ -625,11 +631,11 @@ class MongoDB extends Adapter
      *
      * @throws Exception
      */
-    protected function getDatabase()
+    protected function getDatabase(string $name = null)
     {
-        $namespace = $this->getNamespace();
+        $database = is_null($name) ? $this->getDefaultDatabase() : $name;
 
-        return $this->getClient()->$namespace;
+        return $this->getClient()->selectDatabase($database);
     }
 
     /**

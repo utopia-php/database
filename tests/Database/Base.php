@@ -609,6 +609,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
 
         static::getDatabase()->createDocument('movies', new Document([
+            '$id' => 'frozen',
             '$read' => ['role:all', 'user1', 'user2'],
             '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Frozen',
@@ -797,6 +798,16 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
         $this->assertEquals('Frozen II', $documents[0]['name']);
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
+
+        /**
+         * $id condition
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('$id', Query::TYPE_EQUAL, ['frozen']),
+        ]);
+
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('Frozen', $documents[0]['name']);
 
         /**
          * ORDER BY

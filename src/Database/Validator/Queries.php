@@ -41,6 +41,11 @@ class Queries extends Validator
     {
         $this->validator = $validator;
 
+        $this->indexes[] = [
+            'type' => Database::INDEX_UNIQUE,
+            'attributes' => ['$id']
+        ];
+
         foreach ($indexes as $index) {
             $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
         }

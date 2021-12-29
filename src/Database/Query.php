@@ -16,17 +16,17 @@ class Query
     /**
      * @var string
      */
-    protected $attribute = '';
+    protected string $attribute = '';
 
     /**
      * @var string
      */
-    protected $operator = '';
+    protected string $operator = '';
 
     /**
      * @var (mixed)[]
      */
-    protected $values;
+    protected array $values;
 
     /**
      * Construct.
@@ -67,9 +67,9 @@ class Query
     /**
      * Get operand
      *
-     * @return mixed
+     * @return array
      */
-    public function getValues()
+    public function getValues(): array
     {
         return $this->values;
     }
@@ -86,6 +86,42 @@ class Query
             'operator' => $this->operator,
             'values' => $this->values,
         ];
+    }
+
+    /**
+     * Set attribute
+     *
+     * @return self
+     */
+    public function setAttribute(string $attribute): self
+    {
+        $this->attribute = $attribute;
+
+        return $this;
+    }
+
+    /**
+     * Set operator
+     *
+     * @return self
+     */
+    public function setOperator(string $operator): self
+    {
+        $this->operator = $operator;
+
+        return $this;
+    }
+
+    /**
+     * Set operand
+     *
+     * @return self
+     */
+    public function setValues(array $values): self
+    {
+        $this->values = $values;
+
+        return $this;
     }
 
     /**

@@ -97,6 +97,7 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
+        $this->assertEquals(true, $validator->isValid(Query::parse('$id.equal("Iron Man", "Ant Man")')));
         $this->assertEquals(true, $validator->isValid(Query::parse('title.notEqual("Iron Man", "Ant Man")')));
         $this->assertEquals(true, $validator->isValid(Query::parse('description.equal("Best movie ever")')));
         $this->assertEquals(true, $validator->isValid(Query::parse('rating.greater(4)')));

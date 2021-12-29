@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Validator;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -39,6 +40,13 @@ class QueryValidator extends Validator
      */
     public function __construct(array $attributes)
     {
+        $this->schema[] = [
+            'key' => '$id',
+            'array' => false,
+            'type' => Database::VAR_STRING,
+            'size' => 512
+        ];
+
         foreach ($attributes as $attribute) {
             $this->schema[] = $attribute->getArrayCopy();
         }

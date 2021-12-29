@@ -152,6 +152,10 @@ class Database
                     return $value;
                 }
 
+                if($value === '{}') {
+                    return json_decode($value);
+                }
+
                 $value = json_decode($value, true);
 
                 if(array_key_exists('$id', $value)) {

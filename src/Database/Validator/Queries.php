@@ -43,7 +43,7 @@ class Queries extends Validator
 
         $this->indexes[] = [
             'type' => Database::INDEX_UNIQUE,
-            'attributes' => '$id'
+            'attributes' => ['$id']
         ];
 
         foreach ($indexes as $index) {

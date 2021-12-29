@@ -695,6 +695,9 @@ class MongoDB extends Adapter
         $filters = [];
 
         foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getOperator()); 
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0]; 

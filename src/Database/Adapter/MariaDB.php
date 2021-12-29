@@ -580,6 +580,9 @@ class MariaDB extends Adapter
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
@@ -658,6 +661,9 @@ class MariaDB extends Adapter
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
@@ -713,6 +719,9 @@ class MariaDB extends Adapter
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);

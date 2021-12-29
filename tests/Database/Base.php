@@ -86,11 +86,12 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535+1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215+1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'bigint', Database::VAR_INTEGER, 8, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(7, $collection->getAttribute('attributes'));
+        $this->assertCount(8, $collection->getAttribute('attributes'));
 
         // Array
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, null, true, true));
@@ -99,7 +100,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, null, true, true));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(11, $collection->getAttribute('attributes'));
+        $this->assertCount(12, $collection->getAttribute('attributes'));
 
         // Default values
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, false, 'test'));
@@ -108,7 +109,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, false, false));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(15, $collection->getAttribute('attributes'));
+        $this->assertCount(16, $collection->getAttribute('attributes'));
 
         // Delete
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
@@ -116,6 +117,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string3'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string4'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'bigint'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
 
@@ -459,6 +461,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'bigint', Database::VAR_INTEGER, 8, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
@@ -469,6 +472,7 @@ abstract class Base extends TestCase
             '$write' => ['role:all', 'user1x', 'user2x'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
@@ -480,6 +484,8 @@ abstract class Base extends TestCase
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($document->getAttribute('integer'));
         $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertIsInt($document->getAttribute('bigint'));
+        $this->assertEquals(8589934592, $document->getAttribute('bigint'));
         $this->assertIsFloat($document->getAttribute('float'));
         $this->assertEquals(5.55, $document->getAttribute('float'));
         $this->assertIsBool($document->getAttribute('boolean'));
@@ -1393,6 +1399,7 @@ abstract class Base extends TestCase
             '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
@@ -1423,6 +1430,7 @@ abstract class Base extends TestCase
             '$write' => ['user1'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
@@ -1441,6 +1449,7 @@ abstract class Base extends TestCase
             '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
@@ -1465,6 +1474,7 @@ abstract class Base extends TestCase
             '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
@@ -1485,6 +1495,7 @@ abstract class Base extends TestCase
             '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
@@ -1498,6 +1509,7 @@ abstract class Base extends TestCase
             '$write' => ['role:all'],
             'string' => 'text📝',
             'integer' => 5,
+            'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],

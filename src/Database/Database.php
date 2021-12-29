@@ -153,7 +153,7 @@ class Database
                 }
 
                 if($value === '{}') {
-                    return json_decode($value);
+                    return new \stdClass();
                 }
 
                 $value = json_decode($value, true);

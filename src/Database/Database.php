@@ -465,11 +465,7 @@ class Database
         {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
-    
-        if($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
- 
+
         switch ($type) {
             case self::VAR_STRING:
                 if($size > $this->adapter->getStringLimit()) {
@@ -520,7 +516,13 @@ class Database
             }
         }
 
-        return $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $attribute;
     }
 
     /**
@@ -618,19 +620,6 @@ class Database
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        $collection->setAttribute('indexes', new Document([
-            '$id' => $id,
-            'key' => $id,
-            'type' => $type,
-            'attributes' => $attributes,
-            'lengths' => $lengths,
-            'orders' => $orders,
-        ]), Document::SET_TYPE_APPEND);
-
-        if($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
-
         switch ($type) {
             case self::INDEX_KEY:
                 if(!$this->adapter->getSupportForIndex()) {
@@ -655,7 +644,22 @@ class Database
                 break;
         }
 
-        return $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+
+        $collection->setAttribute('indexes', new Document([
+            '$id' => $id,
+            'key' => $id,
+            'type' => $type,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders,
+        ]), Document::SET_TYPE_APPEND);
+
+        if($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $index;
     }
 
     /**
@@ -679,7 +683,7 @@ class Database
         }
 
         $collection->setAttribute('indexes', $indexes);
-    
+
         if($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }

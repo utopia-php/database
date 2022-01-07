@@ -157,8 +157,8 @@ abstract class Adapter
      * Get Database Connection.
      * Pulls and returns a connection from the pool
      */
-    public function getConnection() {
-      return $this->pool->get();
+    public function getConnection($fromPool = true) {
+      return $fromPool == true ? $this->pool->get(); : PDO::Connect();
     }
 
     public function returnConnection($client) {

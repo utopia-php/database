@@ -15,9 +15,11 @@ use MongoDB\Database as MongoDatabase;
 class MongoDB extends Adapter
 {
     /**
-     * @var MongoClient
-     */
-    protected $client;
+   * @var PDOPool
+   * @access protected
+   */    
+    protected $_pool;
+
 
     /**
      * Constructor.
@@ -26,9 +28,29 @@ class MongoDB extends Adapter
      *
      * @param MongoClient $client
      */
-    public function __construct(MongoClient $client)
-    {
-        $this->client = $client;
+    public function __construct(
+      string $host = 'localhost',
+      string $user,
+      string $password,
+      string $schema,
+      int $port,
+    ) {
+      parent::__construct($host, $user, $password, $schema, $port);
+
+      Swoole\Runtime::enableCoroutine(true);
+    }
+
+    protected function initPool() {
+      if(isset($this->_pool)) {
+        return;
+      }
+
+      $this->_pool = new Swoole\ConnectionPool(function() {
+        $client = new Swoole\Coroutine\Client(SWOOLE_SOCK_TCP);
+        $client->connect($this->host, $this->port, 0.5);
+
+        return $client;
+      });
     }
 
     /**

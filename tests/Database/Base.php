@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Size as SizeException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -1732,6 +1733,21 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
 
         static::getDatabase()->deleteCollection('indexLimit');
+    }
+
+    public function testExceptionIndexSize()
+    {
+        static::getDatabase()->createCollection('indexSizeLimit');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexSizeLimit', 'testattribute', Database::VAR_STRING, 3073, true));
+
+        $this->assertEquals(true, static::getDatabase()->createDocument('indexSizeLimit', new Document([
+            'testattribute' => \str_repeat('A', 3073)
+        ])));
+
+        $this->expectException(SizeException::class);
+        $this->assertEquals(false, static::getDatabase()->createIndex('indexSizeLimit', 'testindex', Database::INDEX_KEY, ['testattribute'], [3073]));
+        static::getDatabase()->deleteCollection('indexSizeLimit');
     }
 
     /**

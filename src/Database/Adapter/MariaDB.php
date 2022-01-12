@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Size;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -269,9 +270,20 @@ class MariaDB extends Adapter
             $attribute = "`{$attribute}`{$length} {$order}";
         }
 
-        return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
-            ->execute();
+        $stmt = $this->getPDO()->prepare($this->getSQLIndex($name, $id, $type, $attributes));
+
+        try {
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            switch ($e->getCode()) {
+                case 1071:
+                    throw new Size('Attributes too large to index: '. \implode(', ', $attributes));
+                    break;
+                default:
+                    throw $e;
+                    break;
+            }
+        }
     }
 
     /**

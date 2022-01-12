@@ -412,6 +412,13 @@ abstract class Adapter
     abstract public function getIndexLimit(): int;
 
     /**
+     * Get maximum index size limit in bytes.
+     *
+     * @return int
+     */
+    abstract public function getIndexSizeLimit(): int;
+
+    /**
      * Does the adapter handle casting?
      * 
      * @return bool

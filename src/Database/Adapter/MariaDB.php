@@ -831,6 +831,16 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get maximum index size limit in bytes.
+     *
+     * @return int
+     */
+    public function getIndexSizeLimit(): int
+    {
+        return 3072;
+    }
+
+    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection

@@ -863,6 +863,18 @@ class MongoDB extends Adapter
     }
 
     /**
+     * Get maximum index size limit in bytes.
+     * No key limit as of Mongo v4.2
+     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Index-Key-Limit
+     *
+     * @return int
+     */
+    public function getIndexSizeLimit(): int
+    {
+        return 0;
+    }
+
+    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection

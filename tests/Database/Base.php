@@ -57,15 +57,17 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateExistsDelete
      */
-    public function testCreateListDeleteCollection()
+    public function testCreateListExistsDeleteCollection()
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
 
         $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2'));
         $this->assertCount(2, static::getDatabase()->listCollections());
+        $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors2'));
         $collection = static::getDatabase()->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
@@ -75,6 +77,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
+        $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
 
     public function testCreateDeleteAttribute()

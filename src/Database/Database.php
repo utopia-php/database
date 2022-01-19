@@ -280,12 +280,16 @@ class Database
 
     /**
      * Check if database exists
+     * Optionally check if collection exists in database
+     *
+     * @param string $database database name
+     * @param string $collection (optional) collection name
      *
      * @return bool
      */
-    public function exists(string $name): bool
+    public function exists(string $database, string $collection = ''): bool
     {
-        return $this->adapter->exists($name);
+        return $this->adapter->exists($database, $collection);
     }
 
     /**

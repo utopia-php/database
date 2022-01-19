@@ -142,12 +142,14 @@ abstract class Adapter
 
     /**
      * Check if database exists
+     * Optionally check if collection exists in database
      *
-     * @param string $name
+     * @param string $database database name
+     * @param string $collection (optional) collection name
      *
      * @return bool
      */
-    abstract public function exists(string $name): bool;
+    abstract public function exists(string $database, string $collection): bool;
 
     /**
      * List Databases

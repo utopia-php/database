@@ -56,7 +56,7 @@ class MariaDB extends Adapter
      *
      * @return bool
      */
-    public function exists(string $database, $collection = ''): bool
+    public function exists(string $database, string $collection = null): bool
     {
         $database = $this->filter($database);
 

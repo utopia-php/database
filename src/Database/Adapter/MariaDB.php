@@ -59,9 +59,10 @@ class MariaDB extends Adapter
     public function exists(string $database, $collection = ''): bool
     {
         $database = $this->filter($database);
-        $collection = $this->filter($collection);
 
-        if ($collection) {
+        if (!\is_null($collection)) {
+            $collection = $this->filter($collection);
+
             $select = 'TABLE_NAME';
             $from = 'INFORMATION_SCHEMA.TABLES' ;
             $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
@@ -80,7 +81,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
 
-        if ($collection) {
+        if (!\is_null($collection)) {
             $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
         }
 

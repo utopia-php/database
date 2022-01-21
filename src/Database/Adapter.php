@@ -149,7 +149,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function exists(string $database, string $collection): bool;
+    abstract public function exists(string $database, string $collection = null): bool;
 
     /**
      * List Databases

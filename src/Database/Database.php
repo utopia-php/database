@@ -287,7 +287,7 @@ class Database
      *
      * @return bool
      */
-    public function exists(string $database, string $collection = ''): bool
+    public function exists(string $database, string $collection = null): bool
     {
         return $this->adapter->exists($database, $collection);
     }

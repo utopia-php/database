@@ -49,27 +49,47 @@ class MariaDB extends Adapter
 
     /**
      * Check if database exists
+     * Optionally check if collection exists in database
      *
-     * @param string $name
+     * @param string $database database name
+     * @param string $collection (optional) collection name
      *
      * @return bool
      */
-    public function exists(string $name): bool
+    public function exists(string $database, string $collection = null): bool
     {
-        $name = $this->filter($name);
+        $database = $this->filter($database);
+
+        if (!\is_null($collection)) {
+            $collection = $this->filter($collection);
+
+            $select = 'TABLE_NAME';
+            $from = 'INFORMATION_SCHEMA.TABLES' ;
+            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
+            $match = "{$this->getNamespace()}_{$collection}";
+        } else {
+            $select = 'SCHEMA_NAME';
+            $from = 'INFORMATION_SCHEMA.SCHEMATA' ;
+            $where = 'SCHEMA_NAME = :schema';
+            $match = $database;
+        }
 
         $stmt = $this->getPDO()
-            ->prepare("SELECT SCHEMA_NAME
-                FROM INFORMATION_SCHEMA.SCHEMATA
-                WHERE SCHEMA_NAME = :schema;");
-            
-        $stmt->bindValue(':schema', $name, PDO::PARAM_STR);
+            ->prepare("SELECT {$select}
+                FROM {$from}
+                WHERE {$where};");
+
+        $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
+
+        if (!\is_null($collection)) {
+            $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+        }
 
         $stmt->execute();
 
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return (($document['SCHEMA_NAME'] ?? '') == $name);
+        return (($document[$select] ?? '') === $match);
     }
 
     /**

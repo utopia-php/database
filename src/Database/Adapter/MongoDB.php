@@ -54,19 +54,31 @@ class MongoDB extends Adapter
      *
      * @return bool
      */
-    public function exists(string $database, string $collection = ''): bool
+    public function exists(string $database, string $collection = null): bool
     {
-
         $database = $this->filter($database);
-        $collection = $this->filter($collection);
 
-        $names = ($collection)
-            ? $this->getClient()->selectDatabase($database)->listCollectionNames()
-            : $this->getClient()->listDatabaseNames();
+        if (!\is_null($collection)) {
+            $collection = $this->filter($collection);
 
-        $match = ($collection)
-            ? "{$this->getNamespace()}_{$collection}"
-            : $database;
+            $match = "{$this->getNamespace()}_{$collection}";
+            $names = $this
+                ->getClient()
+                ->selectDatabase($database)
+                ->listCollectionNames([
+                    'filter' => [
+                        'name' => $match
+                    ]
+                ]);
+        } else {
+            $match = $database;
+            $names = $this->getClient()
+                ->listDatabaseNames([
+                    'filter' => [
+                        'name' => $match
+                    ]
+                ]);
+        }
 
         foreach ($names as $name) {
             if ($name === $match) {

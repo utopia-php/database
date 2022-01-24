@@ -52,7 +52,25 @@ class MariaDBTest extends Base
         $dbPort = '3306';
         $dbUser = 'root';
         $dbPass = 'password';
+ 
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
 
+        $udb = 
+          new Database(
+            MariaDB(
+                $dbHost,
+                $dbPort,
+                $dbUser,
+                $dbPass
+            ),
+            new Cache(new RedisAdapter($redis))
+          );
+
+        $udb->setDefaultDatabase('utopiaTests');
+        $udb->setNamespace('myapp_'.uniqid());
+  
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
             PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
             PDO::ATTR_TIMEOUT => 3, // Seconds
@@ -61,12 +79,8 @@ class MariaDBTest extends Base
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         ]);
 
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MariaDB($pdo), $cache);
+        $database = new Database(new MariaDB(), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 

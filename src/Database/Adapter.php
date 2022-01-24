@@ -6,6 +6,8 @@ use Swoole\Database\PDOPool;
 
 use Exception;
 
+
+
 abstract class Adapter
 {
   /**
@@ -61,6 +63,13 @@ abstract class Adapter
         return $this;
     }
 
+    /** Set Database type 
+     * Set the database (server) to connect to.
+     * 
+     * @return string
+     */
+    abstract function getAdapterName(): string;
+
     /**
      * Set Namespace.
      *
@@ -115,6 +124,18 @@ abstract class Adapter
       $this->port = $port;
     }
 
+    protected function options() 
+    {
+        return [
+            PDO::ATTR_TIMEOUT => 3, // Seconds
+            PDO::ATTR_PERSISTENT => true,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_ERRMODE => App::isDevelopment() 
+            ? PDO::ERRMODE_WARNING 
+            : PDO::ERRMODE_SILENT, // If in production mode, warnings are not displayed
+        ];
+    }
+
     protected function initPool() {
       if(isset($this->_pool)) {
         return;
@@ -127,11 +148,7 @@ abstract class Adapter
         ->withCharset('utf8mb4')
         ->withUsername($this->user)
         ->withPassword($this->password)
-        ->withOptions([
-            PDO::ATTR_ERRMODE => App::isDevelopment() 
-            ? PDO::ERRMODE_WARNING 
-            : PDO::ERRMODE_SILENT, // If in production mode, warnings are not displayed
-        ]), 16
+        ->withOptions($this->options()), 16
       );
     }
 

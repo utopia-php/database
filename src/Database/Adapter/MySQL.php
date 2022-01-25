@@ -99,7 +99,7 @@ class MySQL extends MariaDB
                 break;
         }
 
-        return 'CREATE '.$type.' '.$id.' ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
+        return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
 
     /**

@@ -240,6 +240,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('indexes');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'order', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0, true));
@@ -249,15 +250,17 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
         
         $collection = static::getDatabase()->getCollection('indexes');
-        $this->assertCount(4, $collection->getAttribute('indexes'));
+        $this->assertCount(5, $collection->getAttribute('indexes'));
 
         // Delete Indexes
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index4'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'order'));
 
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));

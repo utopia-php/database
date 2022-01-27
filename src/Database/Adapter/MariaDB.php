@@ -1206,11 +1206,11 @@ class MariaDB extends Adapter
      */
     protected function getSQLPermissions(array $roles): string
     {
-        foreach($roles as &$role) { // Add surrounding quotes after escaping, use + as placeholder after getPDO()->quote()
-            $role = "+".str_replace('+', ' ', $role)."+";
+        foreach($roles as $i => $role) { // Add surrounding single quotes
+            $roles[$i] = "'".str_replace('\'', ' ', $role)."'";
         }
 
-        return "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
+        return "MATCH (table_main._read) AGAINST (".$this->getPDO()->quote(implode(' ', $roles))." IN BOOLEAN MODE)";
     }
 
     /**

@@ -1451,7 +1451,7 @@ abstract class Base extends TestCase
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
-        ]));           
+        ]));
 
         return $document;
     }

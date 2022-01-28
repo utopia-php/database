@@ -35,7 +35,7 @@ services:
       - "8705:8080"
 
   mariadb:
-    image: mariadb:10.5
+    image: mariadb:10.7
     container_name: utopia-mariadb
     networks:
       - database
@@ -43,7 +43,8 @@ services:
       - "8701:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
-  
+    command: 'mysqld --innodb-flush-method=fsync'
+
   mongo:
     image: mongo:3.6
     container_name: utopia-mongo
@@ -55,21 +56,21 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
 
-  mysql:
-    image: mysql:8.0.25
-    container_name: utopia-mysql
-    networks:
-      - database
-    ports:
-      - "8703:3307"
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: default
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
-      MYSQL_TCP_PORT: 3307
-    cap_add:
-      - SYS_NICE
+  # mysql:
+  #   image: mysql:8.0.25
+  #   container_name: utopia-mysql
+  #   networks:
+  #     - database
+  #   ports:
+  #     - "8703:3307"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: password
+  #     MYSQL_DATABASE: default
+  #     MYSQL_USER: user
+  #     MYSQL_PASSWORD: password
+  #     MYSQL_TCP_PORT: 3307
+  #   cap_add:
+  #     - SYS_NICE
 
   redis:
     image: redis:6.0-alpine

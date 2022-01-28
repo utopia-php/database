@@ -44,7 +44,7 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete()
     {
-        $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
+        //$this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
@@ -1429,10 +1429,95 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
 
         $this->assertEquals(true, $document->isEmpty());
-        
+
         Authorization::setRole('role:all');
 
         return $document;
+    }
+
+    public function testMultipleReadPermissionsSuccess(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->createCollection('permissions');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('permissions', 'value', Database::VAR_STRING, 128, true));
+
+        for ($i=0; $i < 20; $i++) {
+            $document = static::getDatabase()->createDocument('permissions', new Document([
+                '$id' => 'doc_unknown_'.$i,
+                '$read' => ['role:unknown'],
+                '$write' => [],
+                'value' => 'doc_unknown_'.$i,
+            ]));
+
+            $this->assertEquals(false, $document->isEmpty());
+        }
+
+        for ($i=0; $i < 20; $i++) {
+            $document = static::getDatabase()->createDocument('permissions', new Document([
+                '$id' => 'doc_all_'.$i,
+                '$read' => ['role:all'],
+                '$write' => [],
+                'value' => 'doc_all_'.$i,
+            ]));
+
+            $this->assertEquals(false, $document->isEmpty());
+        }
+
+        for ($i=0; $i < 20; $i++) {
+            $document = static::getDatabase()->createDocument('permissions', new Document([
+                '$id' => 'doc_user_'.$i,
+                '$read' => ['user:torsten'],
+                '$write' => [],
+                'value' => 'doc_user_'.$i,
+            ]));
+
+            $this->assertEquals(false, $document->isEmpty());
+        }
+
+        for ($i=0; $i < 20; $i++) {
+            $document = static::getDatabase()->createDocument('permissions', new Document([
+                '$id' => 'doc_team_'.$i,
+                '$read' => ['team:appwrite'],
+                '$write' => [],
+                'value' => 'doc_team_'.$i,
+            ]));
+
+            $this->assertEquals(false, $document->isEmpty());
+        }
+
+        for ($i=0; $i < 20; $i++) {
+            $document = static::getDatabase()->createDocument('permissions', new Document([
+                '$id' => 'doc_team_owner_'.$i,
+                '$read' => ['team:appwrite/owner'],
+                '$write' => [],
+                'value' => 'doc_team_owner_'.$i,
+            ]));
+
+            $this->assertEquals(false, $document->isEmpty());
+        }
+
+        Authorization::reset();
+        Authorization::setRole('role:all');
+        Authorization::setRole('role:guest');
+        Authorization::setRole('role:user');
+        Authorization::setRole('role:unknown');
+        Authorization::setRole('user:torsten');
+        Authorization::setRole('team:appwrite');
+        Authorization::setRole('team:appwrite/owner');
+
+        $count = static::getDatabase()->count('permissions');
+        $documents = static::getDatabase()->find('permissions', limit: 150);
+
+        var_dump($count);
+        var_dump(count($documents));
+
+        $this->assertEquals(false, $document->isEmpty());
+        $this->assertEquals(true, $document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole('role:all');
     }
 
     /**

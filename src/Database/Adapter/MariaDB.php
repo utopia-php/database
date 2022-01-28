@@ -637,7 +637,7 @@ class MariaDB extends Adapter
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
-
+        //$stmt->debugDumpParams();
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($results as &$value) {

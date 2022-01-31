@@ -704,7 +704,7 @@ abstract class Base extends TestCase
         $this->assertIsArray($documents[0]->getAttribute('generes'));
 
         $firstDocumentId = $documents[0]->getId();
-        $lastDocumentId = $documents[\count($documents)]->getId();
+        $lastDocumentId = $documents[\count($documents) - 1]->getId();
 
          /**
          * Check $id

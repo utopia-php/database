@@ -544,6 +544,10 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $orders = [];
 
+        $orderAttributes = \array_map(function($orderAttribute) {
+            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
+        }, $orderAttributes);
+
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);

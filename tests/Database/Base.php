@@ -703,6 +703,17 @@ abstract class Base extends TestCase
         $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
         $this->assertIsArray($documents[0]->getAttribute('generes'));
 
+        $firstDocumentId = $documents[0]->getId();
+        $lastDocumentId = $documents[\count($documents)]->getId();
+
+         /**
+         * Check $id
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_DESC]);
+        $this->assertEquals($lastDocumentId, $documents[0]->getId());
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_ASC]);
+        $this->assertEquals($firstDocumentId, $documents[0]->getId());
+
         /**
          * Check Permissions
          */

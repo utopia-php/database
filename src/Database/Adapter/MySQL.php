@@ -110,10 +110,12 @@ class MySQL extends MariaDB
      * @param string $placeholder
      * @param mixed $value
      * 
-     * @return string
+     * @return array
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissions(array $roles): array
     {
+        return [];
+
         foreach ($roles as &$role) {
             $role = 'JSON_CONTAINS(_read, ' . $this->getPDO()->quote("\"" . $role . "\"") . ', \'$\')';
         }

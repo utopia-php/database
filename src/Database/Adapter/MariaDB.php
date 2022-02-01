@@ -134,7 +134,7 @@ class MariaDB extends Adapter
         $id = $this->filter($name);
 
         if (!empty($attributes) || !empty($indexes)) {
-            foreach ($attributes as &$attribute) {
+            foreach ($attributes as $i => $attribute) {
                 $attrId = $this->filter($attribute->getId());
                 $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
@@ -142,15 +142,15 @@ class MariaDB extends Adapter
                     $attrType = 'LONGTEXT';
                 }
 
-                $attribute = "`{$attrId}` {$attrType}, ";
+                $attributes[$i] = "`{$attrId}` {$attrType}, ";
             }
 
-            foreach ($indexes as &$index) {
+            foreach ($indexes as $i => $index) {
                 $indexId = $this->filter($index->getId()); 
                 $indexType = $this->getSQLIndexType($index->getAttribute('type'));
 
                 $indexAttributes = $index->getAttribute('attributes');
-                foreach ($indexAttributes as $key => &$attribute) {
+                foreach ($indexAttributes as $key => $attribute) {
                     $indexLength = $index->getAttribute('lengths')[$key] ?? '';
                     $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
                     $indexOrder = $index->getAttribute('orders')[$key] ?? '';
@@ -160,10 +160,10 @@ class MariaDB extends Adapter
                         $indexOrder = '';
                     }
 
-                    $attribute = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                    $indexAttributes[$key] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
                 }
 
-                $index = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+                $indexes[$i] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
 
             }
 
@@ -172,7 +172,7 @@ class MariaDB extends Adapter
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_uid` CHAR(255) NOT NULL,
                     `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
-                    `_write` TEXT NOT NULL,
+                    `_write` " . $this->getTypeForReadPermission() . " NOT NULL,
                     " . \implode(' ', $attributes) . "
                     PRIMARY KEY (`_id`),
                     " . \implode(' ', $indexes) . "
@@ -186,7 +186,7 @@ class MariaDB extends Adapter
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_uid` CHAR(255) NOT NULL,
                     `_read` " . $this->getTypeForReadPermission() . " NOT NULL,
-                    `_write` TEXT NOT NULL,
+                    `_write` " . $this->getTypeForReadPermission() . " NOT NULL,
                     PRIMARY KEY (`_id`),
                     UNIQUE KEY `_index1` (`_uid`)
                   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
@@ -276,7 +276,7 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        foreach($attributes as $key => &$attribute) {
+        foreach($attributes as $key => $attribute) {
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '('.(int)$length.')';
             $order = $orders[$key] ?? '';
@@ -286,7 +286,7 @@ class MariaDB extends Adapter
                 $order = '';
             }
 
-            $attribute = "`{$attribute}`{$length} {$order}";
+            $attributes[$key] = "`{$attribute}`{$length} {$order}";
         }
 
         return $this->getPDO()
@@ -597,7 +597,9 @@ class MariaDB extends Adapter
             $orders[] = '_id '.($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
         }
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        if (Authorization::$status) {
+            $where[] = '(' . \implode(' OR ', $this->getSQLPermissions($roles)) . ')';
+        }
 
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
@@ -614,7 +616,7 @@ class MariaDB extends Adapter
         $order = 'ORDER BY '.implode(', ', $orders);
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
+            WHERE ".implode(' AND ', $where)."
             {$order}
             LIMIT :offset, :limit;
         ");
@@ -640,7 +642,7 @@ class MariaDB extends Adapter
 
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        foreach ($results as &$value) {
+        foreach ($results as $i => $value) {
             $value['$id'] = $value['_uid'];
             $value['$internalId'] = $value['_id'];
             $value['$read'] = (isset($value['_read'])) ? json_decode($value['_read'], true) : [];
@@ -650,7 +652,7 @@ class MariaDB extends Adapter
             unset($value['_read']);
             unset($value['_write']);
 
-            $value = new Document($value);
+            $results[$i] = new Document($value);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -678,7 +680,9 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        if (Authorization::$status) {
+            $where[] = '(' . \implode(' OR ', $this->getSQLPermissions($roles)) . ')';
+        }
 
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
@@ -694,7 +698,7 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
+            WHERE ".implode(' AND ', $where)."
             {$limit}) table_count
         ");
 
@@ -736,7 +740,9 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        if (Authorization::$status) {
+            $where[] = '(' . \implode(' OR ', $this->getSQLPermissions($roles)) . ')';
+        }
 
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
@@ -754,7 +760,7 @@ class MariaDB extends Adapter
             FROM (
                 SELECT {$attribute}
                 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-                WHERE {$permissions} AND ".implode(' AND ', $where)."
+                WHERE ".implode(' AND ', $where)."
                 {$limit}
             ) table_count");
 
@@ -998,7 +1004,7 @@ class MariaDB extends Adapter
      */
     protected function getTypeForReadPermission(): string
     {
-        return "TEXT";
+        return "JSON";
     }
 
     /**
@@ -1202,15 +1208,11 @@ class MariaDB extends Adapter
      * @param string $placeholder
      * @param mixed $value
      * 
-     * @return string
+     * @return array
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissions(array $roles): array
     {
-        foreach($roles as &$role) { // Add surrounding quotes after escaping, use + as placeholder after getPDO()->quote()
-            $role = "+".str_replace('+', ' ', $role)."+";
-        }
-
-        return "MATCH (table_main._read) AGAINST (".str_replace('+', '"', $this->getPDO()->quote(implode(' ', $roles)))." IN BOOLEAN MODE)";
+        return array_map(fn (string $role) => "JSON_CONTAINS(table_main._read, '\"{$role}\"', '$')", $roles);
     }
 
     /**

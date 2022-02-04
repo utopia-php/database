@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use Throwable;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -54,17 +53,17 @@ class Database
     /**
      * @var Adapter
      */
-    protected $adapter;
+    protected Adapter $adapter;
 
     /**
      * @var Cache
      */
-    protected $cache;
+    protected Cache $cache;
 
     /**
      * @var array
      */
-    protected $primitives = [
+    protected array $primitives = [
         self::VAR_STRING => true,
         self::VAR_INTEGER => true,
         self::VAR_FLOAT => true,
@@ -77,7 +76,7 @@ class Database
      * 
      * @var array
      */
-    protected $collection = [
+    protected array $collection = [
         '$id' => self::METADATA,
         '$collection' => self::METADATA,
         'name' => 'collections',
@@ -119,7 +118,7 @@ class Database
     /**
      * @var array
      */
-    static protected $filters = [];
+    static protected array $filters = [];
 
     /**
      * @param Adapter $adapter
@@ -159,7 +158,7 @@ class Database
                 if (array_key_exists('$id', $value)) {
                     return new Document($value);
                 } else {
-                    $value = array_map(function (mixed $item) {
+                    $value = array_map(function ($item) {
                         if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
                             return new Document($item);
                         }
@@ -430,34 +429,12 @@ class Database
      * 
      * @return bool
      */
-
-    /**
-     * Create Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $required
-     * @param mixed $default
-     * @param bool $signed
-     * @param bool $array
-     * @param string|null $format
-     * @param array $formatOptions
-     * @param array $filters
-     * @return bool
-     * @throws Exception
-     * @throws Throwable
-     * @throws DuplicateException
-     * @throws LimitException
-     */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->getCollection($collection);
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
-
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
@@ -750,7 +727,7 @@ class Database
         $cache = null;
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load("cache-{$this->getNamespace()}:{$collection->getId()}:{$id}", self::TTL)) {
+        if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
             $validator = new Authorization(self::PERMISSION_READ);
 
@@ -778,14 +755,14 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->save("cache-{$this->getNamespace()}:{$collection->getId()}:{$id}", $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
 
     /**
      * Create Document
-     *
+     * 
      * @param string $collection
      * @param Document $document
      *
@@ -825,7 +802,7 @@ class Database
 
     /**
      * Update Document
-     *
+     * 
      * @param string $collection
      * @param string $id
      *
@@ -867,14 +844,14 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge("cache-{$this->getNamespace()}:{$collection->getId()}:{$id}");
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         return $document;
     }
 
     /**
      * Delete Document 
-     *
+     * 
      * @param string $collection
      * @param string $id
      *
@@ -892,21 +869,21 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge("cache-{$this->getNamespace()}:{$collection}:{$id}");
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }
 
     /**
      * Cleans the all the collection's documents from the cache
-     *
+     * 
      * @param string $collection
      *
      * @return bool
      */
     public function deleteCachedCollection(string $collection): bool
     {
-        return $this->cache->purge("cache-{$this->getNamespace()}:{$collection}:*");
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
     }
 
     /**
@@ -919,12 +896,12 @@ class Database
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge("cache-{$this->getNamespace()}:{$collection}:{$id}");
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
     }
 
     /**
      * Find Documents
-     *
+     * 
      * @param string $collection
      * @param Query[] $queries
      * @param int $limit
@@ -936,7 +913,7 @@ class Database
      *
      * @return Document[]
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], ?Document $cursor = null, string $cursorDirection = self::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = self::CURSOR_AFTER): array
     {
         $collection = $this->getCollection($collection);
 
@@ -948,10 +925,10 @@ class Database
 
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
-        foreach ($results as $key => $node) {
-            $results[$key] = $this->casting($collection, $node);
-            $results[$key] = $this->decode($collection, $node);
-            $results[$key]->setAttribute('$collection', $collection->getId());
+        foreach ($results as &$node) {
+            $node = $this->casting($collection, $node);
+            $node = $this->decode($collection, $node);
+            $node->setAttribute('$collection', $collection->getId());
         }
 
         return $results;
@@ -965,7 +942,7 @@ class Database
      * @param array $orderTypes
      * @param Document|null $cursor
      * @param string $cursorDirection
-     *
+     * 
      * @return Document|bool
      */
     public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = Database::CURSOR_AFTER)
@@ -976,9 +953,9 @@ class Database
 
     /**
      * Count Documents
-     *
+     * 
      * Count the number of documents. Pass $max=0 for unlimited count
-     *
+     * 
      * @param string $collection
      * @param Query[] $queries
      * @param int $max
@@ -994,9 +971,9 @@ class Database
 
     /**
      * Sum an attribute
-     *
+     * 
      * Sum an attribute for all the documents. Pass $max=0 for unlimited count
-     *
+     * 
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
@@ -1004,7 +981,7 @@ class Database
      *
      * @return int|float
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
         $count = $this->adapter->sum($collection, $attribute, $queries, $max);
 
@@ -1072,10 +1049,10 @@ class Database
 
     /**
      * Encode Document
-     *
+     * 
      * @param Document $collection
      * @param Document $document
-     *
+     * 
      * @return Document
      */
     public function encode(Document $collection, Document $document): Document
@@ -1101,10 +1078,10 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as $i => $node) {
+            foreach ($value as &$node) {
                 if (($node !== null)) {
                     foreach ($filters as $filter) {
-                        $value[$i] = $this->encodeAttribute($filter, $node, $document);
+                        $node = $this->encodeAttribute($filter, $node, $document);
                     }
                 }
             }
@@ -1140,9 +1117,9 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as $i => $node) {
+            foreach ($value as &$node) {
                 foreach (array_reverse($filters) as $filter) {
-                    $value[$i] = $this->decodeAttribute($filter, $node, $document);
+                    $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }
 
@@ -1180,16 +1157,20 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as $i => $node) {
+            foreach ($value as &$node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
-                        $value[$i] = (bool)$node;
+                        $node = (bool)$node;
                         break;
                     case self::VAR_INTEGER:
-                        $value[$i] = (int)$node;
+                        $node = (int)$node;
                         break;
                     case self::VAR_FLOAT:
-                        $value[$i] = (float)$node;
+                        $node = (float)$node;
+                        break;
+
+                    default:
+                        # code...
                         break;
                 }
             }
@@ -1212,7 +1193,7 @@ class Database
      * 
      * @return mixed
      */
-    protected function encodeAttribute(string $name, mixed $value, Document $document)
+    protected function encodeAttribute(string $name, $value, Document $document)
     {
         if (!isset(self::$filters[$name])) {
             throw new Exception('Filter not found');
@@ -1220,7 +1201,7 @@ class Database
 
         try {
             $value = self::$filters[$name]['encode']($value, $document, $this);
-        } catch (Throwable $th) {
+        } catch (\Throwable $th) {
             throw $th;
         }
 
@@ -1229,17 +1210,17 @@ class Database
 
     /**
      * Decode Attribute
-     *
+     * 
      * Passes the attribute $value, and $document context to a predefined filter
-     * that allow you to manipulate the output format of the given attribute.
-     *
+     *  that allow you to manipulate the output format of the given attribute.
+     * 
      * @param string $name
      * @param mixed $value
      * @param Document $document
-     *
+     * 
      * @return mixed
      */
-    protected function decodeAttribute(string $name, mixed $value, Document $document)
+    protected function decodeAttribute(string $name, $value, Document $document)
     {
         if (!isset(self::$filters[$name])) {
             throw new Exception('Filter not found');
@@ -1247,7 +1228,7 @@ class Database
 
         try {
             $value = self::$filters[$name]['decode']($value, $document, $this);
-        } catch (Throwable $th) {
+        } catch (\Throwable $th) {
             throw $th;
         }
 
@@ -1266,7 +1247,7 @@ class Database
         $uniqid = \uniqid();
 
         if ($padding > 0) {
-            $bytes = \random_bytes(intval(\ceil($padding / 2))); // one byte expands to two chars
+            $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
             $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
         }
 

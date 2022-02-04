@@ -1,129 +1,104 @@
 <?php
 
-// namespace Utopia\Database\Adapter;
+namespace Utopia\Database\Adapter;
 
-// use PDO;
-// use Exception;
-// use phpDocumentor\Reflection\DocBlock\Tags\Var_;
-// use Utopia\Database\Adapter;
+use Exception;
+use Utopia\Database\Database;
 
-// class Postgres extends Adapter
-// {
-//     /**
-//      * @var PDO
-//      */
-//     protected $pdo;
+class Postgres extends MariaDB
+{
+    /**
+     * Create Database
+     *
+     * @param string $name
+     * 
+     * @return bool
+     */
+    public function create(string $name): bool
+    {
+        $name = $this->filter($name);
 
-//     /**
-//      * Constructor.
-//      *
-//      * Set connection and settings
-//      *
-//      * @param PDO $pdo
-//      */
-//     public function __construct(PDO $pdo)
-//     {
-//         $this->pdo = $pdo;
-//     }
-    
-//     /**
-//      * Create Database
-//      * 
-//      * @return bool
-//      */
-//     public function create(): bool
-//     {
-//         $name = $this->getNamespace();
+        return $this->getPDO()
+            ->prepare("SELECT 'CREATE DATABASE  \"{$name}\" /*!40100 DEFAULT CHARACTER SET utf8mb4 */'
+            WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '\"{$name}\" /*!40100 DEFAULT CHARACTER SET utf8mb4 */')")
+            ->execute();
+    }
 
-//         return $this->getPDO()
-//             ->prepare("CREATE SCHEMA {$name} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
-//             ->execute();
-//     }
+    /**
+     * Create Collection
+     * 
+     * @param string $name
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
+     * @return bool
+     */
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    {
+        $database = $this->getDefaultDatabase();
+        $namespace = $this->getNamespace();
+        $id = $this->filter($name);
 
-//     /**
-//      * List Databases
-//      * 
-//      * @return array
-//      */
-//     public function list(): array
-//     {
-//         $stmt = $this->getPDO()
-//             ->prepare("SELECT datname FROM pg_database;");
+        if (!empty($attributes) || !empty($indexes)) {
+            foreach ($attributes as &$attribute) {
+                $attrId = $this->filter($attribute->getId());
+                $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-//         $stmt->execute();
-        
-//         $list = [];
+                if($attribute->getAttribute('array')) {
+                    $attrType = 'LONGTEXT';
+                }
 
-//         foreach ($stmt->fetchAll() as $key => $value) {
-//             $list[] = $value['datname'] ?? '';
-//         }
+                $attribute = "`{$attrId}` {$attrType}, ";
+            }
 
-//         return $list;
-//     }
+            foreach ($indexes as &$index) {
+                $indexId = $this->filter($index->getId()); 
+                $indexType = $this->getSQLIndexType($index->getAttribute('type'));
 
-//     /**
-//      * Delete Database
-//      * 
-//      * @return bool
-//      */
-//     public function delete(): bool
-//     {
-//         $name = $this->getNamespace();
+                $indexAttributes = $index->getAttribute('attributes');
+                foreach ($indexAttributes as $key => &$attribute) {
+                    $indexLength = $index->getAttribute('lengths')[$key] ?? '';
+                    $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
+                    $indexOrder = $index->getAttribute('orders')[$key] ?? '';
+                    $indexAttribute = $this->filter($attribute);
 
-//         return $this->getPDO()
-//             ->prepare("DROP SCHEMA {$name};")
-//             ->execute();
-//     }
+                    if ($indexType === Database::INDEX_FULLTEXT) {
+                        $indexOrder = '';
+                    }
 
-//     /**
-//      * Create Collection
-//      * 
-//      * @param string $id
-//      * @return bool
-//      */
-//     public function createCollection(string $id): bool
-//     {
-//         $name = $this->filter($id).'_documents';
+                    $attribute = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                }
 
-//         return $this->getPDO()
-//             ->prepare("CREATE TABLE {$this->getNamespace()}.{$name}(
-//                 _id     INT         PRIMARY KEY     NOT NULL,
-//                 _uid    CHAR(13)                    NOT NULL
-//              );")
-//             ->execute();
-//     }
+                $index = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
 
-//     /**
-//      * List Collections
-//      * 
-//      * @return array
-//      */
-//     public function listCollections(): array
-//     {
-//     }
+            }
 
-//     /**
-//      * Delete Collection
-//      * 
-//      * @param string $id
-//      * @return bool
-//      */
-//     public function deleteCollection(string $id): bool
-//     {
-//         $name = $this->filter($id).'_documents';
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
+                    \"_id\" SERIAL(11) NOT NULL,
+                    \"_uid\" CHAR(255) NOT NULL,
+                    \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
+                    \"_write\" TEXT NOT NULL,
+                    " . \implode(' ', $attributes) . "
+                    PRIMARY KEY (\"_id\"),
+                    " . \implode(' ', $indexes) . "
+                    UNIQUE KEY \"_index1\" (\"_uid\")
+                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                ->execute();
 
-//         return $this->getPDO()
-//             ->prepare("DROP TABLE {$this->getNamespace()}.{$name};")
-//             ->execute();
-//     }
+        } else {
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
+                    \"_id\" int(11) unsigned NOT NULL AUTO_INCREMENT,
+                    \"_uid\" CHAR(255) NOT NULL,
+                    \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
+                    \"_write\" TEXT NOT NULL,
+                    PRIMARY KEY (\"_id\"),
+                    UNIQUE KEY \"_index1\" (\"_uid\")
+                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                ->execute();
+        }
 
-//     /**
-//      * @return PDO
-//      *
-//      * @throws Exception
-//      */
-//     protected function getPDO()
-//     {
-//         return $this->pdo;
-//     }
-// }
+        // Update $this->getIndexCount when adding another default index
+        return $this->createIndex($id, '_index2', $this->getIndexTypeForReadPermission(), ['_read'], [], []);
+    }
+}

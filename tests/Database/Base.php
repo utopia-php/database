@@ -44,13 +44,13 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete()
     {
-        $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+        if (!static::getDatabase()->exists($this->testDatabase)) {
+            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+        }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
-
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
@@ -584,6 +584,33 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+
+        $oldRead = $document->getRead();
+        $oldWrite = $document->getWrite();
+
+        $new
+            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
+        ;
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('role:guest', $new->getRead());
+        $this->assertContains('role:guest', $new->getWrite());
+
+        $new
+            ->setAttribute('$read', $oldRead)
+            ->setAttribute('$write', $oldWrite)
+        ;
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertNotContains('role:guest', $new->getRead());
+        $this->assertNotContains('role:guest', $new->getWrite());
 
         return $document;
     }

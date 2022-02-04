@@ -419,12 +419,16 @@ class MariaDB extends Adapter
             $permissions[] = "('write', '{$permission}', '{$document->getId()}')";
         }
 
-        $queryPermissions = "INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-        $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+        if (!empty($permissions)) {
+            $queryPermissions = "INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+        }
 
         try {
             $stmt->execute();
-            $stmtPermissions->execute();
+            if (isset($stmtPermissions)) {
+                $stmtPermissions->execute();
+            }
         } catch (PDOException $e) {
             switch ($e->getCode()) {
                 case 1062:
@@ -474,7 +478,7 @@ class MariaDB extends Adapter
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $permissions = array_reduce($permissions, function (array $carry, array ƒ$item) {
+        $permissions = array_reduce($permissions, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
 
             return $carry;

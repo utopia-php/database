@@ -18,7 +18,7 @@ class MariaDB extends Adapter
     /**
      * @var PDO
      */
-    protected PDO $pdo;
+    protected $pdo;
 
     /**
      * Constructor.
@@ -27,7 +27,7 @@ class MariaDB extends Adapter
      *
      * @param PDO $pdo
      */
-    public function __construct(PDO $pdo)
+    public function __construct($pdo)
     {
         $this->pdo = $pdo;
     }
@@ -1413,7 +1413,7 @@ class MariaDB extends Adapter
      * Returns the current PDO object
      * @return PDO 
      */
-    protected function getPDO(): PDO
+    protected function getPDO()
     {
         return $this->pdo;
     }

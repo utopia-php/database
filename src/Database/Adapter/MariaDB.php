@@ -180,7 +180,7 @@ class MariaDB extends Adapter
                 ->execute();
 
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}+permissions` (
+                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
                     `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                     `_type` VARCHAR(12) NOT NULL,
                     `_permission` VARCHAR(255) NOT NULL,
@@ -192,7 +192,7 @@ class MariaDB extends Adapter
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}+permissions`;")
+                ->prepare("DROP TABLE IF EXISTS `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}_perms`;")
                 ->execute();
             throw $th;
         }
@@ -213,7 +213,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("DROP TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}+permissions`;")
+            ->prepare("DROP TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}_perms`;")
             ->execute();
     }
 
@@ -420,7 +420,7 @@ class MariaDB extends Adapter
         }
 
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $queryPermissions = "INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
 
@@ -471,7 +471,7 @@ class MariaDB extends Adapter
          */
         $permissionsStmt = $this->getPDO()->prepare("
                 SELECT _type, _permission
-                FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions` p
+                FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` p
                 WHERE p._document = {$this->getPDO()->quote($document->getId())}
         ");
 
@@ -527,7 +527,7 @@ class MariaDB extends Adapter
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
                 DELETE
-                FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions`
+                FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
                 WHERE
                     _document = :_uid
                     {$removeQuery}
@@ -542,7 +542,7 @@ class MariaDB extends Adapter
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(
                     "
-                    INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions`
+                    INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
                     (_document, _type, _permission) VALUES " . implode(', ', [
                         ...array_map(fn (string $role) => "( {$this->getPDO()->quote($document->getId())}, 'read', {$this->getPDO()->quote($role)} )", $readAdded),
                         ...array_map(fn (string $role) => "( {$this->getPDO()->quote($document->getId())}, 'write', {$this->getPDO()->quote($role)} )", $writeAdded)
@@ -623,7 +623,7 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("DELETE FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` WHERE _uid = :_uid LIMIT 1");
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
-        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}+permissions` WHERE _document = :_uid");
+        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` WHERE _document = :_uid");
         $stmtPermissions->bindValue(':_uid', $id, PDO::PARAM_STR);
 
         try {
@@ -1344,7 +1344,7 @@ class MariaDB extends Adapter
 
         return "EXISTS (
                     SELECT 1
-                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}+permissions` AS p
+                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms` AS p
                     WHERE
                     (
                         p._document = table_main._uid
@@ -1367,7 +1367,7 @@ class MariaDB extends Adapter
     {
         return "(
                     SELECT JSON_ARRAYAGG(DISTINCT _permission)
-                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}+permissions`
+                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
                     WHERE
                         _document = table_main._uid
                         AND _type = {$this->getPDO()->quote($type)}

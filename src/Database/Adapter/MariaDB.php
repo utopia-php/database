@@ -186,7 +186,7 @@ class MariaDB extends Adapter
                     `_permission` VARCHAR(255) NOT NULL,
                     `_document` VARCHAR(255) NOT NULL,
                     PRIMARY KEY (`_id`),
-                    INDEX `_index1` (`_type`,`_document`,`_permission`),
+                    UNIQUE INDEX `_index1` (`_type`,`_document`,`_permission`),
                     INDEX `_index2` (`_permission`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
                 ->execute();

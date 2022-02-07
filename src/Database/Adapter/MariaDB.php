@@ -170,24 +170,24 @@ class MariaDB extends Adapter
         try {
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
-                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                    `_uid` CHAR(255) NOT NULL,
-                    " . \implode(' ', $attributes) . "
-                    PRIMARY KEY (`_id`),
-                    " . \implode(' ', $indexes) . "
-                    UNIQUE KEY `_index1` (`_uid`)
+                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                        `_uid` CHAR(255) NOT NULL,
+                        " . \implode(' ', $attributes) . "
+                        PRIMARY KEY (`_id`),
+                        " . \implode(' ', $indexes) . "
+                        UNIQUE KEY `_index1` (`_uid`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
                 ->execute();
 
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
-                    `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                    `_type` VARCHAR(12) NOT NULL,
-                    `_permission` VARCHAR(255) NOT NULL,
-                    `_document` VARCHAR(255) NOT NULL,
-                    PRIMARY KEY (`_id`),
-                    UNIQUE INDEX `_index1` (`_type`,`_document`,`_permission`),
-                    INDEX `_index2` (`_permission`)
+                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                        `_type` VARCHAR(12) NOT NULL,
+                        `_permission` VARCHAR(255) NOT NULL,
+                        `_document` VARCHAR(255) NOT NULL,
+                        PRIMARY KEY (`_id`),
+                        UNIQUE INDEX `_index1` (`_type`,`_document`,`_permission`),
+                        INDEX `_index2` (`_permission`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
                 ->execute();
         } catch (\Exception $th) {

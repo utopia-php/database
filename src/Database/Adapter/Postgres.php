@@ -18,11 +18,99 @@ class Postgres extends MariaDB
     {
         $name = $this->filter($name);
 
+        // $results = $this->getPDO()->prepare("SELECT 1 FROM pg_database WHERE datname='{$name}'");
+        // $results->execute();
+        // $results = $results->fetchAll();
+
+        // if(!empty($results))
+        //     return false;
+
         return $this->getPDO()
-            ->prepare("SELECT 'CREATE DATABASE  \"{$name}\" /*!40100 DEFAULT CHARACTER SET utf8mb4 */'
-            WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '\"{$name}\" /*!40100 DEFAULT CHARACTER SET utf8mb4 */')")
+            ->prepare("CREATE SCHEMA IF NOT EXISTS \"{$name}\"")
             ->execute();
     }
+
+    /**
+     * Get SQL Type
+     * 
+     * @param string $type
+     * @param int $size in chars
+     * 
+     * @return string
+     */
+    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    {
+        switch ($type) {
+            case Database::VAR_STRING:
+                // $size = $size * 4; // Convert utf8mb4 size to bytes
+                if($size > 16383) {
+                    return 'TEXT';
+                }
+
+                return "VARCHAR({$size})";
+            break;
+
+            case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
+
+                if($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
+                    return 'BIGINT';
+                }
+
+                return 'INTEGER';
+            break;
+
+            case Database::VAR_FLOAT:
+                return 'REAL';
+            break;
+
+            case Database::VAR_BOOLEAN:
+                return 'BOOLEAN';
+            break;
+
+            case Database::VAR_DOCUMENT:
+                return 'VARCHAR';
+            break;
+
+            default:
+                throw new Exception('Unknown Type');
+            break;
+        }
+    }
+
+    /**
+     * Get SQL Index
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param array $attributes
+     * 
+     * @return string
+     */
+    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    {
+        switch ($type) {
+            case Database::INDEX_KEY:
+            case Database::INDEX_ARRAY:
+                $type = 'INDEX';
+            break;
+
+            case Database::INDEX_UNIQUE:
+                $type = 'UNIQUE INDEX';
+            break;
+
+            case Database::INDEX_FULLTEXT:
+                $type = 'FULLTEXT INDEX';
+            break;
+
+            default:
+                throw new Exception('Unknown Index Type:' . $type);
+            break;
+        }
+
+        return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
+    }
+
 
     /**
      * Create Collection
@@ -44,10 +132,10 @@ class Postgres extends MariaDB
                 $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
                 if($attribute->getAttribute('array')) {
-                    $attrType = 'LONGTEXT';
+                    $attrType = 'TEXT';
                 }
 
-                $attribute = "`{$attrId}` {$attrType}, ";
+                $attribute = "\"{$attrId}\" {$attrType}, ";
             }
 
             foreach ($indexes as &$index) {
@@ -65,36 +153,36 @@ class Postgres extends MariaDB
                         $indexOrder = '';
                     }
 
-                    $attribute = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                    $attribute = "\"{$indexAttribute}\"{$indexLength} {$indexOrder}";
                 }
 
-                $index = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+                $index = "{$indexType} \"{$indexId}\" (" . \implode(", ", $indexAttributes) . " ),";
 
             }
 
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
-                    \"_id\" SERIAL(11) NOT NULL,
+                    \"_id\" SERIAL NOT NULL,
                     \"_uid\" CHAR(255) NOT NULL,
                     \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
                     \"_write\" TEXT NOT NULL,
                     " . \implode(' ', $attributes) . "
                     PRIMARY KEY (\"_id\"),
                     " . \implode(' ', $indexes) . "
-                    UNIQUE KEY \"_index1\" (\"_uid\")
-                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                    CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
+                  )")
                 ->execute();
 
         } else {
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
-                    \"_id\" int(11) unsigned NOT NULL AUTO_INCREMENT,
+                    \"_id\" SERIAL(11) NOT NULL,
                     \"_uid\" CHAR(255) NOT NULL,
                     \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
                     \"_write\" TEXT NOT NULL,
                     PRIMARY KEY (\"_id\"),
-                    UNIQUE KEY \"_index1\" (\"_uid\")
-                  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                    CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
+                  )")
                 ->execute();
         }
 

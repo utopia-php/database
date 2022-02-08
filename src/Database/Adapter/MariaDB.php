@@ -493,7 +493,7 @@ class MariaDB extends Adapter
         $writeRemoved = array_diff($permissions['write'], $document->getWrite());
 
         /**
-         * Get removed Permissions
+         * Get added Permissions
          */
         $readAdded = array_diff($document->getRead(), $permissions['read']);
         $writeAdded = array_diff($document->getWrite(), $permissions['write']);

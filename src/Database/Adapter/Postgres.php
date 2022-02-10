@@ -9,6 +9,8 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class Postgres extends MariaDB
 {
@@ -140,7 +142,7 @@ class Postgres extends MariaDB
             break;
 
             case Database::INDEX_FULLTEXT:
-                $type = 'UNIQUE INDEX';
+                $type = 'INDEX';
             break;
 
             default:
@@ -149,6 +151,48 @@ class Postgres extends MariaDB
         }
 
         return 'CREATE '.$type.' "'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
+    }
+
+    /**
+     * Get Document
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return Document
+     */
+    public function getDocument(string $collection, string $id): Document
+    {
+        $name = $this->filter($collection);
+
+        $stmt = $this->getPDO()->prepare("SELECT *
+            FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+            WHERE _uid = :_uid
+            LIMIT 1;
+        ");
+
+        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+
+        $stmt->execute();
+
+        /** @var array $document */
+        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if(empty($document)) {
+            return new Document([]);
+        }
+
+        $document['$id'] = $document['_uid'];
+        $document['$internalId'] = $document['_id'];
+        $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
+        $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
+
+        unset($document['_id']);
+        unset($document['_uid']);
+        unset($document['_read']);
+        unset($document['_write']);
+
+        return new Document($document);
     }
 
     /**
@@ -225,6 +269,7 @@ class Postgres extends MariaDB
     {
         $attributes = $document->getAttributes();
         $name = $this->filter($collection);
+        $columnNames = '';
         $columns = '';
 
         $this->getPDO()->beginTransaction();
@@ -234,12 +279,14 @@ class Postgres extends MariaDB
          */
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columns .= "\"{$column}\"" . '=:' . $column . ',';
+            $columnNames .= "{$column}" . ', ';
+            $columns .= ":" . $column . ', ';
         }
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-                VALUES( {$columns} _uid = :_uid, _read = :_read, _write = :_write)");
+                ({$columnNames} _uid, _read, _write)
+                VALUES ({$columns} :_uid, :_read, :_write)");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
         $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
@@ -255,10 +302,9 @@ class Postgres extends MariaDB
             $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
         }
 
-        var_dump($stmt);
-
         try {
             $stmt->execute();
+            // $stmt->debugDumpParams();
         } catch (PDOException $e) {
             switch ($e->getCode()) {
                 case 1062:
@@ -280,6 +326,146 @@ class Postgres extends MariaDB
         return $document;
     }
 
+       /**
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param string $collection
+     * @param array $queries
+     * @param int $limit
+     * @param int $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     * @param array $cursor
+     * @param string $cursorDirection
+     *
+     * @return array 
+     * @throws Exception 
+     * @throws PDOException 
+     */
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $orders = [];
+
+        foreach($orderAttributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+
+            // Get most dominant/first order attribute
+            if ($i === 0 && !empty($cursor)) {
+                $orderOperatorInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+                if ($cursorDirection === Database::CURSOR_BEFORE) {
+                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                    $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                }
+
+                $where[] = "(
+                        {$attribute} {$this->getSQLOperator($orderOperator)} :cursor 
+                        OR (
+                            {$attribute} = :cursor 
+                            AND
+                            _id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
+                        )
+                    )";
+            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+
+            $orders[] = $attribute.' '.$orderType;
+        }
+
+        // Allow after pagination without any order
+        if (empty($orderAttributes) && !empty($cursor)) {
+            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+            $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            );
+            $where[] = "( _id {$this->getSQLOperator($orderOperator)} {$cursor['$internalId']} )";
+        }
+
+        // Allow order type without any order attribute, fallback to the natural order (_id)
+        if(empty($orderAttributes) && !empty($orderTypes)) {
+            $order = $orderTypes[0] ?? Database::ORDER_ASC;
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+
+            $orders[] = '_id '.$this->filter($order);
+        } else {
+            $orders[] = '_id '.($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+        }
+
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+            }
+            $condition = implode(' OR ', $conditions);
+            $where[] = empty($condition) ? '' : '('.$condition.')';
+        }
+
+        $order = 'ORDER BY '.implode(', ', $orders);
+
+        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
+            WHERE {$permissions} AND ".implode(' AND ', $where)."
+            {$order}
+            LIMIT :limit OFFSET :offset;
+        ");
+
+        foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+            $attribute = $orderAttributes[0];
+            if (is_null($cursor[$attribute] ?? null)) {
+                throw new Exception("Order attribute '{$attribute}' is empty.");
+            }
+            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
+        }
+
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($results as &$value) {
+            $value['$id'] = $value['_uid'];
+            $value['$internalId'] = $value['_id'];
+            $value['$read'] = (isset($value['_read'])) ? json_decode($value['_read'], true) : [];
+            $value['$write'] = (isset($value['_write'])) ? json_decode($value['_write'], true) : [];
+            unset($value['_uid']);
+            unset($value['_id']);
+            unset($value['_read']);
+            unset($value['_write']);
+
+            $value = new Document($value);
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $results = array_reverse($results); //TODO: check impact on array_reverse
+        }
+
+        return $results;
+    }
 
     /**
      * Create Collection

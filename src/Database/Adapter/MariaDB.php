@@ -247,6 +247,27 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $name
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $id, string $name): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+        $name = $this->filter($name);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$id}` TO `{$name}`;")
+            ->execute();
+    }
+
+    /**
      * Delete Attribute
      *
      * @param string $collection

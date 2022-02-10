@@ -211,6 +211,16 @@ abstract class Adapter
     abstract public function deleteAttribute(string $collection, string $id): bool;
 
     /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $name
+     * @return bool
+     */
+    abstract public function renameAttribute(string $collection, string $id, string $name): bool;
+
+    /**
      * Create Index
      *
      * @param string $collection

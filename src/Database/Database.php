@@ -601,6 +601,36 @@ class Database
     }
 
     /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function renameAttribute(string $collection, string $id, string $name): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $key => $value) {
+            if (isset($value['$id']) && $value['$id'] === $id) {
+                $attributes[$key]['key'] = $name;
+                break;
+            }
+        }
+
+        $collection->setAttribute('attributes', $attributes);
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $this->adapter->renameAttribute($collection->getId(), $id, $name);
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection

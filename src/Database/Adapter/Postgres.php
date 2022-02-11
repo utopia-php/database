@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
-use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
@@ -183,7 +182,7 @@ class Postgres extends MariaDB
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
+        $document['$internalId'] = strval($document['_id']);
         $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
         $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
 
@@ -193,6 +192,147 @@ class Postgres extends MariaDB
         unset($document['_write']);
 
         return new Document($document);
+    }
+
+    /**
+     * Create Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+        $type = $this->getSQLType($type, $size, $signed);
+
+        if($array) {
+            $type = 'TEXT';
+        }
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+                ADD COLUMN \"{$id}\" {$type};")
+            ->execute();
+    }
+
+    /**
+     * Delete Document
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function deleteDocument(string $collection, string $id): bool
+    {
+        $name = $this->filter($collection);
+
+        $this->getPDO()->beginTransaction();
+
+        $stmt = $this->getPDO()
+            ->prepare("DELETE FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+                WHERE _uid = :_uid");
+
+        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+
+        if(!$stmt->execute()) {
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to clean document');
+        }
+
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
+        }
+
+        return true;
+    }
+
+    /**
+     * Delete Collection
+     * 
+     * @param string $id
+     * @return bool
+     */
+    public function deleteCollection(string $id): bool
+    {
+        $id = $this->filter($id);
+
+        return $this->getPDO()
+            ->prepare("DROP TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$id}\";")
+            ->execute();
+    }
+
+    /**
+     * Update Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    public function updateDocument(string $collection, Document $document): Document
+    {
+        $attributes = $document->getAttributes();
+        $name = $this->filter($collection);
+        $columns = '';
+
+        $this->getPDO()->beginTransaction();
+
+        /**
+         * Update Attributes
+         */
+        foreach ($attributes as $attribute => $value) { // Parse statement
+            $column = $this->filter($attribute);
+            $columns .= "\"{$column}\"" . '=:' . $column . ',';
+        }
+
+        $stmt = $this->getPDO()
+            ->prepare("UPDATE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+                SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
+
+        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
+        $stmt->bindValue(':_write', json_encode($document->getWrite()), PDO::PARAM_STR);
+
+        foreach ($attributes as $attribute => $value) {
+            if(is_array($value)) { // arrays & objects should be saved as strings
+                $value = json_encode($value);
+            }
+
+            $attribute = $this->filter($attribute);
+            $value = (is_bool($value)) ? (int)$value : $value;
+            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+        }
+
+        if(!empty($attributes)) {
+            try {
+                $stmt->execute();
+            } catch (PDOException $e) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        $this->getPDO()->rollBack();
+                        throw new Duplicate('Duplicated document: '.$e->getMessage());
+                        break;
+
+                    default:
+                        throw $e;
+                        break;
+                }
+            }
+        }
+
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
+        }
+
+        return $document;
     }
 
     /**

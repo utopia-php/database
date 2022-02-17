@@ -617,6 +617,7 @@ class Database
         foreach ($attributes as $key => $value) {
             if (isset($value['$id']) && $value['$id'] === $id) {
                 $attributes[$key]['key'] = $name;
+                $attributes[$key]['$id'] = $name;
                 break;
             }
         }

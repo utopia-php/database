@@ -385,6 +385,8 @@ class MariaDB extends Adapter
 
         unset($document['_id']);
         unset($document['_uid']);
+        unset($document['_read']);
+        unset($document['_write']);
 
         return new Document($document);
     }

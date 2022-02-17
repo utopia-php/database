@@ -1363,15 +1363,15 @@ class MariaDB extends Adapter
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
-        return "EXISTS (
-                    SELECT 1
-                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms` AS p
-                    WHERE
+        return "table_main._uid IN 
+                (
+                    SELECT * FROM 
                     (
-                        p._document = table_main._uid
-                        AND p._type = 'read'
-                    )
-                    AND p._permission IN (" . implode(', ', $roles) . ")
+                        SELECT _document
+                        FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
+                        WHERE _permission IN (" . implode(', ', $roles) . ")
+                        AND _type = 'read'
+                    ) as subquery
                 )";
     }
 

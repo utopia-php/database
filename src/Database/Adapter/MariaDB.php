@@ -31,6 +31,19 @@ class MariaDB extends Adapter
         $this->pdo = $pdo;
     }
 
+    function getAdapterName(): string {
+      return "mariadb";
+    }
+
+    protected function options() {
+      $options = parent::options();
+      
+      return [
+        ...$options,
+        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+      ];
+    }
+
     /**
      * Create Database
      *
@@ -1228,15 +1241,5 @@ class MariaDB extends Adapter
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
             break;
         }
-    }
-
-    /**
-     * @return PDO
-     *
-     * @throws Exception
-     */
-    protected function getPDO()
-    {
-        return $this->pdo;
     }
 }

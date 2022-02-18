@@ -28,7 +28,9 @@
         "ext-mongodb": "*",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.4.*",
-        "mongodb/mongodb": "1.8.0"
+        "mongodb/mongodb": "1.8.0",
+        "utopia-php/swoole": "^0.3.2",
+        "ext-swoole": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.4",

@@ -1265,4 +1265,11 @@ class Database
     {
         return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
     }
+
+    public function connect()
+    {
+      $this->adapter->connect();
+
+      return $this;
+    }
 }

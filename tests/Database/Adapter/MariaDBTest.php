@@ -44,46 +44,33 @@ class MariaDBTest extends Base
      */
     static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
-            return self::$database;
-        }
+      if(!is_null(self::$database)) {
+        return self::$database;
+      }
+      $dbHost = 'kdmb-cloud-test-do-user-8650538-0.b.db.ondigitalocean.com';
+      $dbPort = '25060';
+      $dbUser = 'doadmin';
+      $dbPass = 'AzIAei842ArWP4z7';
 
-        $dbHost = 'mariadb';
-        $dbPort = '3306';
-        $dbUser = 'root';
-        $dbPass = 'password';
- 
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
+      $redis = new Redis();
+      $redis->connect('redis', 6379);
+      $redis->flushAll();
 
-        $udb = 
-          new Database(
-            MariaDB(
-                $dbHost,
-                $dbPort,
-                $dbUser,
-                $dbPass
-            ),
-            new Cache(new RedisAdapter($redis))
-          );
+      $database = 
+        new Database(
+          new MariaDB(
+              $dbHost,
+              $dbPort,
+              $dbUser,
+              $dbPass
+          ),
+          new Cache(new RedisAdapter($redis))
+        );
 
-        $udb->setDefaultDatabase('utopiaTests');
-        $udb->setNamespace('myapp_'.uniqid());
-  
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-            PDO::ATTR_TIMEOUT => 3, // Seconds
-            PDO::ATTR_PERSISTENT => true,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        ]);
+      $database->connect();
+      $database->setDefaultDatabase('defaultdb');
+      $database->setNamespace('myapp_'.uniqid());
 
-
-        $database = new Database(new MariaDB(), $cache);
-        $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
-
-        return self::$database = $database;
+      return self::$database = $database;
     }
 }

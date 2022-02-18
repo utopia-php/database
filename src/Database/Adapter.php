@@ -1,12 +1,14 @@
 <?php
 namespace Utopia\Database;
 
+use PDO;
+use Swoole\Runtime;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
 
 use Exception;
 
-
+Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
 
 abstract class Adapter
 {
@@ -110,6 +112,12 @@ abstract class Adapter
         return $this->namespace;
     }
 
+    public string $host = "localhost";
+    public string $user = "root";
+    public string $password = "";
+    public string $schema = "";
+    public int $port = 3306;
+
     public function __construct(
       string $host = 'localhost',
       string $user,
@@ -129,10 +137,7 @@ abstract class Adapter
         return [
             PDO::ATTR_TIMEOUT => 3, // Seconds
             PDO::ATTR_PERSISTENT => true,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_ERRMODE => App::isDevelopment() 
-            ? PDO::ERRMODE_WARNING 
-            : PDO::ERRMODE_SILENT, // If in production mode, warnings are not displayed
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
         ];
     }
 
@@ -154,8 +159,8 @@ abstract class Adapter
 
     protected function getPool(): PDOPool
     {
-        if (empty($this->_pool)) {
-          $this->initPool();
+        if (empty($this->_pool) || is_null($this->_pool)) {
+            $this->initPool();
         }
 
         return $this->_pool;
@@ -173,6 +178,8 @@ abstract class Adapter
      */
     public function connect() {
       $this->initPool();
+
+      return $this;
     }
 
     /**
@@ -180,7 +187,13 @@ abstract class Adapter
      * Pulls and returns a connection from the pool
      */
     public function getConnection($fromPool = true) {
-      return $fromPool == true ? $this->pool->get(); : PDO::Connect();
+      var_dump($this->getPool()->get());
+
+      return $fromPool == true ? $this->getPool()->get() : PDO::Connect();
+    }
+
+    protected function getPDO() {
+      return $this->getConnection();
     }
 
     public function returnConnection($client) {

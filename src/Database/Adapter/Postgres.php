@@ -222,6 +222,26 @@ class Postgres extends MariaDB
     }
 
     /**
+     * Delete Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+                DROP COLUMN \"{$id}\";")
+            ->execute();
+    }
+
+    /**
      * Delete Document
      *
      * @param string $collection

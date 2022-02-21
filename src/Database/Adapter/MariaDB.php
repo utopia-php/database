@@ -495,9 +495,9 @@ class MariaDB extends Adapter
         $permissionsStmt = $this->getPDO()->prepare("
                 SELECT _type, _permission
                 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` p
-                WHERE p._document = {$this->getPDO()->quote($document->getId())}
+                WHERE p._document = :_uid
         ");
-
+        $permissionsStmt->bindValue(':_uid', $document->getId());
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -529,7 +529,7 @@ class MariaDB extends Adapter
             if ($readRemoved) {
                 $removeQuery .= "(
                     _type = 'read'
-                    AND _permission IN (" . implode(', ', array_map(fn (string $role) => $this->getPDO()->quote($role), $readRemoved)) . ")
+                    AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_read_{$i}", array_keys($readRemoved))) . ")
                 )";
             }
 
@@ -540,7 +540,7 @@ class MariaDB extends Adapter
             if ($writeRemoved) {
                 $removeQuery .= "(
                     _type = 'write'
-                    AND _permission IN (" . implode(', ', array_map(fn (string $role) => $this->getPDO()->quote($role), $writeRemoved)) . ")
+                    AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_write_{$i}", array_keys($writeRemoved))) . ")
                 )";
             }
             $removeQuery .= ')';
@@ -556,6 +556,13 @@ class MariaDB extends Adapter
                     {$removeQuery}
             ");
             $stmtRemovePermissions->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+            foreach ($readRemoved as $i => $role) {
+                $stmtRemovePermissions->bindValue(":_remove_read_{$i}", $role);
+            }
+            foreach ($writeRemoved as $i => $role) {
+                $stmtRemovePermissions->bindValue(":_remove_write_{$i}", $role);
+            }
         }
 
         /**
@@ -567,10 +574,18 @@ class MariaDB extends Adapter
                     "
                     INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
                     (_document, _type, _permission) VALUES " . implode(', ', [
-                        ...array_map(fn (string $role) => "( {$this->getPDO()->quote($document->getId())}, 'read', {$this->getPDO()->quote($role)} )", $readAdded),
-                        ...array_map(fn (string $role) => "( {$this->getPDO()->quote($document->getId())}, 'write', {$this->getPDO()->quote($role)} )", $writeAdded)
+                        ...array_map(fn (string $i) => "( :_uid, 'read', :_add_read_{$i} )", array_keys($readAdded)),
+                        ...array_map(fn (string $i) => "( :_uid, 'write', :_add_read_{$i} )", array_keys($writeAdded))
                     ])
                 );
+
+            $stmtAddPermissions->bindValue(":_uid", $document->getId());
+            foreach ($readAdded as $i => $role) {
+                $stmtAddPermissions->bindValue(":_add_read_{$i}", $role);
+            }
+            foreach ($writeAdded as $i => $role) {
+                $stmtAddPermissions->bindValue(":_add_write_{$i}", $role);
+            }
         }
 
         /**
@@ -585,7 +600,7 @@ class MariaDB extends Adapter
             ->prepare("UPDATE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
                 SET {$columns} _uid = :_uid WHERE _uid = :_uid");
 
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_uid', $document->getId());
 
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings

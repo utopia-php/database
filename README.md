@@ -15,15 +15,6 @@ Install using composer:
 composer require utopia-php/database
 ```
 
-Initialization:
-
-```php
-<?php
-
-require_once __DIR__ . '/../../vendor/autoload.php';
-
-```
-
 ### Concepts
 
 A list of the utopia/php concepts and their relevant equivalent using the different adapters
@@ -54,6 +45,8 @@ Some examples to help you get started.
 **Creating a database:**
 
 ```php
+require_once __DIR__ . '/vendor/autoload.php';
+
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
@@ -134,22 +127,6 @@ Below is a list of supported adapters, and their compatibly tested versions alon
 | SQLlite | 🛠 | 3.35 |
 
 ` ✅  - supported, 🛠  - work in progress`
-
-## TODOS
-
-- [ ] CRUD: Updated databases list method
-- [ ] CRUD: Validate original document before editing `$id`
-- [ ] CRUD: Test no one can overwrite exciting documents/collections without permission
-- [ ] FIND: Test for find timeout limits
-- [ ] FIND: Add a query validator (Limit queries to indexed attaributes only?)
-- [ ] FIND: Add support for more operators (search/match/like)
-- [ ] TEST: Missing Collection, DocumentId validators tests
-- [ ] TEST: Validate row size is not larger than allowed by adapter (MySQL/MariaDB ~16k)
-- [ ] TEST: Add test for creation of a unique index
-
-## Open Issues
-
-- In queries for arrays, should we create a dedicated index?
 
 ## Limitations (to be completed per adapter)
 
@@ -235,6 +212,11 @@ Navigate to `localhost:8708` to visualize query results.
 
 + [https://github.com/kodumbeats](https://github.com/kodumbeats)
 + [https://blog.kodumbeats.dev](https://blog.kodumbeats.dev)
+
+**Torsten Dittmann**
+
++ [https://twitter.com/dittmanntorsten](https://twitter.com/dittmanntorsten)
++ [https://github.com/torstendittmann](https://github.com/torstendittmann)
 
 ## Copyright and license
 

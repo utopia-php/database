@@ -1256,7 +1256,7 @@ class MariaDB extends Adapter
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
-                return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ')';
+                return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
                 break;
 
             default:

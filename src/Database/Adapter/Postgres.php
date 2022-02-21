@@ -118,6 +118,25 @@ class Postgres extends MariaDB
             ->execute();
     }
 
+     /**
+     * Delete Index
+     * 
+     * @param string $collection
+     * @param string $id
+     * 
+     * @return bool
+     */
+    public function deleteIndex(string $collection, string $id): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+                DROP INDEX \"{$id}\";")
+            ->execute();
+    }
+
     /**
      * Get SQL Index
      * 
@@ -678,7 +697,7 @@ class Postgres extends MariaDB
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
                     \"_id\" SERIAL NOT NULL,
-                    \"_uid\" CHAR(255) NOT NULL,
+                    \"_uid\" VARCHAR(255) NOT NULL,
                     \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
                     \"_write\" TEXT NOT NULL,
                     " . \implode(' ', $attributes) . "
@@ -692,7 +711,7 @@ class Postgres extends MariaDB
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
                     \"_id\" SERIAL NOT NULL,
-                    \"_uid\" CHAR(255) NOT NULL,
+                    \"_uid\" VARCHAR(255) NOT NULL,
                     \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
                     \"_write\" TEXT NOT NULL,
                     PRIMARY KEY (\"_id\"),

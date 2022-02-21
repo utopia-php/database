@@ -103,21 +103,22 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Get SQL Permissions
-     * 
-     * @param array $roles
-     * @param string $operator
-     * @param string $placeholder
-     * @param mixed $value
-     * 
-     * @return string
+     * Get SQL query to aggregate permissions as JSON array
+     *
+     * @param string $collection 
+     * @param string $type 
+     * @param string $alias 
+     * @return string 
+     * @throws Exception 
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLPermissionsQuery(string $collection, string $type, string $alias): string
     {
-        foreach ($roles as &$role) {
-            $role = 'JSON_CONTAINS(_read, ' . $this->getPDO()->quote("\"" . $role . "\"") . ', \'$\')';
-        }
-
-        return '(' . implode(' OR ', $roles) . ')';
+        return "(
+                    SELECT JSON_ARRAYAGG(_permission)
+                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
+                    WHERE
+                        _document = table_main._uid
+                        AND _type = {$this->getPDO()->quote($type)}
+                ) as {$alias}";
     }
 }

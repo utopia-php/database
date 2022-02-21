@@ -53,17 +53,17 @@ class Database
     /**
      * @var Adapter
      */
-    protected $adapter;
+    protected Adapter $adapter;
 
     /**
      * @var Cache
      */
-    protected $cache;
+    protected Cache $cache;
 
     /**
      * @var array
      */
-    protected $primitives = [
+    protected array $primitives = [
         self::VAR_STRING => true,
         self::VAR_INTEGER => true,
         self::VAR_FLOAT => true,
@@ -76,7 +76,7 @@ class Database
      * 
      * @var array
      */
-    protected $collection = [
+    protected array $collection = [
         '$id' => self::METADATA,
         '$collection' => self::METADATA,
         'name' => 'collections',
@@ -118,7 +118,7 @@ class Database
     /**
      * @var array
      */
-    static protected $filters = [];
+    static protected array $filters = [];
 
     /**
      * @param Adapter $adapter
@@ -129,15 +129,16 @@ class Database
         $this->adapter = $adapter;
         $this->cache = $cache;
 
-        self::addFilter('json',
+        self::addFilter(
+            'json',
             /**
              * @param mixed $value
              * @return mixed
              */
-            function($value) {
+            function ($value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
-                if(!is_array($value) && !$value instanceof \stdClass) {
+                if (!is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
 
@@ -147,14 +148,14 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function($value) {
-                if(!is_string($value)) {
+            function ($value) {
+                if (!is_string($value)) {
                     return $value;
                 }
 
                 $value = json_decode($value, true);
 
-                if(array_key_exists('$id', $value)) {
+                if (array_key_exists('$id', $value)) {
                     return new Document($value);
                 } else {
                     $value = array_map(function ($item) {
@@ -327,7 +328,7 @@ class Database
     {
         $this->adapter->createCollection($id, $attributes, $indexes);
 
-        if($id === self::METADATA) {
+        if ($id === self::METADATA) {
             return new Document($this->collection);
         }
 
@@ -347,15 +348,17 @@ class Database
 
         // check attribute limits, if given
         if ($attributes) {
-            if ($this->adapter->getAttributeLimit() > 0 && 
-                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
-            {
+            if (
+                $this->adapter->getAttributeLimit() > 0 &&
+                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
+            ) {
                 throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
             }
 
-            if ($this->adapter->getRowLimit() > 0 && 
-                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit())
-            {
+            if (
+                $this->adapter->getRowLimit() > 0 &&
+                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit()
+            ) {
                 throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
             }
         }
@@ -431,24 +434,26 @@ class Database
         $collection = $this->getCollection($collection);
 
         // attribute IDs are case insensitive
-        $attributes = $collection->getAttribute('attributes', []); /** @var Document[] $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
         }
 
-        if ($this->adapter->getAttributeLimit() > 0 && 
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
-        {
+        if (
+            $this->adapter->getAttributeLimit() > 0 &&
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
+        ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
         if ($format) {
             if (!Structure::hasFormat($format, $type)) {
-                throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
+                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
             }
-        } 
+        }
 
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
@@ -464,30 +469,31 @@ class Database
             'filters' => $filters,
         ]), Document::SET_TYPE_APPEND);
 
-        if ($this->adapter->getRowLimit() > 0 && 
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
-        {
+        if (
+            $this->adapter->getRowLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+        ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
 
         switch ($type) {
             case self::VAR_STRING:
-                if($size > $this->adapter->getStringLimit()) {
-                    throw new Exception('Max size allowed for string is: '.number_format($this->adapter->getStringLimit()));
+                if ($size > $this->adapter->getStringLimit()) {
+                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
                 }
                 break;
 
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
-                if($size > $limit) {
-                    throw new Exception('Max size allowed for int is: '.number_format($limit));
+                if ($size > $limit) {
+                    throw new Exception('Max size allowed for int is: ' . number_format($limit));
                 }
                 break;
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 break;
             default:
-                throw new Exception('Unknown attribute type: '.$type);
+                throw new Exception('Unknown attribute type: ' . $type);
                 break;
         }
 
@@ -497,7 +503,7 @@ class Database
                 throw new Exception('Cannot set a default value on a required attribute');
             }
             switch (\gettype($default)) {
-                // first enforce typed array for each value in $default
+                    // first enforce typed array for each value in $default
                 case 'array':
                     foreach ($default as $value) {
                         if ($type !== \gettype($value)) {
@@ -505,7 +511,7 @@ class Database
                         }
                     }
                     break;
-                // then enforce for primitive types
+                    // then enforce for primitive types
                 case self::VAR_STRING:
                 case self::VAR_INTEGER:
                 case self::VAR_FLOAT:
@@ -515,14 +521,14 @@ class Database
                     }
                     break;
                 default:
-                    throw new Exception('Unknown attribute type for: '.$default);
+                    throw new Exception('Unknown attribute type for: ' . $default);
                     break;
             }
         }
 
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
-        if($collection->getId() !== self::METADATA) {
+        if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
@@ -546,16 +552,18 @@ class Database
 
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
-        if ($this->adapter->getAttributeLimit() > 0 &&
-            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit())
-        {
+        if (
+            $this->adapter->getAttributeLimit() > 0 &&
+            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
+        ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
             return false;
         }
 
-        if ($this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit())
-        {
+        if (
+            $this->adapter->getRowLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+        ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
             return false;
         }
@@ -578,18 +586,49 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $key => $value) {
-            if(isset($value['$id']) && $value['$id'] === $id) {
+            if (isset($value['$id']) && $value['$id'] === $id) {
                 unset($attributes[$key]);
             }
         }
 
         $collection->setAttribute('attributes', $attributes);
-    
-        if($collection->getId() !== self::METADATA) {
+
+        if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return $this->adapter->deleteAttribute($collection->getId(), $id);
+    }
+
+    /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     */
+    public function renameAttribute(string $collection, string $id, string $name): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $key => $value) {
+            if (isset($value['$id']) && $value['$id'] === $id) {
+                $attributes[$key]['key'] = $name;
+                $attributes[$key]['$id'] = $name;
+                break;
+            }
+        }
+
+        $collection->setAttribute('attributes', $attributes);
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $this->adapter->renameAttribute($collection->getId(), $id, $name);
     }
 
     /**
@@ -606,14 +645,15 @@ class Database
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
-        if(empty($attributes)) {
+        if (empty($attributes)) {
             throw new Exception('Missing attributes');
         }
 
         $collection = $this->getCollection($collection);
 
         // index IDs are case insensitive
-        $indexes = $collection->getAttribute('indexes', []); /** @var Document[] $indexes */
+        $indexes = $collection->getAttribute('indexes', []);
+        /** @var Document[] $indexes */
         foreach ($indexes as $index) {
             if (\strtolower($index->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Index already exists');
@@ -626,25 +666,25 @@ class Database
 
         switch ($type) {
             case self::INDEX_KEY:
-                if(!$this->adapter->getSupportForIndex()) {
+                if (!$this->adapter->getSupportForIndex()) {
                     throw new Exception('Key index is not supported');
                 }
                 break;
 
             case self::INDEX_UNIQUE:
-                if(!$this->adapter->getSupportForUniqueIndex()) {
+                if (!$this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Unique index is not supported');
                 }
                 break;
 
             case self::INDEX_FULLTEXT:
-                if(!$this->adapter->getSupportForUniqueIndex()) {
+                if (!$this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;
 
             default:
-                throw new Exception('Unknown index type: '.$type);
+                throw new Exception('Unknown index type: ' . $type);
                 break;
         }
 
@@ -659,7 +699,7 @@ class Database
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
 
-        if($collection->getId() !== self::METADATA) {
+        if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
@@ -681,14 +721,14 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         foreach ($indexes as $key => $value) {
-            if(isset($value['$id']) && $value['$id'] === $id) {
+            if (isset($value['$id']) && $value['$id'] === $id) {
                 unset($indexes[$key]);
             }
         }
 
         $collection->setAttribute('indexes', $indexes);
 
-        if($collection->getId() !== self::METADATA) {
+        if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
@@ -705,12 +745,12 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
-        if($collection === self::METADATA && $id === self::METADATA) {
+        if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
         }
 
-        if(empty($collection)) {
-            throw new Exception('test exception: '.$collection .':'. $id);
+        if (empty($collection)) {
+            throw new Exception('test exception: ' . $collection . ':' . $id);
         }
 
         $collection = $this->getCollection($collection);
@@ -718,7 +758,7 @@ class Database
         $cache = null;
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, self::TTL)) {
+        if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
             $validator = new Authorization(self::PERMISSION_READ);
 
@@ -739,14 +779,14 @@ class Database
             return new Document();
         }
 
-        if($document->isEmpty()) {
+        if ($document->isEmpty()) {
             return $document;
         }
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->save('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -773,9 +813,8 @@ class Database
         $collection = $this->getCollection($collection);
 
         $document
-            ->setAttribute('$id', empty($document->getId()) ? $this->getId(): $document->getId())
-            ->setAttribute('$collection', $collection->getId())
-        ;
+            ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
+            ->setAttribute('$collection', $collection->getId());
 
         $document = $this->encode($collection, $document);
 
@@ -786,7 +825,7 @@ class Database
         }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
-        
+
         $document = $this->decode($collection, $document);
 
         return $document;
@@ -836,7 +875,7 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         return $document;
     }
@@ -861,7 +900,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
 
         return $this->adapter->deleteDocument($collection, $id);
     }
@@ -875,7 +914,7 @@ class Database
      */
     public function deleteCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':*');
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
     }
 
     /**
@@ -888,7 +927,7 @@ class Database
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
     }
 
     /**
@@ -1047,7 +1086,7 @@ class Database
      * 
      * @return Document
      */
-    public function encode(Document $collection, Document $document):Document
+    public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1078,7 +1117,7 @@ class Database
                 }
             }
 
-            if(!$array) {
+            if (!$array) {
                 $value = $value[0];
             }
 
@@ -1096,7 +1135,7 @@ class Database
      * 
      * @return Document
      */
-    public function decode(Document $collection, Document $document):Document
+    public function decode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1105,7 +1144,7 @@ class Database
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
-            
+
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
@@ -1129,7 +1168,7 @@ class Database
      * 
      * @return Document
      */
-    public function casting(Document $collection, Document $document):Document
+    public function casting(Document $collection, Document $document): Document
     {
         if ($this->adapter->getSupportForCasting()) {
             return $document;
@@ -1143,10 +1182,9 @@ class Database
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
 
-            if($array) {
+            if ($array) {
                 $value = (!is_string($value)) ? ($value ?? []) : json_decode($value, true);
-            }
-            else {
+            } else {
                 $value = [$value];
             }
 

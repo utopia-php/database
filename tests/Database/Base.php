@@ -4,7 +4,6 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use stdClass;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
@@ -44,8 +43,9 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete()
     {
-        $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+        if (!static::getDatabase()->exists($this->testDatabase)) {
+            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+        }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
@@ -785,6 +785,24 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
 
         /**
+         * Fulltext search (wildcard)
+         */
+        // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
+            $documents = static::getDatabase()->find('movies', [
+                new Query('name', Query::TYPE_SEARCH, ['cap*']),
+            ]);
+
+            $this->assertEquals(2, count($documents));
+
+            $documents = static::getDatabase()->find('movies', [
+                new Query('name', Query::TYPE_SEARCH, ['cap']),
+            ]);
+
+            $this->assertEquals(0, count($documents));
+        }
+
+        /**
          * Multiple conditions
          */
         $documents = static::getDatabase()->find('movies', [
@@ -1345,7 +1363,7 @@ abstract class Base extends TestCase
             'registration' => 1234,
             'reset' => false,
             'name' => 'My Name',
-            'prefs' => new stdClass,
+            'prefs' => new \stdClass,
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],

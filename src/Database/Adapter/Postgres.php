@@ -110,7 +110,7 @@ class Postgres extends MariaDB
                 $order = '';
             }
 
-            $attribute = "\"{$attribute}\"{$length} {$order}";
+            $attribute = "\"{$attribute}\"{$order}";
         }
 
         return $this->getPDO()
@@ -130,10 +130,10 @@ class Postgres extends MariaDB
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $schemaName = $this->getDefaultDatabase();
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-                DROP INDEX \"{$id}\";")
+            ->prepare("DROP INDEX IF EXISTS \"{$schemaName}\".{$id};")
             ->execute();
     }
 
@@ -660,7 +660,6 @@ class Postgres extends MariaDB
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
-        if (!empty($attributes) || !empty($indexes)) {
             foreach ($attributes as &$attribute) {
                 $attrId = $this->filter($attribute->getId());
                 $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
@@ -672,28 +671,6 @@ class Postgres extends MariaDB
                 $attribute = "\"{$attrId}\" {$attrType}, ";
             }
 
-            foreach ($indexes as &$index) {
-                $indexId = $this->filter($index->getId()); 
-                $indexType = $this->getSQLIndexType($index->getAttribute('type'));
-
-                $indexAttributes = $index->getAttribute('attributes');
-                foreach ($indexAttributes as $key => &$attribute) {
-                    $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                    $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
-                    $indexOrder = $index->getAttribute('orders')[$key] ?? '';
-                    $indexAttribute = $this->filter($attribute);
-
-                    if ($indexType === Database::INDEX_FULLTEXT) {
-                        $indexOrder = '';
-                    }
-
-                    $attribute = "\"{$indexAttribute}\"{$indexLength} {$indexOrder}";
-                }
-
-                $index = "{$indexType} \"{$indexId}\" (" . \implode(", ", $indexAttributes) . " ),";
-
-            }
-
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
                     \"_id\" SERIAL NOT NULL,
@@ -702,23 +679,16 @@ class Postgres extends MariaDB
                     \"_write\" TEXT NOT NULL,
                     " . \implode(' ', $attributes) . "
                     PRIMARY KEY (\"_id\"),
-                    " . \implode(' ', $indexes) . "
                     CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
                   )")
                 ->execute();
 
-        } else {
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
-                    \"_id\" SERIAL NOT NULL,
-                    \"_uid\" VARCHAR(255) NOT NULL,
-                    \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
-                    \"_write\" TEXT NOT NULL,
-                    PRIMARY KEY (\"_id\"),
-                    CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
-                  )")
-                ->execute();
-        }
+                foreach ($indexes as &$index) {
+                    $indexId = $this->filter($index->getId()); 
+                    $indexAttributes = $index->getAttribute('attributes');
+
+                    $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
+                }
 
         // Update $this->getIndexCount when adding another default index
         return $this->createIndex($id, "_index2_{$namespace}_{$id}", $this->getIndexTypeForReadPermission(), ['_read'], [], []);

@@ -660,36 +660,48 @@ class Postgres extends MariaDB
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
-            foreach ($attributes as &$attribute) {
-                $attrId = $this->filter($attribute->getId());
-                $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
+        $this->getPDO()->beginTransaction();
 
-                if($attribute->getAttribute('array')) {
-                    $attrType = 'TEXT';
-                }
+        foreach ($attributes as &$attribute) {
+            $attrId = $this->filter($attribute->getId());
+            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-                $attribute = "\"{$attrId}\" {$attrType}, ";
+            if($attribute->getAttribute('array')) {
+                $attrType = 'TEXT';
             }
 
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
-                    \"_id\" SERIAL NOT NULL,
-                    \"_uid\" VARCHAR(255) NOT NULL,
-                    \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
-                    \"_write\" TEXT NOT NULL,
-                    " . \implode(' ', $attributes) . "
-                    PRIMARY KEY (\"_id\"),
-                    CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
-                  )")
-                ->execute();
+            $attribute = "\"{$attrId}\" {$attrType}, ";
+        }
 
-                foreach ($indexes as &$index) {
-                    $indexId = $this->filter($index->getId()); 
-                    $indexAttributes = $index->getAttribute('attributes');
+        $stmt = $this->getPDO()
+            ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
+                \"_id\" SERIAL NOT NULL,
+                \"_uid\" VARCHAR(255) NOT NULL,
+                \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
+                \"_write\" TEXT NOT NULL,
+                " . \implode(' ', $attributes) . "
+                PRIMARY KEY (\"_id\"),
+                CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
+                )");
 
-                    $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
-                }
+        try{
+            $stmt->execute();
 
+            foreach ($indexes as &$index) {
+                $indexId = $this->filter($index->getId()); 
+                $indexAttributes = $index->getAttribute('attributes');
+    
+                $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
+            }
+        }catch(Exception $e){
+            $this->getPDO()->rollBack();
+            throw new Exception('Failed to create collection');
+        }
+        
+        if(!$this->getPDO()->commit()) {
+            throw new Exception('Failed to commit transaction');
+        }
+        
         // Update $this->getIndexCount when adding another default index
         return $this->createIndex($id, "_index2_{$namespace}_{$id}", $this->getIndexTypeForReadPermission(), ['_read'], [], []);
     }

@@ -816,16 +816,10 @@ abstract class Base extends TestCase
         // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
         if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
             $documents = static::getDatabase()->find('movies', [
-                new Query('name', Query::TYPE_SEARCH, ['cap*']),
-            ]);
-
-            $this->assertEquals(2, count($documents));
-
-            $documents = static::getDatabase()->find('movies', [
                 new Query('name', Query::TYPE_SEARCH, ['cap']),
             ]);
 
-            $this->assertEquals(0, count($documents));
+            $this->assertEquals(2, count($documents));
         }
 
         /**

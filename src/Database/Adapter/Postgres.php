@@ -345,7 +345,7 @@ class Postgres extends MariaDB
             }
 
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
+            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
             $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
         }
 
@@ -477,13 +477,12 @@ class Postgres extends MariaDB
             }
 
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
+            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
             $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
         }
 
         try {
             $stmt->execute();
-            // $stmt->debugDumpParams();
         } catch (PDOException $e) {
             switch ($e->getCode()) {
                 case 1062:
@@ -624,6 +623,7 @@ class Postgres extends MariaDB
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
+        // $stmt->debugDumpParams();
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($results as &$value) {

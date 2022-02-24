@@ -32,7 +32,7 @@ class OrderAttributes extends Validator
     /**
      * Expression constructor
      *
-     * @param string[] $attributes
+     * @param Document[] $attributes
      * @param Document[] $indexes
      * @param bool $strict
      */

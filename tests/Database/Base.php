@@ -736,7 +736,7 @@ abstract class Base extends TestCase
          * Check $id
          */
         $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_DESC]);
-        $this->assertEquals($lastDocumentId, $documents[0]->getId());
+        $this->assertEquals($lastDocumentId, $documents[\count($documents)-1]->getId());
         $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_ASC]);
         $this->assertEquals($firstDocumentId, $documents[0]->getId());
 

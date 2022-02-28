@@ -171,9 +171,28 @@ class Postgres extends MariaDB
         return 'CREATE '.$type.' "'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
     }
 
+    /**
+     * Encode array
+     * 
+     * @param string $value
+     * 
+     * @return array
+     */
     protected function encodeArray(string $value): array
     {
         return explode(',', substr($value, 1, -1));
+    }
+
+    /**
+     * Decode array
+     * 
+     * @param array $value
+     * 
+     * @return string
+     */
+    protected function decodeArray(array $value): string
+    {
+        return '{'.implode(",", $value).'}';
     }
 
     /**
@@ -204,7 +223,7 @@ class Postgres extends MariaDB
         if(empty($document)) {
             return new Document([]);
         }
-        // \var_dump($document);
+
         $document['$id'] = $document['_uid'];
         $document['$internalId'] = strval($document['_id']);
         $document['$read'] = (isset($document['_read'])) ? $this->encodeArray($document['_read']) : [];
@@ -343,8 +362,8 @@ class Postgres extends MariaDB
         $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
         $write = $read = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', '{'.implode(",",$read).'}', PDO::PARAM_STR);
-        $stmt->bindValue(':_write', '{'.implode(",",$write).'}', PDO::PARAM_STR);
+        $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
+        $stmt->bindValue(':_write', $this->decodeArray($write), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -477,8 +496,8 @@ class Postgres extends MariaDB
         $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
         $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', '{'.implode(",",$read).'}', PDO::PARAM_STR);
-        $stmt->bindValue(':_write', '{'.implode(",",$write).'}', PDO::PARAM_STR);
+        $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
+        $stmt->bindValue(':_write', $this->decodeArray($write), PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings

@@ -711,6 +711,7 @@ abstract class Base extends TestCase
          * Check Basic
          */
         $documents = static::getDatabase()->find('movies');
+        $movieDocuments = $documents;
 
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
@@ -728,6 +729,32 @@ abstract class Base extends TestCase
         $this->assertIsBool($documents[0]->getAttribute('active'));
         $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
         $this->assertIsArray($documents[0]->getAttribute('generes'));
+
+        // Alphabetical order
+        $sortedDocuments = $movieDocuments;
+        \usort($sortedDocuments, function($doc1, $doc2) {
+            return strcmp($doc1['$id'], $doc2['$id']);
+        });
+
+        $firstDocumentId = $sortedDocuments[0]->getId();
+        $lastDocumentId = $sortedDocuments[\count($sortedDocuments) - 1]->getId();
+
+         /**
+         * Check $id: Notice, this orders ID names alphabetically, not by internal numeric ID
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_DESC]);
+        $this->assertEquals($lastDocumentId, $documents[0]->getId());
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_ASC]);
+        $this->assertEquals($firstDocumentId, $documents[0]->getId());
+
+        /**
+         * Check internal numeric ID sorting
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+        $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
+        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_ASC]);
+        $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
+
 
         /**
          * Check Permissions

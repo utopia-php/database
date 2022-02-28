@@ -171,6 +171,11 @@ class Postgres extends MariaDB
         return 'CREATE '.$type.' "'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
     }
 
+    protected function encodeArray(string $value): array
+    {
+        return explode(',', substr($value, 1, -1));
+    }
+
     /**
      * Get Document
      *
@@ -199,11 +204,11 @@ class Postgres extends MariaDB
         if(empty($document)) {
             return new Document([]);
         }
-
+        // \var_dump($document);
         $document['$id'] = $document['_uid'];
         $document['$internalId'] = strval($document['_id']);
-        $document['$read'] = (isset($document['_read'])) ? json_decode($document['_read'], true) : [];
-        $document['$write'] = (isset($document['_write'])) ? json_decode($document['_write'], true) : [];
+        $document['$read'] = (isset($document['_read'])) ? $this->encodeArray($document['_read']) : [];
+        $document['$write'] = (isset($document['_write'])) ? $this->encodeArray($document['_write']) : [];
 
         unset($document['_id']);
         unset($document['_uid']);
@@ -335,9 +340,11 @@ class Postgres extends MariaDB
             ->prepare("UPDATE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
                 SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
 
+        $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
+        $write = $read = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
-        $stmt->bindValue(':_write', json_encode($document->getWrite()), PDO::PARAM_STR);
+        $stmt->bindValue(':_read', '{'.implode(",",$read).'}', PDO::PARAM_STR);
+        $stmt->bindValue(':_write', '{'.implode(",",$write).'}', PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -467,9 +474,11 @@ class Postgres extends MariaDB
                 ({$columnNames} _uid, _read, _write)
                 VALUES ({$columns} :_uid, :_read, :_write)");
 
+        $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
+        $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', json_encode($document->getRead()), PDO::PARAM_STR);
-        $stmt->bindValue(':_write', json_encode($document->getWrite()), PDO::PARAM_STR);
+        $stmt->bindValue(':_read', '{'.implode(",",$read).'}', PDO::PARAM_STR);
+        $stmt->bindValue(':_write', '{'.implode(",",$write).'}', PDO::PARAM_STR);
 
         foreach ($attributes as $attribute => $value) {
             if(is_array($value)) { // arrays & objects should be saved as strings
@@ -583,7 +592,6 @@ class Postgres extends MariaDB
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
-
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
@@ -623,14 +631,13 @@ class Postgres extends MariaDB
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
-        // $stmt->debugDumpParams();
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
             $value['$internalId'] = $value['_id'];
-            $value['$read'] = (isset($value['_read'])) ? json_decode($value['_read'], true) : [];
-            $value['$write'] = (isset($value['_write'])) ? json_decode($value['_write'], true) : [];
+            $value['$read'] = (isset($value['_read'])) ? $this->encodeArray($value['_read']) : [];
+            $value['$write'] = (isset($value['_write'])) ? $this->encodeArray($value['_write']) : [];
             unset($value['_uid']);
             unset($value['_id']);
             unset($value['_read']);
@@ -644,6 +651,22 @@ class Postgres extends MariaDB
         }
 
         return $results;
+    }
+
+    /**
+     * Get SQL Permissions
+     * 
+     * @param array $roles
+     * @param string $operator
+     * @param string $placeholder
+     * @param mixed $value
+     * 
+     * @return string
+     */
+    protected function getSQLPermissions(array $roles): string
+    {
+        $roles = array_map(fn($role) => "'".$role."'", $roles);
+        return "(table_main._read && ARRAY[".implode(',', $roles)."])";
     }
 
     /**
@@ -677,8 +700,8 @@ class Postgres extends MariaDB
             ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
-                \"_read\" " . $this->getTypeForReadPermission() . " NOT NULL,
-                \"_write\" TEXT NOT NULL,
+                \"_read\" TEXT[] NOT NULL,
+                \"_write\" TEXT[] NOT NULL,
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\"),
                 CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")

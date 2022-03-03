@@ -118,6 +118,43 @@ class Postgres extends MariaDB
             ->execute();
     }
 
+    /**
+     * Get PDO Type
+     * 
+     * @param mixed $value
+     * 
+     * @return int
+     */
+    protected function getPDOType($value): int
+    {
+        switch (gettype($value)) {
+            case 'string':
+                return PDO::PARAM_STR;
+            break;
+
+            case 'boolean':
+                return PDO::PARAM_BOOL;
+            break;
+
+            //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
+            case 'double':
+                return PDO::PARAM_STR;
+            break;
+
+            case 'integer':
+                return PDO::PARAM_INT;
+            break;
+
+            case 'NULL':
+                return PDO::PARAM_NULL;
+            break;
+
+            default:
+                throw new Exception('Unknown PDO Type for ' . gettype($value));
+            break;
+        }
+    }
+
      /**
      * Delete Index
      * 
@@ -381,7 +418,7 @@ class Postgres extends MariaDB
             } catch (PDOException $e) {
                 switch ($e->getCode()) {
                     case 1062:
-                    case 23000:
+                    case 23505:
                         $this->getPDO()->rollBack();
                         throw new Duplicate('Duplicated document: '.$e->getMessage());
                         break;
@@ -514,7 +551,7 @@ class Postgres extends MariaDB
         } catch (PDOException $e) {
             switch ($e->getCode()) {
                 case 1062:
-                case 23000:
+                case 23505:
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: '.$e->getMessage());
                     break;
@@ -530,6 +567,147 @@ class Postgres extends MariaDB
         }
 
         return $document;
+    }
+
+    /**
+     * Get SQL Condtions
+     * 
+     * @param string $attribute
+     * @param string $operator
+     * @param string $placeholder
+     * @param mixed $value
+     * 
+     * @return string
+     */
+    protected function getSQLCondition(string $attribute, string $operator, string $placeholder, $value): string
+    {
+        switch ($operator) {
+            case Query::TYPE_SEARCH:
+                $value = "'".$value."'";
+                return "to_tsvector({$attribute}) @@ to_tsquery({$value})";
+            break;
+
+            default:
+                return $attribute.' '.$this->getSQLOperator($operator).' '.$placeholder; // Using \"attrubute_\" to avoid conflicts with custom names;
+            break;
+        }
+    }
+
+    /**
+     * Count Documents
+     *
+     * Count data set size using chosen queries
+     *
+     * @param string $collection
+     * @param array $queries
+     * @param int $max
+     *
+     * @return int
+     */
+    public function count(string $collection, array $queries = [], int $max = 0): int
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $limit = ($max === 0) ? '' : 'LIMIT :max';
+
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+            }
+
+            $condition = implode(' OR ', $conditions);
+            $where[] = empty($condition) ? '' : '('.$condition.')';
+        }
+
+        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
+            WHERE {$permissions} AND ".implode(' AND ', $where)."
+            {$limit}) table_count
+        ");
+
+        foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        if($max !== 0) {
+            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
+        $stmt->execute();
+
+        /** @var array $result */
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result['sum'] ?? 0;
+    }
+
+    /**
+     * Sum an Attribute
+     *
+     * Sum an attribute using chosen queries
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param Query[] $queries
+     * @param int $max
+     *
+     * @return int|float
+     */
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    {
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = ['1=1'];
+        $limit = ($max === 0) ? '' : 'LIMIT :max';
+
+        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+
+        foreach($queries as $i => $query) {
+            if($query->getAttribute() === '$id') {
+                $query->setAttribute('_uid');
+            }
+            $conditions = [];
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+            }
+
+            $where[] = implode(' OR ', $conditions);
+        }
+
+        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum
+            FROM (
+                SELECT {$attribute}
+                FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
+                WHERE {$permissions} AND ".implode(' AND ', $where)."
+                {$limit}
+            ) table_count");
+
+        foreach($queries as $i => $query) {
+            if($query->getOperator() === Query::TYPE_SEARCH) continue;
+            foreach($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+            }
+        }
+
+        if($max !== 0) {
+            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
+        $stmt->execute();
+
+        /** @var array $result */
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result['sum'] ?? 0;
     }
 
        /**

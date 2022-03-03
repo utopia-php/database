@@ -1814,7 +1814,7 @@ abstract class Base extends TestCase
 
     public function testGetAttributeLimit()
     {
-        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql' || static::getAdapterName() === 'postgres') {
             $this->assertEquals(1012, $this->getDatabase()->getAttributeLimit());
         } else {
             $this->assertEquals(0, $this->getDatabase()->getAttributeLimit());

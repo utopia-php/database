@@ -900,12 +900,14 @@ class Postgres extends MariaDB
                 \"_read\" TEXT[] NOT NULL,
                 \"_write\" TEXT[] NOT NULL,
                 " . \implode(' ', $attributes) . "
-                PRIMARY KEY (\"_id\"),
-                CONSTRAINT \"index_{$namespace}_{$id}\" UNIQUE (\"_uid\")
+                PRIMARY KEY (\"_id\")
                 )");
 
+        $stmtIndex = $this->getPDO()
+            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
         try{
             $stmt->execute();
+            $stmtIndex->execute();
 
             foreach ($indexes as &$index) {
                 $indexId = $this->filter($index->getId()); 
@@ -914,6 +916,7 @@ class Postgres extends MariaDB
                 $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
             }
         }catch(Exception $e){
+            var_dump($e->getMessage());
             $this->getPDO()->rollBack();
             throw new Exception('Failed to create collection');
         }

@@ -4,7 +4,6 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use stdClass;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
@@ -51,7 +50,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
-
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
@@ -586,6 +584,33 @@ abstract class Base extends TestCase
         $this->assertIsArray($new->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
 
+        $oldRead = $document->getRead();
+        $oldWrite = $document->getWrite();
+
+        $new
+            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
+        ;
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('role:guest', $new->getRead());
+        $this->assertContains('role:guest', $new->getWrite());
+
+        $new
+            ->setAttribute('$read', $oldRead)
+            ->setAttribute('$write', $oldWrite)
+        ;
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertNotContains('role:guest', $new->getRead());
+        $this->assertNotContains('role:guest', $new->getWrite());
+
         return $document;
     }
 
@@ -686,6 +711,7 @@ abstract class Base extends TestCase
          * Check Basic
          */
         $documents = static::getDatabase()->find('movies');
+        $movieDocuments = $documents;
 
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
@@ -703,6 +729,32 @@ abstract class Base extends TestCase
         $this->assertIsBool($documents[0]->getAttribute('active'));
         $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
         $this->assertIsArray($documents[0]->getAttribute('generes'));
+
+        // Alphabetical order
+        $sortedDocuments = $movieDocuments;
+        \usort($sortedDocuments, function($doc1, $doc2) {
+            return strcmp($doc1['$id'], $doc2['$id']);
+        });
+
+        $firstDocumentId = $sortedDocuments[0]->getId();
+        $lastDocumentId = $sortedDocuments[\count($sortedDocuments) - 1]->getId();
+
+         /**
+         * Check $id: Notice, this orders ID names alphabetically, not by internal numeric ID
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_DESC]);
+        $this->assertEquals($lastDocumentId, $documents[0]->getId());
+        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_ASC]);
+        $this->assertEquals($firstDocumentId, $documents[0]->getId());
+
+        /**
+         * Check internal numeric ID sorting
+         */
+        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+        $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
+        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_ASC]);
+        $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
+
 
         /**
          * Check Permissions
@@ -784,6 +836,18 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(2, count($documents));
+
+        /**
+         * Fulltext search (wildcard)
+         */
+        // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
+            $documents = static::getDatabase()->find('movies', [
+                new Query('name', Query::TYPE_SEARCH, ['cap']),
+            ]);
+
+            $this->assertEquals(2, count($documents));
+        }
 
         /**
          * Multiple conditions
@@ -1346,7 +1410,7 @@ abstract class Base extends TestCase
             'registration' => 1234,
             'reset' => false,
             'name' => 'My Name',
-            'prefs' => new stdClass,
+            'prefs' => new \stdClass,
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],

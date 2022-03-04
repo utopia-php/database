@@ -9,17 +9,17 @@ abstract class Adapter
     /**
      * @var string
      */
-    protected $namespace = '';
+    protected string $namespace = '';
 
     /**
      * @var string
      */
-    protected $defaultDatabase = '';
+    protected string $defaultDatabase = '';
 
     /**
      * @var array
      */
-    protected $debug = [];
+    protected array $debug = [];
 
     /**
      * @param string $key
@@ -27,7 +27,7 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function setDebug(string $key, $value): self
+    public function setDebug(string $key, mixed $value): self
     {
         $this->debug[$key] = $value;
 
@@ -43,7 +43,7 @@ abstract class Adapter
     }
 
     /**
-     * return $this
+     * @return self
      */
     public function resetDebug(): self
     {
@@ -57,7 +57,7 @@ abstract class Adapter
      *
      * Set namespace to divide different scope of data sets
      *
-     * @param $namespace
+     * @param string $namespace
      *
      * @throws Exception
      *
@@ -149,7 +149,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function exists(string $database, string $collection = null): bool;
+    abstract public function exists(string $database, ?string $collection): bool;
 
     /**
      * List Databases
@@ -209,6 +209,16 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;
+
+    /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $name
+     * @return bool
+     */
+    abstract public function renameAttribute(string $collection, string $id, string $name): bool;
 
     /**
      * Create Index

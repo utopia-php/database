@@ -90,8 +90,8 @@ class Query
 
     /**
      * Set attribute
-     *
-     * @return self
+     * @param string $attribute 
+     * @return Query 
      */
     public function setAttribute(string $attribute): self
     {
@@ -102,8 +102,8 @@ class Query
 
     /**
      * Set operator
-     *
-     * @return self
+     * @param string $operator
+     * @return Query
      */
     public function setOperator(string $operator): self
     {
@@ -114,8 +114,8 @@ class Query
 
     /**
      * Set operand
-     *
-     * @return self
+     * @param array $values
+     * @return Query
      */
     public function setValues(array $values): self
     {
@@ -126,10 +126,10 @@ class Query
 
     /**
      * Check if operator is supported
-     *
+     * @param string $value
      * @return bool
      */
-    public static function isOperator($value): bool
+    public static function isOperator(string $value): bool
     {
         switch ($value) {
             case self::TYPE_EQUAL:
@@ -160,11 +160,9 @@ class Query
         $values = [];
 
         // get index of open parentheses
-        /** @var int */
-        $end = mb_strpos($filter, '(');
+        $end = intval(mb_strpos($filter, '('));
 
         // count stanzas by only counting '.' that come before open parentheses
-        /** @var int */
         $stanzas = mb_substr_count(mb_substr($filter, 0, $end), ".") + 1;
 
         // TODO@kodumbeats handle relations between collections, e.g. if($stanzas > 2)
@@ -199,25 +197,19 @@ class Query
         $end = mb_strrpos($expression, ')');
 
         //extract the query method
-
-        /** @var string */
         $operator = mb_substr($expression, 0, $start);
 
         //grab everything inside parentheses
-
-        /** @var mixed */
-        $value = mb_substr($expression, 
-            ($start + 1), /* exclude open paren*/ 
+        $value = mb_substr(
+            $expression,
+            ($start + 1), /* exclude open paren*/
             ($end - $start - 1) /* exclude closed paren*/
         );
 
         // Explode comma-separated values
-
         $values = explode(',', $value);
 
         // Cast $value type
-
-        /** @var array */
         $values = array_map(function ($value) {
 
             // Trim whitespace from around $value
@@ -246,7 +238,6 @@ class Query
                     // trim leading and tailing quotes
                     return trim($value, '\'"');
             }
-
         }, $values);
 
         return [$operator, $values];

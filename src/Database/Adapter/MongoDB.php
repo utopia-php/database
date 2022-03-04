@@ -448,6 +448,11 @@ class MongoDB extends Adapter
         return (!!$result);
     }
 
+    public function renameAttribute(string $collection, string $id, string $name): bool
+    {
+        return true;
+    }
+
     /**
      * Find Documents
      *
@@ -474,6 +479,10 @@ class MongoDB extends Adapter
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
 
         // orders
+        $orderAttributes = \array_map(function($orderAttribute) {
+            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
+        }, $orderAttributes);
+        
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);

@@ -575,7 +575,7 @@ class MariaDB extends Adapter
                     INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
                     (_document, _type, _permission) VALUES " . implode(', ', [
                         ...array_map(fn (string $i) => "( :_uid, 'read', :_add_read_{$i} )", array_keys($readAdded)),
-                        ...array_map(fn (string $i) => "( :_uid, 'write', :_add_read_{$i} )", array_keys($writeAdded))
+                        ...array_map(fn (string $i) => "( :_uid, 'write', :_add_write_{$i} )", array_keys($writeAdded))
                     ])
                 );
 

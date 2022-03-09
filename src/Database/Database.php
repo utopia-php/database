@@ -153,7 +153,7 @@ class Database
                     return $value;
                 }
 
-                $value = json_decode($value, true);
+                $value = json_decode($value, true) ?? [];
 
                 if (array_key_exists('$id', $value)) {
                     return new Document($value);

@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
-use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;

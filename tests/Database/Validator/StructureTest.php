@@ -295,7 +295,7 @@ class StructureTest extends TestCase
         ])));
 
 
-        $this->assertEquals(true, $validator->isValid(new Document([
+        $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',

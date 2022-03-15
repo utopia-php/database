@@ -1268,7 +1268,7 @@ class MariaDB extends Adapter
         switch ($operator) {
             case Query::TYPE_SEARCH:
                 /**
-                 * Replace reservec chars with space.
+                 * Replace reserved chars with space.
                  */
                 $value = str_replace(['@', '+', '-', '*'], ' ', $value);
 

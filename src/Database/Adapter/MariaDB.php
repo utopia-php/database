@@ -1270,7 +1270,7 @@ class MariaDB extends Adapter
                 /**
                  * Replace reservec chars with space.
                  */
-                $value = str_replace(['@'], ' ', $value);
+                $value = str_replace(['@', '+', '-', '*'], ' ', $value);
 
                 /**
                  * Prepend wildcard by default on the back.

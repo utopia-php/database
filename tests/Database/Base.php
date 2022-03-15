@@ -558,6 +558,36 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testCreateDocument
+     */
+    public function testListDocumentSearch(Document $document)
+    {
+        static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
+        static::getDatabase()->createDocument('documents', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'string' => '*test+alias@email-provider.com',
+            'integer' => 0,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+            'empty' => [],
+        ]));
+
+        /**
+         * Allow reserved keywords for search
+         */
+        $documents = static::getDatabase()->find('documents', [
+            new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']),
+        ]);
+
+        $this->assertEquals(1, count($documents));
+
+        return $document;
+    }
+
+    /**
      * @depends testGetDocument
      */
     public function testUpdateDocument(Document $document)

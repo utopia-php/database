@@ -1267,7 +1267,16 @@ class MariaDB extends Adapter
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
-                $value = "\"{$value}*\”";
+                /**
+                 * Replace reservec chars with space.
+                 */
+                $value = str_replace(['@'], ' ', $value);
+
+                /**
+                 * Prepend wildcard by default on the back.
+                 */
+                $value = "'{$value}*'";
+
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
                 break;
 

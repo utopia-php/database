@@ -847,6 +847,12 @@ abstract class Base extends TestCase
             ]);
 
             $this->assertEquals(2, count($documents));
+
+            $documents = static::getDatabase()->find('movies', [
+                new Query('name', Query::TYPE_SEARCH, ['test@email.com']),
+            ]);
+
+            $this->assertEquals(0, count($documents));
         }
 
         /**

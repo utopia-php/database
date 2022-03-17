@@ -378,10 +378,10 @@ class MariaDB extends Adapter
             return new Document([]);
         }
 
-        $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
-        $document['$read'] = json_decode((string) $document['$read'], true) ?? [];
-        $document['$write'] = json_decode((string) $document['$write'], true) ?? [];
+        $document['$id'] = (string) $document['_uid'];
+        $document['$internalId'] = (string) $document['_id'];
+        $document['$read'] = json_decode($document['$read'] ?? '', true) ?? [];
+        $document['$write'] = json_decode($document['$write'] ?? '', true) ?? [];
 
         unset($document['_id']);
         unset($document['_uid']);
@@ -816,10 +816,10 @@ class MariaDB extends Adapter
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($results as $key => $value) {
-            $results[$key]['$id'] = $value['_uid'];
-            $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$read'] = json_decode((string) $value['_read'], true) ?? [];
-            $results[$key]['$write'] = json_decode((string) $value['_write'], true) ?? [];
+            $results[$key]['$id'] = (string )$value['_uid'];
+            $results[$key]['$internalId'] = (string) $value['_id'];
+            $results[$key]['$read'] = json_decode($value['_read'] ?? '', true) ?? [];
+            $results[$key]['$write'] = json_decode($value['_write'] ?? '', true) ?? [];
 
             unset($results[$key]['_uid']);
             unset($results[$key]['_id']);

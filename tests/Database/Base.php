@@ -84,9 +84,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('attributes');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16383+1, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535+1, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215+1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16383 + 1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'bigint', Database::VAR_INTEGER, 8, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
@@ -221,7 +221,7 @@ abstract class Base extends TestCase
     public function testCleanupAttributeTests()
     {
         static::getDatabase()->deleteCollection('attributes');
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -250,7 +250,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
-        
+
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(5, $collection->getAttribute('indexes'));
 
@@ -567,8 +567,7 @@ abstract class Base extends TestCase
             ->setAttribute('integer', 6)
             ->setAttribute('float', 5.56)
             ->setAttribute('boolean', false)
-            ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
-        ;
+            ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND);
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
@@ -589,8 +588,7 @@ abstract class Base extends TestCase
 
         $new
             ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
-            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
-        ;
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
@@ -601,8 +599,7 @@ abstract class Base extends TestCase
 
         $new
             ->setAttribute('$read', $oldRead)
-            ->setAttribute('$write', $oldWrite)
-        ;
+            ->setAttribute('$write', $oldWrite);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
@@ -732,14 +729,14 @@ abstract class Base extends TestCase
 
         // Alphabetical order
         $sortedDocuments = $movieDocuments;
-        \usort($sortedDocuments, function($doc1, $doc2) {
+        \usort($sortedDocuments, function ($doc1, $doc2) {
             return strcmp($doc1['$id'], $doc2['$id']);
         });
 
         $firstDocumentId = $sortedDocuments[0]->getId();
         $lastDocumentId = $sortedDocuments[\count($sortedDocuments) - 1]->getId();
 
-         /**
+        /**
          * Check $id: Notice, this orders ID names alphabetically, not by internal numeric ID
          */
         $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_DESC]);
@@ -804,8 +801,7 @@ abstract class Base extends TestCase
 
         // TODO@kodumbeats hacky way to pass mariadb tests
         // Remove when $operator="contains" is supported
-        if (static::getAdapterName() === "mongodb")
-        {
+        if (static::getAdapterName() === "mongodb") {
             /**
              * Array contains condition
              */
@@ -1180,19 +1176,19 @@ abstract class Base extends TestCase
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
-        
+
         $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(2, $count);
-        
+
         Authorization::unsetRole('userx');
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
-        
+
         Authorization::disable();
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         Authorization::reset();
-        
+
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [], 3);
         $this->assertEquals(3, $count);
@@ -1217,26 +1213,26 @@ abstract class Base extends TestCase
     {
         Authorization::setRole('userx');
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(2019+2019, $sum);
+        $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
-        $this->assertEquals(2013+2019+2011+2019+2025+2026, $sum);
+        $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025 + 2026, $sum);
         $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
         $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
         $this->assertEquals(2019, $sum);
 
         Authorization::unsetRole('userx');
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(2019+2019, $sum);
+        $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
-        $this->assertEquals(2013+2019+2011+2019+2025, $sum);
+        $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025, $sum);
         $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
         $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
     public function testEncodeDecode()
@@ -1443,8 +1439,8 @@ abstract class Base extends TestCase
         $this->assertEquals('[]', $result->getAttribute('sessions'));
         $this->assertEquals('[]', $result->getAttribute('tokens'));
         $this->assertEquals('[]', $result->getAttribute('memberships'));
-        $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
-        $this->assertEquals(['{"$id":"1","label":"x"}','{"$id":"2","label":"y"}','{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
+        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
+        $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
 
         $result = static::getDatabase()->decode($collection, $document);
 
@@ -1463,7 +1459,7 @@ abstract class Base extends TestCase
         $this->assertEquals([], $result->getAttribute('sessions'));
         $this->assertEquals([], $result->getAttribute('tokens'));
         $this->assertEquals([], $result->getAttribute('memberships'));
-        $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
+        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
         $this->assertEquals([
             new Document(['$id' => '1', 'label' => 'x']),
             new Document(['$id' => '2', 'label' => 'y']),
@@ -1494,7 +1490,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
 
         $this->assertEquals(true, $document->isEmpty());
-        
+
         Authorization::setRole('role:all');
 
         return $document;
@@ -1516,7 +1512,7 @@ abstract class Base extends TestCase
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
-        ]));           
+        ]));
 
         return $document;
     }
@@ -1605,7 +1601,7 @@ abstract class Base extends TestCase
         if ($this->getDatabase()->getAttributeLimit() > 0) {
             // load the collection up to the limit
             $attributes = [];
-            for ($i=0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
+            for ($i = 0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
                 $attributes[] = new Document([
                     '$id' => "test{$i}",
                     'type' => Database::VAR_INTEGER,
@@ -1621,10 +1617,10 @@ abstract class Base extends TestCase
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
-        } 
+        }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -1637,14 +1633,14 @@ abstract class Base extends TestCase
 
             // create same attribute in testExceptionAttributeLimit
             $attribute = new Document([
-                    '$id' => 'breaking',
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 0,
-                    'required' => true,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
+                '$id' => 'breaking',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
             ]);
 
             $this->expectException(LimitException::class);
@@ -1652,8 +1648,7 @@ abstract class Base extends TestCase
         }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
-
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -1689,7 +1684,7 @@ abstract class Base extends TestCase
 
             // Load the collection up to the limit
             // Strings
-            for ($i=0; $i < $stringCount; $i++) {
+            for ($i = 0; $i < $stringCount; $i++) {
                 $attributes[] = new Document([
                     '$id' => "test_string{$i}",
                     'type' => Database::VAR_STRING,
@@ -1703,7 +1698,7 @@ abstract class Base extends TestCase
             }
 
             // Integers
-            for ($i=0; $i < $intCount; $i++) {
+            for ($i = 0; $i < $intCount; $i++) {
                 $attributes[] = new Document([
                     '$id' => "test_int{$i}",
                     'type' => Database::VAR_INTEGER,
@@ -1717,7 +1712,7 @@ abstract class Base extends TestCase
             }
 
             // Floats
-            for ($i=0; $i < $floatCount; $i++) {
+            for ($i = 0; $i < $floatCount; $i++) {
                 $attributes[] = new Document([
                     '$id' => "test_float{$i}",
                     'type' => Database::VAR_FLOAT,
@@ -1731,7 +1726,7 @@ abstract class Base extends TestCase
             }
 
             // Booleans
-            for ($i=0; $i < $boolCount; $i++) {
+            for ($i = 0; $i < $boolCount; $i++) {
                 $attributes[] = new Document([
                     '$id' => "test_bool{$i}",
                     'type' => Database::VAR_BOOLEAN,
@@ -1748,10 +1743,10 @@ abstract class Base extends TestCase
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
-        } 
+        }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -1765,14 +1760,14 @@ abstract class Base extends TestCase
 
             // create same attribute in testExceptionWidthLimit
             $attribute = new Document([
-                    '$id' => 'breaking',
-                    'type' => Database::VAR_STRING,
-                    'size' => 100,
-                    'required' => true,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
+                '$id' => 'breaking',
+                'type' => Database::VAR_STRING,
+                'size' => 100,
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
             ]);
 
             $this->expectException(LimitException::class);
@@ -1780,7 +1775,7 @@ abstract class Base extends TestCase
         }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     public function testExceptionIndexLimit()
@@ -1788,7 +1783,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('indexLimit');
 
         // add unique attributes for indexing
-        for ($i=0; $i < 64; $i++) {
+        for ($i = 0; $i < 64; $i++) {
             $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
@@ -1796,7 +1791,7 @@ abstract class Base extends TestCase
         // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
         // MongoDB create 4 indexes per new collection
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
+        for ($i = 0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
@@ -1829,7 +1824,7 @@ abstract class Base extends TestCase
 
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
-        
+
         return $document;
     }
 
@@ -1878,7 +1873,7 @@ abstract class Base extends TestCase
 
     public function testGetAttributeLimit()
     {
-        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql' || static::getAdapterName() === 'postgres') {
+        if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql' || static::getAdapterName() === 'postgres' || static::getAdapterName() === 'cockroach') {
             $this->assertEquals(1012, $this->getDatabase()->getAttributeLimit());
         } else {
             $this->assertEquals(0, $this->getDatabase()->getAttributeLimit());

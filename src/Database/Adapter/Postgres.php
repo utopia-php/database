@@ -333,7 +333,7 @@ class Postgres extends MariaDB
          */
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columnNames .= "{$column}" . ', ';
+            $columnNames .= "\"{$column}\"" . ', ';
             $columns .= ":" . $column . ', ';
         }
 
@@ -614,7 +614,7 @@ class Postgres extends MariaDB
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
-            $value['$internalId'] = $value['_id'];
+            $value['$internalId'] = strval($value['_id']);
             $value['$read'] = (isset($value['_read'])) ? $this->encodeArray($value['_read']) : [];
             $value['$write'] = (isset($value['_write'])) ? $this->encodeArray($value['_write']) : [];
             unset($value['_uid']);

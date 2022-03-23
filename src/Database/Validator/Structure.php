@@ -235,7 +235,8 @@ class Structure extends Validator
 
             switch ($type) {
                 case Database::VAR_STRING:
-                    $validator = new Text(0);
+                    $size = $attribute['size'] ?? 0;
+                    $validator = new Text($size);
                     break;
 
                 case Database::VAR_INTEGER:

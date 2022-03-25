@@ -25,7 +25,7 @@ services:
       POSTGRES_PASSWORD: password
 
   cockroach:
-    image: cockroachdb/cockroach:v20.2.0
+    image: cockroachdb/cockroach:v21.2.0
     container_name: utopia-cockroach
     command: start-single-node --insecure --logtostderr
     networks:

@@ -121,13 +121,19 @@ class Database
     static protected array $filters = [];
 
     /**
+     * @var array
+     */
+    private array $instanceFilters = [];
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache)
+    public function __construct(Adapter $adapter, Cache $cache, array $instanceFilters)
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        $this->instanceFilters = $instanceFilters;
 
         self::addFilter(
             'json',
@@ -1226,12 +1232,16 @@ class Database
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!isset(self::$filters[$name]) && !isset($this->filter[$name])) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['encode']($value, $document, $this);
+            if(isset($this->filter[$name])) {
+                $value = $this->filters[$name]['encode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['encode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -1253,12 +1263,16 @@ class Database
      */
     protected function decodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!isset(self::$filters[$name]) && !isset($this->filter[$name])) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            if(isset($this->filter[$name])) {
+                $value = $this->filters[$name]['decode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['decode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }

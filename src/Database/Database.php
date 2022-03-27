@@ -129,7 +129,7 @@ class Database
      * @param Adapter $adapter
      * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache, array $filters)
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
         $this->adapter = $adapter;
         $this->cache = $cache;

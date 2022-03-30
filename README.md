@@ -66,6 +66,7 @@ $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 ]);
 
+Cache::setCaseSensitivity(false); // Make sure cache is case-insensitive for document IDs
 $cache = new Cache(new NoCache()); // or use any cache adapter you wish
 
 $database = new Database(new MariaDB($pdo), $cache);

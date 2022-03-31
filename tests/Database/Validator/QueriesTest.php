@@ -155,7 +155,17 @@ class QueriesTest extends TestCase
             'orders' => []
         ]);
 
-        $this->collection['indexes'] = [$index1, $index2, $index3, $index4];
+        // Failed index
+        $index5 = new Document([
+            '$id' => 'testindex5',
+            'type' => 'fulltext',
+            'attributes' => [
+                'rating'
+            ],
+            'orders' => []
+        ]);
+
+        $this->collection['indexes'] = [$index1, $index2, $index3, $index4, $index5];
     }
 
     public function tearDown(): void
@@ -174,6 +184,9 @@ class QueriesTest extends TestCase
 
 
         // test for FAILURE
+
+        $this->assertEquals(true, $validator->isValid(['rating.equal(10)']));
+        $this->assertEquals("Index not found: rating", $validator->getDescription());
 
         $this->queries[] = Query::parse('rating.greater(4)');
 

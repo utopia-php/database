@@ -123,6 +123,7 @@ class QueriesTest extends TestCase
                 'ASC',
                 'DESC'
             ],
+            'status' => 'available',
         ]);
 
         $index2 = new Document([
@@ -137,6 +138,7 @@ class QueriesTest extends TestCase
                 'ASC',
                 'DESC'
             ],
+            'status' => 'available',
         ]);
         $index3 = new Document([
             '$id' => 'testindex3',
@@ -144,7 +146,8 @@ class QueriesTest extends TestCase
             'attributes' => [
                 'title'
             ],
-            'orders' => []
+            'orders' => [],
+            'status' => 'available',
         ]);
         $index4 = new Document([
             '$id' => 'testindex4',
@@ -152,7 +155,8 @@ class QueriesTest extends TestCase
             'attributes' => [
                 'description'
             ],
-            'orders' => []
+            'orders' => [],
+            'status' => 'available',
         ]);
 
         // Failed index
@@ -162,7 +166,8 @@ class QueriesTest extends TestCase
             'attributes' => [
                 'rating'
             ],
-            'orders' => []
+            'orders' => [],
+            'status' => 'failed',
         ]);
 
         $this->collection['indexes'] = [$index1, $index2, $index3, $index4, $index5];
@@ -184,12 +189,13 @@ class QueriesTest extends TestCase
 
 
         // test for FAILURE
-
+        $queriesBackup = $this->queries;
         $query1 = Query::parse('rating.equal(10)');
         $this->queries = [$query1];
-        $this->assertEquals(true, $validator->isValid($this->queries));
+        $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Index not found: rating", $validator->getDescription());
 
+        $this->queries = $queriesBackup;
         $this->queries[] = Query::parse('rating.greater(4)');
 
         $this->assertEquals(false, $validator->isValid($this->queries));

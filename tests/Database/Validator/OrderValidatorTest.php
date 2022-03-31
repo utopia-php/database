@@ -96,6 +96,7 @@ class OrderValidatorTest extends TestCase
             'attributes' => ['title'],
             'lengths' => [256],
             'orders' => ['ASC'],
+            'status' => 'available',
         ],
         [
             '$id' => 'index2',
@@ -103,6 +104,7 @@ class OrderValidatorTest extends TestCase
             'attributes' => ['price'],
             'lengths' => [],
             'orders' => ['DESC'],
+            'status' => 'available',
         ],
         [
             '$id' => 'index3',
@@ -110,6 +112,15 @@ class OrderValidatorTest extends TestCase
             'attributes' => ['published'],
             'lengths' => [],
             'orders' => ['DESC'],
+            'status' => 'available',
+        ],
+        [
+            '$id' => 'index4',
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['rating'],
+            'lengths' => [],
+            'orders' => ['DESC'],
+            'status' => 'failed',
         ],
     ];
 
@@ -138,5 +149,6 @@ class OrderValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(['title']));
         $this->assertEquals(true, $validator->isValid(['published']));
         $this->assertEquals(false, $validator->isValid(['_uid']));
+        $this->assertEquals(false, $validator->isValid(['rating']));
     }
 }

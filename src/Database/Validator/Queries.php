@@ -45,9 +45,11 @@ class Queries extends Validator
             'type' => Database::INDEX_UNIQUE,
             'attributes' => ['$id']
         ];
-
+        
         foreach ($indexes as $index) {
-            $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
+            if($index->getAttribute('status') === 'available') {
+                $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
+            }
         }
 
         $this->strict = $strict;

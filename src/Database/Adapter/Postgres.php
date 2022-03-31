@@ -128,7 +128,7 @@ class Postgres extends MariaDB
                 )");
 
         $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
+            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
         try{
             $stmt->execute();
             $stmtIndex->execute();
@@ -333,7 +333,7 @@ class Postgres extends MariaDB
          */
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columnNames .= "{$column}" . ', ';
+            $columnNames .= "\"{$column}\"" . ', ';
             $columns .= ":" . $column . ', ';
         }
 
@@ -410,7 +410,7 @@ class Postgres extends MariaDB
                 SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
 
         $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
-        $write = $read = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
+        $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
         $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
         $stmt->bindValue(':_write', $this->decodeArray($write), PDO::PARAM_STR);
@@ -577,7 +577,7 @@ class Postgres extends MariaDB
             }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '('.$condition.')';
@@ -614,7 +614,7 @@ class Postgres extends MariaDB
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
-            $value['$internalId'] = $value['_id'];
+            $value['$internalId'] = strval($value['_id']);
             $value['$read'] = (isset($value['_read'])) ? $this->encodeArray($value['_read']) : [];
             $value['$write'] = (isset($value['_write'])) ? $this->encodeArray($value['_write']) : [];
             unset($value['_uid']);
@@ -660,7 +660,7 @@ class Postgres extends MariaDB
             }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -718,7 +718,7 @@ class Postgres extends MariaDB
             }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.'.$query->getAttribute(), $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getOperator(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -853,7 +853,7 @@ class Postgres extends MariaDB
             break;
         }
 
-        return 'CREATE '.$type.' "'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
+        return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
     }
 
     /**

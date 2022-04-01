@@ -409,12 +409,19 @@ class MariaDB extends Adapter
 
         $this->getPDO()->beginTransaction();
 
+        $bindIndex = 0;
+        $bindMap = [];
+
         /**
          * Insert Attributes
          */
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columns .= "`{$column}`" . '=:' . $column . ',';
+            $bindKey = 'xvalue' . $bindIndex;
+            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+
+            $bindMap[$attribute] = $bindIndex;
+            $bindIndex++;
         }
 
         $stmt = $this->getPDO()
@@ -428,9 +435,10 @@ class MariaDB extends Adapter
                 $value = json_encode($value);
             }
 
+            $bindKey = 'xvalue' . $bindMap[$attribute];
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
         }
 
         $permissions = [];
@@ -448,6 +456,8 @@ class MariaDB extends Adapter
         }
 
         try {
+            \var_dump($stmt->queryString);
+
             $stmt->execute();
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
@@ -591,9 +601,17 @@ class MariaDB extends Adapter
         /**
          * Update Attributes
          */
+
+        $bindIndex = 0;
+        $bindMap = [];
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $columns .= "`{$column}`" . '=:' . $column . ',';
+            $bindKey = 'xvalue' . $bindIndex;
+            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+
+            $bindMap[$attribute] = $bindIndex;
+            $bindIndex++;
         }
 
         $stmt = $this->getPDO()
@@ -607,9 +625,10 @@ class MariaDB extends Adapter
                 $value = json_encode($value);
             }
 
+            $bindKey = 'xvalue' . $bindMap[$attribute];
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
         }
 
         if (!empty($attributes)) {

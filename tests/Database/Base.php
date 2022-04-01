@@ -471,8 +471,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with.dot', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with.dot', Database::VAR_STRING, 128, false, null));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
@@ -560,7 +560,7 @@ abstract class Base extends TestCase
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
-        $this->assertEquals('Works too', $document->getAttribute('with-dot'));
+        $this->assertEquals('Works too', $document->getAttribute('with.dot'));
 
         return $document;
     }
@@ -634,7 +634,7 @@ abstract class Base extends TestCase
             ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
         ;
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 

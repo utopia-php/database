@@ -121,6 +121,12 @@ class Document extends ArrayObject
      */
     public function getAttribute(string $name, $default = null)
     {
+        // Try exact match first
+        if(isset($this[$name])) {
+            return $this[$name];
+        }
+
+        // Try nested syntax
         $name = \explode('.', $name);
 
         $temp = &$this;

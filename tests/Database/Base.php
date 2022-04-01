@@ -471,6 +471,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with.dot', Database::VAR_STRING, 128, true));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
@@ -482,6 +484,8 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
+            'with-dash' => 'Works',
+            'with.dot' => 'Works too',
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -498,6 +502,8 @@ abstract class Base extends TestCase
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
+        $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertEquals('Works too', $document->getAttribute('with.dot'));
 
         return $document;
     }
@@ -553,6 +559,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+        $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertEquals('Works too', $document->getAttribute('with-dot'));
 
         return $document;
     }
@@ -598,6 +606,8 @@ abstract class Base extends TestCase
             ->setAttribute('float', 5.56)
             ->setAttribute('boolean', false)
             ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+            ->setAttribute('with-dash', 'Works')
+            ->setAttribute('with.dot', 'Works too')
         ;
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
@@ -613,6 +623,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+        $this->assertEquals('Works', $new->getAttribute('with-dash'));
+        $this->assertEquals('Works too', $new->getAttribute('with.dot'));
 
         $oldRead = $document->getRead();
         $oldWrite = $document->getWrite();

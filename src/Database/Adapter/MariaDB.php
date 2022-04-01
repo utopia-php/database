@@ -456,8 +456,6 @@ class MariaDB extends Adapter
         }
 
         try {
-            \var_dump($stmt->queryString);
-
             $stmt->execute();
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

@@ -3,14 +3,8 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use Throwable;
 use Utopia\Database\Adapter;
-use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
-use MongoDB\Client as MongoClient;
-use MongoDB\Database as MongoDatabase;
 
 class MongoDB extends Adapter
 {
@@ -29,6 +23,11 @@ class MongoDB extends Adapter
     public function __construct(MongoClient $client)
     {
         $this->client = $client;
+    }
+
+    public function hello()
+    {
+      return $this->getClient()->query(['hello' => 1]);   
     }
 
     /**
@@ -130,30 +129,32 @@ class MongoDB extends Adapter
     {
         $id = $this->getNamespace() .'_'. $this->filter($name);
 
-        $database = $this->getDatabase();
-
         // Returns an array/object with the result document
-        if (empty($database->createCollection($id))) {
+        if (empty($this->getClient()->createCollection($id))) {
             return false;
         }
 
-        $collection = $database->selectCollection($id);
+        $collection = $this->getClient()->createCollection($name);
 
-        // Mongo creates an index for _id; _uid (unique, case insensitive) and _read index by default
-        // Returns the name of the created index as a string.
-        $uid = $collection->createIndex([
-            '_uid' => $this->getOrder(Database::ORDER_DESC)],
-            [
-                'name' => '_uid',
-                'unique' => true,
-                'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
-                    'locale' => 'en',
-                    'strength' => 1
-                ],
+
+        $uid = $this->getClient()->createIndexes($collection, [
+          [
+            '_uid' => $this->getOrder(Database::ORDER_DESC),
+            'name' => '_uid',
+            'unique' => true,
+            'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
+                'locale' => 'en',
+                'strength' => 1
             ]
-        );
-        $read = $collection->createIndex(['_read' => $this->getOrder(Database::ORDER_DESC)], ['name' => '_read_permissions']);
+          ],
+        ]);
 
+        $read = $this->getClient()->createIndexes($collection, [
+          '_read' => $this->getOrder(Database::ORDER_DESC), 
+          [
+            'name' => '_read_permissions'
+          ]
+        ]);
 
         if (!$uid || !$read) {
             return false;
@@ -204,7 +205,7 @@ class MongoDB extends Adapter
                 $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
             }
 
-            if (!$collection->createIndexes($newIndexes)) {
+            if (!$this->getClient()->createIndexes($newIndexes)) {
                 return false;
             }
 
@@ -222,7 +223,7 @@ class MongoDB extends Adapter
     {
         $list = [];
 
-        foreach ($this->getDatabase()->listCollectionNames() as $key => $value) {
+        foreach ($this->getClient()->listCollectionNames() as $key => $value) {
             $list[] = $value;
         }
 
@@ -239,7 +240,7 @@ class MongoDB extends Adapter
     {
         $id = $this->getNamespace() .'_'. $this->filter($id);
 
-        return (!!$this->getDatabase()->dropCollection($id));
+        return (!!$this->getClient()->dropCollection($id));
     }
 
     /**
@@ -321,7 +322,7 @@ class MongoDB extends Adapter
             }
         }
 
-        return (!!$collection->createIndex($indexes, $options));
+        return (!!$client->createIndexes($indexes, $options));
     }
 
     /**
@@ -489,10 +490,6 @@ class MongoDB extends Adapter
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
 
         // orders
-        $orderAttributes = \array_map(function($orderAttribute) {
-            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
-        }, $orderAttributes);
-        
         foreach($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
@@ -973,4 +970,48 @@ class MongoDB extends Adapter
     {
         return true;
     }
+
+    ////// TEMP
+    public function filter(string $value):string
+    {
+        $value = preg_replace("/[^A-Za-z0-9\_\-\.]/", '', $value);
+
+        if(\is_null($value)) {
+            throw new Exception('Failed to filter key');
+        }
+
+        return $value;
+    }
+
+    public function getNamespace(): string
+    {
+        if (empty($this->namespace)) {
+            throw new Exception('Missing namespace');
+        }
+
+        return $this->namespace;
+    }
+
+    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    {
+        if (empty($name) && $reset === false) {
+            throw new Exception('Missing database');
+        }
+
+        $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
+
+        return true;
+    }
+
+    public function setNamespace(string $namespace): bool
+    {
+        if (empty($namespace)) {
+            throw new Exception('Missing namespace');
+        }
+
+        $this->namespace = $this->filter($namespace);
+
+        return true;
+    }
+
 }

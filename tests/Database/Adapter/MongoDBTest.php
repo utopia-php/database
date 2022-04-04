@@ -48,8 +48,6 @@ class MongoDBTest extends Base
             return self::$database;
         }
 
-        Cache::setCaseSensitivity(false);
-
         $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
         $client = new Client('mongodb://mongo/',
             [

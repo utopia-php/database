@@ -26,7 +26,6 @@ $cli
     ->param('adapter', '', new Text(0), 'Database adapter', false)
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->action(function ($adapter, $name) {
-        Cache::setCaseSensitivity(false);
         $database = null;
 
         switch ($adapter) {

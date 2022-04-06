@@ -1957,8 +1957,6 @@ abstract class Base extends TestCase
         $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
         $this->assertCount(2, $colors->getAttribute('attributes'));
 
-        // Test with index
-
     }
 
     /**

@@ -383,7 +383,7 @@ class Database
         ]);
 
         if(!$metaDocument) {
-            throw new DuplicateException('Collection not found');
+            throw new Exception('Collection not found');
         }
 
         // Check new ID

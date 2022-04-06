@@ -1966,7 +1966,7 @@ abstract class Base extends TestCase
      * @depends testRenameCollection
      * @expectedException Exception
      */
-    public function textRenameMissing()
+    public function textRenameCollectionMissing()
     {
         $database = static::getDatabase();
         $this->expectExceptionMessage('Collection not found');
@@ -1977,7 +1977,7 @@ abstract class Base extends TestCase
      * @depends testRenameCollection
      * @expectedException Exception
      */
-    public function testRenameExisting()
+    public function testRenameCollectionExisting()
     {
         $database = static::getDatabase();
         $this->expectExceptionMessage('Collection ID already used');

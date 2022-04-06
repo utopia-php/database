@@ -367,6 +367,50 @@ class Database
     }
 
     /**
+     * Rename Collection
+     * 
+     * @param string $id
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
+     * 
+     * @return Document
+     */
+    public function renameCollection(string $id, string $newId): Document
+    {
+        // Check current ID
+        $metaDocument = $this->findOne(self::METADATA, [
+            new Query('name', Query::TYPE_EQUAL, [$id])
+        ]);
+
+        if(!$metaDocument) {
+            throw new DuplicateException('Collection not found');
+        }
+
+        // Check new ID
+        $newMetaDocument = $this->findOne(self::METADATA, [
+            new Query('name', Query::TYPE_EQUAL, [$newId])
+        ]);
+
+        if($newMetaDocument) {
+            throw new DuplicateException('Collection ID already used');
+        }
+
+        // TODO: Adapter
+        // $this->adapter->renameCollection($id, $newId);
+
+        $idClone = $metaDocument->getId();
+
+        $metaDocument->setAttribute('name', $newId);
+        $metaDocument->setAttribute('$id', $newId);
+
+        if ($metaDocument->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $idClone, $metaDocument);
+        }
+
+        return $metaDocument;
+    }
+
+    /**
      * Get Collection
      * 
      * @param string $collection
@@ -872,10 +916,11 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $document = $this->adapter->updateDocument($collection->getId(), $document);
+        $document = $this->adapter->updateDocument($collection->getId(), $id, $document);
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId());
 
         return $document;
     }
@@ -1054,6 +1099,7 @@ class Database
     //         throw new StructureException($validator->getDescription());
     //     }
 
+    // TODO: If uncommented, here you need to provide document ID (new method signature)
     //     $new = new Document($this->adapter->updateDocument($this->getCollection($new->getCollection()), $new->getId(), $new->getArrayCopy()));
 
     //     $new = $this->decode($new);

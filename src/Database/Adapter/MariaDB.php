@@ -477,13 +477,14 @@ class MariaDB extends Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $documentId
      * @param Document $document
      * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws Duplicate
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $documentId, Document $document): Document
     {
         $attributes = $document->getAttributes();
         $name = $this->filter($collection);
@@ -497,7 +498,7 @@ class MariaDB extends Adapter
                 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` p
                 WHERE p._document = :_uid
         ");
-        $permissionsStmt->bindValue(':_uid', $document->getId());
+        $permissionsStmt->bindValue(':_uid', $documentId);
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -555,7 +556,7 @@ class MariaDB extends Adapter
                     _document = :_uid
                     {$removeQuery}
             ");
-            $stmtRemovePermissions->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+            $stmtRemovePermissions->bindValue(':_uid', $documentId, PDO::PARAM_STR);
 
             foreach ($readRemoved as $i => $role) {
                 $stmtRemovePermissions->bindValue(":_remove_read_{$i}", $role);
@@ -588,6 +589,16 @@ class MariaDB extends Adapter
             }
         }
 
+         /**
+         * Query to migrate permissions
+         */
+        $stmtMigratePermissions = $this->getPDO()
+            ->prepare("UPDATE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
+                SET _document = :_uid WHERE _document = :_uid_old");
+
+        $stmtMigratePermissions->bindValue(":_uid", $document->getId());
+        $stmtMigratePermissions->bindValue(":_uid_old", $documentId);
+
         /**
          * Update Attributes
          */
@@ -598,9 +609,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("UPDATE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+                SET {$columns} _uid = :_uid WHERE _uid = :_uid_old");
 
         $stmt->bindValue(':_uid', $document->getId());
+        $stmt->bindValue(':_uid_old', $documentId);
 
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings
@@ -621,6 +633,7 @@ class MariaDB extends Adapter
                 if (isset($stmtAddPermissions)) {
                     $stmtAddPermissions->execute();
                 }
+                $stmtMigratePermissions->execute();
             } catch (PDOException $e) {
                 switch ($e->getCode()) {
                     case 1062:

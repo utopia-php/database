@@ -1930,4 +1930,57 @@ abstract class Base extends TestCase
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
     }
+
+    public function testRenameCollection()
+    {
+        $database = static::getDatabase();
+
+        $planets = $database->createCollection('planets');
+        $database->createAttribute('planets', 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute('planets', 'size', Database::VAR_INTEGER, 0, true);
+
+        $planets2 = $database->createCollection('planets2');
+        $database->createAttribute('planets2', 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute('planets2', 'size', Database::VAR_INTEGER, 0, true);
+
+        $this->assertEquals('planets', $planets->getId());
+        $this->assertEquals('planets', $planets->getAttribute('name'));
+        $this->assertEquals('planets2', $planets2->getId());
+        $this->assertEquals('planets2', $planets2->getAttribute('name'));
+
+        $planets = $database->renameCollection('planets', 'planets3');
+
+        $this->assertEquals('planets3', $planets->getId());
+        $this->assertEquals('planets3', $planets->getAttribute('name'));
+
+        $planets = $database->getCollection('planets3');
+        $planets2 = $database->getCollection('planets2');
+
+        $this->assertEquals('planets3', $planets->getId());
+        $this->assertEquals('planets3', $planets->getAttribute('name'));
+        $this->assertEquals('planets2', $planets2->getId());
+        $this->assertEquals('planets2', $planets2->getAttribute('name'));
+    }
+
+    /**
+     * @depends testRenameCollection
+     * @expectedException Exception
+     */
+    public function textRenameMissing()
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Collection not found');
+        $database->renameCollection('planets', 'planets4');
+    }
+
+    /**
+     * @depends testRenameCollection
+     * @expectedException Exception
+     */
+    public function testRenameExisting()
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Collection ID already used');
+        $database->renameCollection('planets3', 'planets2');
+    }
 }

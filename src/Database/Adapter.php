@@ -268,11 +268,12 @@ abstract class Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $documentId
      * @param Document $document
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $documentId, Document $document): Document;
 
     /**
      * Delete Document

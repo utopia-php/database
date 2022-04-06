@@ -400,17 +400,18 @@ class MongoDB extends Adapter
      *
      * @param string $collection
      * @param Document $document
+     * @param string $documentId
      *
      * @return Document
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $documentId, Document $document): Document
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
 
         try {
             $result = $collection->findOneAndUpdate(
-                ['_uid' => $document->getId()],
+                ['_uid' => $documentId],
                 ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
                 ['returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER]
             );

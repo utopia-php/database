@@ -632,6 +632,38 @@ class Database
     }
 
     /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $name
+     *
+     * @return bool
+     */
+    public function renameIndex(string $collection, string $id, string $name): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $indexes = $collection->getAttribute('indexes', []);
+
+        foreach ($indexes as $key => $value) {
+            if (isset($value['$id']) && $value['$id'] === $id) {
+                $indexes[$key]['key'] = $name;
+                $indexes[$key]['$id'] = $name;
+                break;
+            }
+        }
+
+        $collection->setAttribute('indexes', $indexes);
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $this->adapter->renameIndex($collection->getId(), $id, $name);
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection

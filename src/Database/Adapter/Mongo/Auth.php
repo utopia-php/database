@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
+use MongoDB\BSON;
+
 class Auth
 {
   private $authcid;
@@ -24,6 +26,41 @@ class Auth
     $this->service = isset($options['service']) ? $options['service'] : null;
 
     $this->nonce = base64_encode(random_bytes(32));
+  }
+  
+  public function start()
+  {
+    $response = $this->createResponse();
+    $payload = new BSON\Binary($response, 0);
+
+    return [
+      [
+        "saslStart" => 1,
+        "mechanism" => "SCRAM-SHA-1",
+        "payload" => $payload,
+        "autoAuthorize" => 1,
+        "options" => ["skipEmptyExchange" => true],
+      ], 
+      'admin'
+    ];
+  }
+
+  public function continue($data)
+  {
+    $cid = $data->conversationId;
+    $token = $data->payload->getData();
+    
+    $answer = $this->createResponse($token);
+    $payload = new \MongoDB\BSON\Binary($answer, 0);
+    
+    return [
+      [
+        "saslContinue" => 1,
+        "conversationId" => $cid,
+        "payload" => $payload,
+      ], 
+      'admin'
+    ];
   }
 
   public function createResponse($challenge = null)

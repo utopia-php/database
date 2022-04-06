@@ -1,12 +1,15 @@
 <?php
 
-namespace Utopia\Database\Adapter;
+namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Adapter;
 
-class MongoDB extends Adapter
+use Utopia\Database\Adapter;
+use Utopia\Database\Document;
+use Utopia\Database\Database;
+
+class MongoDBAdapter extends Adapter
 {
     /**
      * @var MongoClient
@@ -23,6 +26,7 @@ class MongoDB extends Adapter
     public function __construct(MongoClient $client)
     {
         $this->client = $client;
+        $this->client->connect();
     }
 
     public function hello()
@@ -55,37 +59,7 @@ class MongoDB extends Adapter
      */
     public function exists(string $database, string $collection = null): bool
     {
-        $database = $this->filter($database);
-
-        if (!\is_null($collection)) {
-            $collection = $this->filter($collection);
-
-            $match = "{$this->getNamespace()}_{$collection}";
-            $names = $this
-                ->getClient()
-                ->selectDatabase($database)
-                ->listCollectionNames([
-                    'filter' => [
-                        'name' => $match
-                    ]
-                ]);
-        } else {
-            $match = $database;
-            $names = $this->getClient()
-                ->listDatabaseNames([
-                    'filter' => [
-                        'name' => $match
-                    ]
-                ]);
-        }
-
-        foreach ($names as $name) {
-            if ($name === $match) {
-                return true;
-            }
-        }
-
-        return false;
+      return true;
     }
 
     /**
@@ -113,8 +87,9 @@ class MongoDB extends Adapter
      */
     public function delete(string $name): bool
     {
-        $name = $this->filter($name);
-        return (!!$this->getClient()->dropDatabase($name));
+        $this->getClient()->dropDatabase([], $name);
+
+        return true;
     }
 
     /**
@@ -137,9 +112,9 @@ class MongoDB extends Adapter
         $collection = $this->getClient()->createCollection($name);
 
 
-        $uid = $this->getClient()->createIndexes($collection, [
+        $uid = $this->getClient()->createIndexes($name, [
           [
-            '_uid' => $this->getOrder(Database::ORDER_DESC),
+            'key' => $this->client->toObject(['_uid' => $this->getOrder(Database::ORDER_DESC)]),
             'name' => '_uid',
             'unique' => true,
             'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
@@ -149,12 +124,18 @@ class MongoDB extends Adapter
           ],
         ]);
 
-        $read = $this->getClient()->createIndexes($collection, [
-          '_read' => $this->getOrder(Database::ORDER_DESC), 
-          [
-            'name' => '_read_permissions'
-          ]
-        ]);
+        // $read = $this->getClient()->createIndexes($collection, [
+        //   '_read' => $this->getOrder(Database::ORDER_DESC), 
+        //   [
+        //     'name' => '_read_permissions'
+        //   ]
+        // ]);
+
+
+        $read = $this->getClient()->createIndexes($name, [[
+            'key' => $this->client->toObject(['_read' => $this->getOrder(Database::ORDER_DESC)]),
+            'name' => '_read_permissions',
+        ]]);
 
         if (!$uid || !$read) {
             return false;
@@ -205,7 +186,7 @@ class MongoDB extends Adapter
                 $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
             }
 
-            if (!$this->getClient()->createIndexes($newIndexes)) {
+            if (!$this->getClient()->createIndexes($name, $newIndexes)) {
                 return false;
             }
 
@@ -272,6 +253,11 @@ class MongoDB extends Adapter
         return true;
     }
 
+    public function renameAttribute(string $collection, string $id, string $name): bool
+    {
+        return false;
+    }
+
     /**
      * Create Index
      *
@@ -322,7 +308,7 @@ class MongoDB extends Adapter
             }
         }
 
-        return (!!$client->createIndexes($indexes, $options));
+        return (!!$this->client->createIndexes($name, $indexes, $options));
     }
 
     /**
@@ -660,8 +646,9 @@ class MongoDB extends Adapter
     protected function getDatabase(string $name = null)
     {
         $database = is_null($name) ? $this->getDefaultDatabase() : $name;
+        $selected = $this->getClient()->selectDatabase($database);
 
-        return $this->getClient()->selectDatabase($database);
+        return $selected;
     }
 
     /**

@@ -2,20 +2,12 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
+use MongoDB\BSON;
+
 use Utopia\Database\Adapter\Mongo\Auth;
 use Utopia\Database\Adapter\Mongo\Command;
+use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 
-
-class MongoClientOptions
-{
-  public function __construct(
-    public readonly string $name,
-    public readonly string $host,
-    public readonly int $port,
-    public readonly string $username,
-    public readonly string $password
-  ){}
-}
 
 class MongoClient 
 { 
@@ -28,7 +20,8 @@ class MongoClient
     $this->id = uniqid('utopia.mongo.client');
     $this->options = $options;
 
-    $this->client = new Swoole\Coroutine\Client(SWOOLE_SOCK_TCP | SWOOLE_KEEP);
+    $this->client = new \Swoole\Coroutine\Client(SWOOLE_SOCK_TCP | SWOOLE_KEEP);
+
     $this->auth = new Auth([
       'authcid' => $options->username,
       'secret' => Auth::encodeCredentials($options->username, $options->password)
@@ -36,7 +29,14 @@ class MongoClient
   }
 
   public function connect() {
-    $res = $this->client->connect($this->options->host, $this->options->port);
+    $this->client->connect($this->options->host, $this->options->port);
+    [$payload, $db] = $this->auth->start();
+
+    $res = $this->query($payload, $db);
+
+    [$payload, $db] = $this->auth->continue($res);
+    
+    $res = $this->query($payload, $db);
 
     return $this;
   }
@@ -45,12 +45,12 @@ class MongoClient
     return $this->send($string);
   }
 
-  public function query($command, $db = null) {
-    $sections = BSON\fromPHP([
-      ...$command,
+  public function query(array $command, $db = null) {
+    $params = array_merge($command, [
       '$db' => $db ?? $this->options->name,
     ]);
 
+    $sections = BSON\fromPHP($params);
     $message = pack('V*', 21 + strlen($sections), $this->id, 0, 2013, 0) . "\0" . $sections;
 
     return $this->send($message);
@@ -83,7 +83,7 @@ class MongoClient
 
     do {
       if (($chunk = $this->client->recv()) === false) {
-          Co::sleep(1); // Prevent excessive CPU Load, test lower.
+          \Co::sleep(1); // Prevent excessive CPU Load, test lower.
           continue;
       }
       
@@ -109,7 +109,7 @@ class MongoClient
     }
 
     if(property_exists($result, 'errmsg')) {
-      throw new Exception($result->errmsg);
+      throw new \Exception($result->errmsg);
     }
 
     if($result->ok == 1) {
@@ -131,65 +131,71 @@ class MongoClient
     return $this->query([
       'listDatabases' => 1,
       'nameOnly' => true,
-    ]);
+    ], 'admin');
   }
 
   // https://docs.mongodb.com/manual/reference/command/dropDatabase/#mongodb-dbcommand-dbcmd.dropDatabase
-  public function dropDatabase($options = []) {
-    $this->query([
-      "dropDatabase" => 1,
-      ...$options
-    ]);
+  public function dropDatabase(array $options = [], string $db = null) {
+    $db = $db ?? $this->options->name;
+
+    $this->query(array_merge(["dropDatabase" => 1], $options), $db);
 
     return $this;
   }
 
   // For options see: https://docs.mongodb.com/manual/reference/command/create/#mongodb-dbcommand-dbcmd.create
   public function createCollection($name, $options = []) {
-    $this->query($name, [
-      ...$options
-    ]);
+    $list = $this->listCollectionNames(["name" => $name]);
+
+    if(\count($list->cursor->firstBatch) > 0) {
+      return $this;
+    }
+
+    $this->query(array_merge([
+      'create' => $name,
+    ], $options));
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/drop/#mongodb-dbcommand-dbcmd.drop
   public function dropCollection($name, $options = []) {
-    $this->query($name, [
-      ...$options
-    ]);
+    $this->query($name, $options);
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/listCollections/#listcollections
   public function listCollectionNames($filter = [], $options = []) {
-    return $this->query([
-      "listCollections" => 1,
+    $qry = array_merge([
+      "listCollections" => 1.0,
       "nameOnly" => true,
-      "filter" => $this->toObject($filter),
-      ...$options
-    ]);
+      "authorizedCollections" => true,
+      "filter" => $this->toObject($filter)],
+      $options
+    );
+
+    return $this->query($qry);
   }
 
   // https://docs.mongodb.com/manual/reference/command/createIndexes/#createindexes
-  public function createIndexes($collection, $indexes, $options = []) {
-    $this->query([
+  public function createIndexes(string $collection, $indexes, $options = []) {
+    $this->query(array_merge([
       'createIndexes' => $collection,
-      'indexes' => $indexes,
-      ...$options
-    ]);
+      'indexes' => $indexes],
+      $options)
+    );
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/dropIndexes/#dropindexes
   public function dropIndexes($collection, $indexes, $options = []) {
-    $this->query([
-      'dropIndexes' => $collection,
-      'indexes' => $indexes,
-      ...$options
-    ]);
+    $this->query(array_merge([
+        'dropIndexes' => $collection,
+        'indexes' => $indexes,
+      ], $options)
+    );
 
     return $this;
   }
@@ -208,11 +214,10 @@ class MongoClient
       }
     }
 
-    $this->query([
+    $this->query(array_merge([
       MongoCommand::INSERT => $collection, 
       'documents' => $docObjects, 
-      ...$options
-    ]);
+    ], $options));
 
     return $this;
   }
@@ -220,18 +225,18 @@ class MongoClient
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
   public function update($collection, $where = [], $updates = [], $options = []) {
     
-    $this->query([
+    $this->query(array_merge([
       MongoCommand::UPDATE => $collection, 
       'updates' => [
-        [
-          'q' => $this->toObject($where),
-          'u' => $this->toObject($updates),
-          'multi' => false,
-          'upsert' => false
+          [
+            'q' => $this->toObject($where),
+            'u' => $this->toObject($updates),
+            'multi' => false,
+            'upsert' => false
+          ]
         ]
-      ],
-      ...$options
-    ]);
+      ], $options)
+    );
 
     return $this;
   }
@@ -239,61 +244,58 @@ class MongoClient
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
   public function upsert($collection, $where = [], $updates = [], $options = []) {
     
-    $this->query([
+    $this->query(array_merge([
       MongoCommand::UPDATE => $collection, 
       'updates' => [
-        [
           'q' => $this->toObject($where),
           'u' => $this->toObject($updates),
           'multi' => false,
           'upsert' => true
         ]
-      ],
-      ...$options
-    ]);
+      ], $options)
+    );
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/find/#mongodb-dbcommand-dbcmd.find
   public function find($collection, $filters = [], $options = []) {
-    return $this->query([
+    return $this->query(array_merge([
       MongoCommand::FIND => $collection,
       'filter' => $this->toObject($filters),
-      ...$options,
-    ]);
+      ], $options)
+    );
   }
 
   // https://docs.mongodb.com/manual/reference/command/findAndModify/#mongodb-dbcommand-dbcmd.findAndModify
   public function findAndModify($collection, $document, $update, $remove = false, $filters = [], $options = []) {
-    return $this->query([
+    return $this->query(array_merge([
       MongoCommand::FIND_AND_MODIFY => $collection,
       'filter' => $this->toObject($filters),
       'remove' => $remove,
       'update' => $update,
-      ...$options,
-    ]);
+      ], $options)
+    );
   }
 
   // https://docs.mongodb.com/manual/reference/command/delete/#mongodb-dbcommand-dbcmd.delete
   public function delete($collection, $filters = [], $limit = 1, $deleteOptions = [], $options = []) {
-    return $this->query([
+    return $this->query(array_merge([
       MongoCommand::DELETE => $collection,
       'deletes' => [
-        $this->toObject(
+        $this->toObject(array_merge(
           [
             'q' => $this->toObject($filters),
             'limit' => $limit,
-            ...$deleteOptions
-          ]
+          ], $deleteOptions)
         ),
-      ],
-      ...$options,
-    ]);
+      ]],
+      $options)
+    );
   }
 
 
-  private function toObject($dict) {
+  public function toObject($dict) {
     $obj = new \stdClass();
 
     foreach($dict as $k => $v) {
@@ -310,34 +312,4 @@ class MongoClient
     return $obj;
   }
 
-  private function authenticate()
-  {
-    $this->query(['hello' => 1]);   
-
-    $payload = $this->auth->createResponse();
-    $payload = new \MongoDB\BSON\Binary($payload, 0);
-
-    $result = $this->query([
-      "saslStart" => 1,
-      "mechanism" => "SCRAM-SHA-1",
-      "payload" => $payload,
-      "autoAuthorize" => 1,
-      "options" => ["skipEmptyExchange" => true],
-    ], 'admin');  
-
-    $cid = $result->conversationId;
-    $token = $result->payload->getData();
-
-    $payload = $auth->createResponse($token);
-    $payload = new \MongoDB\BSON\Binary($payload, 0);
-
-    $result = $this->query([
-      "saslContinue" => 1,
-      "conversationId" => $cid,
-      "payload" => $payload,
-      "options" => ["skipEmptyExchange" => true],
-    ], 'admin');  
-
-    $this->authToken = $res->payload->getData();
-  }
 }

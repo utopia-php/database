@@ -613,6 +613,7 @@ class Database
     {
         $collection = $this->getCollection($collection);
         $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
 
         $attribute = \array_search($id, \array_map(function($attribute) {
             return $attribute['$id'];
@@ -638,7 +639,21 @@ class Database
             }
         }
 
+        foreach ($indexes as $index) {
+            $indexAttributes = $index->getAttribute('attributes', []);
+            $indexAttributes = \array_map(function($attribute) use($id, $name) {
+                if($attribute === $id) {
+                    return $name;
+                }
+
+                return $attribute;
+            }, $indexAttributes);
+
+            $index->setAttribute('attributes', $indexAttributes);
+        }
+
         $collection->setAttribute('attributes', $attributes);
+        $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);

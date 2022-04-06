@@ -1940,6 +1940,8 @@ abstract class Base extends TestCase
         $database->createAttribute('colors', 'name', Database::VAR_STRING, 128, true);
         $database->createAttribute('colors', 'hex', Database::VAR_STRING, 128, true);
 
+        $database->createIndex('colors', 'index1', Database::INDEX_KEY, ['name'], [128], [Database::ORDER_ASC]);
+
         $database->createDocument('colors', new Document([
             '$read' => ['role:all'],
             '$write' => ['role:all'],
@@ -1957,6 +1959,9 @@ abstract class Base extends TestCase
         $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
         $this->assertCount(2, $colors->getAttribute('attributes'));
 
+        // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
+        $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
+        $this->assertCount(1, $colors->getAttribute('indexes'));
     }
 
     /**

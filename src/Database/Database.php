@@ -601,18 +601,34 @@ class Database
     }
 
     /**
-     * Delete Attribute
+     * Rename Attribute
      *
      * @param string $collection
      * @param string $id
+     * @param string $name
      *
      * @return bool
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
         $collection = $this->getCollection($collection);
-
         $attributes = $collection->getAttribute('attributes', []);
+
+        $attribute = \array_search($id, \array_map(function($attribute) {
+            return $attribute['$id'];
+        }, $attributes));
+
+        if($attribute === false) {
+            throw new Exception('Attribute not found');
+        }
+
+        $attributeNew = \array_search($name, \array_map(function($attribute) {
+            return $attribute['$id'];
+        }, $attributes));
+
+        if($attributeNew !== false) {
+            throw new DuplicateException('Attribute name already used');
+        }
 
         foreach ($attributes as $key => $value) {
             if (isset($value['$id']) && $value['$id'] === $id) {

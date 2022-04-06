@@ -179,6 +179,16 @@ abstract class Adapter
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
+     * Create Collection
+     * 
+     * @param string $id
+     * @param string $name
+     * 
+     * @return bool
+     */
+    abstract public function renameCollection(string $id, string $name): bool;
+
+    /**
      * Delete Collection
      * 
      * @param string $name

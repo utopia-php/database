@@ -1939,6 +1939,13 @@ abstract class Base extends TestCase
         $database->createAttribute('planets', 'name', Database::VAR_STRING, 128, true);
         $database->createAttribute('planets', 'size', Database::VAR_INTEGER, 0, true);
 
+        $database->createDocument('planets', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Earth',
+            'size' => 6371
+        ]));
+
         $planets2 = $database->createCollection('planets2');
         $database->createAttribute('planets2', 'name', Database::VAR_STRING, 128, true);
         $database->createAttribute('planets2', 'size', Database::VAR_INTEGER, 0, true);
@@ -1960,6 +1967,11 @@ abstract class Base extends TestCase
         $this->assertEquals('planets3', $planets->getAttribute('name'));
         $this->assertEquals('planets2', $planets2->getId());
         $this->assertEquals('planets2', $planets2->getAttribute('name'));
+
+        // Try to get document to make sure actual schema was changed by adapter
+        $document = $database->findOne('planets3', []);
+        $this->assertEquals('Earth', $document->getAttribute('name'));
+        $this->assertEquals(6371, $document->getAttribute('size'));
     }
 
     /**

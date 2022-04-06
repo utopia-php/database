@@ -370,12 +370,11 @@ class Database
      * Rename Collection
      * 
      * @param string $id
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param string $name
      * 
      * @return Document
      */
-    public function renameCollection(string $id, string $newId): Document
+    public function renameCollection(string $id, string $name): Document
     {
         // Check current ID
         $metaDocument = $this->findOne(self::METADATA, [
@@ -388,20 +387,19 @@ class Database
 
         // Check new ID
         $newMetaDocument = $this->findOne(self::METADATA, [
-            new Query('name', Query::TYPE_EQUAL, [$newId])
+            new Query('name', Query::TYPE_EQUAL, [$name])
         ]);
 
         if($newMetaDocument) {
             throw new DuplicateException('Collection ID already used');
         }
 
-        // TODO: Adapter
-        // $this->adapter->renameCollection($id, $newId);
+        $this->adapter->renameCollection($id, $name);
 
         $idClone = $metaDocument->getId();
 
-        $metaDocument->setAttribute('name', $newId);
-        $metaDocument->setAttribute('$id', $newId);
+        $metaDocument->setAttribute('name', $name);
+        $metaDocument->setAttribute('$id', $name);
 
         if ($metaDocument->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $idClone, $metaDocument);

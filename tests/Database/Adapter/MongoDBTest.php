@@ -3,11 +3,13 @@
 namespace Utopia\Tests\Adapter;
 
 use Redis;
-use MongoDB\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Adapter\Mongo\MongoClient;
+use Utopia\Database\Adapter\Mongo\MongoClientOptions;
+use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
+
 use Utopia\Tests\Base;
 
 /*
@@ -49,21 +51,22 @@ class MongoDBTest extends Base
             return self::$database;
         }
 
-        $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-        $client = new Client('mongodb://mongo/',
-            [
-                'username' => 'root',
-                'password' => 'example',
-            ],
-            $options
+        $options = new MongoClientOptions(
+            'utopia_testing',
+            'mongo',
+            27017,
+            'root',
+            'example'
         );
 
+        $client = new MongoClient($options);
+        
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MongoDB($client), $cache);
+        $database = new Database(new MongoDBAdapter($client), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 

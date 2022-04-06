@@ -54,13 +54,14 @@ services:
       - MYSQL_ROOT_PASSWORD=password
   
   mongo:
-    image: mongo:3.6
+    image: mongo:4.4
     container_name: utopia-mongo
     networks:
       - database
     ports:
       - "8702:27017"
     environment:
+      MONGO_INITDB_DATABASE: utopia_testing
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
 

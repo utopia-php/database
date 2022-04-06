@@ -1962,6 +1962,12 @@ abstract class Base extends TestCase
         // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
         $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
         $this->assertCount(1, $colors->getAttribute('indexes'));
+
+        // Document should be there if adapter migrated properly
+        $document = $database->findOne('colors', []);
+        $this->assertEquals('black', $document->getAttribute('verbose'));
+        $this->assertEquals('#000000', $document->getAttribute('hex'));
+        $this->assertEquals(null, $document->getAttribute('name'));
     }
 
     /**

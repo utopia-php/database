@@ -264,6 +264,7 @@ class Database
         $attributes = array_map(function ($attribute) {
             return new Document([
                 '$id' => $attribute[0],
+                '$lock' => false,
                 'type' => $attribute[1],
                 'size' => $attribute[2],
                 'required' => $attribute[3],
@@ -334,6 +335,7 @@ class Database
 
         $collection = new Document([
             '$id' => $id,
+            '$lock' => false,
             '$read' => ['role:all'],
             '$write' => ['role:all'],
             'name' => $id,
@@ -457,6 +459,7 @@ class Database
 
         $collection->setAttribute('attributes', new Document([
             '$id' => $id,
+            '$lock' => false,
             'key' => $id,
             'type' => $type,
             'size' => $size,
@@ -692,6 +695,7 @@ class Database
 
         $collection->setAttribute('indexes', new Document([
             '$id' => $id,
+            '$lock' => false,
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
@@ -740,10 +744,11 @@ class Database
      * 
      * @param string $collection
      * @param string $id
+     * @param boolean $ignoreLock
      *
      * @return Document
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, bool $ignoreLock = false): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
@@ -769,7 +774,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id);
+        $document = $this->adapter->getDocument($collection->getId(), $id, $ignoreLock);
 
         $document->setAttribute('$collection', $collection->getId());
 
@@ -813,6 +818,7 @@ class Database
         $collection = $this->getCollection($collection);
 
         $document
+            ->setAttribute('$lock', false)
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
             ->setAttribute('$collection', $collection->getId());
 
@@ -860,7 +866,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+        if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -868,10 +874,84 @@ class Database
 
         $validator = new Structure($collection);
 
+
+
         if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
             throw new StructureException($validator->getDescription());
         }
 
+        $document = $this->adapter->updateDocument($collection->getId(), $document);
+        $document = $this->decode($collection, $document);
+
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+
+        return $document;
+    }
+
+    /**
+     * Lock Document
+     * 
+     * @param string $collection
+     * @param string $id
+     *
+     * @return Document
+     *
+     * @throws Exception
+     */
+    public function lockDocument(string $collection, string $id): Document
+    {
+        $document = $this->getDocument($collection, $id, true); // TODO make sure user don\'t need read permission for write operations
+        $collection = $this->getCollection($collection);
+
+        $validator = new Authorization('write');
+
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $document->setAttribute('$lock', true);
+
+        $document = $this->encode($collection, $document);
+        $document = $this->adapter->updateDocument($collection->getId(), $document);
+        $document = $this->decode($collection, $document);
+
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+
+        return $document;
+    }
+
+    /**
+     * Unlock Document
+     * 
+     * @param string $collection
+     * @param string $id
+     *
+     * @return Document
+     *
+     * @throws Exception
+     */
+    public function unlockDocument(string $collection, string $id): Document
+    {
+        $document = $this->getDocument($collection, $id, true); // TODO make sure user don\'t need read permission for write operations
+        $collection = $this->getCollection($collection);
+
+        $validator = new Authorization('write');
+
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $document->setAttribute('$lock', false);
+
+        $document = $this->encode($collection, $document);
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
@@ -892,7 +972,7 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = $this->getDocument($collection, $id);
+        $document = $this->getDocument($collection, $id, true);
 
         $validator = new Authorization('write');
 

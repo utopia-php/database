@@ -90,6 +90,14 @@ class Document extends ArrayObject
     }
 
     /**
+     * @return boolean
+     */
+    public function getLock(): bool
+    {
+        return $this->getAttribute('$lock', false);
+    }
+
+    /**
      * Get Document Attributes
      * 
      * @return array
@@ -99,7 +107,7 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if(array_key_exists($attribute, ['$id' => true, '$internalId' => true, '$collection' => true, '$read' => true, '$write' => []])) {
+            if(array_key_exists($attribute, ['$id' => true, '$internalId' => true, '$collection' => true, '$read' => true, '$write' => [], '$lock' => false])) {
                 continue;
             }
 

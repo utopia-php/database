@@ -1930,4 +1930,57 @@ abstract class Base extends TestCase
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
     }
+
+    public function testLockedDocuments()
+    {
+        $database = static::getDatabase();
+
+        $collection = $database->createCollection('words');
+        $database->createAttribute('words', 'word', Database::VAR_STRING, 128, true);
+        $database->createAttribute('words', 'popularity', Database::VAR_INTEGER, 0, true);
+
+        $doc1 = $database->createDocument('words', new Document([
+            '$write' => ['role:all'],
+            '$read' => ['role:all'],
+            '$id' => 'firstWord',
+            'word' => 'Hello',
+            'popularity' => 15
+        ]));
+
+        $doc1 = $database->createDocument('words', new Document([
+            '$write' => ['role:all'],
+            '$read' => ['role:all'],
+            '$id' => 'secondWord',
+            'word' => 'Hi',
+            'popularity' => 50
+        ]));
+
+        $this->assertEquals(false, $doc1->isEmpty());
+        $this->assertEquals(false, $doc1->isEmpty());
+
+        $doc1 = $database->getDocument('words', 'firstWord');
+        $doc2 = $database->getDocument('words', 'secondWord');
+        $this->assertEquals(false, $doc1->isEmpty());
+        $this->assertEquals(false, $doc2->isEmpty());
+        $this->assertEquals(false, $doc1->getLock());
+        $this->assertEquals(false, $doc2->getLock());
+
+        $doc1 = $database->lockDocument('words', 'firstWord');
+        $this->assertEquals(true, $doc1->getLock());
+
+        $doc1 = $database->getDocument('words', 'firstWord');
+        $doc2 = $database->getDocument('words', 'secondWord');
+        $this->assertEquals(true, $doc1->isEmpty());
+        $this->assertEquals(false, $doc2->isEmpty());
+
+        $doc1 = $database->unlockDocument('words', 'firstWord');
+        $this->assertEquals(false, $doc1->getLock());
+
+        $doc1 = $database->getDocument('words', 'firstWord');
+        $doc2 = $database->getDocument('words', 'secondWord');
+        $this->assertEquals(false, $doc1->isEmpty());
+        $this->assertEquals(false, $doc2->isEmpty());
+        $this->assertEquals(false, $doc1->getLock());
+        $this->assertEquals(false, $doc2->getLock());
+    }
 }

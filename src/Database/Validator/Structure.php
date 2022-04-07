@@ -67,6 +67,15 @@ class Structure extends Validator
             'array' => true,
             'filters' => [],
         ],
+        [
+            '$id' => '$lock',
+            'type' => Database::VAR_BOOLEAN,
+            'size' => 1,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
     ];
 
     /**

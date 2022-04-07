@@ -249,10 +249,11 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param boolean $ignoreLock
      *
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id): Document;
+    abstract public function getDocument(string $collection, string $id, bool $ignoreLock): Document;
 
     /**
      * Create Document

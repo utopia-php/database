@@ -172,6 +172,7 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_uid` CHAR(255) NOT NULL,
+                        `_lock` BOOLEAN NOT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
@@ -349,13 +350,19 @@ class MariaDB extends Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param boolean $ignoreLock
      * @return Document
      * @throws Exception
      * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, bool $ignoreLock): Document
     {
         $name = $this->filter($collection);
+
+        $lockQuery = ' AND _lock = 0';
+        if($ignoreLock) {
+            $lockQuery = '';
+        }
 
         $stmt = $this->getPDO()->prepare("
             SELECT 
@@ -363,7 +370,7 @@ class MariaDB extends Adapter
                 {$this->getSQLPermissionsQuery($name, 'read', '$read')},
                 {$this->getSQLPermissionsQuery($name, 'write', '$write')}
             FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-            WHERE _uid = :_uid
+            WHERE _uid = :_uid {$lockQuery}
             LIMIT 1;
         ");
 
@@ -382,11 +389,13 @@ class MariaDB extends Adapter
         $document['$internalId'] = $document['_id'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
+        $document['$lock'] = $document['_lock'] === 0;
 
         unset($document['_id']);
         unset($document['_uid']);
         unset($document['_read']);
         unset($document['_write']);
+        unset($document['_lock']);
 
         return new Document($document);
     }
@@ -419,9 +428,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
-                SET {$columns} _uid = :_uid");
+                SET {$columns} _uid = :_uid, _lock = :_lock");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_lock', $document->getLock(), PDO::PARAM_BOOL);
 
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings
@@ -598,9 +608,10 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()
             ->prepare("UPDATE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}`
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+                SET {$columns} _uid = :_uid, _lock = :_lock WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId());
+        $stmt->bindValue(':_lock', $document->getLock(), PDO::PARAM_BOOL);
 
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings

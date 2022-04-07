@@ -433,6 +433,10 @@ class Database
      */
     public function updateAttribute(string $collection, string $id = null, string $type = null, int $size = null, bool $required = null, $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = null, array $filters = null): bool
     {
+        if($array !== null) {
+            throw new Exception('Changing array status is not supported');
+        }
+
         // Can get to false during function
         $success = true;
 
@@ -445,15 +449,16 @@ class Database
         }, $attributes));
 
         if($attributeIndex === false) {
-            throw new Exception('Attribute not found.');
+            throw new Exception('Attribute not found');
         }
 
         $attribute = $attributes[$attributeIndex];
 
-        if($type !== null || $size !== null || $signed !== null) {
+        if($type !== null || $size !== null || $signed !== null || $array !== null) {
             $type = $type === null ? $attribute->getAttribute('type') : $type;
             $size = $size === null ? $attribute->getAttribute('size') : $size;
             $signed = $signed === null ? $attribute->getAttribute('signed') : $signed;
+            $array = $array === null ? $attribute->getAttribute('array') : $array;
 
             switch ($type) {
                 case self::VAR_STRING:
@@ -479,8 +484,9 @@ class Database
             $attribute->setAttribute('type', $type);
             $attribute->setAttribute('size', $size);
             $attribute->setAttribute('signed', $signed);
+            $attribute->setAttribute('array', $array);
 
-            // TODO: $success = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+            $success = $this->adapter->updateAttribute($collection->getId(), $id, $type, $size, $signed, $array);
         }
 
         if($required !== null) {
@@ -515,10 +521,6 @@ class Database
             }
 
             $attribute->setAttribute('default', $default);
-        }
-
-        if($array !== null) {
-            $attribute->setAttribute('array', $array);
         }
 
         if($format !== null) {

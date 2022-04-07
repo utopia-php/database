@@ -1945,6 +1945,7 @@ abstract class Base extends TestCase
         $database->createAttribute('stocks', 'price', Database::VAR_STRING, 128, false);
         $database->createAttribute('stocks', 'authors', Database::VAR_STRING, 128, true);
         $database->createAttribute('stocks', 'employee', Database::VAR_STRING, 128, true);
+        $database->createAttribute('stocks', 'unsignedAttribute', Database::VAR_INTEGER, 0, true);
 
         $database->createIndex('stocks', 'index1', Database::INDEX_KEY, ['brand'], [128], [Database::ORDER_ASC]);
 
@@ -1954,7 +1955,8 @@ abstract class Base extends TestCase
             'brand' => 'Apple',
             'price' => '171',
             'authors' => 'Tim Cook',
-            'employee' => '{}'
+            'employee' => '{}',
+            'unsignedAttribute' => -5
         ]));
 
         $database->createDocument('stocks', new Document([
@@ -1963,7 +1965,8 @@ abstract class Base extends TestCase
             'brand' => 'Microsoft',
             'price' => '299',
             'authors' => 'Satya Nadella',
-            'employee' => '{}'
+            'employee' => '{}',
+            'unsignedAttribute' => -50
         ]));
 
         $collection = $database->getCollection('stocks');
@@ -2002,7 +2005,9 @@ abstract class Base extends TestCase
             null, // formatOptions
             null, // filters
         ));
-
+     
+        /*
+        Changing array not supported at the moment.
         $this->assertTrue($database->updateAttribute('stocks', 'authors',
             null, // type
             null, // size
@@ -2014,14 +2019,15 @@ abstract class Base extends TestCase
             null, // formatOptions
             null, // filters
         ));
+        */
 
         $this->assertTrue($database->updateAttribute('stocks', 'employee',
             null, // type
             null, // size
-            true, // required
+            null, // required
             null, // default
             null, // signed
-            true, // array
+            null, // array
             'enum', // format
             ['engineer', 'designer', 'devrel'], // formatOptions
             ['json'], // filters
@@ -2035,7 +2041,10 @@ abstract class Base extends TestCase
         $this->assertEquals('Unnamed', $attributes[0]->getAttribute('default'));
         $this->assertEquals(Database::VAR_INTEGER, $attributes[1]->getAttribute('type'));
         $this->assertEquals(false, $attributes[1]->getAttribute('signed'));
+        /*
+        Changing array not supported at the moment.
         $this->assertEquals(true, $attributes[2]->getAttribute('array'));
+        */
         $this->assertEquals('enum', $attributes[3]->getAttribute('format'));
         $this->assertEquals('json', $attributes[3]->getAttribute('filters')[0]);
         $this->assertCount(1, $attributes[3]->getAttribute('filters'));
@@ -2044,6 +2053,120 @@ abstract class Base extends TestCase
         $this->assertEquals('devrel', $attributes[3]->getAttribute('formatOptions')[2]);
         $this->assertCount(3, $attributes[3]->getAttribute('formatOptions'));
 
-        // TODO: Adapter validations?
+        $document = $database->findOne('stocks');
+        $this->assertEquals('Apple', $document->getAttribute('brand'));
+        $this->assertIsNumeric($document->getAttribute('price'));
+        $this->assertEquals(171, $document->getAttribute('price'));
+        $this->assertEquals('Tim Cook', $document->getAttribute('authors'));
+    }
+
+    /**
+     * @depends testUpdateAttribute
+     * @expectedException Exception
+     */
+    public function testUpdateAttributeMissing()
+    {
+        $database = static::getDatabase();
+
+        $this->expectExceptionMessage('Attribute not found');
+        $database->updateAttribute('stocks', 'brand2',
+            null, // type
+            42, // size
+            null, // required
+            null, // default
+            null, // signed
+            null, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        );
+    }
+
+    /**
+     * @depends testUpdateAttribute
+     * @expectedException Exception
+     */
+    public function testUpdateAttributeArray()
+    {
+        $database = static::getDatabase();
+
+        $this->expectExceptionMessage('Changing array status is not supported');
+        $database->updateAttribute('stocks', 'brand',
+            null, // type
+            null, // size
+            null, // required
+            null, // default
+            null, // signed
+            true, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        );
+    }
+
+    /**
+     * @depends testUpdateAttribute
+     * @expectedException Exception
+     */
+    public function testUpdateAttributeSize()
+    {
+        $database = static::getDatabase();
+
+        $this->expectExceptionMessage("Data truncated for column 'brand'");
+        $database->updateAttribute('stocks', 'brand',
+            null, // type
+            1, // size
+            null, // required
+            null, // default
+            null, // signed
+            null, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        );
+    }
+
+    /**
+     * @depends testUpdateAttribute
+     * @expectedException Exception
+     */
+    public function testUpdateAttributeType()
+    {
+        $database = static::getDatabase();
+
+        $this->expectExceptionMessage("Truncated incorrect INTEGER value:");
+        $database->updateAttribute('stocks', 'brand',
+            Database::VAR_INTEGER, // type
+            null, // size
+            null, // required
+            null, // default
+            null, // signed
+            null, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        );
+    }
+
+    /**
+     * @depends testUpdateAttribute
+     * @expectedException Exception
+     */
+    public function testUpdateAttributeSigned()
+    {
+        $database = static::getDatabase();
+
+        $this->expectExceptionMessage("Numeric value out of range");
+        $database->updateAttribute('stocks', 'unsignedAttribute',
+            null, // type
+            null, // size
+            null, // required
+            null, // default
+            false, // signed
+            null, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        );
     }
 }

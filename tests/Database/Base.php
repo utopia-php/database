@@ -11,6 +11,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Structure;
 
 abstract class Base extends TestCase
 {
@@ -1929,5 +1930,120 @@ abstract class Base extends TestCase
 
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
+    }
+
+    public function testUpdateAttribute()
+    {
+        $database = static::getDatabase();
+
+        Structure::addFormat('enum', function($options) {
+            return $options;
+        }, 'string');
+
+        $collection = $database->createCollection('stocks');
+        $database->createAttribute('stocks', 'brand', Database::VAR_STRING, 128, true);
+        $database->createAttribute('stocks', 'price', Database::VAR_STRING, 128, false);
+        $database->createAttribute('stocks', 'authors', Database::VAR_STRING, 128, true);
+        $database->createAttribute('stocks', 'employee', Database::VAR_STRING, 128, true);
+
+        $database->createIndex('stocks', 'index1', Database::INDEX_KEY, ['brand'], [128], [Database::ORDER_ASC]);
+
+        $database->createDocument('stocks', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'brand' => 'Apple',
+            'price' => '171',
+            'authors' => 'Tim Cook',
+            'employee' => '{}'
+        ]));
+
+        $database->createDocument('stocks', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'brand' => 'Microsoft',
+            'price' => '299',
+            'authors' => 'Satya Nadella',
+            'employee' => '{}'
+        ]));
+
+        $collection = $database->getCollection('stocks');
+        $attributes = $collection->getAttribute('attributes');
+
+        $this->assertEquals(128, $attributes[0]->getAttribute('size'));
+        $this->assertEquals(true, $attributes[0]->getAttribute('required'));
+        $this->assertEquals(null, $attributes[0]->getAttribute('default'));
+        $this->assertEquals(Database::VAR_STRING, $attributes[1]->getAttribute('type'));
+        $this->assertEquals(true, $attributes[1]->getAttribute('signed'));
+        $this->assertEquals(false, $attributes[2]->getAttribute('array'));
+        $this->assertEquals(null, $attributes[3]->getAttribute('format'));
+        $this->assertIsArray($attributes[3]->getAttribute('formatOptions'));
+        $this->assertCount(0, $attributes[3]->getAttribute('formatOptions'));
+
+        $this->assertTrue($database->updateAttribute('stocks', 'brand',
+            null, // type
+            10, // size
+            false, // required
+            "Unnamed", // default
+            null, // signed
+            null, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        ));
+
+        $this->assertTrue($database->updateAttribute('stocks', 'price',
+            Database::VAR_INTEGER, // type
+            null, // size
+            null, // required
+            null, // default
+            false, // signed
+            null, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        ));
+
+        $this->assertTrue($database->updateAttribute('stocks', 'authors',
+            null, // type
+            null, // size
+            null, // required
+            null, // default
+            null, // signed
+            true, // array
+            null, // format
+            null, // formatOptions
+            null, // filters
+        ));
+
+        $this->assertTrue($database->updateAttribute('stocks', 'employee',
+            null, // type
+            null, // size
+            true, // required
+            null, // default
+            null, // signed
+            true, // array
+            'enum', // format
+            ['engineer', 'designer', 'devrel'], // formatOptions
+            ['json'], // filters
+        ));
+
+        $collection = $database->getCollection('stocks');
+        $attributes = $collection->getAttribute('attributes');
+
+        $this->assertEquals(10, $attributes[0]->getAttribute('size'));
+        $this->assertEquals(false, $attributes[0]->getAttribute('required'));
+        $this->assertEquals('Unnamed', $attributes[0]->getAttribute('default'));
+        $this->assertEquals(Database::VAR_INTEGER, $attributes[1]->getAttribute('type'));
+        $this->assertEquals(false, $attributes[1]->getAttribute('signed'));
+        $this->assertEquals(true, $attributes[2]->getAttribute('array'));
+        $this->assertEquals('enum', $attributes[3]->getAttribute('format'));
+        $this->assertEquals('json', $attributes[3]->getAttribute('filters')[0]);
+        $this->assertCount(1, $attributes[3]->getAttribute('filters'));
+        $this->assertEquals('engineer', $attributes[3]->getAttribute('formatOptions')[0]);
+        $this->assertEquals('designer', $attributes[3]->getAttribute('formatOptions')[1]);
+        $this->assertEquals('devrel', $attributes[3]->getAttribute('formatOptions')[2]);
+        $this->assertCount(3, $attributes[3]->getAttribute('formatOptions'));
+
+        // TODO: Adapter validations?
     }
 }

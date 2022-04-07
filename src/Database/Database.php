@@ -413,6 +413,148 @@ class Database
     }
 
     /**
+     * Update Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size utf8mb4 chars length
+     * @param bool $required
+     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param bool $signed
+     * @param bool $array
+     * @param string $format optional validation format of attribute
+     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param array $filters
+     * 
+     * To update attribute key (ID), use renameAttribute instead.
+     * 
+     * @return bool
+     */
+    public function updateAttribute(string $collection, string $id = null, string $type = null, int $size = null, bool $required = null, $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = null, array $filters = null): bool
+    {
+        // Can get to false during function
+        $success = true;
+
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $attributeIndex = \array_search($id, \array_map(function($attribute) {
+            return $attribute['$id'];
+        }, $attributes));
+
+        if($attributeIndex === false) {
+            throw new Exception('Attribute not found.');
+        }
+
+        $attribute = $attributes[$attributeIndex];
+
+        if($type !== null || $size !== null || $signed !== null) {
+            $type = $type === null ? $attribute->getAttribute('type') : $type;
+            $size = $size === null ? $attribute->getAttribute('size') : $size;
+            $signed = $signed === null ? $attribute->getAttribute('signed') : $signed;
+
+            switch ($type) {
+                case self::VAR_STRING:
+                    if ($size > $this->adapter->getStringLimit()) {
+                        throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
+                    }
+                    break;
+    
+                case self::VAR_INTEGER:
+                    $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
+                    if ($size > $limit) {
+                        throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                    }
+                    break;
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type: ' . $type);
+                    break;
+            }
+
+            $attribute->setAttribute('type', $type);
+            $attribute->setAttribute('size', $size);
+            $attribute->setAttribute('signed', $signed);
+
+            // TODO: $success = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        }
+
+        if($required !== null) {
+            $attribute->setAttribute('required', $required);
+        }
+
+        if($default !== null) {
+            if ($attribute->getAttribute('required') === true) {
+                throw new Exception('Cannot set a default value on a required attribute');
+            }
+            switch (\gettype($default)) {
+                    // first enforce typed array for each value in $default
+                case 'array':
+                    foreach ($default as $value) {
+                        if ($attribute->getAttribute('type') !== \gettype($value)) {
+                            throw new Exception('Default value contents do not match given type ' . $attribute->getAttribute('type'));
+                        }
+                    }
+                    break;
+                    // then enforce for primitive types
+                case self::VAR_STRING:
+                case self::VAR_INTEGER:
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                    if ($attribute->getAttribute('type') !== \gettype($default)) {
+                        throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
+                    }
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type for: ' . $default);
+                    break;
+            }
+
+            $attribute->setAttribute('default', $default);
+        }
+
+        if($array !== null) {
+            $attribute->setAttribute('array', $array);
+        }
+
+        if($format !== null) {
+            if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
+                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
+            }
+
+            $attribute->setAttribute('format', $format);
+        }
+
+        if($formatOptions !== null) {
+            $attribute->setAttribute('formatOptions', $formatOptions);
+        }
+
+        if($filters !== null) {
+            $attribute->setAttribute('filters', $filters);
+        }
+
+        $attributes[$attributeIndex] = $attribute;
+        $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+
+        if (
+            $this->adapter->getRowLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+        ) {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $success;
+    }
+
+    /**
      * Create Attribute
      * 
      * @param string $collection

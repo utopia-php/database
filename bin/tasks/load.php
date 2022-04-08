@@ -33,6 +33,8 @@ $cli
         $start = null;
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
+        Cache::setCaseSensitivity(false);
+
         Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
             case 'mariadb': 

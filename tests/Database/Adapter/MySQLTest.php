@@ -57,6 +57,8 @@ class MySQLTest extends Base
             return self::$database;
         }
 
+        Cache::setCaseSensitivity(false);
+
         $dbHost = 'mysql';
         $dbPort = '3307';
         $dbUser = 'root';

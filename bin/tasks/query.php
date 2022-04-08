@@ -26,8 +26,6 @@ $cli
     ->action(function ($adapter, $name, $limit) {
         $database = null;
 
-        Cache::setCaseSensitivity(false);
-
         switch ($adapter) {
             case 'mongodb':
                 $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];

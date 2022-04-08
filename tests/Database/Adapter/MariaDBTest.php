@@ -48,8 +48,6 @@ class MariaDBTest extends Base
             return self::$database;
         }
 
-        Cache::setCaseSensitivity(false);
-
         $dbHost = 'mariadb';
         $dbPort = '3306';
         $dbUser = 'root';

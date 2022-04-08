@@ -27,7 +27,7 @@
         "ext-redis": "*",
         "ext-mongodb": "*",
         "utopia-php/framework": "0.*.*",
-        "utopia-php/cache": "0.5.*",
+        "utopia-php/cache": "0.6.*",
         "mongodb/mongodb": "1.8.0"
     },
     "require-dev": {

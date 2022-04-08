@@ -557,6 +557,7 @@
         },
         {
             "name": "composer/semver",
+<<<<<<< HEAD
             "version": "3.3.2",
             "source": {
                 "type": "git",
@@ -567,6 +568,18 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/composer/semver/zipball/3953f23262f2bff1919fc82183ad9acb13ff62c9",
                 "reference": "3953f23262f2bff1919fc82183ad9acb13ff62c9",
+=======
+            "version": "3.3.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/composer/semver.git",
+                "reference": "5d8e574bb0e69188786b8ef77d43341222a41a71"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/composer/semver/zipball/5d8e574bb0e69188786b8ef77d43341222a41a71",
+                "reference": "5d8e574bb0e69188786b8ef77d43341222a41a71",
+>>>>>>> 7700aab (Cache upgrade code changes)
                 "shasum": ""
             },
             "require": {
@@ -618,7 +631,11 @@
             "support": {
                 "irc": "irc://irc.freenode.org/composer",
                 "issues": "https://github.com/composer/semver/issues",
+<<<<<<< HEAD
                 "source": "https://github.com/composer/semver/tree/3.3.2"
+=======
+                "source": "https://github.com/composer/semver/tree/3.3.1"
+>>>>>>> 7700aab (Cache upgrade code changes)
             },
             "funding": [
                 {
@@ -634,7 +651,11 @@
                     "type": "tidelift"
                 }
             ],
+<<<<<<< HEAD
             "time": "2022-04-01T19:23:25+00:00"
+=======
+            "time": "2022-03-16T11:22:07+00:00"
+>>>>>>> 7700aab (Cache upgrade code changes)
         },
         {
             "name": "composer/xdebug-handler",
@@ -1852,6 +1873,7 @@
         },
         {
             "name": "phpunit/phpunit",
+<<<<<<< HEAD
             "version": "9.5.20",
             "source": {
                 "type": "git",
@@ -1862,6 +1884,18 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/12bc8879fb65aef2138b26fc633cb1e3620cffba",
                 "reference": "12bc8879fb65aef2138b26fc633cb1e3620cffba",
+=======
+            "version": "9.5.19",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/sebastianbergmann/phpunit.git",
+                "reference": "35ea4b7f3acabb26f4bb640f8c30866c401da807"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/35ea4b7f3acabb26f4bb640f8c30866c401da807",
+                "reference": "35ea4b7f3acabb26f4bb640f8c30866c401da807",
+>>>>>>> 7700aab (Cache upgrade code changes)
                 "shasum": ""
             },
             "require": {
@@ -1939,7 +1973,11 @@
             ],
             "support": {
                 "issues": "https://github.com/sebastianbergmann/phpunit/issues",
+<<<<<<< HEAD
                 "source": "https://github.com/sebastianbergmann/phpunit/tree/9.5.20"
+=======
+                "source": "https://github.com/sebastianbergmann/phpunit/tree/9.5.19"
+>>>>>>> 7700aab (Cache upgrade code changes)
             },
             "funding": [
                 {
@@ -1951,7 +1989,11 @@
                     "type": "github"
                 }
             ],
+<<<<<<< HEAD
             "time": "2022-04-01T12:37:26+00:00"
+=======
+            "time": "2022-03-15T09:57:31+00:00"
+>>>>>>> 7700aab (Cache upgrade code changes)
         },
         {
             "name": "psr/container",
@@ -3022,6 +3064,7 @@
         },
         {
             "name": "symfony/console",
+<<<<<<< HEAD
             "version": "v5.4.7",
             "source": {
                 "type": "git",
@@ -3032,6 +3075,18 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/symfony/console/zipball/900275254f0a1a2afff1ab0e11abd5587a10e1d6",
                 "reference": "900275254f0a1a2afff1ab0e11abd5587a10e1d6",
+=======
+            "version": "v5.4.5",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/symfony/console.git",
+                "reference": "d8111acc99876953f52fe16d4c50eb60940d49ad"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/symfony/console/zipball/d8111acc99876953f52fe16d4c50eb60940d49ad",
+                "reference": "d8111acc99876953f52fe16d4c50eb60940d49ad",
+>>>>>>> 7700aab (Cache upgrade code changes)
                 "shasum": ""
             },
             "require": {
@@ -3101,7 +3156,11 @@
                 "terminal"
             ],
             "support": {
+<<<<<<< HEAD
                 "source": "https://github.com/symfony/console/tree/v5.4.7"
+=======
+                "source": "https://github.com/symfony/console/tree/v5.4.5"
+>>>>>>> 7700aab (Cache upgrade code changes)
             },
             "funding": [
                 {
@@ -3117,7 +3176,11 @@
                     "type": "tidelift"
                 }
             ],
+<<<<<<< HEAD
             "time": "2022-03-31T17:09:19+00:00"
+=======
+            "time": "2022-02-24T12:45:35+00:00"
+>>>>>>> 7700aab (Cache upgrade code changes)
         },
         {
             "name": "symfony/deprecation-contracts",

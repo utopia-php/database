@@ -29,7 +29,7 @@ A list of the utopia/php concepts and their relevant equivalent using the differ
 
 ### Filters
 
-Attribute filters are functions that manipulate attribute before saving to database and after retrieving from the database. You can add filters using the `Database::addFilter($name, $encode, $decode)` where `$name` is the name of the filter that we can add later to attribute `filters` array. `$encode` and `$decode` are the functions used to encode and decode the attribute respectively. There is also instance level filters that can only be defined while constructing the `Database` instance. Instance level filters override the static filters if they have the same name.
+Attribute filters are functions that manipulate attributes before saving them to the database and after retrieving them from the database. You can add filters using the `Database::addFilter($name, $encode, $decode)` where `$name` is the name of the filter that we can add later to attribute `filters` array. `$encode` and `$decode` are the functions used to encode and decode the attribute, respectively. There are also instance-level filters that can only be defined while constructing the `Database` instance. Instance level filters override the static filters if they have the same name.
 
 ### Reserved Attributes
 

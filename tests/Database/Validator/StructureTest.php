@@ -161,6 +161,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'description' => 'Demo description',
             'rating' => 5,
@@ -178,6 +179,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'My Title',
             'description' => null,
@@ -189,6 +191,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'My Title',
             'description' => null,
@@ -205,6 +208,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'Demo Title',
             'titlex' => 'Unknown Attribute',
@@ -224,6 +228,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'Demo Title',
             'description' => 'Demo description',
@@ -240,6 +245,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 5,
             'description' => 'Demo description',
@@ -258,6 +264,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -271,6 +278,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -284,6 +292,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -296,6 +305,7 @@ class StructureTest extends TestCase
 
 
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -314,6 +324,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -327,6 +338,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -345,6 +357,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -357,6 +370,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -369,6 +383,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -381,6 +396,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -400,6 +416,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -413,6 +430,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -431,6 +449,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -444,6 +463,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
         
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -462,6 +482,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
+            '$lock' => false,
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
@@ -473,5 +494,23 @@ class StructureTest extends TestCase
         ])));
         
         $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
+    }
+
+    public function testMissingLock()
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'user@team_appwrite.io',
+        ])));
+        
+        $this->assertEquals('Invalid document structure: Missing required attribute "$lock"', $validator->getDescription());
     }
 }

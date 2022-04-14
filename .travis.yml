@@ -31,5 +31,5 @@ install:
 
 script:
 - docker ps
-- docker-compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+- docker-compose exec tests vendor/bin/phpunit --configuration phpunit.xml
 - docker-compose exec tests vendor/bin/psalm --show-info=true

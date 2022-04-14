@@ -2134,7 +2134,9 @@ abstract class Base extends TestCase
     {
         $database = static::getDatabase();
 
-        $this->expectExceptionMessage("Truncated incorrect INTEGER value:");
+        // 2 possible exceptions, each comming from different SQL server
+        $this->expectExceptionMessageMatches("/Truncated incorrect INTEGER value\:|Incorrect integer value\:/");
+
         $database->updateAttribute('stocks', 'brand',
             Database::VAR_INTEGER, // type
             null, // size

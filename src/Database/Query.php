@@ -206,14 +206,53 @@ class Query
             ($end - $start - 1) /* exclude closed paren*/
         );
 
-        // Explode comma-separated values
-        $values = explode(',', $value);
+        $value = trim($value);
+
+        // Get the values separated by commas
+        $values = array();
+        $openingQuote = false;
+        $v = ''; // Temporarily holds value as each character is processed
+        for ($i = 0; $i < mb_strlen($value); $i++) { 
+            $char = mb_substr($value, $i, 1);
+            if ($openingQuote) {
+                if ($char == '\\') {
+                    // Escape char so grab it and the next regardless of what it is
+                    $v .= mb_substr($value, $i, 2);
+                    $i++;
+                } else if ($char == '"'){
+                    // Closing quote so add $v to $values and reset
+                    $v .= $char;
+                    $values[] = $v;
+                    $v = '';
+                    $openingQuote = false;
+                } else {
+                    $v .= $char;
+                }
+            } else if ($char == ' ') {
+                // Skip spaces outside of quotes
+                continue;
+            } else if ($char == ',') {
+                // Value terminator so see if we need to add $v to $values
+                if (mb_strlen($v) > 0) {
+                    $values[] = $v;
+                    $v = '';
+                }
+            } else {
+                if ($char == '"') {
+                    $openingQuote = true;
+                }
+                $v .= $char;
+            }
+        }
+        // Finished processing so add $v to $values
+        if (mb_strlen($v) > 0) {
+            $values[] = $v;
+        }
 
         // Cast $value type
         $values = array_map(function ($value) {
 
             // Trim whitespace from around $value
-
             $value = trim($value);
 
             switch (true) {

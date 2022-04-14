@@ -66,6 +66,13 @@ class QueryTest extends TestCase
         $this->assertContains('Brad Pitt', $query->getValues());
         $this->assertContains('Johnny Depp', $query->getValues());
 
+        $query = Query::parse('text.equal("Contains,Comma", "No Comma")');
+
+        $this->assertEquals('text', $query->getAttribute());
+        $this->assertEquals('equal', $query->getOperator());
+        $this->assertContains('Contains,Comma', $query->getValues());
+        $this->assertContains('No Comma', $query->getValues());
+
         $query = Query::parse('writers.contains("Tim O\'Reilly")');
 
         $this->assertEquals('writers', $query->getAttribute());

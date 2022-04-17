@@ -502,6 +502,30 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testRespectNulls()
+    {
+        static::getDatabase()->createCollection('documents_nulls');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'string', Database::VAR_STRING, 128, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'integer', Database::VAR_INTEGER, 0, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'bigint', Database::VAR_INTEGER, 8, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'float', Database::VAR_FLOAT, 0, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'boolean', Database::VAR_BOOLEAN, 0, false));
+
+        $document = static::getDatabase()->createDocument('documents_nulls', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+        ]));
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertNull($document->getAttribute('string'));
+        $this->assertNull($document->getAttribute('integer'));
+        $this->assertNull($document->getAttribute('bigint'));
+        $this->assertNull($document->getAttribute('float'));
+        $this->assertNull($document->getAttribute('boolean'));
+        return $document;
+    }
+
     public function testCreateDocumentDefaults()
     {
         static::getDatabase()->createCollection('defaults');

@@ -1181,6 +1181,9 @@ class Database
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
+            if(is_null($value)) {
+                continue;
+            }
 
             if ($array) {
                 $value = (!is_string($value)) ? ($value ?? []) : json_decode($value, true);
@@ -1189,6 +1192,9 @@ class Database
             }
 
             foreach ($value as &$node) {
+                if(is_null($value)) {
+                    continue;
+                }
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;

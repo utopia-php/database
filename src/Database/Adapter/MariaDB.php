@@ -379,7 +379,7 @@ class MariaDB extends Adapter
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
+        $document['$internalId'] = (string)$document['_id'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
 

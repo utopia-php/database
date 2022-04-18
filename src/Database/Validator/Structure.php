@@ -33,8 +33,8 @@ class Structure extends Validator
         ],
         [
             '$id' => '$internalId',
-            'type' => Database::VAR_INTEGER,
-            'size' => 11, // auto increment integer default
+            'type' => Database::VAR_STRING,
+            'size' => 64,
             'required' => false,
             'signed' => true,
             'array' => false,

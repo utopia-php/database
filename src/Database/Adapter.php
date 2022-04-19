@@ -218,7 +218,7 @@ abstract class Adapter
      * @param string $name
      * @return bool
      */
-    abstract public function renameAttribute(string $collection, string $id, string $name): bool;
+    abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
      * Create Index

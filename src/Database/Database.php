@@ -604,33 +604,31 @@ class Database
      * Rename Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old Current attribute ID
+     * @param string $name New attribute ID
      *
      * @return bool
      */
-    public function renameAttribute(string $collection, string $id, string $name): bool
+    public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->getCollection($collection);
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = \in_array($id, \array_column($attributes, '$id'));
-
+        $attribute = \in_array($old, \array_column($attributes, '$id'));
         if($attribute === false) {
             throw new Exception('Attribute not found');
         }
 
-        $attributeNew = \in_array($name, \array_column($attributes, '$id'));
-
+        $attributeNew = \in_array($new, \array_column($attributes, '$id'));
         if($attributeNew !== false) {
             throw new DuplicateException('Attribute name already used');
         }
 
         foreach ($attributes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $id) {
-                $attributes[$key]['key'] = $name;
-                $attributes[$key]['$id'] = $name;
+            if (isset($value['$id']) && $value['$id'] === $old) {
+                $attributes[$key]['key'] = $new;
+                $attributes[$key]['$id'] = $new;
                 break;
             }
         }
@@ -638,7 +636,7 @@ class Database
         foreach ($indexes as $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
-            $indexAttributes = \array_map(fn($attribute) => ($attribute === $id) ? $name : $attribute , $indexAttributes);
+            $indexAttributes = \array_map(fn($attribute) => ($attribute === $old) ? $new : $attribute , $indexAttributes);
 
             $index->setAttribute('attributes', $indexAttributes);
         }
@@ -650,7 +648,7 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
-        return $this->adapter->renameAttribute($collection->getId(), $id, $name);
+        return $this->adapter->renameAttribute($collection->getId(), $old, $new);
     }
 
     /**

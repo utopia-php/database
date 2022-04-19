@@ -256,14 +256,14 @@ class MariaDB extends Adapter
      * @throws Exception
      * @throws PDOException
      */
-    public function renameAttribute(string $collection, string $id, string $name): bool
+    public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $name = $this->filter($name);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$id}` TO `{$name}`;")
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$old}` TO `{$new}`;")
             ->execute();
     }
 

@@ -444,9 +444,7 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributeIndex = \array_search($id, \array_map(function($attribute) {
-            return $attribute['$id'];
-        }, $attributes));
+        $attributeIndex = \array_search($id, \array_column($attributes, '$id'));
 
         if($attributeIndex === false) {
             throw new Exception('Attribute not found');
@@ -455,11 +453,11 @@ class Database
         $attribute = $attributes[$attributeIndex];
 
         if($type !== null || $size !== null || $signed !== null || $array !== null) {
-            $type = $type === null ? $attribute->getAttribute('type') : $type;
-            $size = $size === null ? $attribute->getAttribute('size') : $size;
-            $signed = $signed === null ? $attribute->getAttribute('signed') : $signed;
-            $array = $array === null ? $attribute->getAttribute('array') : $array;
-
+            $type ??= $attribute->getAttribute('type');
+            $size ??= $attribute->getAttribute('size');
+            $signed ??= $attribute->getAttribute('signed');
+            $array ??= $attribute->getAttribute('array');
+            
             switch ($type) {
                 case self::VAR_STRING:
                     if ($size > $this->adapter->getStringLimit()) {
@@ -481,10 +479,11 @@ class Database
                     break;
             }
 
-            $attribute->setAttribute('type', $type);
-            $attribute->setAttribute('size', $size);
-            $attribute->setAttribute('signed', $signed);
-            $attribute->setAttribute('array', $array);
+            $attribute
+                ->setAttribute('type', $type)
+                ->setAttribute('size', $size)
+                ->setAttribute('signed', $signed)
+                ->setAttribute('array', $array);
 
             $success = $this->adapter->updateAttribute($collection->getId(), $id, $type, $size, $signed, $array);
         }

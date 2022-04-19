@@ -224,11 +224,11 @@ abstract class Adapter
      * Rename Index
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      */
-    abstract public function renameIndex(string $collection, string $id, string $name): bool;
+    abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
     /**
      * Create Index

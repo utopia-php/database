@@ -271,20 +271,20 @@ class MariaDB extends Adapter
      * Rename Index
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function renameIndex(string $collection, string $id, string $name): bool
+    public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $name = $this->filter($name);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME INDEX `{$id}` TO `{$name}`;")
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME INDEX `{$old}` TO `{$new}`;")
             ->execute();
     }
 

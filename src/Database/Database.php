@@ -635,33 +635,37 @@ class Database
      * Rename Index
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      *
      * @return bool
      */
-    public function renameIndex(string $collection, string $id, string $name): bool
+    public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->getCollection($collection);
 
         $indexes = $collection->getAttribute('indexes', []);
 
-        $index = \in_array($id, \array_column($indexes, '$id'));
+        $index = \in_array($old, \array_map(function($index) {
+            return $index['$id'];
+        }, $indexes));
 
         if($index === false) {
             throw new Exception('Index not found');
         }
 
-        $indexNew = \in_array($name, \array_column($indexes, '$id'));
+        $indexNew = \in_array($new, \array_map(function($index) {
+            return $index['$id'];
+        }, $indexes));
 
         if($indexNew !== false) {
             throw new DuplicateException('Index name already used');
         }
 
         foreach ($indexes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $id) {
-                $indexes[$key]['key'] = $name;
-                $indexes[$key]['$id'] = $name;
+            if (isset($value['$id']) && $value['$id'] === $old) {
+                $indexes[$key]['key'] = $new;
+                $indexes[$key]['$id'] = $new;
                 break;
             }
         }
@@ -672,7 +676,7 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
-        return $this->adapter->renameIndex($collection->getId(), $id, $name);
+        return $this->adapter->renameIndex($collection->getId(), $old, $new);
     }
 
     /**

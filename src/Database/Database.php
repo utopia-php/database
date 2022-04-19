@@ -444,7 +444,9 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributeIndex = \array_search($id, \array_column($attributes, '$id'));
+        $attributeIndex = \array_search($id, \array_map(function($attribute) {
+            return $attribute['$id'];
+        }, $attributes));
 
         if($attributeIndex === false) {
             throw new Exception('Attribute not found');

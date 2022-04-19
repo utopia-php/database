@@ -615,12 +615,18 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = \in_array($old, \array_column($attributes, '$id'));
+        $attribute = \in_array($old, \array_map(function($attribute) {
+            return $attribute['$id'];
+        }, $attributes));
+
         if($attribute === false) {
             throw new Exception('Attribute not found');
         }
 
-        $attributeNew = \in_array($new, \array_column($attributes, '$id'));
+        $attributeNew = \in_array($new, \array_map(function($attribute) {
+            return $attribute['$id'];
+        }, $attributes));
+        
         if($attributeNew !== false) {
             throw new DuplicateException('Attribute name already used');
         }

@@ -7,7 +7,7 @@ use MongoDB\BSON;
 use Utopia\Database\Adapter\Mongo\Auth;
 use Utopia\Database\Adapter\Mongo\Command;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
-
+use Utopia\Database\Database;
 
 class MongoClient 
 { 
@@ -16,11 +16,13 @@ class MongoClient
   private $client;
   private $auth;
 
-  public function __construct(MongoClientOptions $options) {
+  public function __construct(MongoClientOptions $options, $useCoroutine = true) {
     $this->id = uniqid('utopia.mongo.client');
     $this->options = $options;
 
-    $this->client = new \Swoole\Coroutine\Client(SWOOLE_SOCK_TCP | SWOOLE_KEEP);
+    $this->client = $useCoroutine
+    ? new \Swoole\Coroutine\Client(SWOOLE_SOCK_TCP | SWOOLE_KEEP)
+    : new \Swoole\Client(SWOOLE_SOCK_TCP | SWOOLE_KEEP);
 
     $this->auth = new Auth([
       'authcid' => $options->username,
@@ -160,6 +162,8 @@ class MongoClient
 
   // https://docs.mongodb.com/manual/reference/command/drop/#mongodb-dbcommand-dbcmd.drop
   public function dropCollection($name, $options = []) {
+    $name = \is_string($name) ? [$name] : $name;
+
     $this->query($name, $options);
 
     return $this;

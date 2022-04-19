@@ -51,7 +51,7 @@ class Document extends ArrayObject
 
     /**
      * Methods __get and __isset allows usage of array_column() above Document class.
-     * Refference:  https://www.php.net/manual/en/function.array-column.php (Example #4 )
+     * Refference:  https://www.php.net/manual/en/function.array-column.php (Example #4)
      */
     public function __get($prop)
     {

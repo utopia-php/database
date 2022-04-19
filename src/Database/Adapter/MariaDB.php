@@ -250,8 +250,8 @@ class MariaDB extends Adapter
      * Rename Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      * @throws Exception
      * @throws PDOException

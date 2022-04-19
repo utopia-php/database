@@ -339,9 +339,7 @@ class MongoDBAdapter extends Adapter
     public function getDocument(string $collection, string $id): Document
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
-
-        $result = $collection->findOne(['_uid' => $id]);
+        $result = $this->getDatabase()->find($collection, ['_uid' => $id]);
 
         if(empty($result)) {
             return new Document([]);
@@ -364,10 +362,9 @@ class MongoDBAdapter extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
 
         try {
-            $collection->insertOne($this->replaceChars('$', '_', $document->getArrayCopy()));
+          $this->getDatabase()->insert($name, $this->replaceChars('$', '_', $document->getArrayCopy()));
         } catch (\MongoDB\Driver\Exception\BulkWriteException $e) {
             switch ($e->getCode()) {
                 case 11000:
@@ -454,8 +451,7 @@ class MongoDBAdapter extends Adapter
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
-
+        
         $filters = [];
 
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
@@ -535,16 +531,16 @@ class MongoDBAdapter extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
-        }
+        // if (Authorization::$status) { // skip if authorization is disabled
+        //     $filters['_read']['$in'] = Authorization::getRoles();
+        // }
 
         /**
          * @var Document[]
          */
         $found = [];
 
-        $results = $collection->find($filters, $options);
+        $results = $this->getDatabase()->find($collection, $filters, $options);
 
         foreach($results as $i => $result) {
             $found[] = new Document($this->replaceChars('_', '$', $result));
@@ -672,6 +668,10 @@ class MongoDBAdapter extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
+        if(!\is_array($array)) {
+          $array = (array)$array;
+        }
+
         $array[$to.'read'] = $array[$from.'read'];
         $array[$to.'write'] = $array[$from.'write'];
         $array[$to.'collection'] = $array[$from.'collection'];

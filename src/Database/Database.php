@@ -615,17 +615,13 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = \array_search($id, \array_map(function($attribute) {
-            return $attribute['$id'];
-        }, $attributes));
+        $attribute = \array_search($id, \array_column($attributes, '$id'));
 
         if($attribute === false) {
             throw new Exception('Attribute not found');
         }
 
-        $attributeNew = \array_search($name, \array_map(function($attribute) {
-            return $attribute['$id'];
-        }, $attributes));
+        $attributeNew = \array_search($name, \array_column($attributes, '$id'));
 
         if($attributeNew !== false) {
             throw new DuplicateException('Attribute name already used');
@@ -641,13 +637,8 @@ class Database
 
         foreach ($indexes as $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
-            $indexAttributes = \array_map(function($attribute) use($id, $name) {
-                if($attribute === $id) {
-                    return $name;
-                }
 
-                return $attribute;
-            }, $indexAttributes);
+            $indexAttributes = \array_map(fn($attribute) => ($attribute === $id) ? $name : $attribute , $indexAttributes);
 
             $index->setAttribute('attributes', $indexAttributes);
         }

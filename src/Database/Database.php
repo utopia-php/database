@@ -646,17 +646,13 @@ class Database
 
         $indexes = $collection->getAttribute('indexes', []);
 
-        $index = \array_search($id, \array_map(function($index) {
-            return $index['$id'];
-        }, $indexes));
+        $index = \in_array($id, \array_column($indexes, '$id'));
 
         if($index === false) {
             throw new Exception('Index not found');
         }
 
-        $indexNew = \array_search($name, \array_map(function($index) {
-            return $index['$id'];
-        }, $indexes));
+        $indexNew = \in_array($name, \array_column($indexes, '$id'));
 
         if($indexNew !== false) {
             throw new DuplicateException('Index name already used');

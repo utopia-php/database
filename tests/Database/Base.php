@@ -1983,54 +1983,27 @@ abstract class Base extends TestCase
         $this->assertCount(0, $attributes[3]->getAttribute('formatOptions'));
 
         $this->assertTrue($database->updateAttribute('stocks', 'brand',
-            null, // type
-            10, // size
-            false, // required
-            "Unnamed", // default
-            null, // signed
-            null, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            size: 10,
+            required: false,
+            default: 'Unnamed'
         ));
 
         $this->assertTrue($database->updateAttribute('stocks', 'price',
-            Database::VAR_INTEGER, // type
-            null, // size
-            null, // required
-            null, // default
-            false, // signed
-            null, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            type: Database::VAR_INTEGER,
+            signed: false
         ));
      
         /*
         Changing array not supported at the moment.
         $this->assertTrue($database->updateAttribute('stocks', 'authors',
-            null, // type
-            null, // size
-            null, // required
-            null, // default
-            null, // signed
-            true, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            array: true
         ));
         */
 
         $this->assertTrue($database->updateAttribute('stocks', 'employee',
-            null, // type
-            null, // size
-            null, // required
-            null, // default
-            null, // signed
-            null, // array
-            'enum', // format
-            ['engineer', 'designer', 'devrel'], // formatOptions
-            ['json'], // filters
+            format: 'enum',
+            formatOptions: ['engineer', 'designer', 'devrel'],
+            filters: ['json']
         ));
 
         $collection = $database->getCollection('stocks');
@@ -2070,15 +2043,7 @@ abstract class Base extends TestCase
 
         $this->expectExceptionMessage('Attribute not found');
         $database->updateAttribute('stocks', 'brand2',
-            null, // type
-            42, // size
-            null, // required
-            null, // default
-            null, // signed
-            null, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            size: 42
         );
     }
 
@@ -2092,15 +2057,7 @@ abstract class Base extends TestCase
 
         $this->expectExceptionMessage('Changing array status is not supported');
         $database->updateAttribute('stocks', 'brand',
-            null, // type
-            null, // size
-            null, // required
-            null, // default
-            null, // signed
-            true, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            array: true
         );
     }
 
@@ -2114,15 +2071,7 @@ abstract class Base extends TestCase
 
         $this->expectExceptionMessage("Data truncated for column 'brand'");
         $database->updateAttribute('stocks', 'brand',
-            null, // type
-            1, // size
-            null, // required
-            null, // default
-            null, // signed
-            null, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            size: 1
         );
     }
 
@@ -2138,15 +2087,7 @@ abstract class Base extends TestCase
         $this->expectExceptionMessageMatches("/Truncated incorrect INTEGER value\:|Incorrect integer value\:/");
 
         $database->updateAttribute('stocks', 'brand',
-            Database::VAR_INTEGER, // type
-            null, // size
-            null, // required
-            null, // default
-            null, // signed
-            null, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+            type: Database::VAR_INTEGER
         );
     }
 
@@ -2160,15 +2101,7 @@ abstract class Base extends TestCase
 
         $this->expectExceptionMessage("Numeric value out of range");
         $database->updateAttribute('stocks', 'unsignedAttribute',
-            null, // type
-            null, // size
-            null, // required
-            null, // default
-            false, // signed
-            null, // array
-            null, // format
-            null, // formatOptions
-            null, // filters
+        signed: false
         );
     }
 }

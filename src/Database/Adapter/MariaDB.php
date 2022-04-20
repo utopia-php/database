@@ -373,7 +373,6 @@ class MariaDB extends Adapter
 
         /** @var array $document */
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if (empty($document)) {
             return new Document([]);
         }

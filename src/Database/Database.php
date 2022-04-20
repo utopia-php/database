@@ -486,6 +486,8 @@ class Database
                 ->setAttribute('array', $array);
 
             $success = $this->adapter->updateAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+
+            return $success;
         }
 
         if($required !== null) {

@@ -615,9 +615,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = \in_array($old, \array_map(function($attribute) {
-            return $attribute['$id'];
-        }, $attributes));
+        $attribute = \in_array($old, \array_map(fn($attribute) => $attribute['$id'], $attributes));
 
         if($attribute === false) {
             throw new Exception('Attribute not found');

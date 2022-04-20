@@ -621,10 +621,8 @@ class Database
             throw new Exception('Attribute not found');
         }
 
-        $attributeNew = \in_array($new, \array_map(function($attribute) {
-            return $attribute['$id'];
-        }, $attributes));
-        
+        $attributeNew = \in_array($new, \array_map(fn($attribute) => $attribute['$id'], $attributes));
+
         if($attributeNew !== false) {
             throw new DuplicateException('Attribute name already used');
         }

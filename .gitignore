@@ -6,3 +6,8 @@ data-tests.php
 loader.php
 .phpunit.result.cache
 /bin/view/results/
+
+## - Oh Wess!
+Makefile
+.envrc
+.vscode

@@ -654,6 +654,50 @@ class Database
     }
 
     /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     *
+     * @return bool
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->getCollection($collection);
+
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $index = \in_array($old, \array_map(fn($index) => $index['$id'], $indexes));
+
+        if($index === false) {
+            throw new Exception('Index not found');
+        }
+
+        $indexNew = \in_array($new, \array_map(fn($index) => $index['$id'], $indexes));
+
+        if($indexNew !== false) {
+            throw new DuplicateException('Index name already used');
+        }
+
+        foreach ($indexes as $key => $value) {
+            if (isset($value['$id']) && $value['$id'] === $old) {
+                $indexes[$key]['key'] = $new;
+                $indexes[$key]['$id'] = $new;
+                break;
+            }
+        }
+
+        $collection->setAttribute('indexes', $indexes);
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+
+        return $this->adapter->renameIndex($collection->getId(), $old, $new);
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection

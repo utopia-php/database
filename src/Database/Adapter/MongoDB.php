@@ -453,6 +453,11 @@ class MongoDB extends Adapter
         return true;
     }
 
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        return true;
+    }
+
     /**
      * Find Documents
      *

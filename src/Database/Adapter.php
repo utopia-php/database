@@ -221,6 +221,16 @@ abstract class Adapter
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     */
+    abstract public function renameIndex(string $collection, string $old, string $new): bool;
+
+    /**
      * Create Index
      *
      * @param string $collection

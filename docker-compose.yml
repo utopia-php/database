@@ -13,6 +13,14 @@ services:
     ports:
       - "8708:8708"
 
+  mongoclient:
+    image: mongoclient/mongoclient:latest
+    container_name: mongoclient
+    hostname: mongoclient
+    networks:
+      - database
+    ports:
+      - 3300:3000
   # postgres:
   #   image: postgres:13
   #   container_name: utopia-postgres

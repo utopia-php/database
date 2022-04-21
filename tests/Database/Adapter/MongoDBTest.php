@@ -96,40 +96,40 @@ class MongoDBTest extends Base
     /**
      * @depends testCreateExistsDelete
      */
-    public function testEncodeDecode()
-    { 
-    }
+    // public function testEncodeDecode()
+    // { 
+    // }
 
-    public function testCreateListExistsDeleteCollection()
-    {
-    }
+    // public function testCreateListExistsDeleteCollection()
+    // {
+    // }
 
-    public function testCreateDeleteAttribute()
-    {
-    }
+    // public function testCreateDeleteAttribute()
+    // {
+    // }
 
-    public function testCreateDeleteIndex()
-    {
-    }
+    // public function testCreateDeleteIndex()
+    // {
+    // }
 
-    public function testCreateCollectionWithSchema()
-    {
-    }
+    // public function testCreateCollectionWithSchema()
+    // {
+    // }
 
-    public function testCreateCollectionValidator()
-    {
-    }
+    // public function testCreateCollectionValidator()
+    // {
+    // }
 
-    public function testCreateDocument()
-    {
-    }
+    // public function testCreateDocument()
+    // {
+    // }
 
-    public function testCreateDocumentDefaults()
-    {
-    }
+    // public function testCreateDocumentDefaults()
+    // {
+    // }
 
-    public function testExceptionIndexLimit()
-    {
-    }
+    // public function testExceptionIndexLimit()
+    // {
+    // }
 
 }

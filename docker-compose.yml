@@ -13,6 +13,15 @@ services:
     ports:
       - "8708:8708"
 
+  adminer:
+    image: adminer
+    container_name: appwrite-adminer
+    restart: always
+    ports:
+      - "9506:8080"
+    networks:
+      - database
+
   postgres:
     image: postgres:13
     container_name: utopia-postgres

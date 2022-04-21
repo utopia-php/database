@@ -373,13 +373,12 @@ class MariaDB extends Adapter
 
         /** @var array $document */
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if (empty($document)) {
             return new Document([]);
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
+        $document['$internalId'] = (string)$document['_id'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
 

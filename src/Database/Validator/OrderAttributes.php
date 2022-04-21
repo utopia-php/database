@@ -86,9 +86,9 @@ class OrderAttributes extends Validator
     {
         foreach ($attributes as $attribute) {
             // Search for attribute in schema
-            $attributeIndex = array_search($attribute, array_column($this->schema, 'key'));
+            $attributeInSchema = \in_array($attribute, \array_column($this->schema, 'key'));
 
-            if ($attributeIndex === false) {
+            if ($attributeInSchema === false) {
                 $this->message = 'Order attribute not found in schema: ' . $attribute;
                 return false;
             }

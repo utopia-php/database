@@ -206,21 +206,15 @@ class MongoClient
 
   // https://docs.mongodb.com/manual/reference/command/insert/#mongodb-dbcommand-dbcmd.insert
   public function insert($collection, $documents, $options = []) {
-    $documents = is_array($documents) ? $documents : [$documents];
-    
-    $docObjects = [];
-    foreach($documents as $doc) {
-      foreach((object)$doc as $k=>$value) {
-        $docObj = new \stdClass();
-        $docObj->{$k} = $value;
+    $docObj = new \stdClass();
 
-        $docObjects[] = $docObj;
-      }
+    foreach($documents as $key => $value) {
+        $docObj->{$key} = $value;
     }
 
     $this->query(array_merge([
       MongoCommand::INSERT => $collection, 
-      'documents' => $docObjects, 
+      'documents' => [$docObj],
     ], $options));
 
     return $this;
@@ -247,7 +241,6 @@ class MongoClient
 
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
   public function upsert($collection, $where = [], $updates = [], $options = []) {
-    
     $this->query(array_merge([
       MongoCommand::UPDATE => $collection, 
       'updates' => [

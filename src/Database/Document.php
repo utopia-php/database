@@ -34,11 +34,11 @@ class Document extends ArrayObject
             throw new Exception('$write permission must be of type array');
         }
 
-        $res = $input;
+        // $res = $input;
         foreach ($input as $key => &$value) {
-            if(array_key_exists('id', $input)) {
-                $res['$id'] = $input['id'];
-            }
+            // if(array_key_exists('id', $input)) {
+            //     $res['$id'] = $input['id'];
+            // }
 
             if (\is_array($value)) {
                 if ((isset($value['$id']) || isset($value['$collection']))) {
@@ -52,16 +52,17 @@ class Document extends ArrayObject
                 }
             }
         }
+
         
-        if(array_key_exists('attributes', $input)) {
-          $attributes = $input['attributes'];
+        // if(array_key_exists('attributes', $input)) {
+        //   $attributes = $input['attributes'];
 
-          foreach ($attributes as $attr) {
-            $res[$attr] = $input[$attr];
-          }
-        }
+        //   foreach ($attributes as $attr) {
+        //     $res[$attr] = $input[$attr];
+        //   }
+        // }
 
-        $input = $res;
+        // $input = $res;
 
         parent::__construct((array)$input);
     }
@@ -138,11 +139,7 @@ class Document extends ArrayObject
      */
     public function getAttribute(string $name, $default = null)
     {
-        if(isset($this[$name])) {
-            return $this[$name];
-        }
-
-        return $default;
+        return $this[$name] ?? $default;
     }
 
     /**

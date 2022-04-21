@@ -274,7 +274,6 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() .'_'.$this->filter($collection);
         $id = $this->filter($id);
-        $collection = $this->getDatabase()->selectCollection($name);
 
         $indexes = [];
         $options = [];
@@ -339,11 +338,14 @@ class MongoDBAdapter extends Adapter
     public function getDocument(string $collection, string $id): Document
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
-        $result = $this->getDatabase()->find($collection, ['_uid' => $id]);
+
+        $result = $this->getDatabase()->find($name, ['_uid' => $id])->cursor->firstBatch ?? [];
 
         if(empty($result)) {
             return new Document([]);
         }
+
+        $result = (array) reset($result);
 
         $result = $this->replaceChars('_', '$', $result);
 
@@ -390,13 +392,12 @@ class MongoDBAdapter extends Adapter
     public function updateDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
 
         try {
-            $result = $collection->findOneAndUpdate(
+            $result = $this->client->upsert(
+                $name,
                 ['_uid' => $document->getId()],
-                ['$set' => $this->replaceChars('$', '_', $document->getArrayCopy())],
-                ['returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER]
+                $this->replaceChars('$', '_', $document->getArrayCopy()),
             );
         } catch (\MongoDB\Driver\Exception\CommandException $e) {
             switch ($e->getCode()) {
@@ -683,8 +684,6 @@ class MongoDBAdapter extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
-      $array = (array)$array;
-
         if(array_key_exists($from . 'read', $array))
           $array[$to.'read'] = $array[$from.'read'];
 

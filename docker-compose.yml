@@ -13,16 +13,14 @@ services:
     ports:
       - "8708:8708"
 
-  postgres:
-    image: postgres:13
-    container_name: utopia-postgres
+  mongoclient:
+    image: mongoclient/mongoclient:latest
+    container_name: mongoclient
+    hostname: mongoclient
     networks:
       - database
     ports:
-      - "8700:5432"
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: password
+      - 3300:3000
 
   cockroach:
     image: cockroachdb/cockroach:v20.2.0
@@ -33,7 +31,7 @@ services:
     ports:
       - "8704:26257"
       - "8705:8080"
-      
+
   mariadb:
     image: mariadb:10.5
     container_name: utopia-mariadb

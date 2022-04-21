@@ -668,19 +668,23 @@ class MongoDBAdapter extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
-        if(!\is_array($array)) {
-          $array = (array)$array;
-        }
+      $array = (array)$array;
 
-        $array[$to.'read'] = $array[$from.'read'];
-        $array[$to.'write'] = $array[$from.'write'];
-        $array[$to.'collection'] = $array[$from.'collection'];
+        if(array_key_exists($from . 'read', $array))
+          $array[$to.'read'] = $array[$from.'read'];
 
-        if ($from === '_') { // convert internal to document ID
+        if(array_key_exists($from . 'write', $array))
+          $array[$to.'write'] = $array[$from.'write'];
+
+          if(array_key_exists($from . 'collection', $array))
+          $array[$to.'collection'] = $array[$from.'collection'];
+
+        if ($from === '_' && array_key_exists($from.'uid', $array)) { // convert internal to document ID
             $array[$to.'id'] = $array[$from.'uid'];
             $array[$to.'internalId'] = (string) $array[$from.'id'];
+
             unset($array[$from.'uid']);
-        } else if ($from === '$') { // convert document to internal ID
+        } else if ($from === '$' && array_key_exists($from.'id', $array)) { // convert document to internal ID
             $array[$to.'uid'] = $array[$from.'id'];
 
             if (array_key_exists($from.'internalId', $array)) {

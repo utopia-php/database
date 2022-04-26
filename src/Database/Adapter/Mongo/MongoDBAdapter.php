@@ -307,6 +307,9 @@ class MongoDBAdapter extends Adapter
             }
         }
 
+
+      var_dump($indexes);
+
         return (!!$this->client->createIndexes($name, $indexes, $options));
     }
 
@@ -669,6 +672,9 @@ class MongoDBAdapter extends Adapter
      */
     protected function replaceChars($from, $to, $array): array
     {
+      $array = (array) $array;
+      
+
         if(array_key_exists($from . 'read', $array))
           $array[$to.'read'] = $array[$from.'read'];
 

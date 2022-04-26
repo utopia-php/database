@@ -183,18 +183,22 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/createIndexes/#createindexes
-  public function createIndexes(string $collection, $indexes, $options = []) {
-    $this->query(array_merge([
-      'createIndexes' => $collection,
-      'indexes' => $indexes],
-      $options)
+  public function createIndexes(string $collection, array $indexes, $options = []) {
+
+    $indexes = $this->toArray($indexes);
+
+    $this->query(array_merge(
+      [
+        'createIndexes' => $collection, 
+        'indexes' => $indexes
+      ], $options),
     );
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/dropIndexes/#dropindexes
-  public function dropIndexes($collection, $indexes, $options = []) {
+  public function dropIndexes(string $collection, array $indexes, $options = []) {
     $this->query(array_merge([
         'dropIndexes' => $collection,
         'indexes' => $indexes,
@@ -205,7 +209,7 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/insert/#mongodb-dbcommand-dbcmd.insert
-  public function insert($collection, $documents, $options = []) {
+  public function insert(string $collection, $documents, $options = []) {
     $docObj = new \stdClass();
 
     foreach($documents as $key => $value) {
@@ -221,14 +225,14 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
-  public function update($collection, $where = [], $updates = [], $options = []) {
-    
+  public function update(string $collection, $where = [], $updates = [], $options = []) {
+
     $this->query(array_merge([
       MongoCommand::UPDATE => $collection, 
       'updates' => [
           [
-            'q' => $this->toObject($where),
-            'u' => $this->toObject($updates),
+            "q" => $this->toObject($where),
+            "u" => $this->toObject($updates),
             'multi' => false,
             'upsert' => false
           ]
@@ -240,23 +244,35 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
-  public function upsert($collection, $where = [], $updates = [], $options = []) {
-    $this->query(array_merge([
-      MongoCommand::UPDATE => $collection, 
-      'updates' => [
-          'q' => $this->toObject($where),
-          'u' => $this->toObject($updates),
-          'multi' => false,
-          'upsert' => true
-        ]
+  public function upsert(string $collection, $where = [], $updates = [], $options = []) {
+   $this->query(array_merge(
+     [
+       "update" => $collection,
+       "updates" => [
+         [
+           "q" => ["_uid" => $where["_uid"]],
+           "u" => ["\$set" => $updates],
+         ]
+        ],
       ], $options)
-    );
+   );
+
+    // $this->query(array_merge([
+    //   MongoCommand::UPDATE => $collection, 
+    //   'updates' =>[
+    //       "q" => ["_uid" => $where["_uid"]],
+    //       "u" => ['$set' => $updates],
+    //       "multi" => false,
+    //       "upsert" => true
+    //     ]
+    //   ], $options)
+    // );
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/find/#mongodb-dbcommand-dbcmd.find
-  public function find($collection, $filters = [], $options = []) {
+  public function find(string $collection, $filters = [], $options = []) {
     return $this->query(array_merge([
       MongoCommand::FIND => $collection,
       'filter' => $this->toObject($filters),
@@ -265,7 +281,7 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/findAndModify/#mongodb-dbcommand-dbcmd.findAndModify
-  public function findAndModify($collection, $document, $update, $remove = false, $filters = [], $options = []) {
+  public function findAndModify(string $collection, $document, $update, $remove = false, $filters = [], $options = []) {
     return $this->query(array_merge([
       MongoCommand::FIND_AND_MODIFY => $collection,
       'filter' => $this->toObject($filters),
@@ -276,7 +292,7 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/delete/#mongodb-dbcommand-dbcmd.delete
-  public function delete($collection, $filters = [], $limit = 1, $deleteOptions = [], $options = []) {
+  public function delete(string $collection, $filters = [], $limit = 1, $deleteOptions = [], $options = []) {
     return $this->query(array_merge([
       MongoCommand::DELETE => $collection,
       'deletes' => [
@@ -309,4 +325,16 @@ class MongoClient
     return $obj;
   }
 
+  public function toArray($obj) {
+    if(is_object($obj) || is_array($obj)) {
+      $ret = (array) $obj;
+      foreach($ret as &$item) {
+          $item = $this->toArray($item);
+      }
+
+      return $ret;
+    } else {
+      return $obj;
+    }
+  }
 }

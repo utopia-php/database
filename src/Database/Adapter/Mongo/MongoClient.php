@@ -8,6 +8,7 @@ use Utopia\Database\Adapter\Mongo\Auth;
 use Utopia\Database\Adapter\Mongo\Command;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Database;
+use Utopia\Database\Adapter\Mongo\MongoIndex;
 
 class MongoClient 
 { 
@@ -145,6 +146,10 @@ class MongoClient
     return $this;
   }
 
+  public function selectCollection($name) {
+    return $this;
+  }
+
   // For options see: https://docs.mongodb.com/manual/reference/command/create/#mongodb-dbcommand-dbcmd.create
   public function createCollection($name, $options = []) {
     $list = $this->listCollectionNames(["name" => $name]);
@@ -162,9 +167,9 @@ class MongoClient
 
   // https://docs.mongodb.com/manual/reference/command/drop/#mongodb-dbcommand-dbcmd.drop
   public function dropCollection($name, $options = []) {
-    $name = \is_string($name) ? [$name] : $name;
+    // $name = \is_string($name) ? [$name] : $name;
 
-    $this->query($name, $options);
+    // $this->query($name, $options);
 
     return $this;
   }
@@ -183,9 +188,7 @@ class MongoClient
   }
 
   // https://docs.mongodb.com/manual/reference/command/createIndexes/#createindexes
-  public function createIndexes(string $collection, array $indexes, $options = []) {
-
-    $indexes = $this->toArray($indexes);
+  public function createIndexes($collection, $indexes, $options = []) {
 
     $this->query(array_merge(
       [
@@ -194,11 +197,11 @@ class MongoClient
       ], $options),
     );
 
-    return $this;
+    return true;
   }
 
   // https://docs.mongodb.com/manual/reference/command/dropIndexes/#dropindexes
-  public function dropIndexes(string $collection, array $indexes, $options = []) {
+  public function dropIndexes(string $collection, $indexes, $options = []) {
     $this->query(array_merge([
         'dropIndexes' => $collection,
         'indexes' => $indexes,
@@ -256,17 +259,6 @@ class MongoClient
         ],
       ], $options)
    );
-
-    // $this->query(array_merge([
-    //   MongoCommand::UPDATE => $collection, 
-    //   'updates' =>[
-    //       "q" => ["_uid" => $where["_uid"]],
-    //       "u" => ['$set' => $updates],
-    //       "multi" => false,
-    //       "upsert" => true
-    //     ]
-    //   ], $options)
-    // );
 
     return $this;
   }

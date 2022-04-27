@@ -931,9 +931,10 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-
+        
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
+        
         /** @var Document[] $indexes */
         foreach ($indexes as $index) {
             if (\strtolower($index->getId()) === \strtolower($id)) {

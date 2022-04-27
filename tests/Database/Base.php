@@ -221,8 +221,7 @@ abstract class Base extends TestCase
      */
     public function testCleanupAttributeTests()
     {
-        static::getDatabase()->deleteCollection('attributes');
-        $this->assertEquals(1,1);
+      static::getDatabase()->deleteCollection('attributes');
     }
 
     /**
@@ -665,6 +664,8 @@ abstract class Base extends TestCase
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
+        var_dump($new);
+        
         $this->assertNotEmpty(true, $new->getId());
         $this->assertIsString($new->getAttribute('string'));
         $this->assertEquals('text📝 updated', $new->getAttribute('string'));
@@ -1841,7 +1842,8 @@ abstract class Base extends TestCase
             $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
 
             $this->expectException(LimitException::class);
-            $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
+            
+            $this->assertEquals(false, static::getDatabase()->createAttribute($collection, "widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
         } 
 
         // Default assertion for other adapters

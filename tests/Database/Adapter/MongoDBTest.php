@@ -7,7 +7,6 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Adapter\Mongo\MongoClient;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
@@ -91,6 +90,7 @@ class MongoDBTest extends Base
       // $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
       // $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
+
 
     /**
      * @depends testCreateDocument

@@ -27,7 +27,7 @@ class Authorization extends Validator
      * 
      * @var string
      */
-    protected $message = 'Authorization Error';
+    protected string $message = 'Authorization Error';
 
     /**
      * @param string $action Action to check for during validation.
@@ -58,7 +58,7 @@ class Authorization extends Validator
      *
      * @return bool
      */
-    public function isValid($permissions): bool
+    public function isValid(mixed $permissions): bool
     {
         if (!self::$status) {
             return true;
@@ -146,7 +146,7 @@ class Authorization extends Validator
      * 
      * @var bool
      */
-    public static $status = true;
+    public static bool $status = true;
     
     /**
      * Default value in case we need
@@ -154,7 +154,7 @@ class Authorization extends Validator
      *
      * @var bool
      */
-    public static $statusDefault = true;
+    public static bool $statusDefault = true;
 
     /**
      * Change default status.

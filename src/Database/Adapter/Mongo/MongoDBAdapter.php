@@ -124,16 +124,9 @@ class MongoDBAdapter extends Adapter
           ],
         ]);
 
-        // $read = $this->getClient()->createIndexes($collection, [
-        //   '_read' => $this->getOrder(Database::ORDER_DESC), 
-        //   [
-        //     'name' => '_read_permissions'
-        //   ]
-        // ]);
-
 
         $read = $this->getClient()->createIndexes($name, [[
-            'key' => $this->client->toObject(['_read' => $this->getOrder(Database::ORDER_DESC)]),
+            'key' => ['_read' => $this->getOrder(Database::ORDER_DESC)],
             'name' => '_read_permissions',
         ]]);
 
@@ -279,38 +272,29 @@ class MongoDBAdapter extends Adapter
         $options = [];
 
         // pass in custom index name
-        $options['name'] = $id;
+        $indexes['name'] = $id;
 
         foreach($attributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
 
+            $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+            $indexes['key'][$attribute] = $orderType;
+
             switch ($type) {
                 case Database::INDEX_KEY:
-                    // ordering for plain indexes
-                    $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-                    $indexes[$attribute] = $orderType;
                     break;
                 case Database::INDEX_FULLTEXT:
-                    // MongoDB fulltext index is just 'text'
-                    // Not using Database::INDEX_KEY for clarity
-                    $indexes[$attribute] = 'text';
+                    $indexes['key'][$attribute] = 'text';
                     break;
                 case Database::INDEX_UNIQUE:
-                    $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-                    $indexes[$attribute] = $orderType;
-                    $options['unique'] = true;
+                    $indexes['unique'] = true;
                     break;
                 default:
-                    // index not supported
-                    // TODO@kodumbeats handle and test for this case
                     return false;
             }
         }
 
-
-      var_dump($indexes);
-
-        return (!!$this->client->createIndexes($name, $indexes, $options));
+        return $this->client->createIndexes($name, [$indexes], $options);
     }
 
     /**
@@ -325,9 +309,9 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
         $id = $this->filter($id);
-        $collection = $this->getDatabase()->selectCollection($name);
+        $collection = $this->getDatabase();
 
-        return (!!$collection->dropIndex($id));
+        return (!!$collection->dropIndexes($name, $id));
     }
 
     /**
@@ -342,7 +326,7 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
 
-        $result = $this->getDatabase()->find($name, ['_uid' => $id])->cursor->firstBatch ?? [];
+        $result = $this->client->find($name, ['_uid' => $id])->cursor->firstBatch ?? [];
 
         if(empty($result)) {
             return new Document([]);
@@ -369,7 +353,7 @@ class MongoDBAdapter extends Adapter
         $name = $this->getNamespace() .'_'. $this->filter($collection);
 
         try {
-          $this->getDatabase()->insert($name, $this->replaceChars('$', '_', $document->getArrayCopy()));
+          $this->client->insert($name, $this->replaceChars('$', '_', $document->getArrayCopy()));
         } catch (\MongoDB\Driver\Exception\BulkWriteException $e) {
             switch ($e->getCode()) {
                 case 11000:
@@ -396,8 +380,9 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
 
+
         try {
-            $result = $this->client->upsert(
+            $result = $this->client->update(
                 $name,
                 ['_uid' => $document->getId()],
                 $this->replaceChars('$', '_', $document->getArrayCopy()),
@@ -413,7 +398,9 @@ class MongoDBAdapter extends Adapter
             }
         }
 
+        
         $result = $this->replaceChars('_', '$', $result);
+
 
         return new Document($result);
     }
@@ -429,9 +416,8 @@ class MongoDBAdapter extends Adapter
     public function deleteDocument(string $collection, string $id): bool
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
 
-        $result = $collection->findOneAndDelete(['_uid' => $id]);
+        $result = $this->client->delete($name, ['_uid' => $id]);
 
         return (!!$result);
     }
@@ -473,7 +459,7 @@ class MongoDBAdapter extends Adapter
         $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
 
         // queries
-        $filters = $this->buildFilters($queries);
+        $filters = $queries;
 
         if (empty($orderAttributes)) {
             // Allow after pagination without any order
@@ -714,6 +700,8 @@ class MongoDBAdapter extends Adapter
      */
     protected function buildFilters($queries): array
     {
+      var_dump($queries);
+
         $filters = [];
 
         foreach($queries as $i => $query) {

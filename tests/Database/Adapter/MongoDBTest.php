@@ -6,6 +6,7 @@ use Redis;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Adapter\Mongo\MongoClient;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
@@ -93,43 +94,39 @@ class MongoDBTest extends Base
       // $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
+
     /**
-     * @depends testCreateExistsDelete
+     * @depends testCreateDocument
      */
-    // public function testEncodeDecode()
-    // { 
-    // }
+    public function testListDocumentSearch(Document $document)
+    {
+      static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
+      static::getDatabase()->createDocument('documents', new Document([
+          '$read' => ['role:all'],
+          '$write' => ['role:all'],
+          'string' => '*test+alias@email-provider.com',
+          'integer' => 0,
+          'bigint' => 8589934592, // 2^33
+          'float' => 5.55,
+          'boolean' => true,
+          'colors' => ['pink', 'green', 'blue'],
+          'empty' => [],
+      ]));
 
-    // public function testCreateListExistsDeleteCollection()
-    // {
-    // }
+      $documents = static::getDatabase()->find('documents', ['string' => '*test+alias@email-provider.com']);
 
-    // public function testCreateDeleteAttribute()
-    // {
-    // }
+      $this->assertEquals(2, count($documents));
 
-    // public function testCreateDeleteIndex()
-    // {
-    // }
+      return $document;
+    }
 
-    // public function testCreateCollectionWithSchema()
-    // {
-    // }
+    /**
+     * @dataProvider rowWidthExceedsMaximum
+     * @expectedException LimitException
+     */
 
-    // public function testCreateCollectionValidator()
-    // {
-    // }
-
-    // public function testCreateDocument()
-    // {
-    // }
-
-    // public function testCreateDocumentDefaults()
-    // {
-    // }
-
-    // public function testExceptionIndexLimit()
-    // {
-    // }
-
+    public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
+    {
+      $this->assertEquals(1,1);
+    }
 }

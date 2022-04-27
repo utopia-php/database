@@ -8,24 +8,31 @@ use Utopia\Validator;
 class Authorization extends Validator
 {
     /**
+     * Array of allowed roles.
+     * 
      * @var array
      */
     static $roles = ['role:all' => true];
 
     /**
+     * Action of the authorization validation.
+     * Mainly 'read' or 'write'.
+     * 
      * @var string
      */
     protected $action = '';
 
     /**
+     * Error message explaining why validation failed.
+     * 
      * @var string
      */
     protected $message = 'Authorization Error';
 
     /**
-     * @param string $action
+     * @param string $action Action to check for during validation.
      */
-    public function __construct($action)
+    public function __construct(string $action)
     {
         $this->action = $action;
     }
@@ -70,13 +77,16 @@ class Authorization extends Validator
             }
         }
 
-        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only this scopes "'.\json_encode(self::getRoles()).'" are given and only this are allowed "'.\json_encode($permissions).'".';
+        $this->message = 'Missing "'.$this->action.'" permission. Scopes "'.\json_encode(self::getRoles()).'" are given, but these scopes are allowed: "'.\json_encode($permissions).'"';
 
         return false;
     }
 
     /**
-     * @param string $role
+     * Add role to list of allowed roles for validation.
+     * 
+     * @param string $role Role to add
+     * 
      * @return void
      */
     public static function setRole(string $role): void
@@ -85,7 +95,9 @@ class Authorization extends Validator
     }
 
     /**
-     * @param string $role
+     * Remove role from list of allowed roles for validation.
+     * 
+     * @param string $role Role to remove
      *
      * @return void
      */
@@ -95,6 +107,8 @@ class Authorization extends Validator
     }
 
     /**
+     * Get list of allowed roles.
+     * 
      * @return array
      */
     public static function getRoles(): array
@@ -103,6 +117,8 @@ class Authorization extends Validator
     }
 
     /**
+     * Clear list of allowed roles.
+     * 
      * @return void
      */
     public static function cleanRoles(): void
@@ -111,9 +127,11 @@ class Authorization extends Validator
     }
 
     /**
-     * @param string $role
+     * Check if role is already allowed.
      * 
-     * @return bool
+     * @param string $role Role name to check for
+     * 
+     * @return bool Returns true if role is already in the list
      */
     public static function isRole(string $role): bool
     {
@@ -121,13 +139,18 @@ class Authorization extends Validator
     }
 
     /**
+     * Current Authorization status.
+     * 
+     * true = authorization checks are active
+     * false = authorization checks will not run
+     * 
      * @var bool
      */
     public static $status = true;
     
     /**
      * Default value in case we need
-     *  to reset Authorization status
+     *  to reset Authorization status.
      *
      * @var bool
      */
@@ -135,10 +158,12 @@ class Authorization extends Validator
 
     /**
      * Change default status.
+     * 
      * This will be used for the
-     *  value set on the self::reset() method
+     *  value set on the self::reset() method.
      * 
      * @param bool $status
+     * 
      * @return void
      */
     public static function setDefaultStatus(bool $status): void
@@ -148,23 +173,25 @@ class Authorization extends Validator
     }
 
     /**
-     * Skip Authorization
+     * Skip Authorization for the code executed inside the callback.
      * 
-     * Skips authorization for the code to be executed inside the callback
+     * @param callable $callback function to run without authorization
      * 
      * @return mixed
      */
     public static function skip(callable $callback)
     {
-        self::disable();
+        $enabled = self::$status;
+
+        if ($enabled) self::disable();
         $result = $callback();
-        self::reset();
+        if ($enabled) self::reset();
 
         return $result;
     }
 
     /**
-     * Enable Authorization checks
+     * Enable Authorization checks.
      * 
      * @return void
      */
@@ -174,7 +201,7 @@ class Authorization extends Validator
     }
 
     /**
-     * Disable Authorization checks
+     * Disable Authorization checks.
      * 
      * @return void
      */
@@ -184,7 +211,7 @@ class Authorization extends Validator
     }
 
     /**
-     * Disable Authorization checks
+     * Reset Authorization checks.
      * 
      * @return void
      */
@@ -206,9 +233,7 @@ class Authorization extends Validator
     }
 
     /**
-     * Get Type
-     *
-     * Returns validator type.
+     * Get validator type.
      *
      * @return string
      */

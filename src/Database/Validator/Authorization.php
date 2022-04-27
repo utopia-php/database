@@ -12,7 +12,7 @@ class Authorization extends Validator
      * 
      * @var array
      */
-    static $roles = ['role:all' => true];
+    static array $roles = ['role:all' => true];
 
     /**
      * Action of the authorization validation.
@@ -20,7 +20,7 @@ class Authorization extends Validator
      * 
      * @var string
      */
-    protected $action = '';
+    protected string $action = '';
 
     /**
      * Error message explaining why validation failed.
@@ -179,7 +179,7 @@ class Authorization extends Validator
      * 
      * @return mixed
      */
-    public static function skip(callable $callback)
+    public static function skip(callable $callback): mixed
     {
         $enabled = self::$status;
 

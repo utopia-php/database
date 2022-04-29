@@ -244,4 +244,121 @@ class MongoDBTest extends Base
 
       $this->assertEquals(true, $res);
     }
+
+        /**
+     * @depends testUpdateDocument
+     */
+    public function testFind(Document $document)
+    {
+        static::getDatabase()->createCollection('movies');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$id' => 'frozen',
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Frozen',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2013,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Frozen II',
+            'director' => 'Chris Buck & Jennifer Lee',
+            'year' => 2019,
+            'price' => 39.50,
+            'active' => true,
+            'generes' => ['animation', 'kids'],
+        ]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Captain America: The First Avenger',
+            'director' => 'Joe Johnston',
+            'year' => 2011,
+            'price' => 25.94,
+            'active' => true,
+            'generes' => ['science fiction', 'action', 'comics'],
+        ]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Captain Marvel',
+            'director' => 'Anna Boden & Ryan Fleck',
+            'year' => 2019,
+            'price' => 25.99,
+            'active' => true,
+            'generes' => ['science fiction', 'action', 'comics'],
+        ]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Work in Progress',
+            'director' => 'TBD',
+            'year' => 2025,
+            'price' => 0.0,
+            'active' => false,
+            'generes' => [],
+        ]));
+
+        static::getDatabase()->createDocument('movies', new Document([
+            '$read' => ['userx'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+            'name' => 'Work in Progress 2',
+            'director' => 'TBD',
+            'year' => 2026,
+            'price' => 0.0,
+            'active' => false,
+            'generes' => [],
+        ]));
+
+        /**
+         * Check Basic
+         */
+        $documents = static::getDatabase()->count('movies');
+
+        $this->assertEquals(5, $documents);
+      }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionDuplicate(Document $document)
+    {
+        // $document->setAttribute('$id', 'duplicated');
+        // static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        // $this->expectException(DuplicateException::class);
+        // static::getDatabase()->createDocument($document->getCollection(), $document);
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionCaseInsensitiveDuplicate(Document $document)
+    {
+        // $document->setAttribute('$id', 'caseSensitive');
+        // static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        // $document->setAttribute('$id', 'CaseSensitive');
+
+        // $this->expectException(DuplicateException::class);
+        // static::getDatabase()->createDocument($document->getCollection(), $document);
+        
+        // return $document;
+    }
 }

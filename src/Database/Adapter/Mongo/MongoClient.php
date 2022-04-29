@@ -9,6 +9,7 @@ use Utopia\Database\Adapter\Mongo\Command;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\Mongo\MongoIndex;
+use Utopia\Database\Query;
 
 class MongoClient 
 { 
@@ -103,8 +104,10 @@ class MongoClient
 
     $result = BSON\toPHP(substr($res, 21, $responseLength - 21));
 
+    $cnt = -1;
+    
     if(property_exists($result, "n") && $result->ok == 1) {
-      return "ok";
+      return $result->n;
     }
 
     if(property_exists($result, "nonce") && $result->ok == 1) {
@@ -265,11 +268,14 @@ class MongoClient
 
   // https://docs.mongodb.com/manual/reference/command/find/#mongodb-dbcommand-dbcmd.find
   public function find(string $collection, $filters = [], $options = []) {
-    return $this->query(array_merge([
+    
+    $result =  $this->query(array_merge([
       MongoCommand::FIND => $collection,
       'filter' => $this->toObject($filters),
       ], $options)
     );
+
+    return $result;
   }
 
   // https://docs.mongodb.com/manual/reference/command/findAndModify/#mongodb-dbcommand-dbcmd.findAndModify
@@ -299,6 +305,23 @@ class MongoClient
     );
   }
 
+  public function count($collection, $filters, $options) {
+    $result = $this->find($collection, $filters, $options);
+    $list = $result->cursor->firstBatch;
+    
+    return \count($list);
+  }
+
+  //$count = $this->adapter->sum($collection, $attribute, $queries, $max);
+  public function aggregate($collection, $pipeline) {
+    $result = $this->query([
+      MongoCommand::AGGREGATE => $collection,
+      'pipeline' => $pipeline,
+      'cursor' => $this->toObject([]),
+    ]);
+
+    return $result;
+  }
 
   public function toObject($dict) {
     $obj = new \stdClass();
@@ -320,7 +343,7 @@ class MongoClient
   public function toArray($obj) {
     if(is_object($obj) || is_array($obj)) {
       $ret = (array) $obj;
-      foreach($ret as &$item) {
+      foreach($ret as $item) {
           $item = $this->toArray($item);
       }
 

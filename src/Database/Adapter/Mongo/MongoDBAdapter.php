@@ -8,6 +8,8 @@ use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Query;
 
 class MongoDBAdapter extends Adapter
 {
@@ -398,11 +400,12 @@ class MongoDBAdapter extends Adapter
             }
         }
 
-        
-        $result = $this->replaceChars('_', '$', $result);
+
+        return $document;
+        // $result = $this->replaceChars('_', '$', $result);
 
 
-        return new Document($result);
+        // return new Document($result);
     }
 
     /**
@@ -520,19 +523,15 @@ class MongoDBAdapter extends Adapter
             ]);
         }
 
-        // permissions
-        // if (Authorization::$status) { // skip if authorization is disabled
-        //     $filters['_read']['$in'] = Authorization::getRoles();
-        // }
 
         /**
          * @var Document[]
          */
         $found = [];
 
-        $results = $this->getDatabase()->find($collection, $filters, $options);
+        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
 
-        foreach($results as $i => $result) {
+        foreach($this->client->toArray($results) as $i => $result) {
             $found[] = new Document($this->replaceChars('_', '$', $result));
         }
 
@@ -540,6 +539,7 @@ class MongoDBAdapter extends Adapter
             $found = array_reverse($found);
         }
 
+        
         return $found;
     }
 
@@ -562,7 +562,9 @@ class MongoDBAdapter extends Adapter
         $options = [];
 
         // set max limit
-        $options['limit'] = ($max) ? $max : null;
+        if ($max > 0) {
+            $options['limit'] = $max;
+        }
 
         // queries
         $filters = $this->buildFilters($queries);
@@ -572,7 +574,7 @@ class MongoDBAdapter extends Adapter
             $filters['_read']['$in'] = Authorization::getRoles();
         }
 
-        return $collection->countDocuments($filters, $options);
+        return $this->client->count($name, $filters, $options);
     }
 
     /**
@@ -621,7 +623,9 @@ class MongoDBAdapter extends Adapter
                     'total' => ['$sum' => '$' . $attribute],
                 ],
         ];
-        return ($collection->aggregate($pipeline)->toArray()[0] ?? [])['total'] ?? 0;
+
+
+        return $this->client->aggregate($name, $pipeline)->cursor->firstBatch[0]->total ?? 0;
     }
 
     /**

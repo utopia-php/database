@@ -1070,6 +1070,7 @@ class Database
 
         $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
 
+        var_dump($document);
         return $document;
     }
 
@@ -1139,6 +1140,9 @@ class Database
         $validator = new Authorization('write');
 
         if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
+          var_dump($old);
+          die;
+
             throw new AuthorizationException($validator->getDescription());
         }
 

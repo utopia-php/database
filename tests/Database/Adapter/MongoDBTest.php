@@ -7,6 +7,7 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Adapter\Mongo\MongoClient;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
@@ -334,16 +335,64 @@ class MongoDBTest extends Base
         $this->assertEquals(5, $documents);
       }
 
+
     /**
+     * @depends testAttributeCaseInsensitivity
+     */
+    public function testIndexCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        $this->expectException(\Exception::class);
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+    }
+
+    /**
+     * @depends testInvalidDefaultValues
+     */
+    public function testAttributeCaseInsensitivity()
+    {
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
+        $this->expectException(\Exception::class);
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
+    }
+
+    /**
+     * @depends testCreateExistsDelete
+     */
+    public function testCreateListExistsDeleteCollection()
+    {
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
+
+        $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertNotNull(static::getDatabase()->exists($this->testDatabase, 'actors'));
+
+        // Collection names should not be unique
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2'));
+        $this->assertCount(2, static::getDatabase()->listCollections());
+        $this->assertNotNull(static::getDatabase()->exists($this->testDatabase, 'actors2'));
+        $collection = static::getDatabase()->getCollection('actors2');
+        $collection->setAttribute('name', 'actors'); // change name to one that exists
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
+        $this->assertCount(1, static::getDatabase()->listCollections());
+
+        $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
+        $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
+
+        $this->assertNotNull(static::getDatabase()->exists($this->testDatabase, 'actors'));
+    }
+
+     /**
      * @depends testGetDocument
      */
     public function testExceptionDuplicate(Document $document)
     {
-        // $document->setAttribute('$id', 'duplicated');
-        // static::getDatabase()->createDocument($document->getCollection(), $document);
+        $document->setAttribute('$id', 'duplicated');
+        static::getDatabase()->createDocument($document->getCollection(), $document);
 
-        // $this->expectException(DuplicateException::class);
-        // static::getDatabase()->createDocument($document->getCollection(), $document);
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createDocument($document->getCollection(), $document);
     }
 
     /**
@@ -358,7 +407,21 @@ class MongoDBTest extends Base
 
         // $this->expectException(DuplicateException::class);
         // static::getDatabase()->createDocument($document->getCollection(), $document);
-        
-        // return $document;
+
+        return $document;
+    }
+
+
+
+    /**
+     * Ensure the collection is removed after use
+     * 
+     * @depends testIndexCaseInsensitivity
+     */
+    public function testCleanupAttributeTests()
+    {
+      static::getDatabase()->deleteCollection('attributes');
+
+      $this->assertEquals(true, 1==1);
     }
 }

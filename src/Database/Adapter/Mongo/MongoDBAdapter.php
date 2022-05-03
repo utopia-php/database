@@ -46,8 +46,9 @@ class MongoDBAdapter extends Adapter
     public function create(string $name): bool
     {
         $name = $this->filter($name);
+        $this->getClient()->selectDatabase($name);
 
-        return (!!$this->getClient()->selectDatabase($name));
+        return true;
     }
 
     /**
@@ -61,7 +62,27 @@ class MongoDBAdapter extends Adapter
      */
     public function exists(string $database, string $collection = null): bool
     {
-      return true;
+      if(!\is_null($collection)) {
+
+      
+        $list = $this->flattenArray($this->list());
+
+        $included = false;
+
+        foreach($list as $obj) {
+          if(\is_object($obj)) {
+            if($obj->name == $collection) {
+              $included = true;
+            } else {
+              $included = false;
+            }
+          }
+        }
+
+        return $included;
+      }
+
+      return !\is_null($this->getClient()->selectDatabase($database));
     }
 
     /**
@@ -111,28 +132,23 @@ class MongoDBAdapter extends Adapter
             return false;
         }
 
-        $collection = $this->getClient()->createCollection($name);
-
-
-        $uid = $this->getClient()->createIndexes($name, [
+        $indexesCreated = $this->client->createIndexes($id, [
           [
-            'key' => $this->client->toObject(['_uid' => $this->getOrder(Database::ORDER_DESC)]),
+            'key' => ['_uid' => $this->getOrder(Database::ORDER_DESC)],
             'name' => '_uid',
             'unique' => true,
             'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
                 'locale' => 'en',
-                'strength' => 1
+                'strength' => 1,
             ]
           ],
-        ]);
-
-
-        $read = $this->getClient()->createIndexes($name, [[
+          [
             'key' => ['_read' => $this->getOrder(Database::ORDER_DESC)],
             'name' => '_read_permissions',
-        ]]);
+          ] 
+        ]);
 
-        if (!$uid || !$read) {
+        if (!$indexesCreated) {
             return false;
         }
 
@@ -265,7 +281,7 @@ class MongoDBAdapter extends Adapter
      *
      * @return bool
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
     {
         $name = $this->getNamespace() .'_'.$this->filter($collection);
         $id = $this->filter($id);
@@ -294,6 +310,10 @@ class MongoDBAdapter extends Adapter
                 default:
                     return false;
             }
+        }
+
+        if (!empty($collation)) {
+            $options['collation'] = $collation;
         }
 
         return $this->client->createIndexes($name, [$indexes], $options);
@@ -338,8 +358,9 @@ class MongoDBAdapter extends Adapter
 
         $result = $this->replaceChars('_', '$', $result);
 
-        return new Document($result);
+        $newDoc = new Document($result);
 
+        return $newDoc;
     }
 
     /**
@@ -354,7 +375,9 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
 
-        $this->client->insert($name, $this->replaceChars('$', '_', $document->getArrayCopy()));
+        $record =  $this->replaceChars('$', '_', $document->getArrayCopy());
+
+        $this->client->insert($name, $record);
 
         return $document;
     }
@@ -372,29 +395,17 @@ class MongoDBAdapter extends Adapter
         $name = $this->getNamespace() .'_'. $this->filter($collection);
 
 
-        try {
-            $result = $this->client->update(
-                $name,
-                ['_uid' => $document->getId()],
-                $this->replaceChars('$', '_', $document->getArrayCopy()),
-            );
-        } catch (\MongoDB\Driver\Exception\CommandException $e) {
-            switch ($e->getCode()) {
-                case 11000:
-                    throw new Duplicate('Duplicated document: '.$e->getMessage());
-                    break;
-                default:
-                    throw $e;
-                    break;
-            }
-        }
+        $result = $this->client->update(
+            $name,
+            ['_uid' => $document->getId()],
+            $this->replaceChars('$', '_', $document->getArrayCopy()),
+        );
+    
 
+        $newDoc = $document->getArrayCopy();
+        $newDoc = $this->replaceChars('_', '$', $newDoc);
 
         return $document;
-        // $result = $this->replaceChars('_', '$', $result);
-
-
-        // return new Document($result);
     }
 
     /**
@@ -989,4 +1000,18 @@ class MongoDBAdapter extends Adapter
         return true;
     }
 
+    function flattenArray($list) {
+      if (!is_array($list)) {
+          // make sure the input is an array
+          return array($list);
+      }
+  
+      $new_array = array();
+
+      foreach ($list as $value) {
+          $new_array = array_merge($new_array, $this->flattenArray($value));
+      }
+  
+      return $new_array;
+  }  
 }

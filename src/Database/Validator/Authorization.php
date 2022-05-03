@@ -66,8 +66,8 @@ class Authorization extends Validator
 
         foreach ($permissions as $permission) {
             if (\array_key_exists($permission, self::$roles)) {
-                return true;
-            }
+              return true;
+            } 
         }
 
         $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only this scopes "'.\json_encode(self::getRoles()).'" are given and only this are allowed "'.\json_encode($permissions).'".';

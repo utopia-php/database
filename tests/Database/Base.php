@@ -680,6 +680,7 @@ abstract class Base extends TestCase
         $oldRead = $document->getRead();
         $oldWrite = $document->getWrite();
 
+
         $new
             ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
             ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
@@ -1939,7 +1940,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
-        $result = static::getDatabase()->createDocument('movies', new Document([
+        static::getDatabase()->createDocument('movies', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
             '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Frozen',

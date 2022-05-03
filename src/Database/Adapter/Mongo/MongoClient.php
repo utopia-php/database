@@ -107,10 +107,8 @@ class MongoClient
     $result = BSON\toPHP(substr($res, 21, $responseLength - 21));
 
     $cnt = -1;
-    
-    
-    if(property_exists($result, "writeErrors")) {
 
+    if(property_exists($result, "writeErrors")) {
       throw new DuplicateException($result->writeErrors[0]->errmsg);
     }
 
@@ -217,7 +215,7 @@ class MongoClient
   public function dropIndexes(string $collection, $indexes, $options = []) {
     $this->query(array_merge([
         'dropIndexes' => $collection,
-        'indexes' => $indexes,
+        'index' => $indexes,
       ], $options)
     );
 
@@ -232,7 +230,7 @@ class MongoClient
         $docObj->{$key} = $value;
     }
 
-    $this->query(array_merge([
+    $result = $this->query(array_merge([
       MongoCommand::INSERT => $collection, 
       'documents' => [$docObj],
     ], $options));
@@ -250,7 +248,7 @@ class MongoClient
             "q" => $this->toObject($where),
             "u" => $this->toObject($updates),
             'multi' => false,
-            'upsert' => false
+            'upsert' => true
           ]
         ]
       ], $options)

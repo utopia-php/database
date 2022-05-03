@@ -354,18 +354,7 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() .'_'. $this->filter($collection);
 
-        try {
-          $this->client->insert($name, $this->replaceChars('$', '_', $document->getArrayCopy()));
-        } catch (\MongoDB\Driver\Exception\BulkWriteException $e) {
-            switch ($e->getCode()) {
-                case 11000:
-                    throw new Duplicate('Duplicated document: '.$e->getMessage());
-                    break;
-                default:
-                    throw $e;
-                    break;
-            }
-        }
+        $this->client->insert($name, $this->replaceChars('$', '_', $document->getArrayCopy()));
 
         return $document;
     }
@@ -719,8 +708,6 @@ class MongoDBAdapter extends Adapter
      */
     protected function buildFilters($queries): array
     {
-      var_dump($queries);
-
         $filters = [];
 
         foreach($queries as $i => $query) {

@@ -10,6 +10,8 @@ use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\Mongo\MongoIndex;
 use Utopia\Database\Query;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 
 class MongoClient 
 { 
@@ -106,6 +108,12 @@ class MongoClient
 
     $cnt = -1;
     
+    
+    if(property_exists($result, "writeErrors")) {
+
+      throw new DuplicateException($result->writeErrors[0]->errmsg);
+    }
+
     if(property_exists($result, "n") && $result->ok == 1) {
       return $result->n;
     }
@@ -114,6 +122,7 @@ class MongoClient
       return $result;
     }
 
+
     if(property_exists($result, 'errmsg')) {
       throw new \Exception($result->errmsg);
     }
@@ -121,7 +130,7 @@ class MongoClient
     if($result->ok == 1) {
       return $result;
     }
-    
+
     return $result->cursor->firstBatch;
   }
   
@@ -161,18 +170,20 @@ class MongoClient
       return $this;
     }
 
-    $this->query(array_merge([
+    $result = $this->query(array_merge([
       'create' => $name,
     ], $options));
+
+    var_dump($result);
 
     return $this;
   }
 
   // https://docs.mongodb.com/manual/reference/command/drop/#mongodb-dbcommand-dbcmd.drop
-  public function dropCollection($name, $options = []) {
-    // $name = \is_string($name) ? [$name] : $name;
-
-    // $this->query($name, $options);
+  public function dropCollection(string $name, $options = []) {
+    $this->query(array_merge([
+      'drop' => $name,
+    ], $options));
 
     return $this;
   }
@@ -193,12 +204,13 @@ class MongoClient
   // https://docs.mongodb.com/manual/reference/command/createIndexes/#createindexes
   public function createIndexes($collection, $indexes, $options = []) {
 
-    $this->query(array_merge(
+    $qry = array_merge(
       [
         'createIndexes' => $collection, 
         'indexes' => $indexes
-      ], $options),
-    );
+      ], $options);
+
+    $this->query($qry);
 
     return true;
   }
@@ -227,7 +239,7 @@ class MongoClient
       'documents' => [$docObj],
     ], $options));
 
-    return $this;
+    return new Document($this->toArray($docObj));
   }
 
   // https://docs.mongodb.com/manual/reference/command/update/#syntax

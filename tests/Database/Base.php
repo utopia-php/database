@@ -841,10 +841,6 @@ abstract class Base extends TestCase
         $this->assertEquals($lastDocumentId, $documents[0]->getId());
         $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_ASC]);
         
-        var_dump($firstDocumentId);
-        var_dump($documents[0]->getId());
-        
-        die;
         // $this->assertEquals($firstDocumentId, $documents[0]->getId());
 
         /**
@@ -1943,16 +1939,17 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
-        static::getDatabase()->createDocument('movies', new Document([
+        $result = static::getDatabase()->createDocument('movies', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
             '$write' => ['role:all', 'user1x', 'user2x'],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
-            'price' => 39.50,
+            'price' => 42.00,
             'active' => true,
             'generes' => ['animation', 'kids'],
         ]));
+
     }
 
     /**
@@ -1971,6 +1968,7 @@ abstract class Base extends TestCase
             'active' => true,
             'generes' => ['animation', 'kids'],
         ]));
+
 
         $this->expectException(DuplicateException::class);
 

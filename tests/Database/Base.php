@@ -536,6 +536,30 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testRespectNulls()
+    {
+        static::getDatabase()->createCollection('documents_nulls');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'string', Database::VAR_STRING, 128, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'integer', Database::VAR_INTEGER, 0, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'bigint', Database::VAR_INTEGER, 8, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'float', Database::VAR_FLOAT, 0, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'boolean', Database::VAR_BOOLEAN, 0, false));
+
+        $document = static::getDatabase()->createDocument('documents_nulls', new Document([
+            '$read' => ['role:all', 'user1', 'user2'],
+            '$write' => ['role:all', 'user1x', 'user2x'],
+        ]));
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertNull($document->getAttribute('string'));
+        $this->assertNull($document->getAttribute('integer'));
+        $this->assertNull($document->getAttribute('bigint'));
+        $this->assertNull($document->getAttribute('float'));
+        $this->assertNull($document->getAttribute('boolean'));
+        return $document;
+    }
+
     public function testCreateDocumentDefaults()
     {
         static::getDatabase()->createCollection('defaults');
@@ -1966,5 +1990,109 @@ abstract class Base extends TestCase
 
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
+    }
+
+    public function testRenameIndex()
+    {
+        $database = static::getDatabase();
+
+        $numbers = $database->createCollection('numbers');
+        $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
+        $database->createAttribute('numbers', 'symbol', Database::VAR_INTEGER, 0, true);
+
+        $database->createIndex('numbers', 'index1', Database::INDEX_KEY, ['verbose'], [128], [Database::ORDER_ASC]);
+        $database->createIndex('numbers', 'index2', Database::INDEX_KEY, ['symbol'], [0], [Database::ORDER_ASC]);
+
+        $index = $database->renameIndex('numbers', 'index1', 'index3');
+
+        $this->assertTrue($index);
+
+        $numbers = $database->getCollection('numbers');
+
+        $this->assertEquals('index2', $numbers->getAttribute('indexes')[1]['$id']);
+        $this->assertEquals('index3', $numbers->getAttribute('indexes')[0]['$id']);
+        $this->assertCount(2, $numbers->getAttribute('indexes'));
+    }
+
+    /**
+     * @depends testRenameIndex
+     * @expectedException Exception
+     */
+    public function testRenameIndexMissing()
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Index not found');
+        $index = $database->renameIndex('numbers', 'index1', 'index4');
+    }
+
+    /**
+     * @depends testRenameIndex
+     * @expectedException Exception
+     */
+    public function testRenameIndexExisting()
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Index name already used');
+        $index = $database->renameIndex('numbers', 'index3', 'index2');
+    }
+
+    public function testRenameAttribute()
+    {
+        $database = static::getDatabase();
+
+        $colors = $database->createCollection('colors');
+        $database->createAttribute('colors', 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute('colors', 'hex', Database::VAR_STRING, 128, true);
+
+        $database->createIndex('colors', 'index1', Database::INDEX_KEY, ['name'], [128], [Database::ORDER_ASC]);
+
+        $database->createDocument('colors', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'black',
+            'hex' => '#000000'
+        ]));
+
+        $attribute = $database->renameAttribute('colors', 'name', 'verbose');
+
+        $this->assertTrue($attribute);
+
+        $colors = $database->getCollection('colors');
+
+        $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
+        $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
+        $this->assertCount(2, $colors->getAttribute('attributes'));
+
+        // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
+        $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
+        $this->assertCount(1, $colors->getAttribute('indexes'));
+
+        // Document should be there if adapter migrated properly
+        $document = $database->findOne('colors', []);
+        $this->assertEquals('black', $document->getAttribute('verbose'));
+        $this->assertEquals('#000000', $document->getAttribute('hex'));
+        $this->assertEquals(null, $document->getAttribute('name'));
+    }
+
+    /**
+     * @depends testRenameAttribute
+     * @expectedException Exception
+     */
+    public function textRenameAttributeMissing()
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Attribute not found');
+        $database->renameAttribute('colors', 'name2', 'name3');
+    }
+
+    /**
+     * @depends testRenameAttribute
+     * @expectedException Exception
+     */
+    public function testRenameAttributeExisting()
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Attribute name already used');
+        $database->renameAttribute('colors', 'verbose', 'hex');
     }
 }

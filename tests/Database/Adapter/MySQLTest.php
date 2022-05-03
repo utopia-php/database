@@ -65,12 +65,11 @@ class MySQLTest extends Base
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, array(
             PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
             PDO::ATTR_TIMEOUT => 3, // Seconds
-            PDO::ATTR_PERSISTENT => true
+            PDO::ATTR_PERSISTENT => true,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Return arrays
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // Handle all errors with exceptions
+            PDO::ATTR_EMULATE_PREPARES => true
         ));
-
-        // Connection settings
-        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);   // Return arrays
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);        // Handle all errors with exceptions
 
         $redis = new Redis();
         $redis->connect('redis', 6379);

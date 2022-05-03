@@ -13,6 +13,15 @@ services:
     ports:
       - "8708:8708"
 
+  adminer:
+    image: adminer
+    container_name: appwrite-adminer
+    restart: always
+    ports:
+      - "9506:8080"
+    networks:
+      - database
+
   postgres:
     image: postgres:13
     container_name: utopia-postgres
@@ -56,7 +65,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
 
   mysql:
-    image: mysql:8.0.25
+    image: mysql:8.0.28-oracle
     container_name: utopia-mysql
     networks:
       - database

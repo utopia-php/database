@@ -448,7 +448,12 @@ class MongoDB extends Adapter
         return (!!$result);
     }
 
-    public function renameAttribute(string $collection, string $id, string $name): bool
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        return true;
+    }
+
+    public function renameIndex(string $collection, string $old, string $new): bool
     {
         return true;
     }

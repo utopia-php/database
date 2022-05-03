@@ -174,8 +174,6 @@ class MongoClient
       'create' => $name,
     ], $options));
 
-    var_dump($result);
-
     return $this;
   }
 

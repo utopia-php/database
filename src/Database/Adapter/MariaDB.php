@@ -429,18 +429,14 @@ class MariaDB extends Adapter
 
         $this->getPDO()->beginTransaction();
 
-        $bindIndex = 0;
-        $bindMap = [];
-
         /**
          * Insert Attributes
          */
+        $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $bindKey = 'xvalue' . $bindIndex;
+            $bindKey = 'key_' . $bindIndex;
             $columns .= "`{$column}`" . '=:' . $bindKey . ',';
-
-            $bindMap[$attribute] = $bindIndex;
             $bindIndex++;
         }
 
@@ -450,15 +446,17 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
+        $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
-            $bindKey = 'xvalue' . $bindMap[$attribute];
+            $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
         }
 
         $permissions = [];
@@ -621,14 +619,10 @@ class MariaDB extends Adapter
          */
 
         $bindIndex = 0;
-        $bindMap = [];
-
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'xvalue' . $bindIndex;
+            $bindKey = 'key_' . $bindIndex;
             $columns .= "`{$column}`" . '=:' . $bindKey . ',';
-
-            $bindMap[$attribute] = $bindIndex;
             $bindIndex++;
         }
 
@@ -638,15 +632,17 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId());
 
+        $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
-            $bindKey = 'xvalue' . $bindMap[$attribute];
+            $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
         }
 
         if (!empty($attributes)) {

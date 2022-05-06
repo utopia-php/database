@@ -142,7 +142,7 @@ class Database
                     return $value;
                 }
 
-                return json_encode($value);
+                return json_encode($value, JSON_FORCE_OBJECT);
             },
             /**
              * @param mixed $value

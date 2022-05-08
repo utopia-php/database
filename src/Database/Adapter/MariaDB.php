@@ -250,20 +250,41 @@ class MariaDB extends Adapter
      * Rename Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function renameAttribute(string $collection, string $id, string $name): bool
+    public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $name = $this->filter($name);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$id}` TO `{$name}`;")
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->execute();
+    }
+
+    /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME INDEX `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -373,13 +394,12 @@ class MariaDB extends Adapter
 
         /** @var array $document */
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if (empty($document)) {
             return new Document([]);
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
+        $document['$internalId'] = (string)$document['_id'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
 

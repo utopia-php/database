@@ -10,11 +10,12 @@ use Utopia\Database\Database;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Tests\Base;
 
+/*
 class MongoDBTest extends Base
 {
     /**
      * @var Database
-     */
+     * /
     static $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
@@ -23,7 +24,7 @@ class MongoDBTest extends Base
      * Return name of adapter
      *
      * @return string
-     */
+     * /
     static function getAdapterName(): string
     {
         return "mongodb";
@@ -33,7 +34,7 @@ class MongoDBTest extends Base
      * Return row limit of adapter
      *
      * @return int
-     */
+     * /
     static function getAdapterRowLimit(): int
     {
         return MongoDB::getRowLimit();
@@ -41,7 +42,7 @@ class MongoDBTest extends Base
 
     /**
      * @return Adapter
-     */
+     * /
     static function getDatabase(): Database
     {
         if(!is_null(self::$database)) {
@@ -69,3 +70,4 @@ class MongoDBTest extends Base
         return self::$database = $database;
     }
 }
+*/

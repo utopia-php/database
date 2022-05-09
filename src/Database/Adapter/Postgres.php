@@ -613,8 +613,6 @@ class Postgres extends MariaDB
 
         $results = $stmt->fetchAll();
 
-        var_dump($results);
-
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
             $value['$internalId'] = strval($value['_id']);

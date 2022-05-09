@@ -69,7 +69,7 @@ class Postgres extends MariaDB
 
         $stmt->execute();
 
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $stmt->fetch();
 
         return (($document[strtolower($select)] ?? '') === $match);
     }
@@ -92,11 +92,12 @@ class Postgres extends MariaDB
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
      * @return bool
+     * @throws Exception
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
@@ -117,29 +118,29 @@ class Postgres extends MariaDB
             $attribute = "\"{$attrId}\" {$attrType}, ";
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
-                \"_id\" SERIAL NOT NULL,
+        // todo: why TEXT[] for _read _write?
+
+        $stmt = $this->getPDO()->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
+                \"_id\" SERIAL PRIMARY KEY,
                 \"_uid\" VARCHAR(255) NOT NULL,
-                \"_read\" TEXT[] NOT NULL,
-                \"_write\" TEXT[] NOT NULL,
                 " . \implode(' ', $attributes) . "
-                PRIMARY KEY (\"_id\")
+                \"_read\" TEXT[] NOT NULL,
+                \"_write\" TEXT[] NOT NULL
                 )");
 
-        $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
-        try{
+        $stmtIndex = $this->getPDO()->prepare("CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
+
+        try {
             $stmt->execute();
             $stmtIndex->execute();
-
             foreach ($indexes as &$index) {
                 $indexId = $this->filter($index->getId()); 
                 $indexAttributes = $index->getAttribute('attributes');
-    
                 $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
             }
-        }catch(Exception $e){
+        }
+        catch(Exception $e){
+            // todo: remove this line
             var_dump($e->getMessage());
             $this->getPDO()->rollBack();
             throw new Exception('Failed to create collection');
@@ -148,10 +149,11 @@ class Postgres extends MariaDB
         if(!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         // Update $this->getIndexCount when adding another default index
-        return $this->createIndex($id, "_index2_{$namespace}_{$id}", $this->getIndexTypeForReadPermission(), ['_read'], [], []);
-    }
+        return $this->createIndex($id, "read", $this->getIndexTypeForReadPermission(), ['_read'], [], []);
+
+        }
 
     /**
      * Delete Collection
@@ -233,8 +235,8 @@ class Postgres extends MariaDB
         $id = $this->filter($id);
 
         foreach($attributes as $key => &$attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '('.(int)$length.')';
+            //$length = $lengths[$key] ?? '';
+            //$length = (empty($length)) ? '' : '('.(int)$length.')'; // not in use //
             $order = $orders[$key] ?? '';
             $attribute = $this->filter($attribute);
 
@@ -260,7 +262,6 @@ class Postgres extends MariaDB
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $name = $this->filter($collection);
         $id = $this->filter($id);
         $schemaName = $this->getDefaultDatabase();
 
@@ -276,6 +277,7 @@ class Postgres extends MariaDB
      * @param string $id
      *
      * @return Document
+     * @throws Exception
      */
     public function getDocument(string $collection, string $id): Document
     {
@@ -288,18 +290,17 @@ class Postgres extends MariaDB
         ");
 
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
         $stmt->execute();
 
         /** @var array $document */
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $stmt->fetch();
 
         if(empty($document)) {
             return new Document([]);
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = strval($document['_id']);
+        $document['$internalId'] = $document['_id']; // we use ATTR_STRINGIFY_FETCHES no need to to cast
         $document['$read'] = (isset($document['_read'])) ? $this->encodeArray($document['_read']) : [];
         $document['$write'] = (isset($document['_write'])) ? $this->encodeArray($document['_write']) : [];
 
@@ -610,7 +611,9 @@ class Postgres extends MariaDB
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $results = $stmt->fetchAll();
+
+        var_dump($results);
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
@@ -686,7 +689,7 @@ class Postgres extends MariaDB
         $stmt->execute();
 
         /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -746,18 +749,19 @@ class Postgres extends MariaDB
         $stmt->execute();
 
         /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
     }
 
     /**
      * Get SQL Type
-     * 
+     *
      * @param string $type
      * @param int $size in chars
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getSQLType(string $type, int $size, bool $signed = true): string
     {
@@ -769,7 +773,6 @@ class Postgres extends MariaDB
                 }
 
                 return "VARCHAR({$size})";
-            break;
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
 
@@ -778,23 +781,18 @@ class Postgres extends MariaDB
                 }
 
                 return 'INTEGER';
-            break;
 
             case Database::VAR_FLOAT:
                 return 'REAL';
-            break;
 
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
-            break;
 
             case Database::VAR_DOCUMENT:
                 return 'VARCHAR';
-            break;
 
             default:
                 throw new Exception('Unknown Type');
-            break;
         }
     }
 
@@ -824,18 +822,20 @@ class Postgres extends MariaDB
 
     /**
      * Get SQL Index
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param array $attributes
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
     {
         switch ($type) {
             case Database::INDEX_KEY:
+            case Database::INDEX_FULLTEXT:
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
             break;
@@ -844,15 +844,11 @@ class Postgres extends MariaDB
                 $type = 'UNIQUE INDEX';
             break;
 
-            case Database::INDEX_FULLTEXT:
-                $type = 'INDEX';
-            break;
-
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-            break;
         }
 
+        // TODO: for index UNIQUE becuase of case insensitive add lower()
         return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
     }
 

@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use phpDocumentor\Reflection\PseudoTypes\LowercaseString;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -235,7 +236,7 @@ class Database
     /**
      * Create Database
      *
-     * @param string $database
+     * @param string $name
      *
      * @return bool
      */
@@ -250,10 +251,11 @@ class Database
 
     /**
      * Create Metadata collection.
-     * @return bool 
-     * @throws LimitException 
-     * @throws AuthorizationException 
-     * @throws StructureException 
+     * @return bool
+     * @throws LimitException
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Exception
      */
     public function createMetadata(): bool
     {
@@ -317,11 +319,11 @@ class Database
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $id
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * 
+     *
      * @return Document
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
@@ -414,7 +416,7 @@ class Database
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
@@ -426,8 +428,9 @@ class Database
      * @param string $format optional validation format of attribute
      * @param string $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
-     * 
+     *
      * @return bool
+     * @throws Exception
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -494,7 +497,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
 
         // only execute when $default is given
@@ -522,7 +524,6 @@ class Database
                     break;
                 default:
                     throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
             }
         }
 
@@ -557,7 +558,6 @@ class Database
             $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
-            return false;
         }
 
         if (
@@ -565,7 +565,6 @@ class Database
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
-            return false;
         }
 
         return true;
@@ -573,11 +572,12 @@ class Database
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
+     * @throws Exception
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
@@ -642,6 +642,7 @@ class Database
      * @param array $orders
      *
      * @return bool
+     * @throws Exception
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -685,7 +686,6 @@ class Database
 
             default:
                 throw new Exception('Unknown index type: ' . $type);
-                break;
         }
 
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);

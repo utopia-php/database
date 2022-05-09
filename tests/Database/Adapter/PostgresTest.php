@@ -4,6 +4,7 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Redis;
+use Utopia\Cache\Adapter\None;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Cache\Cache;
@@ -52,18 +53,20 @@ class PostgresTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, [
-            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
+            //PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4', // this is for mysql utf8mb4 is set on database creation level
             PDO::ATTR_TIMEOUT => 3, // Seconds
             PDO::ATTR_PERSISTENT => true,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_EMULATE_PREPARES => true
+            PDO::ATTR_EMULATE_PREPARES => true,
+            PDO::ATTR_STRINGIFY_FETCHES => true,    // we want consistency with mariadb
         ]);
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
 
+//        $redis = new Redis();
+//        $redis->connect('redis', 6379);
+//        $redis->flushAll();
+        //$cache = new Cache(new RedisAdapter($redis));
+        $cache = new Cache(new None());
         $database = new Database(new Postgres($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());

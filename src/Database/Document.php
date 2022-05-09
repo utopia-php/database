@@ -16,11 +16,9 @@ class Document extends ArrayObject
      *
      * Construct a new fields object
      *
-     * @see ArrayObject::__construct
-     *
      * @param array $input
-     * @param int    $flags
-     * @param string $iterator_class
+     * @throws Exception
+     * @see ArrayObject::__construct
      */
     public function __construct(array $input = [])
     {

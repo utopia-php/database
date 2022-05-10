@@ -119,16 +119,6 @@ class MongoDBTest extends Base
     }
 
     /**
-     * @dataProvider rowWidthExceedsMaximum
-     * @expectedException LimitException
-     */
-
-    public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
-    {
-      $this->assertEquals(1,1);
-    }
-
-        /**
      * @depends testUpdateDocument
      */
     public function testFind(Document $document)
@@ -217,27 +207,6 @@ class MongoDBTest extends Base
         $this->assertEquals(5, $documents);
       }
 
-
-    /**
-     * @depends testAttributeCaseInsensitivity
-     */
-    public function testIndexCaseInsensitivity()
-    {
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
-        $this->expectException(\Exception::class);
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
-    }
-
-    /**
-     * @depends testInvalidDefaultValues
-     */
-    public function testAttributeCaseInsensitivity()
-    {
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
-        $this->expectException(\Exception::class);
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
-    }
-
     /**
      * @depends testCreateExistsDelete
      */
@@ -265,41 +234,6 @@ class MongoDBTest extends Base
         $this->assertNotNull(static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
 
-     /**
-     * @depends testGetDocument
-     */
-    public function testExceptionDuplicate(Document $document)
-    {
-        $document->setAttribute('$id', 'duplicated');
-        static::getDatabase()->createDocument($document->getCollection(), $document);
-
-        $this->expectException(DuplicateException::class);
-        static::getDatabase()->createDocument($document->getCollection(), $document);
-    }
-
-    /**
-     * @depends testGetDocument
-     */
-    public function testExceptionCaseInsensitiveDuplicate(Document $document)
-    {
-      // try {
-      //   $document->setAttribute('$id', 'caseSensitive');
-      //   $res = static::getDatabase()->createDocument($document->getCollection(), $document);
-
-      //   $docment = $document->getArrayCopy();
-      //   $document->setAttribute('$id', 'CaseSensitive');
-
-      //   // $this->expectException(DuplicateException::class);
-      //   $res = static::getDatabase()->createDocument($document->getCollection(), $document);
-
-      //   return $document;
-      // } catch (Exception $e) {
-      //   die($e);
-      // }        
-    }
-
-
-
     /**
      * Ensure the collection is removed after use
      * 
@@ -307,8 +241,8 @@ class MongoDBTest extends Base
      */
     public function testCleanupAttributeTests()
     {
-      static::getDatabase()->deleteCollection('attributes');
+      $res = static::getDatabase()->deleteCollection('attributes');
 
-      $this->assertEquals(true, 1==1);
+      $this->assertEquals(true, $res);
     }
 }

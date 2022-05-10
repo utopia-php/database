@@ -755,6 +755,7 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+
         $document = null;
         $cache = null;
 
@@ -771,7 +772,6 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id);
-
         $document->setAttribute('$collection', $collection->getId());
 
         $validator = new Authorization(self::PERMISSION_READ);
@@ -848,6 +848,7 @@ class Database
             throw new Exception('Must define $id attribute');
         }
 
+        
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);
 
@@ -856,8 +857,6 @@ class Database
         // $data['$collection'] = $old->getCollection();
 
         $validator = new Authorization('write');
-
-        
 
         if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());

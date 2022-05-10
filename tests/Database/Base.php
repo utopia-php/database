@@ -541,7 +541,7 @@ abstract class Base extends TestCase
     public function testGetDocument(Document $document)
     {
         $document = static::getDatabase()->getDocument('documents', $document->getId());
-
+        
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
@@ -592,14 +592,15 @@ abstract class Base extends TestCase
      */
     public function testUpdateDocument(Document $document)
     {
-        $document
-            ->setAttribute('string', 'text📝 updated')
-            ->setAttribute('integer', 6)
-            ->setAttribute('float', 5.56)
-            ->setAttribute('boolean', false)
-            ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
-        ;
-
+      
+      $document
+      ->setAttribute('string', 'text📝 updated')
+      ->setAttribute('integer', 6)
+      ->setAttribute('float', 5.56)
+      ->setAttribute('boolean', false)
+      ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+      ;
+      
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
         $this->assertNotEmpty(true, $new->getId());

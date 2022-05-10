@@ -231,20 +231,26 @@ class Postgres extends MariaDB
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
+
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
         foreach($attributes as $key => &$attribute) {
             //$length = $lengths[$key] ?? '';
-            //$length = (empty($length)) ? '' : '('.(int)$length.')'; // not in use //
+            //$length = (empty($length)) ? '' : '('.(int)$length.')'; // not in use ?//
             $order = $orders[$key] ?? '';
             $attribute = $this->filter($attribute);
+            $attribute = '"' . $attribute . '"';
+
+            if(Database::INDEX_UNIQUE === $type) {
+                $attribute = 'lower('.$attribute.')'; // case insensitive
+            }
 
             if(Database::INDEX_FULLTEXT === $type) {
                 $order = '';
             }
 
-            $attribute = "\"{$attribute}\"{$order}";
+            $attribute .= !empty($order) ? ' ' . $order : '';
         }
 
         return $this->getPDO()
@@ -847,7 +853,10 @@ class Postgres extends MariaDB
         }
 
         // TODO: for index UNIQUE becuase of case insensitive add lower()
-        return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
+
+        var_dump('CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ('.implode(', ', $attributes).')');
+
+        return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ('.implode(', ', $attributes).')';
     }
 
     /**

@@ -325,6 +325,7 @@ class Database
      * @param Document[] $indexes (optional)
      *
      * @return Document
+     * @throws Exception
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {

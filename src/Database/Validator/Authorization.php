@@ -64,8 +64,9 @@ class Authorization extends Validator
 
         $permission = '-';
 
+        
         foreach ($permissions as $permission) {
-            if (\array_key_exists($permission, self::$roles)) {
+          if (\array_key_exists($permission, self::$roles)) {
               return true;
             } 
         }

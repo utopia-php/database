@@ -400,15 +400,20 @@ class MongoDBTest extends Base
      */
     public function testExceptionCaseInsensitiveDuplicate(Document $document)
     {
-        // $document->setAttribute('$id', 'caseSensitive');
-        // static::getDatabase()->createDocument($document->getCollection(), $document);
+      // try {
+      //   $document->setAttribute('$id', 'caseSensitive');
+      //   $res = static::getDatabase()->createDocument($document->getCollection(), $document);
 
-        // $document->setAttribute('$id', 'CaseSensitive');
+      //   $docment = $document->getArrayCopy();
+      //   $document->setAttribute('$id', 'CaseSensitive');
 
-        // $this->expectException(DuplicateException::class);
-        // static::getDatabase()->createDocument($document->getCollection(), $document);
+      //   // $this->expectException(DuplicateException::class);
+      //   $res = static::getDatabase()->createDocument($document->getCollection(), $document);
 
-        return $document;
+      //   return $document;
+      // } catch (Exception $e) {
+      //   die($e);
+      // }        
     }
 
 

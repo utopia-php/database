@@ -854,8 +854,6 @@ class Postgres extends MariaDB
 
         // TODO: for index UNIQUE becuase of case insensitive add lower()
 
-        var_dump('CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ('.implode(', ', $attributes).')');
-
         return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ('.implode(', ', $attributes).')';
     }
 

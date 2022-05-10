@@ -242,8 +242,9 @@ class Postgres extends MariaDB
             $attribute = $this->filter($attribute);
             $attribute = '"' . $attribute . '"';
 
+            // case insensitive! should we do it for every string index for case insensitive search?
             if(Database::INDEX_UNIQUE === $type) {
-                $attribute = 'lower('.$attribute.')'; // case insensitive
+                $attribute = 'lower('.$attribute.')'; // TODO: disable for integer
             }
 
             if(Database::INDEX_FULLTEXT === $type) {
@@ -851,8 +852,6 @@ class Postgres extends MariaDB
             default:
                 throw new Exception('Unknown Index Type:' . $type);
         }
-
-        // TODO: for index UNIQUE becuase of case insensitive add lower()
 
         return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ('.implode(', ', $attributes).')';
     }

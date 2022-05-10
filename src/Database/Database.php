@@ -857,6 +857,8 @@ class Database
 
         $validator = new Authorization('write');
 
+        
+
         if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
             throw new AuthorizationException($validator->getDescription());
         }

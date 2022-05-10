@@ -140,6 +140,7 @@ class MongoDBAdapter extends Adapter
             'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
                 'locale' => 'en',
                 'strength' => 1,
+                // 'caseLevel' => true,
             ]
           ],
           [

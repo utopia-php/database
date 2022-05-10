@@ -248,7 +248,7 @@ class MongoClient
             "q" => $this->toObject($where),
             "u" => $this->toObject($updates),
             'multi' => false,
-            'upsert' => true
+            'upsert' => false
           ]
         ]
       ], $options)

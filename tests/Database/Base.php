@@ -11,8 +11,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Structure;
-use Utopia\Validator\Range;
 
 abstract class Base extends TestCase
 {
@@ -151,6 +149,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as_5dasdasdas', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas_', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '.as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as.5dasdasdas', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas.', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '-as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as-5dasdasdas', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas-', Database::VAR_BOOLEAN, 0, true));
@@ -347,39 +347,6 @@ abstract class Base extends TestCase
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
 
         static::getDatabase()->deleteCollection('withSchema');
-
-        // Test collection with dash (+attribute +index)
-        $collection2 = static::getDatabase()->createCollection('with-dash', [
-            new Document([
-                '$id' => 'attribute-one',
-                'type' => Database::VAR_STRING,
-                'size' => 256,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [
-            new Document([
-                '$id' => 'index-one',
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute-one'],
-                'lengths' => [256],
-                'orders' => ['ASC'],
-            ])
-        ]);
-
-        $this->assertEquals(false, $collection2->isEmpty());
-        $this->assertEquals('with-dash', $collection2->getId());
-        $this->assertIsArray($collection2->getAttribute('attributes'));
-        $this->assertCount(1, $collection2->getAttribute('attributes'));
-        $this->assertEquals('attribute-one', $collection2->getAttribute('attributes')[0]['$id']);
-        $this->assertEquals(Database::VAR_STRING, $collection2->getAttribute('attributes')[0]['type']);
-        $this->assertIsArray($collection2->getAttribute('indexes'));
-        $this->assertCount(1, $collection2->getAttribute('indexes'));
-        $this->assertEquals('index-one', $collection2->getAttribute('indexes')[0]['$id']);
-        $this->assertEquals(Database::INDEX_KEY, $collection2->getAttribute('indexes')[0]['type']);
-        static::getDatabase()->deleteCollection('with-dash');
     }
 
     public function testCreateCollectionValidator()
@@ -504,7 +471,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
@@ -516,7 +482,6 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
-            'with-dash' => 'Works',
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -533,32 +498,7 @@ abstract class Base extends TestCase
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
-        $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
-        return $document;
-    }
-
-    public function testRespectNulls()
-    {
-        static::getDatabase()->createCollection('documents_nulls');
-
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'string', Database::VAR_STRING, 128, false));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'integer', Database::VAR_INTEGER, 0, false));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'bigint', Database::VAR_INTEGER, 8, false));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'float', Database::VAR_FLOAT, 0, false));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'boolean', Database::VAR_BOOLEAN, 0, false));
-
-        $document = static::getDatabase()->createDocument('documents_nulls', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
-        ]));
-
-        $this->assertNotEmpty(true, $document->getId());
-        $this->assertNull($document->getAttribute('string'));
-        $this->assertNull($document->getAttribute('integer'));
-        $this->assertNull($document->getAttribute('bigint'));
-        $this->assertNull($document->getAttribute('float'));
-        $this->assertNull($document->getAttribute('boolean'));
         return $document;
     }
 
@@ -601,7 +541,7 @@ abstract class Base extends TestCase
     public function testGetDocument(Document $document)
     {
         $document = static::getDatabase()->getDocument('documents', $document->getId());
-
+        
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
@@ -613,7 +553,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-        $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
         return $document;
     }
@@ -653,15 +592,15 @@ abstract class Base extends TestCase
      */
     public function testUpdateDocument(Document $document)
     {
-        $document
-            ->setAttribute('string', 'text📝 updated')
-            ->setAttribute('integer', 6)
-            ->setAttribute('float', 5.56)
-            ->setAttribute('boolean', false)
-            ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
-            ->setAttribute('with-dash', 'Works')
-        ;
-
+      
+      $document
+      ->setAttribute('string', 'text📝 updated')
+      ->setAttribute('integer', 6)
+      ->setAttribute('float', 5.56)
+      ->setAttribute('boolean', false)
+      ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+      ;
+      
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
         $this->assertNotEmpty(true, $new->getId());
@@ -675,7 +614,6 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
-        $this->assertEquals('Works', $new->getAttribute('with-dash'));
 
         $oldRead = $document->getRead();
         $oldWrite = $document->getWrite();
@@ -686,7 +624,7 @@ abstract class Base extends TestCase
             ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
         ;
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
@@ -1999,259 +1937,5 @@ abstract class Base extends TestCase
 
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
-    }
-
-    public function testRenameIndex()
-    {
-        $database = static::getDatabase();
-
-        $numbers = $database->createCollection('numbers');
-        $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
-        $database->createAttribute('numbers', 'symbol', Database::VAR_INTEGER, 0, true);
-
-        $database->createIndex('numbers', 'index1', Database::INDEX_KEY, ['verbose'], [128], [Database::ORDER_ASC]);
-        $database->createIndex('numbers', 'index2', Database::INDEX_KEY, ['symbol'], [0], [Database::ORDER_ASC]);
-
-        $index = $database->renameIndex('numbers', 'index1', 'index3');
-
-        $this->assertTrue($index);
-
-        $numbers = $database->getCollection('numbers');
-
-        $this->assertEquals('index2', $numbers->getAttribute('indexes')[1]['$id']);
-        $this->assertEquals('index3', $numbers->getAttribute('indexes')[0]['$id']);
-        $this->assertCount(2, $numbers->getAttribute('indexes'));
-    }
-
-    /**
-     * @depends testRenameIndex
-     * @expectedException Exception
-     */
-    public function testRenameIndexMissing()
-    {
-        $database = static::getDatabase();
-        $this->expectExceptionMessage('Index not found');
-        $index = $database->renameIndex('numbers', 'index1', 'index4');
-    }
-
-    /**
-     * @depends testRenameIndex
-     * @expectedException Exception
-     */
-    public function testRenameIndexExisting()
-    {
-        $database = static::getDatabase();
-        $this->expectExceptionMessage('Index name already used');
-        $index = $database->renameIndex('numbers', 'index3', 'index2');
-    }
-
-    public function testRenameAttribute()
-    {
-        $database = static::getDatabase();
-
-        $colors = $database->createCollection('colors');
-        $database->createAttribute('colors', 'name', Database::VAR_STRING, 128, true);
-        $database->createAttribute('colors', 'hex', Database::VAR_STRING, 128, true);
-
-        $database->createIndex('colors', 'index1', Database::INDEX_KEY, ['name'], [128], [Database::ORDER_ASC]);
-
-        $database->createDocument('colors', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'black',
-            'hex' => '#000000'
-        ]));
-
-        $attribute = $database->renameAttribute('colors', 'name', 'verbose');
-
-        $this->assertTrue($attribute);
-
-        $colors = $database->getCollection('colors');
-
-        $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
-        $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
-        $this->assertCount(2, $colors->getAttribute('attributes'));
-
-        // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
-        $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
-        $this->assertCount(1, $colors->getAttribute('indexes'));
-
-        // Document should be there if adapter migrated properly
-        $document = $database->findOne('colors', []);
-        $this->assertEquals('black', $document->getAttribute('verbose'));
-        $this->assertEquals('#000000', $document->getAttribute('hex'));
-        $this->assertEquals(null, $document->getAttribute('name'));
-    }
-
-    /**
-     * @depends testRenameAttribute
-     * @expectedException Exception
-     */
-    public function textRenameAttributeMissing()
-    {
-        $database = static::getDatabase();
-        $this->expectExceptionMessage('Attribute not found');
-        $database->renameAttribute('colors', 'name2', 'name3');
-    }
-
-    /**
-     * @depends testRenameAttribute
-     * @expectedException Exception
-     */
-    public function testRenameAttributeExisting()
-    {
-        $database = static::getDatabase();
-        $this->expectExceptionMessage('Attribute name already used');
-        $database->renameAttribute('colors', 'verbose', 'hex');
-    }
-
-    public function testUpdateAttributeDefault()
-    {
-        $database = static::getDatabase();
-
-        $flowers = $database->createCollection('flowers');
-        $database->createAttribute('flowers', 'name', Database::VAR_STRING, 128, true);
-        $database->createAttribute('flowers', 'inStock', Database::VAR_INTEGER, 0, false);
-
-        $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'Violet',
-            'inStock' => 51
-        ]));
-
-        $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'Lily'
-        ]));
-
-        $this->assertNull($doc->getAttribute('inStock'));
-
-        $database->updateAttributeDefault('flowers', 'inStock', 100);
-
-        $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'Iris'
-        ]));
-
-        $this->assertIsNumeric($doc->getAttribute('inStock'));
-        $this->assertEquals(100, $doc->getAttribute('inStock'));
-
-        $database->updateAttributeDefault('flowers', 'inStock', null);
-    }
-
-    /**
-     * @depends testUpdateAttributeDefault
-     */
-    public function testUpdateAttributeRequired() {
-        $database = static::getDatabase();
-
-        $database->updateAttributeRequired('flowers', 'inStock', true);
-
-        $this->expectExceptionMessage('Invalid document structure: Missing required attribute "inStock"');
-    
-        $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'Lily With Missing Stocks'
-        ]));
-    }
-
-    /**
-     * @depends testUpdateAttributeDefault
-     */
-    public function testUpdateAttributeFilter() {
-        $database = static::getDatabase();
-
-        $database->createAttribute('flowers', 'cartModel', Database::VAR_STRING, 2000, false);
-
-        $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'Lily With CartData',
-            'inStock' => 50,
-            'cartModel' => '{"color":"string","size":"number"}'
-        ]));
-
-        $this->assertIsString($doc->getAttribute('cartModel'));
-        $this->assertEquals('{"color":"string","size":"number"}', $doc->getAttribute('cartModel'));
-
-        $database->updateAttributeFilters('flowers', 'cartModel', ['json']);
-
-        $doc = $database->getDocument('flowers', $doc->getId());
-
-        $this->assertIsArray($doc->getAttribute('cartModel'));
-        $this->assertCount(2, $doc->getAttribute('cartModel'));
-        $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);
-        $this->assertEquals('number', $doc->getAttribute('cartModel')['size']);
-    }
-
-    /**
-     * @depends testUpdateAttributeDefault
-     */
-    public function testUpdateAttributeFormat() {
-        $database = static::getDatabase();
-
-        $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
-
-        $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            '$id' => 'LiliPriced',
-            'name' => 'Lily Priced',
-            'inStock' => 50,
-            'cartModel' => '{}',
-            'price' => 500
-        ]));
-
-        $this->assertIsNumeric($doc->getAttribute('price'));
-        $this->assertEquals(500, $doc->getAttribute('price'));
-
-        Structure::addFormat('priceRange', function($attribute) {
-            $min = $attribute['formatOptions']['min'];
-            $max = $attribute['formatOptions']['max'];
-
-            return new Range($min, $max);
-        }, Database::VAR_INTEGER);
-
-        $database->updateAttributeFormat('flowers', 'price', 'priceRange');
-        $database->updateAttributeFormatOptions('flowers', 'price', ['min' => 1, 'max' => 10000]);
-
-        $this->expectExceptionMessage('Invalid document structure: Attribute "price" has invalid format. Value must be a valid range between 1 and 10,000');
-    
-        $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'name' => 'Lily Overpriced',
-            'inStock' => 50,
-            'cartModel' => '{}',
-            'price' => 15000
-        ]));
-    }
-
-    /**
-     * @depends testUpdateAttributeDefault
-     * @depends testUpdateAttributeFormat
-     */
-    public function testUpdateAttributeStructure() {
-        // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
-
-        $database = static::getDatabase();
-
-        $doc = $database->getDocument('flowers', 'LiliPriced');
-        $this->assertIsNumeric($doc->getAttribute('price'));
-        $this->assertEquals(500, $doc->getAttribute('price'));
-
-        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
-
-        // Delete cache to force read from database with new schema
-        $database->deleteCachedDocument('flowers', 'LiliPriced');
-
-        $doc = $database->getDocument('flowers', 'LiliPriced');
-
-        $this->assertIsString($doc->getAttribute('price'));
-        $this->assertEquals('500', $doc->getAttribute('price'));
     }
 }

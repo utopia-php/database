@@ -62,11 +62,11 @@ class PostgresTest extends Base
             PDO::ATTR_STRINGIFY_FETCHES => true,    // we want consistency with mariadb
         ]);
 
-//        $redis = new Redis();
-//        $redis->connect('redis', 6379);
-//        $redis->flushAll();
-        //$cache = new Cache(new RedisAdapter($redis));
-        $cache = new Cache(new None());
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
+        $cache = new Cache(new RedisAdapter($redis));
+        //$cache = new Cache(new None());
         $database = new Database(new Postgres($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());

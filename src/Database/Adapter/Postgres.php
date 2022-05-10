@@ -128,7 +128,7 @@ class Postgres extends MariaDB
                 \"_write\" TEXT[] NOT NULL
                 )");
 
-        $stmtIndex = $this->getPDO()->prepare("CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
+        $stmtIndex = $this->getPDO()->prepare("CREATE UNIQUE INDEX IF NOT EXISTS \"{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
 
         try {
             $stmt->execute();

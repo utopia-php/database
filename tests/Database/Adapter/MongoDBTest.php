@@ -92,7 +92,6 @@ class MongoDBTest extends Base
       // $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
-
     /**
      * @depends testCreateDocument
      */

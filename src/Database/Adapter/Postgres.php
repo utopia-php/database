@@ -165,6 +165,8 @@ class Postgres extends MariaDB
     {
         $id = $this->filter($id);
 
+        //todo: add CASCADE to removes the dependent objects?
+
         return $this->getPDO()
             ->prepare("DROP TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$id}\";")
             ->execute();

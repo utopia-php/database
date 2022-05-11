@@ -1906,7 +1906,7 @@ abstract class Base extends TestCase
 
     public function testMetadataIndexWithNoIndex()
     {
-        // this test should fail.. metadata table does not clean index dependent indexes
+        // This Test should fail!.. metadata table col indexes remain with index content
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('test1'));
         $this->assertEquals(true, static::getDatabase()->createAttribute('test1', 'attr1', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createIndex('test1', 'attr1', Database::INDEX_KEY, ['attr1'], [128]));

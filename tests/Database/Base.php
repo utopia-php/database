@@ -1902,4 +1902,15 @@ abstract class Base extends TestCase
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
     }
+
+
+    public function testMetadataIndexWithNoIndex()
+    {
+        // this test should fail.. metadata table does not clean index dependent indexes
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('test1'));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('test1', 'attr1', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createIndex('test1', 'attr1', Database::INDEX_KEY, ['attr1'], [128]));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('test1', 'attr1'));
+    }
+
 }

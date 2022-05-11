@@ -244,7 +244,7 @@ class Postgres extends MariaDB
 
             // case insensitive! should we do it for every string index for case insensitive search?
             if(Database::INDEX_UNIQUE === $type) {
-                $attribute = 'lower(' . $attribute . '::text)'; // TODO: disable for integer
+                $attribute = 'lower(' . $attribute . '::text)'; // TODO: disable if all attributes are integer?
             }
 
             if(Database::INDEX_FULLTEXT === $type) {

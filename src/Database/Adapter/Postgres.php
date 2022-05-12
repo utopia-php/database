@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
@@ -343,6 +344,7 @@ class Postgres extends MariaDB
                 VALUES ({$columns} :_uid, :_read, :_write)");
 
         $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
+        \var_dump("here", $document->getRead());
         $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
         $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
@@ -358,9 +360,10 @@ class Postgres extends MariaDB
             $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
         }
 
+        \var_dump($stmt->queryString);
         try {
             $stmt->execute();
-        } catch (PDOException $e) {
+        } catch (Throwable $e) {
             switch ($e->getCode()) {
                 case 1062:
                 case 23505:
@@ -410,6 +413,7 @@ class Postgres extends MariaDB
                 SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
 
         $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
+        var_dump($document->getRead());
         $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
         $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
@@ -428,7 +432,7 @@ class Postgres extends MariaDB
         if(!empty($attributes)) {
             try {
                 $stmt->execute();
-            } catch (PDOException $e) {
+            } catch (Throwable $e) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23505:
@@ -531,9 +535,9 @@ class Postgres extends MariaDB
                 }
 
                 $where[] = "(
-                        {$attribute} {$this->getSQLOperator($orderOperator)} :cursor 
+                        \"{$attribute}\" {$this->getSQLOperator($orderOperator)} :cursor 
                         OR (
-                            {$attribute} = :cursor 
+                            \"{$attribute}\" = :cursor 
                             AND
                             _id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
                         )
@@ -542,7 +546,7 @@ class Postgres extends MariaDB
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = $attribute.' '.$orderType;
+            $orders[] = '"'.$attribute.'" '.$orderType;
         }
 
         // Allow after pagination without any order
@@ -812,8 +816,9 @@ class Postgres extends MariaDB
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
-                $value = "'".$value."'";
-                return "to_tsvector({$attribute}) @@ to_tsquery({$value})";
+                $value = "'".$value.":*'";
+                $value = str_replace('.', ' <-> ', $value);
+                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery({$value})";
             break;
 
             default:
@@ -918,7 +923,12 @@ class Postgres extends MariaDB
      */
     protected function encodeArray(string $value): array
     {
-        return explode(',', substr($value, 1, -1));
+        $string = substr($value, 1, -1);
+        if (empty($string)) {
+            return [];
+        } else {
+            return explode(',', $string);
+        }
     }
 
     /**
@@ -930,6 +940,8 @@ class Postgres extends MariaDB
      */
     protected function decodeArray(array $value): string
     {
+        if(empty($value))
+            return '{}';
         return '{'.implode(",", $value).'}';
     }
 }

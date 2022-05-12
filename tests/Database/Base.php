@@ -148,8 +148,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as_5dasdasdas', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas_', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '.as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as.5dasdasdas', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas.', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '-as5dasdasdas', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as-5dasdasdas', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas-', Database::VAR_BOOLEAN, 0, true));
@@ -347,6 +345,39 @@ abstract class Base extends TestCase
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
 
         static::getDatabase()->deleteCollection('withSchema');
+
+        // Test collection with dash (+attribute +index)
+        $collection2 = static::getDatabase()->createCollection('with-dash', [
+            new Document([
+                '$id' => 'attribute-one',
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => 'index-one',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute-one'],
+                'lengths' => [256],
+                'orders' => ['ASC'],
+            ])
+        ]);
+
+        $this->assertEquals(false, $collection2->isEmpty());
+        $this->assertEquals('with-dash', $collection2->getId());
+        $this->assertIsArray($collection2->getAttribute('attributes'));
+        $this->assertCount(1, $collection2->getAttribute('attributes'));
+        $this->assertEquals('attribute-one', $collection2->getAttribute('attributes')[0]['$id']);
+        $this->assertEquals(Database::VAR_STRING, $collection2->getAttribute('attributes')[0]['type']);
+        $this->assertIsArray($collection2->getAttribute('indexes'));
+        $this->assertCount(1, $collection2->getAttribute('indexes'));
+        $this->assertEquals('index-one', $collection2->getAttribute('indexes')[0]['$id']);
+        $this->assertEquals(Database::INDEX_KEY, $collection2->getAttribute('indexes')[0]['type']);
+        static::getDatabase()->deleteCollection('with-dash');
     }
 
     public function testCreateCollectionValidator()
@@ -471,6 +502,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$read' => ['role:all', 'user1', 'user2'],
@@ -482,6 +514,7 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
+            'with-dash' => 'Works',
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -498,6 +531,7 @@ abstract class Base extends TestCase
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
+        $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
         return $document;
     }
@@ -577,6 +611,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+        $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
         return $document;
     }
@@ -622,6 +657,7 @@ abstract class Base extends TestCase
             ->setAttribute('float', 5.56)
             ->setAttribute('boolean', false)
             ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+            ->setAttribute('with-dash', 'Works')
         ;
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
@@ -637,6 +673,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+        $this->assertEquals('Works', $new->getAttribute('with-dash'));
 
         $oldRead = $document->getRead();
         $oldWrite = $document->getWrite();
@@ -646,7 +683,7 @@ abstract class Base extends TestCase
             ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
         ;
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 

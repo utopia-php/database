@@ -121,19 +121,11 @@ class Document extends ArrayObject
      */
     public function getAttribute(string $name, $default = null)
     {
-        $name = \explode('.', $name);
-
-        $temp = &$this;
-
-        foreach ($name as $key) {
-            if (!isset($temp[$key])) {
-                return $default;
-            }
-
-            $temp = &$temp[$key];
+        if(isset($this[$name])) {
+            return $this[$name];
         }
 
-        return $temp;
+        return $default;
     }
 
     /**

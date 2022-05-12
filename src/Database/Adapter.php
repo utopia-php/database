@@ -448,7 +448,7 @@ abstract class Adapter
      */
     public function filter(string $value):string
     {
-        $value = preg_replace("/[^A-Za-z0-9\_\-\.]/", '', $value);
+        $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if(\is_null($value)) {
             throw new Exception('Failed to filter key');

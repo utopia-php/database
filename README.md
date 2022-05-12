@@ -131,7 +131,7 @@ Below is a list of supported adapters, and their compatibly tested versions alon
 ## Limitations (to be completed per adapter)
 
 - ID max size can be 255 bytes
-- ID can only contain [^A-Za-z0-9]
+- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
 - Document max size is x bytes
 - Collection can have a max of x attributes
 - Collection can have a max of x indexes

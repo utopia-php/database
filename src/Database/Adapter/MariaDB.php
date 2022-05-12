@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
-use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -250,20 +249,41 @@ class MariaDB extends Adapter
      * Rename Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function renameAttribute(string $collection, string $id, string $name): bool
+    public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $name = $this->filter($name);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$id}` TO `{$name}`;")
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->execute();
+    }
+
+    /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` RENAME INDEX `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -373,13 +393,12 @@ class MariaDB extends Adapter
 
         /** @var array $document */
         $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
         if (empty($document)) {
             return new Document([]);
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
+        $document['$internalId'] = (string)$document['_id'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
 
@@ -412,9 +431,12 @@ class MariaDB extends Adapter
         /**
          * Insert Attributes
          */
+        $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columns .= "`{$column}`" . '=:' . $column . ',';
+            $bindKey = 'key_' . $bindIndex;
+            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $bindIndex++;
         }
 
         $stmt = $this->getPDO()
@@ -423,14 +445,17 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
+        $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
+            $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
         }
 
         $permissions = [];
@@ -575,7 +600,7 @@ class MariaDB extends Adapter
                     INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
                     (_document, _type, _permission) VALUES " . implode(', ', [
                         ...array_map(fn (string $i) => "( :_uid, 'read', :_add_read_{$i} )", array_keys($readAdded)),
-                        ...array_map(fn (string $i) => "( :_uid, 'write', :_add_read_{$i} )", array_keys($writeAdded))
+                        ...array_map(fn (string $i) => "( :_uid, 'write', :_add_write_{$i} )", array_keys($writeAdded))
                     ])
                 );
 
@@ -591,9 +616,13 @@ class MariaDB extends Adapter
         /**
          * Update Attributes
          */
+
+        $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $columns .= "`{$column}`" . '=:' . $column . ',';
+            $bindKey = 'key_' . $bindIndex;
+            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $bindIndex++;
         }
 
         $stmt = $this->getPDO()
@@ -602,14 +631,17 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':_uid', $document->getId());
 
+        $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
             if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
+            $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
         }
 
         if (!empty($attributes)) {
@@ -1267,7 +1299,16 @@ class MariaDB extends Adapter
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
-                $value = "\"{$value}*\”";
+                /**
+                 * Replace reserved chars with space.
+                 */
+                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $value));
+
+                /**
+                 * Prepend wildcard by default on the back.
+                 */
+                $value = "'{$value}*'";
+
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
                 break;
 

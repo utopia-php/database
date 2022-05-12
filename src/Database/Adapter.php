@@ -214,11 +214,21 @@ abstract class Adapter
      * Rename Attribute
      *
      * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param string $old
+     * @param string $new
      * @return bool
      */
-    abstract public function renameAttribute(string $collection, string $id, string $name): bool;
+    abstract public function renameAttribute(string $collection, string $old, string $new): bool;
+
+    /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     */
+    abstract public function renameIndex(string $collection, string $old, string $new): bool;
 
     /**
      * Create Index
@@ -438,7 +448,7 @@ abstract class Adapter
      */
     public function filter(string $value):string
     {
-        $value = preg_replace("/[^A-Za-z0-9\_\-\.]/", '', $value);
+        $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if(\is_null($value)) {
             throw new Exception('Failed to filter key');

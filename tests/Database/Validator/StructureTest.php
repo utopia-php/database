@@ -250,7 +250,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
     }
 
     public function testArrayOfStringsValidation()
@@ -268,7 +268,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => 'posts',
@@ -281,7 +281,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => 'posts',
@@ -293,6 +293,20 @@ class StructureTest extends TestCase
             'tags' => [],
             'feedback' => 'team@appwrite.io',
         ])));
+
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['too-long-tag-name-to-make-sure-the-length-validator-inside-string-attribute-type-fails-properly'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
     }
 
     public function testIntegerValidation()

@@ -552,7 +552,7 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributeIndex = \in_array($id, \array_map(fn($attribute) => $attribute['$id'], $attributes));
+        $attributeIndex = \array_search($id, \array_map(fn($attribute) => $attribute['$id'], $attributes));
 
         if($attributeIndex === false) {
             throw new Exception('Attribute not found');
@@ -561,18 +561,20 @@ class Database
         $attribute = $attributes[$attributeIndex];
 
         // Execute update from callback
-        $attribute = call_user_func($updateCallback, $attribute);
+        call_user_func($updateCallback, $attribute);
 
         // Save
         $attributes[$attributeIndex] = $attribute;
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
+        /*
         if (
             $this->adapter->getRowLimit() > 0 &&
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
+        */
 
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
@@ -640,7 +642,7 @@ class Database
      * 
      * @return void
      */
-    public function updateAttributeFormatFilters(string $collection, string $id, array $filters): void
+    public function updateAttributeFilters(string $collection, string $id, array $filters): void
     {
         $this->updateAttributeMeta($collection, $id, function($attribute) use($filters) {
             $attribute->setAttribute('filters', $filters);
@@ -679,6 +681,9 @@ class Database
                     if ($attribute->getAttribute('type') !== \gettype($default)) {
                         throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
                     }
+                    break;
+                case 'NULL':
+                    // Disable null. No validation required
                     break;
                 default:
                     throw new Exception('Unknown attribute type for: ' . $default);
@@ -746,8 +751,6 @@ class Database
 
 
             $attribute->setAttribute('array', $array);
-
-            return $attribute;
         });
 
         return $success;

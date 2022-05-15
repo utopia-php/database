@@ -201,6 +201,19 @@ abstract class Adapter
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
+     * Update Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
+
+    /**
      * Delete Attribute
      * 
      * @param string $collection

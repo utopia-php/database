@@ -1,0 +1,353 @@
+make all --print-data-base --no-builtin-variables --no-builtin-rules --question
+# GNU Make 3.81
+# Copyright (C) 2006  Free Software Foundation, Inc.
+# This is free software; see the source for copying conditions.
+# There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE.
+
+# This program built for i386-apple-darwin11.3.0
+
+# Make data base, printed on Mon May 16 09:33:59 2022
+
+# Variables
+
+# automatic
+<D = $(patsubst %/,%,$(dir $<))
+# automatic
+?F = $(notdir $?)
+# environment
+ELECTRON_NO_ATTACH_CONSOLE = 1
+# environment
+VSCODE_LOG_NATIVE = false
+# automatic
+?D = $(patsubst %/,%,$(dir $?))
+# environment
+PLATFORMIO_IDE = 2.4.3
+# makefile (from `Makefile', line 2)
+PROJECT_DIR := database
+# automatic
+@D = $(patsubst %/,%,$(dir $@))
+# automatic
+@F = $(notdir $@)
+# makefile
+CURDIR := /Users/wess/Desktop/Appwrite/utopia/database
+# makefile
+SHELL = /bin/sh
+# makefile (from `Makefile', line 1)
+ROOT_DIR := /Users/wess/Desktop/Appwrite/utopia/database/Makefile
+# environment
+VSCODE_NLS_CONFIG = {"locale":"en-us","availableLanguages":{},"_languagePackSupport":true}
+# environment
+_ = /usr/bin/make
+# makefile (from `Makefile', line 1)
+MAKEFILE_LIST :=  Makefile
+# environment
+REALM_BIN = /Users/wess/.realm/bin
+# environment
+__CF_USER_TEXT_ENCODING = 0x1F5:0x0:0x0
+# makefile (from `Makefile', line 5)
+VERSION = `cat $(VERSION_FILE)`
+# environment
+VSCODE_VERBOSE_LOGGING = true
+# environment
+__CFBundleIdentifier = com.microsoft.VSCodeInsiders
+# environment
+INFOPATH = /opt/homebrew/share/info:
+# environment
+VSCODE_IPC_HOOK_EXTHOST = /var/folders/b_/cnpd0f997xz415lmdw66zxwh0000gn/T/vscode-ipc-fc2c30a5-b474-4f96-9b04-31ceeffa22b0.sock
+# environment
+VSCODE_CWD = /Users/wess/Desktop/Appwrite/utopia/database
+# environment
+PATH = /Users/wess/.yarn/bin:/Users/wess/.config/yarn/global/node_modules/.bin:/Users/wess/.asdf/shims:/Users/wess/.asdf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/wess/.foreman/bin:/opt/flutter/bin:/Users/wess/.cargo/env:/opt/homebrew/sbin:/opt/homebrew/bin:/Users/wess/.realm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin:/Users/wess/.cargo/bin
+# environment
+LSCOLORS = Gxfxcxdxbxegedabagacad
+# environment
+REALM_EDITOR = vim
+# environment
+LIBRARY_PATH = :/opt/homebrew/lib
+# makefile (from `Makefile', line 3)
+PROJECT := database
+# environment
+REALM_NAME = wess
+# environment
+LaunchInstanceID = 3202F805-1B77-4C9F-ADE5-1162EF883B48
+# environment
+VSCODE_LOG_STACK = true
+# environment
+ELECTRON_RUN_AS_NODE = 1
+# default
+.FEATURES := target-specific order-only second-expansion else-if archives jobserver check-symlink
+# environment
+SSH_AUTH_SOCK = /private/tmp/com.apple.launchd.kJBcbyZUEF/Listeners
+# automatic
+%F = $(notdir $%)
+# environment
+REALM_EMAIL = me@wess.io
+# environment
+PLATFORMIO_PATH = /Users/wess/.platformio/python3/bin:/Users/wess/.yarn/bin:/Users/wess/.config/yarn/global/node_modules/.bin:/Users/wess/.asdf/shims:/Users/wess/.asdf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/wess/.foreman/bin:/opt/flutter/bin:/Users/wess/.cargo/env:/opt/homebrew/sbin:/opt/homebrew/bin:/Users/wess/.realm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin:/Users/wess/.cargo/bin
+# environment
+VSCODE_PIPE_LOGGING = true
+# environment
+PWD = /Users/wess/Desktop/Appwrite/utopia/database
+# environment
+HOMEBREW_CELLAR = /opt/homebrew/Cellar
+# environment
+ORIGINAL_XDG_CURRENT_DESKTOP = undefined
+# environment
+MANPATH = /opt/homebrew/share/man::
+# environment
+VSCODE_AMD_ENTRYPOINT = vs/workbench/api/node/extensionHostProcess
+# environment
+HOME = /Users/wess
+# makefile (from `Makefile', line 4)
+VERSION_FILE = VERSION
+# default
+MAKEFILEPATH := /Applications/Xcode.app/Contents/Developer/Makefiles
+# environment
+VSCODE_CLI = 1
+# environment
+VSCODE_CODE_CACHE_PATH = /Users/wess/Library/Application Support/Code - Insiders/CachedData/113287ccc3be52dc3409d451a9b3416d133dca1a
+# environment
+LOGNAME = wess
+# environment
+APPLICATION_INSIGHTS_NO_DIAGNOSTIC_CHANNEL = 1
+# environment
+REALM_CONFIG = /Users/wess/.realm/config.sh
+# environment
+ZSH = /Users/wess/.oh-my-zsh
+# environment
+VSCODE_HANDLES_UNCAUGHT_ERRORS = true
+# automatic
+^D = $(patsubst %/,%,$(dir $^))
+# environment
+XPC_FLAGS = 0x0
+# default
+MAKE = $(MAKE_COMMAND)
+# default
+MAKECMDGOALS := all
+# environment
+SHLVL = 2
+# default
+MAKE_VERSION := 3.81
+# environment
+USER = wess
+# makefile
+.DEFAULT_GOAL := default
+# environment
+TERM_SESSION_ID = 0A2C40D9-BFB8-4C47-99AA-6E7F5A3EF5B5
+# environment
+REALM_AUTHOR = wess
+# environment
+LESS = -R
+# automatic
+%D = $(patsubst %/,%,$(dir $%))
+# default
+MAKE_COMMAND := /Applications/Xcode.app/Contents/Developer/usr/bin/make
+# environment
+OLDPWD = /Users/wess/Desktop/Appwrite/utopia/database
+# environment
+TERM_PROGRAM = Apple_Terminal
+# default
+.VARIABLES := 
+# environment
+TMPDIR = /var/folders/b_/cnpd0f997xz415lmdw66zxwh0000gn/T/
+# automatic
+*F = $(notdir $*)
+# environment
+VSCODE_IPC_HOOK = /Users/wess/Library/Application Support/Code - Insiders/1.68.0-insider-main.sock
+# makefile
+MAKEFLAGS = Rrqp
+# environment
+MFLAGS = -Rrqp
+# automatic
+*D = $(patsubst %/,%,$(dir $*))
+# environment
+TERM_PROGRAM_VERSION = 444
+# environment
+XPC_SERVICE_NAME = application.com.microsoft.VSCodeInsiders.27260285.27260291.94664B24-AED7-4596-8350-13000C483CFF
+# environment
+HOMEBREW_PREFIX = /opt/homebrew
+# automatic
++D = $(patsubst %/,%,$(dir $+))
+# automatic
++F = $(notdir $+)
+# environment
+REALM_COMPANY = Wess.io
+# environment
+HOMEBREW_REPOSITORY = /opt/homebrew
+# environment
+SCRIPT_STACK_DIR = /Users/wess/.realm/libexec/stack
+# environment
+COMMAND_MODE = unix2003
+# default
+MAKEFILES := 
+# automatic
+<F = $(notdir $<)
+# environment
+PLATFORMIO_CALLER = vscode
+# makefile (from `Makefile', line 7)
+RUN_ARGS := 
+# environment
+PAGER = less
+# environment
+LC_ALL = C
+# environment
+NO_PROXY = 127.0.0.1
+# environment
+SECURITYSESSIONID = 186a4
+# automatic
+^F = $(notdir $^)
+# default
+SUFFIXES := 
+# environment
+ASDF_DIR = /Users/wess/.asdf
+# environment
+REALM_HOME = /Users/wess/.realm
+# environment
+MAKELEVEL := 0
+# environment
+LANG = C
+# environment
+TERM = xterm-256color
+# environment
+VSCODE_PID = 99724
+# variable set hash-table stats:
+# Load=100/1024=10%, Rehash=0, Collisions=6/129=5%
+
+# Pattern-specific Variable Values
+
+# No pattern-specific variable values.
+
+# Directories
+
+# . (device 16777232, inode 5254794): 26 files, no impossibilities.
+
+# 26 files, no impossibilities in 1 directories.
+
+# Implicit Rules
+
+# No implicit rules.
+
+# Files
+
+# Not a target:
+all:
+#  Command-line target.
+#  Implicit rule search has been done.
+#  File does not exist.
+#  File has not been updated.
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/0=0%
+
+analyze:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 28):
+	@docker compose exec tests vendor/bin/psalm --show-info=true
+	
+
+.PHONY: help oop test restart
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+oop:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 21):
+	@echo $(RUN_ARGS)
+	
+
+docker-up:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 37):
+	@docker compose up -d
+	
+
+# Not a target:
+.SUFFIXES:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+Makefile:
+#  Implicit rule search has been done.
+#  Last modified 2022-05-10 12:06:30
+#  File has been updated.
+#  Successfully updated.
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/0=0%
+
+docker-down:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 34):
+	@docker compose down --rmi all
+	
+
+test:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 25):
+ 
+	@docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/Adapter/MongoDBTest.php
+	
+
+help:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 14):
+	@echo "" \
+	&& grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' \
+	&& echo ""
+	
+
+default: test
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.DEFAULT:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+restart: docker-down docker-up
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  commands to execute (from `Makefile', line 32):
+	
+
+# files hash-table stats:
+# Load=13/1024=1%, Rehash=0, Collisions=0/35=0%
+# VPATH Search Paths
+
+# No `vpath' search paths.
+
+# No general (`VPATH' variable) search path.
+
+# # of strings in strcache: 1
+# # of strcache buffers: 1
+# strcache size: total = 4096 / max = 4096 / min = 4096 / avg = 4096
+# strcache free: total = 4087 / max = 4087 / min = 4087 / avg = 4087
+
+# Finished Make data base on Mon May 16 09:33:59 2022
+
+ 
+make: *** No rule to make target `all'.  Stop.
+

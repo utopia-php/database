@@ -13,15 +13,6 @@ services:
     ports:
       - "8708:8708"
 
-  adminer:
-    image: adminer
-    container_name: appwrite-adminer
-    restart: always
-    ports:
-      - "9506:8080"
-    networks:
-      - database
-
   postgres:
     image: postgres:13
     container_name: utopia-postgres
@@ -42,7 +33,7 @@ services:
     ports:
       - "8704:26257"
       - "8705:8080"
-
+      
   mariadb:
     image: mariadb:10.5
     container_name: utopia-mariadb
@@ -66,11 +57,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
 
   mysql:
-<<<<<<< HEAD
-    image: mysql:8.0.28-oracle
-=======
     image: mysql:8.0.25
->>>>>>> 22765ef (Update docker-compose.yml)
     container_name: utopia-mysql
     networks:
       - database

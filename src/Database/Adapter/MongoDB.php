@@ -458,6 +458,11 @@ class MongoDB extends Adapter
         return true;
     }
 
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    {
+        return true;
+    }
+
     /**
      * Find Documents
      *

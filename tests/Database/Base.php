@@ -11,6 +11,8 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Structure;
+use Utopia\Validator\Range;
 
 abstract class Base extends TestCase
 {
@@ -2094,5 +2096,155 @@ abstract class Base extends TestCase
         $database = static::getDatabase();
         $this->expectExceptionMessage('Attribute name already used');
         $database->renameAttribute('colors', 'verbose', 'hex');
+    }
+
+    public function testUpdateAttributeDefault()
+    {
+        $database = static::getDatabase();
+
+        $flowers = $database->createCollection('flowers');
+        $database->createAttribute('flowers', 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute('flowers', 'inStock', Database::VAR_INTEGER, 0, false);
+
+        $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Violet',
+            'inStock' => 51
+        ]));
+
+        $doc = $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Lily'
+        ]));
+
+        $this->assertNull($doc->getAttribute('inStock'));
+
+        $database->updateAttributeDefault('flowers', 'inStock', 100);
+
+        $doc = $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Iris'
+        ]));
+
+        $this->assertIsNumeric($doc->getAttribute('inStock'));
+        $this->assertEquals(100, $doc->getAttribute('inStock'));
+
+        $database->updateAttributeDefault('flowers', 'inStock', null);
+    }
+
+    /**
+     * @depends testUpdateAttributeDefault
+     */
+    public function testUpdateAttributeRequired() {
+        $database = static::getDatabase();
+
+        $database->updateAttributeRequired('flowers', 'inStock', true);
+
+        $this->expectExceptionMessage('Invalid document structure: Missing required attribute "inStock"');
+    
+        $doc = $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Lily With Missing Stocks'
+        ]));
+    }
+
+    /**
+     * @depends testUpdateAttributeDefault
+     */
+    public function testUpdateAttributeFilter() {
+        $database = static::getDatabase();
+
+        $database->createAttribute('flowers', 'cartModel', Database::VAR_STRING, 2000, false);
+
+        $doc = $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Lily With CartData',
+            'inStock' => 50,
+            'cartModel' => '{"color":"string","size":"number"}'
+        ]));
+
+        $this->assertIsString($doc->getAttribute('cartModel'));
+        $this->assertEquals('{"color":"string","size":"number"}', $doc->getAttribute('cartModel'));
+
+        $database->updateAttributeFilters('flowers', 'cartModel', ['json']);
+
+        $doc = $database->getDocument('flowers', $doc->getId());
+
+        $this->assertIsArray($doc->getAttribute('cartModel'));
+        $this->assertCount(2, $doc->getAttribute('cartModel'));
+        $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);
+        $this->assertEquals('number', $doc->getAttribute('cartModel')['size']);
+    }
+
+    /**
+     * @depends testUpdateAttributeDefault
+     */
+    public function testUpdateAttributeFormat() {
+        $database = static::getDatabase();
+
+        $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
+
+        $doc = $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            '$id' => 'LiliPriced',
+            'name' => 'Lily Priced',
+            'inStock' => 50,
+            'cartModel' => '{}',
+            'price' => 500
+        ]));
+
+        $this->assertIsNumeric($doc->getAttribute('price'));
+        $this->assertEquals(500, $doc->getAttribute('price'));
+
+        Structure::addFormat('priceRange', function($attribute) {
+            $min = $attribute['formatOptions']['min'];
+            $max = $attribute['formatOptions']['max'];
+
+            return new Range($min, $max);
+        }, Database::VAR_INTEGER);
+
+        $database->updateAttributeFormat('flowers', 'price', 'priceRange');
+        $database->updateAttributeFormatOptions('flowers', 'price', ['min' => 1, 'max' => 10000]);
+
+        $this->expectExceptionMessage('Invalid document structure: Attribute "price" has invalid format. Value must be a valid range between 1 and 10,000');
+    
+        $doc = $database->createDocument('flowers', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'name' => 'Lily Overpriced',
+            'inStock' => 50,
+            'cartModel' => '{}',
+            'price' => 15000
+        ]));
+    }
+
+    /**
+     * @depends testUpdateAttributeDefault
+     * @depends testUpdateAttributeFormat
+     */
+    public function testUpdateAttributeStructure() {
+        // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
+
+        $database = static::getDatabase();
+
+        $doc = $database->getDocument('flowers', 'LiliPriced');
+        $this->assertIsNumeric($doc->getAttribute('price'));
+        $this->assertEquals(500, $doc->getAttribute('price'));
+
+        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
+
+        // Delete cache to force read from database with new schema
+        $database->deleteCachedDocument('flowers', 'LiliPriced');
+
+        $doc = $database->getDocument('flowers', 'LiliPriced');
+
+        $this->assertIsString($doc->getAttribute('price'));
+        $this->assertEquals('500', $doc->getAttribute('price'));
     }
 }

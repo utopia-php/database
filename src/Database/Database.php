@@ -536,6 +536,221 @@ class Database
     }
 
     /**
+     * Update attribute metadata. Utility method for update attribute methods.
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $key Metadata key to update
+     * @param callable $updateCallback method that recieves document, and returns it with changes applied
+     * 
+     * @return Document
+     */
+    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
+    {
+        // Load
+        $collection = $this->getCollection($collection);
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $attributeIndex = \array_search($id, \array_map(fn($attribute) => $attribute['$id'], $attributes));
+
+        if($attributeIndex === false) {
+            throw new Exception('Attribute not found');
+        }
+
+        // Execute update from callback
+        call_user_func($updateCallback, $attributes[$attributeIndex], $collection, $attributeIndex);
+
+        // Save
+        $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        }
+    }
+
+    /**
+     * Update required status of attribute.
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param bool $required
+     * 
+     * @return void
+     */
+    public function updateAttributeRequired(string $collection, string $id, bool $required): void
+    {
+        $this->updateAttributeMeta($collection, $id, function($attribute) use($required) {
+            $attribute->setAttribute('required', $required);
+        });
+    }
+
+    /**
+     * Update format of attribute.
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $format validation format of attribute
+     * 
+     * @return void
+     */
+    public function updateAttributeFormat(string $collection, string $id, string $format): void
+    {
+        $this->updateAttributeMeta($collection, $id, function($attribute) use($format) {
+            if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
+                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
+            }
+
+            $attribute->setAttribute('format', $format);
+        });
+    }
+
+    /**
+     * Update format options of attribute.
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
+     * 
+     * @return void
+     */
+    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): void
+    {
+        $this->updateAttributeMeta($collection, $id, function($attribute) use($formatOptions) {
+            $attribute->setAttribute('formatOptions', $formatOptions);
+        });
+    }
+
+    /**
+     * Update filters of attribute.
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param array $filters
+     * 
+     * @return void
+     */
+    public function updateAttributeFilters(string $collection, string $id, array $filters): void
+    {
+        $this->updateAttributeMeta($collection, $id, function($attribute) use($filters) {
+            $attribute->setAttribute('filters', $filters);
+        });
+    }
+
+    /**
+     * Update default value of attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * 
+     * @return void
+     */
+    public function updateAttributeDefault(string $collection, string $id, $default = null): void
+    {
+        $this->updateAttributeMeta($collection, $id, function($attribute) use($default) {
+            if ($attribute->getAttribute('required') === true) {
+                throw new Exception('Cannot set a default value on a required attribute');
+            }
+            switch (\gettype($default)) {
+                    // first enforce typed array for each value in $default
+                case 'array':
+                    foreach ($default as $value) {
+                        if ($attribute->getAttribute('type') !== \gettype($value)) {
+                            throw new Exception('Default value contents do not match given type ' . $attribute->getAttribute('type'));
+                        }
+                    }
+                    break;
+                    // then enforce for primitive types
+                case self::VAR_STRING:
+                case self::VAR_INTEGER:
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                    if ($attribute->getAttribute('type') !== \gettype($default)) {
+                        throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
+                    }
+                    break;
+                case 'NULL':
+                    // Disable null. No validation required
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type for: ' . $default);
+                    break;
+            }
+    
+            $attribute->setAttribute('default', $default);
+        });
+    }
+
+    /**
+     * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size utf8mb4 chars length
+     * @param bool $signed
+     * @param bool $array
+     * 
+     * To update attribute key (ID), use renameAttribute instead.
+     * 
+     * @return bool
+     */
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
+    {
+        $this->updateAttributeMeta($collection, $id, function($attribute, $collectionDoc, $attributeIndex) use($collection, $id, $type, $size, $signed, $array, &$success) {
+            if($type !== null || $size !== null || $signed !== null || $array !== null) {
+                $type ??= $attribute->getAttribute('type');
+                $size ??= $attribute->getAttribute('size');
+                $signed ??= $attribute->getAttribute('signed');
+                $array ??= $attribute->getAttribute('array');
+                
+                switch ($type) {
+                    case self::VAR_STRING:
+                        if ($size > $this->adapter->getStringLimit()) {
+                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
+                        }
+                        break;
+        
+                    case self::VAR_INTEGER:
+                        $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
+                        if ($size > $limit) {
+                            throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                        }
+                        break;
+                    case self::VAR_FLOAT:
+                    case self::VAR_BOOLEAN:
+                        break;
+                    default:
+                        throw new Exception('Unknown attribute type: ' . $type);
+                        break;
+                }
+    
+                $attribute
+                    ->setAttribute('type', $type)
+                    ->setAttribute('size', $size)
+                    ->setAttribute('signed', $signed)
+                    ->setAttribute('array', $array);
+
+                $attributes = $collectionDoc->getAttribute('attributes');
+                $attributes[$attributeIndex] = $attribute;
+                $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+
+                if (
+                    $this->adapter->getRowLimit() > 0 &&
+                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getRowLimit()
+                ) {
+                    throw new LimitException('Row width limit reached. Cannot create new attribute.');
+                }
+    
+                $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+            }
+        });
+
+        return true;
+    }
+
+    /**
      * Checks if attribute can be added to collection.
      * Used to check attribute limits without asking the database
      * Returns true if attribute can be added to collection, throws exception otherwise

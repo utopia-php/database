@@ -703,10 +703,8 @@ class Database
      * 
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id = null, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
     {
-        $success = true;
-
         $this->updateAttributeMeta($collection, $id, function($attribute) use($collection, $id, $type, $size, $signed, $array, &$success) {
             if($type !== null || $size !== null || $signed !== null || $array !== null) {
                 $type ??= $attribute->getAttribute('type');
@@ -741,14 +739,13 @@ class Database
                     ->setAttribute('signed', $signed)
                     ->setAttribute('array', $array);
     
-                $success = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
             }
-
 
             $attribute->setAttribute('array', $array);
         });
 
-        return $success;
+        return true;
     }
 
     /**

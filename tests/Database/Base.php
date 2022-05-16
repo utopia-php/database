@@ -2239,12 +2239,12 @@ abstract class Base extends TestCase
 
         $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
 
+        // Delete cache to force read from database with new schema
+        $database->deleteCachedDocument('flowers', 'LiliPriced');
+
         $doc = $database->getDocument('flowers', 'LiliPriced');
 
-        // TODO: Not working. Probably PHP/library stuff. In database, it is VARCHAR; and metadata is string
-        /*
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
-        */
     }
 }

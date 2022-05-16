@@ -15,11 +15,31 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 
 class MongoClient 
 { 
+  /**
+   * Unique identifier for socket connection.
+   */
   private $id;
+
+  /**
+   * Options for connection.
+   */
   private $options;
+
+  /**
+   * Socket client.
+   */
   private $client;
+
+  /**
+   * Authentication for connection
+   */
   private $auth;
 
+  /**
+   * Create a Mongo connection.
+   * @param MongoClientOptions $options
+   * @param Boolean $useCoroutine
+   */
   public function __construct(MongoClientOptions $options, $useCoroutine = true) {
     $this->id = uniqid('utopia.mongo.client');
     $this->options = $options;
@@ -34,6 +54,10 @@ class MongoClient
     ]);
   }
 
+  /**
+   * Connect to Mongo using TCP/IP 
+   * and Wire Protocol.
+   */
   public function connect() {
     $this->client->connect($this->options->host, $this->options->port);
     [$payload, $db] = $this->auth->start();
@@ -47,10 +71,19 @@ class MongoClient
     return $this;
   }
 
+  /**
+   * Send a raw string query to connection.
+   */
   public function raw_query($string) {
     return $this->send($string);
   }
 
+  /**
+   * Send a BSON packed query to connection.
+   * 
+   * @param array $command
+   * @param string $db
+   */
   public function query(array $command, $db = null) {
     $params = array_merge($command, [
       '$db' => $db ?? $this->options->name,
@@ -62,6 +95,9 @@ class MongoClient
     return $this->send($message);
   }
 
+  /**
+   * Send a syncronous command to connection.
+   */
   public function blocking($cmd) {
     $this->client->send($cmd . PHP_EOL);
 
@@ -76,12 +112,20 @@ class MongoClient
     return $result;
   }
 
+  /**
+   * Send a message to connection.
+   * 
+   * @param $data
+   */
   public function send($data) {
     $this->client->send($data);
 
     return $this->receive();
   }
 
+  /**
+   * Receive a message from connection.
+   */
   private function receive() {
     $receivedLength = 0;
     $responseLength = null;
@@ -132,14 +176,29 @@ class MongoClient
     return $result->cursor->firstBatch;
   }
   
+  /**
+   * Selects a collection.
+   * 
+   * Note: Since Mongo creates on the fly, this just returns
+   * a instances of self.
+   */
   public function selectDatabase($name) {
     return $this;
   }
 
+  /**
+   * Creates a collection.
+   * 
+   * Note: Since Mongo creates on the fly, this just returns
+   * a instances of self.
+   */
   public function createDatabase($name) {
     return $this;
   }
 
+  /**
+   * Get a list of databases.
+   */
   public function listDatabaseNames() {
     return $this->query([
       'listDatabases' => 1,
@@ -147,6 +206,12 @@ class MongoClient
     ], 'admin');
   }
 
+  /**
+   * Drop (remove) a database.
+   * 
+   * @param array $options
+   * @param string $db
+   */
   // https://docs.mongodb.com/manual/reference/command/dropDatabase/#mongodb-dbcommand-dbcmd.dropDatabase
   public function dropDatabase(array $options = [], string $db = null) {
     $db = $db ?? $this->options->name;
@@ -160,6 +225,12 @@ class MongoClient
     return $this;
   }
 
+  /**
+   * Create a collection.
+   * 
+   * @param string $name
+   * @param array $options
+   */
   // For options see: https://docs.mongodb.com/manual/reference/command/create/#mongodb-dbcommand-dbcmd.create
   public function createCollection($name, $options = []) {
     $list = $this->listCollectionNames(["name" => $name]);
@@ -175,6 +246,12 @@ class MongoClient
     return $this;
   }
 
+  /**
+   * Drop a collection.
+   * 
+   * @param string $name
+   * @param array $options
+   */
   // https://docs.mongodb.com/manual/reference/command/drop/#mongodb-dbcommand-dbcmd.drop
   public function dropCollection(string $name, $options = []) {
     $this->query(array_merge([
@@ -183,6 +260,15 @@ class MongoClient
 
     return $this;
   }
+
+  /**
+   * List collections (name only).
+   * 
+   * @param string $name
+   * @param array $options
+   * 
+   * @return array
+   */
 
   // https://docs.mongodb.com/manual/reference/command/listCollections/#listcollections
   public function listCollectionNames($filter = [], $options = []) {
@@ -196,6 +282,16 @@ class MongoClient
 
     return $this->query($qry);
   }
+
+  /**
+   * Create indexes.
+   * 
+   * @param string $collection
+   * @param array $indexes
+   * @param array $options
+   * 
+   * @return array
+   */
 
   // https://docs.mongodb.com/manual/reference/command/createIndexes/#createindexes
   public function createIndexes($collection, $indexes, $options = []) {
@@ -211,6 +307,15 @@ class MongoClient
     return true;
   }
 
+  /**
+   * Drop indexes from a collection.
+   * 
+   * @param string $collection
+   * @param array $indexes
+   * @param array $options
+   * 
+   * @return array
+   */
   // https://docs.mongodb.com/manual/reference/command/dropIndexes/#dropindexes
   public function dropIndexes(string $collection, $indexes, $options = []) {
     $this->query(array_merge([
@@ -221,6 +326,16 @@ class MongoClient
 
     return $this;
   }
+
+  /**
+   * Insert a document/s.
+   * 
+   * @param string $collection
+   * @param array $documents
+   * @param array $options
+   * 
+   * @return Document
+   */
 
   // https://docs.mongodb.com/manual/reference/command/insert/#mongodb-dbcommand-dbcmd.insert
   public function insert(string $collection, $documents, $options = []) {
@@ -237,6 +352,16 @@ class MongoClient
 
     return new Document($this->toArray($docObj));
   }
+
+  /**
+   * Update a document/s.
+   * 
+   * @param string $collection
+   * @param array $documents
+   * @param array $options
+   * 
+   * @return MongoClient
+   */
 
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
   public function update(string $collection, $where = [], $updates = [], $options = []) {
@@ -257,6 +382,17 @@ class MongoClient
     return $this;
   }
 
+  /**
+   * Insert, or update, a document/s.
+   * 
+   * @param string $collection
+   * @param array $documents
+   * @param array $options
+   * 
+   * @return MongoClient
+   */
+
+
   // https://docs.mongodb.com/manual/reference/command/update/#syntax
   public function upsert(string $collection, $where = [], $updates = [], $options = []) {
    $this->query(array_merge(
@@ -274,6 +410,15 @@ class MongoClient
     return $this;
   }
 
+  /**
+   * Find a document/s.
+   * 
+   * @param string $collection
+   * @param array $filters
+   * @param array $options
+   * 
+   * @return array
+   */
   // https://docs.mongodb.com/manual/reference/command/find/#mongodb-dbcommand-dbcmd.find
   public function find(string $collection, $filters = [], $options = []) {
     
@@ -286,6 +431,16 @@ class MongoClient
     return $result;
   }
 
+  /**
+   * Find and modify document/s.
+   * 
+   * @param string $collection
+   * @param array $filters
+   * @param array $options
+   * 
+   * @return array
+   */
+  
   // https://docs.mongodb.com/manual/reference/command/findAndModify/#mongodb-dbcommand-dbcmd.findAndModify
   public function findAndModify(string $collection, $document, $update, $remove = false, $filters = [], $options = []) {
     return $this->query(array_merge([
@@ -297,6 +452,16 @@ class MongoClient
     );
   }
 
+  /**
+   * Delete a document/s.
+   * 
+   * @param string $collection
+   * @param array $filters
+   * @param array $options
+   * 
+   * @return array
+   */
+  
   // https://docs.mongodb.com/manual/reference/command/delete/#mongodb-dbcommand-dbcmd.delete
   public function delete(string $collection, $filters = [], $limit = 1, $deleteOptions = [], $options = []) {
     return $this->query(array_merge([
@@ -313,6 +478,16 @@ class MongoClient
     );
   }
 
+  /**
+   * Count documents.
+   * 
+   * @param string $collection
+   * @param array $filters
+   * @param array $options
+   * 
+   * @return array
+   */
+  
   public function count($collection, $filters, $options) {
     $result = $this->find($collection, $filters, $options);
     $list = $result->cursor->firstBatch;
@@ -320,7 +495,16 @@ class MongoClient
     return \count($list);
   }
 
-  //$count = $this->adapter->sum($collection, $attribute, $queries, $max);
+  /**
+   * Aggregate a collection pipeline.
+   * 
+   * @param string $collection
+   * @param array $pipeline
+   
+   * 
+   * @return array
+   */
+  
   public function aggregate($collection, $pipeline) {
     $result = $this->query([
       MongoCommand::AGGREGATE => $collection,
@@ -331,6 +515,14 @@ class MongoClient
     return $result;
   }
 
+  /**
+   * Convert an assoc array to an object (stdClass).
+   * 
+   * @param array $dict
+   * 
+   * @return stdClass
+   */
+  
   public function toObject($dict) {
     $obj = new \stdClass();
 
@@ -348,6 +540,14 @@ class MongoClient
     return $obj;
   }
 
+  /**
+   * Convert an object (stdClass) to an assoc array.
+   * 
+   * @param string $obj
+   * 
+   * @return array
+   */
+  
   public function toArray($obj) {
     if(is_object($obj) || is_array($obj)) {
       $ret = (array) $obj;

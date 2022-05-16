@@ -3,6 +3,9 @@
 namespace Utopia\Database\Adapter\Mongo;
 
 class MongoCommand {
+  /**
+   * Defines commands Mongo uses over wire protocol.
+   */
   const CREATE = "create";
   const DELETE = "delete";
   const FIND = "find";

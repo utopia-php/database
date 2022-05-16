@@ -13,14 +13,25 @@ services:
     ports:
       - "8708:8708"
 
-  mongoclient:
-    image: mongoclient/mongoclient:latest
-    container_name: mongoclient
-    hostname: mongoclient
+  adminer:
+    image: adminer
+    container_name: appwrite-adminer
+    restart: always
+    ports:
+      - "9506:8080"
+    networks:
+      - database
+
+  postgres:
+    image: postgres:13
+    container_name: utopia-postgres
     networks:
       - database
     ports:
-      - 3300:3000
+      - "8700:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
 
   cockroach:
     image: cockroachdb/cockroach:v20.2.0
@@ -50,12 +61,11 @@ services:
     ports:
       - "8702:27017"
     environment:
-      MONGO_INITDB_DATABASE: utopia_testing
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
 
   mysql:
-    image: mysql:8.0.25
+    image: mysql:8.0.28-oracle
     container_name: utopia-mysql
     networks:
       - database

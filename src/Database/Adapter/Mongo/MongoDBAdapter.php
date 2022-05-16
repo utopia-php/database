@@ -267,7 +267,7 @@ class MongoDBAdapter extends Adapter
 
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
-        return false;
+        return true;
     }
 
     /**

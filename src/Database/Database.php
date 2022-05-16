@@ -558,23 +558,18 @@ class Database
             throw new Exception('Attribute not found');
         }
 
-        $attribute = $attributes[$attributeIndex];
-
         // Execute update from callback
-        call_user_func($updateCallback, $attribute);
+        call_user_func($updateCallback, $attributes[$attributeIndex]);
 
         // Save
-        $attributes[$attributeIndex] = $attribute;
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
-        /*
         if (
             $this->adapter->getRowLimit() > 0 &&
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
-        */
 
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);

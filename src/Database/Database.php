@@ -559,17 +559,10 @@ class Database
         }
 
         // Execute update from callback
-        call_user_func($updateCallback, $attributes[$attributeIndex]);
+        call_user_func($updateCallback, $attributes[$attributeIndex], $collection, $attributeIndex);
 
         // Save
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
-
-        if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
 
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
@@ -705,7 +698,7 @@ class Database
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
     {
-        $this->updateAttributeMeta($collection, $id, function($attribute) use($collection, $id, $type, $size, $signed, $array, &$success) {
+        $this->updateAttributeMeta($collection, $id, function($attribute, $collectionDoc, $attributeIndex) use($collection, $id, $type, $size, $signed, $array, &$success) {
             if($type !== null || $size !== null || $signed !== null || $array !== null) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
@@ -738,11 +731,20 @@ class Database
                     ->setAttribute('size', $size)
                     ->setAttribute('signed', $signed)
                     ->setAttribute('array', $array);
+
+                $attributes = $collectionDoc->getAttribute('attributes');
+                $attributes[$attributeIndex] = $attribute;
+                $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+
+                if (
+                    $this->adapter->getRowLimit() > 0 &&
+                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getRowLimit()
+                ) {
+                    throw new LimitException('Row width limit reached. Cannot create new attribute.');
+                }
     
                 $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
             }
-
-            $attribute->setAttribute('array', $array);
         });
 
         return true;

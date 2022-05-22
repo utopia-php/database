@@ -2247,4 +2247,124 @@ abstract class Base extends TestCase
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
     }
+
+    public function testReservedKeywords() {
+        // TODO: Get official list with a refference for reserved keywords
+        $keywords = [
+            'order',
+            'where',
+            'create',
+            'delete',
+            'update',
+            'table',
+            'from',
+            'by',
+            'in'
+        ];
+
+        $database = static::getDatabase();
+
+        // Collection name tests
+        $attributes = [
+            new Document([
+                '$id' => 'attribute1',
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => 'index1',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1'],
+                'lengths' => [256],
+                'orders' => ['ASC'],
+            ]),
+        ];
+
+        foreach ($keywords as $keyword) {
+            $collection = $database->createCollection($keyword, $attributes, $indexes);
+            $this->assertEquals($keyword, $collection->getId());
+
+            $document = $database->createDocument($keyword, new Document([
+                '$read' => ['role:all'],
+                '$write' => ['role:all'],
+                '$id' => 'helloWorld',
+                'attribute1' => 'Hello World',
+            ]));
+            $this->assertEquals('helloWorld', $document->getId());
+
+            $document = $database->getDocument($keyword, 'helloWorld');
+            $this->assertEquals('helloWorld', $document->getId());
+
+            $documents = $database->find($keyword);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('helloWorld', $documents[0]->getId());
+
+            $collection = $database->deleteCollection($keyword);
+            $this->assertTrue($collection);
+        }
+
+        // TODO: Test rename, update (if that is a thing)
+
+        // Attribute name tests
+
+        $collection = $database->createCollection('reservedKeywords');
+
+        $this->assertEquals('reservedKeywords', $collection->getId());
+
+        foreach ($keywords as $keyword) {
+            $attribute = static::getDatabase()->createAttribute('reservedKeywords', $keyword, Database::VAR_STRING, 128, true);
+            $this->assertEquals(true, $attribute);
+        }
+
+        $template = new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            '$id' => 'reservedKeyDocument'
+        ]);
+
+        foreach ($keywords as $keyword) {
+            $template->setAttribute($keyword, 'Reserved: ' . $keyword);
+        }
+
+        $document = $database->createDocument('reservedKeywords', $template);
+        $this->assertEquals('reservedKeyDocument', $document->getId());
+        foreach ($keywords as $keyword) {
+            $this->assertEquals('Reserved: ' . $keyword, $document->getAttribute($keyword));
+        }
+
+        $document = $database->getDocument('reservedKeywords', 'reservedKeyDocument');
+        $this->assertEquals('reservedKeyDocument', $document->getId());
+        foreach ($keywords as $keyword) {
+            $this->assertEquals('Reserved: ' . $keyword, $document->getAttribute($keyword));
+        }
+
+        $documents = $database->find('reservedKeywords');
+        $this->assertCount(1, $documents);
+        $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+        foreach ($keywords as $keyword) {
+            $this->assertEquals('Reserved: ' . $keyword, $documents[0]->getAttribute($keyword));
+        }
+
+        $queries = \array_map(fn($keyword) => "${keyword}.equal('Reserved: ${keyword}')", $keywords);
+        $documents = $database->find('reservedKeywords', $queries); // TODO: This fails indeed, due to error in library
+        $this->assertCount(1, $documents);
+        $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+        // TODO: Test sorting
+        // TODO: Test updateAttribute too (if that is a thing)
+
+        $collection = $database->deleteCollection('reservedKeywords');
+        $this->assertTrue($collection);
+
+        // Index nam tests
+
+        // TODO: Crete, rename, delete, update (if that is a thing)
+    }
 }

@@ -121,13 +121,19 @@ class Database
     static protected array $filters = [];
 
     /**
+     * @var array
+     */
+    private array $instanceFilters = [];
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache)
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        $this->instanceFilters = $filters;
 
         self::addFilter(
             'json',
@@ -1513,12 +1519,16 @@ class Database
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['encode']($value, $document, $this);
+            if(array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['encode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -1540,12 +1550,16 @@ class Database
      */
     protected function decodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            if(array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['decode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }

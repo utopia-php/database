@@ -31,6 +31,12 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterRowLimit(): int;
 
+
+    /**
+     * @return string[]
+     */
+    abstract static protected function getReservedKeywords(): array;
+
     public function setUp(): void
     {
         Authorization::setRole('role:all');
@@ -2249,18 +2255,7 @@ abstract class Base extends TestCase
     }
 
     public function testReservedKeywords() {
-        // TODO: Get official list with a refference for reserved keywords
-        $keywords = [
-            'order',
-            'where',
-            'create',
-            'delete',
-            'update',
-            'table',
-            'from',
-            'by',
-            'in'
-        ];
+        $keywords = $this->getReservedKeywords();
 
         $database = static::getDatabase();
 
@@ -2352,12 +2347,24 @@ abstract class Base extends TestCase
             $this->assertEquals('Reserved: ' . $keyword, $documents[0]->getAttribute($keyword));
         }
 
-        $queries = \array_map(fn($keyword) => "${keyword}.equal('Reserved: ${keyword}')", $keywords);
-        $documents = $database->find('reservedKeywords', $queries); // TODO: This fails indeed, due to error in library
+        $queries = \array_map(function($keyword) {
+            return new Query($keyword, Query::TYPE_EQUAL, ["Reserved: ${keyword}"]);
+        }, $keywords);
+
+        $documents = $database->find('reservedKeywords', $queries);
         $this->assertCount(1, $documents);
         $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
-        // TODO: Test sorting
+        $orderTypes = \array_map(function() {
+            return 'DESC';
+        }, $keywords);
+
+        $orderAttributes = $keywords;
+
+        $documents = $database->find('reservedKeywords', orderAttributes: $orderAttributes, orderTypes: $orderTypes);
+        $this->assertCount(1, $documents);
+        $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
         // TODO: Test updateAttribute too (if that is a thing)
 
         $collection = $database->deleteCollection('reservedKeywords');

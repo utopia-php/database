@@ -40,6 +40,27 @@ class MariaDBTest extends Base
     }
 
     /**
+     * Return keywords reserved by database backend
+     *
+     * @return string[]
+     */
+    static function getReservedKeywords(): array
+    {
+        // TODO: Get official list with a refference for reserved keywords
+        return [
+            'order',
+            'where',
+            'create',
+            'delete',
+            'update',
+            'table',
+            'from',
+            'by',
+            'in'
+        ];
+    }
+
+    /**
      * @return Adapter
      */
     static function getDatabase(): Database

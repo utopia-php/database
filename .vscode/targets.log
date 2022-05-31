@@ -6,8 +6,11 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 # PARTICULAR PURPOSE.
 
 # This program built for i386-apple-darwin11.3.0
+ 
+make: *** No rule to make target `all'.  Stop.
 
-# Make data base, printed on Mon May 16 09:33:59 2022
+
+# Make data base, printed on Tue May 31 09:38:09 2022
 
 # Variables
 
@@ -21,6 +24,7 @@ ELECTRON_NO_ATTACH_CONSOLE = 1
 VSCODE_LOG_NATIVE = false
 # automatic
 ?D = $(patsubst %/,%,$(dir $?))
+ 
 # environment
 PLATFORMIO_IDE = 2.4.3
 # makefile (from `Makefile', line 2)
@@ -54,7 +58,7 @@ __CFBundleIdentifier = com.microsoft.VSCodeInsiders
 # environment
 INFOPATH = /opt/homebrew/share/info:
 # environment
-VSCODE_IPC_HOOK_EXTHOST = /var/folders/b_/cnpd0f997xz415lmdw66zxwh0000gn/T/vscode-ipc-fc2c30a5-b474-4f96-9b04-31ceeffa22b0.sock
+VSCODE_IPC_HOOK_EXTHOST = /var/folders/b_/cnpd0f997xz415lmdw66zxwh0000gn/T/vscode-ipc-69903bb9-bbf0-44eb-b6d9-6cc4a47e4c9a.sock
 # environment
 VSCODE_CWD = /Users/wess/Desktop/Appwrite/utopia/database
 # environment
@@ -70,7 +74,7 @@ PROJECT := database
 # environment
 REALM_NAME = wess
 # environment
-LaunchInstanceID = 3202F805-1B77-4C9F-ADE5-1162EF883B48
+LaunchInstanceID = 9F713928-311C-4FC1-AB02-F0D83D4C87A3
 # environment
 VSCODE_LOG_STACK = true
 # environment
@@ -78,13 +82,13 @@ ELECTRON_RUN_AS_NODE = 1
 # default
 .FEATURES := target-specific order-only second-expansion else-if archives jobserver check-symlink
 # environment
-SSH_AUTH_SOCK = /private/tmp/com.apple.launchd.kJBcbyZUEF/Listeners
+SSH_AUTH_SOCK = /private/tmp/com.apple.launchd.TtNpbthDVn/Listeners
 # automatic
 %F = $(notdir $%)
 # environment
 REALM_EMAIL = me@wess.io
 # environment
-PLATFORMIO_PATH = /Users/wess/.platformio/python3/bin:/Users/wess/.yarn/bin:/Users/wess/.config/yarn/global/node_modules/.bin:/Users/wess/.asdf/shims:/Users/wess/.asdf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/wess/.foreman/bin:/opt/flutter/bin:/Users/wess/.cargo/env:/opt/homebrew/sbin:/opt/homebrew/bin:/Users/wess/.realm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin:/Users/wess/.cargo/bin
+PLATFORMIO_PATH = /Users/wess/.platformio/penv/bin:/Users/wess/.platformio/penv:/Users/wess/.platformio/python3/bin:/Users/wess/.yarn/bin:/Users/wess/.config/yarn/global/node_modules/.bin:/Users/wess/.asdf/shims:/Users/wess/.asdf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/wess/.foreman/bin:/opt/flutter/bin:/Users/wess/.cargo/env:/opt/homebrew/sbin:/opt/homebrew/bin:/Users/wess/.realm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/go/bin:/Library/Apple/usr/bin:/Users/wess/.cargo/bin
 # environment
 VSCODE_PIPE_LOGGING = true
 # environment
@@ -106,7 +110,7 @@ MAKEFILEPATH := /Applications/Xcode.app/Contents/Developer/Makefiles
 # environment
 VSCODE_CLI = 1
 # environment
-VSCODE_CODE_CACHE_PATH = /Users/wess/Library/Application Support/Code - Insiders/CachedData/113287ccc3be52dc3409d451a9b3416d133dca1a
+VSCODE_CODE_CACHE_PATH = /Users/wess/Library/Application Support/Code - Insiders/CachedData/acb156d6fb0dc451f427748d5f68774f17cc96fd
 # environment
 LOGNAME = wess
 # environment
@@ -134,7 +138,7 @@ USER = wess
 # makefile
 .DEFAULT_GOAL := default
 # environment
-TERM_SESSION_ID = 0A2C40D9-BFB8-4C47-99AA-6E7F5A3EF5B5
+TERM_SESSION_ID = CF44327B-AE01-4EB9-BAE3-08B22DBF6687
 # environment
 REALM_AUTHOR = wess
 # environment
@@ -162,9 +166,9 @@ MFLAGS = -Rrqp
 # automatic
 *D = $(patsubst %/,%,$(dir $*))
 # environment
-TERM_PROGRAM_VERSION = 444
+TERM_PROGRAM_VERSION = 445
 # environment
-XPC_SERVICE_NAME = application.com.microsoft.VSCodeInsiders.27260285.27260291.94664B24-AED7-4596-8350-13000C483CFF
+XPC_SERVICE_NAME = application.com.microsoft.VSCodeInsiders.31140524.31140530.F6C2C19A-8744-4CD5-850D-FE62C90422B9
 # environment
 HOMEBREW_PREFIX = /opt/homebrew
 # automatic
@@ -194,7 +198,7 @@ LC_ALL = C
 # environment
 NO_PROXY = 127.0.0.1
 # environment
-SECURITYSESSIONID = 186a4
+SECURITYSESSIONID = 186c3
 # automatic
 ^F = $(notdir $^)
 # default
@@ -210,7 +214,7 @@ LANG = C
 # environment
 TERM = xterm-256color
 # environment
-VSCODE_PID = 99724
+VSCODE_PID = 56186
 # variable set hash-table stats:
 # Load=100/1024=10%, Rehash=0, Collisions=6/129=5%
 
@@ -220,9 +224,9 @@ VSCODE_PID = 99724
 
 # Directories
 
-# . (device 16777232, inode 5254794): 26 files, no impossibilities.
+# . (device 16777232, inode 5254794): 28 files, no impossibilities.
 
-# 26 files, no impossibilities in 1 directories.
+# 28 files, no impossibilities in 1 directories.
 
 # Implicit Rules
 
@@ -278,7 +282,7 @@ docker-up:
 # Not a target:
 Makefile:
 #  Implicit rule search has been done.
-#  Last modified 2022-05-10 12:06:30
+#  Last modified 2022-05-16 12:58:19
 #  File has been updated.
 #  Successfully updated.
 # variable set hash-table stats:
@@ -298,7 +302,6 @@ test:
 #  File does not exist.
 #  File has not been updated.
 #  commands to execute (from `Makefile', line 25):
- 
 	@docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/Adapter/MongoDBTest.php
 	
 
@@ -314,6 +317,7 @@ help:
 	&& echo ""
 	
 
+ 
 default: test
 #  Implicit rule search has not been done.
 #  Modification time never checked.
@@ -346,8 +350,6 @@ restart: docker-down docker-up
 # strcache size: total = 4096 / max = 4096 / min = 4096 / avg = 4096
 # strcache free: total = 4087 / max = 4087 / min = 4087 / avg = 4087
 
-# Finished Make data base on Mon May 16 09:33:59 2022
+# Finished Make data base on Tue May 31 09:38:09 2022
 
  
-make: *** No rule to make target `all'.  Stop.
-

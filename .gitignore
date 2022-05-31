@@ -6,6 +6,8 @@ data-tests.php
 loader.php
 .phpunit.result.cache
 /bin/view/results/
+.vscode
+.vscode/*
 
 ## - Oh Wess!
 Makefile

@@ -241,7 +241,7 @@ class Database
     /**
      * Create Database
      *
-     * @param string $database
+     * @param string $name
      *
      * @return bool
      */
@@ -1098,10 +1098,12 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
-            ->setAttribute('$collection', $collection->getId());
+            ->setAttribute('$collection', $collection->getId())
+            ->setAttribute('$createdAt', time())
+            ->setAttribute('$updatedAt', time())
+        ;
 
         $document = $this->encode($collection, $document);
 

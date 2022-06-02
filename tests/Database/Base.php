@@ -2175,6 +2175,10 @@ abstract class Base extends TestCase
 
         $doc = $database->getDocument('flowers', $doc->getId());
 
+        $this->assertIsInt($doc->getCreatedAt());
+        $this->assertIsInt($doc->getUpdateAt());
+        $this->assertGreaterThan(1650000000, $doc->getCreatedAt());
+
         $this->assertIsArray($doc->getAttribute('cartModel'));
         $this->assertCount(2, $doc->getAttribute('cartModel'));
         $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);

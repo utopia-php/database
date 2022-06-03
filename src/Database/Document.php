@@ -35,7 +35,7 @@ class Document extends ArrayObject
         }
 
         // $res = $input;
-        foreach ($input as $key => &$value) {
+        foreach ($input as $key => $value) {
             // if(array_key_exists('id', $input)) {
             //     $res['$id'] = $input['id'];
             // }

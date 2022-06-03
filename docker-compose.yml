@@ -15,7 +15,7 @@ services:
 
   adminer:
     image: adminer
-    container_name: appwrite-adminer
+    container_name: utopia-adminer
     restart: always
     ports:
       - "9506:8080"

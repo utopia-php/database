@@ -67,19 +67,15 @@ class MongoDBAdapter extends Adapter
       
         $list = $this->flattenArray($this->list());
 
-        $included = false;
-
         foreach($list as $obj) {
           if(\is_object($obj)) {
             if($obj->name == $collection) {
-              $included = true;
-            } else {
-              $included = false;
+              return true;
             }
           }
         }
 
-        return $included;
+        return false;
       }
 
       return !\is_null($this->getClient()->selectDatabase($database));
@@ -140,7 +136,6 @@ class MongoDBAdapter extends Adapter
             'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
                 'locale' => 'en',
                 'strength' => 1,
-                // 'caseLevel' => true,
             ]
           ],
           [
@@ -355,11 +350,8 @@ class MongoDBAdapter extends Adapter
             return new Document([]);
         }
 
-        $result = (array) reset($result);
-
-        $result = $this->replaceChars('_', '$', $result);
-
-        $newDoc = new Document($result);
+        $result = $this->replaceChars('_', '$', $result[0]);        
+        $newDoc = new Document($this->client->toArray($result));
 
         return $newDoc;
     }
@@ -402,11 +394,10 @@ class MongoDBAdapter extends Adapter
             $this->replaceChars('$', '_', $document->getArrayCopy()),
         );
     
-
         $newDoc = $document->getArrayCopy();
         $newDoc = $this->replaceChars('_', '$', $newDoc);
 
-        return $document;
+        return new Document($newDoc);
     }
 
     /**

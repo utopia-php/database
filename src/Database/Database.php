@@ -1053,7 +1053,9 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id);
+
         $document->setAttribute('$collection', $collection->getId());
+
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -1069,7 +1071,6 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
-
         return $document;
     }
 

@@ -225,6 +225,7 @@ class MongoDBTest extends Base
         $this->assertNotNull(static::getDatabase()->exists($this->testDatabase, 'actors2'));
         $collection = static::getDatabase()->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
+
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
         $this->assertCount(1, static::getDatabase()->listCollections());

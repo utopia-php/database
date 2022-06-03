@@ -6,29 +6,29 @@ use MongoDB\BSON;
 
 class Auth
 {
-  private $authcid;
-  private $secret;
-  private $authzid;
-  private $service;
-  private $hostname;
-  private $gs2Header;
-  private $cnonce;
-  private $firstMessageBare;
-  private $saltedPassword;
-  private $authMessage;
-  private $nonce;
+  private string $authcid;
+  private string $secret;
+  private string $authzid;
+  private string $service;
+  private string $hostname;
+  private string $gs2Header;
+  private string $cnonce;
+  private string $firstMessageBare;
+  private string $saltedPassword;
+  private string $authMessage;
+  private string $nonce;
 
   public function __construct(array $options)
   {
-    $this->authcid = isset($options['authcid']) ? $options['authcid'] : null;
-    $this->secret = isset($options['secret']) ? $options['secret'] : null;
-    $this->authzid = isset($options['authzid']) ? $options['authzid'] : null;
-    $this->service = isset($options['service']) ? $options['service'] : null;
+    $this->authcid = isset($options['authcid']) ? $options['authcid'] : '';
+    $this->secret = isset($options['secret']) ? $options['secret'] : '';
+    $this->authzid = isset($options['authzid']) ? $options['authzid'] : '';
+    $this->service = isset($options['service']) ? $options['service'] : '';
 
     $this->nonce = base64_encode(random_bytes(32));
   }
   
-  public function start()
+  public function start():array
   {
     $response = $this->createResponse();
     $payload = new BSON\Binary($response, 0);
@@ -45,7 +45,7 @@ class Auth
     ];
   }
 
-  public function continue($data)
+  public function continue($data):array
   {
     $cid = $data->conversationId;
     $token = $data->payload->getData();
@@ -63,7 +63,7 @@ class Auth
     ];
   }
 
-  public function createResponse($challenge = null)
+  public function createResponse($challenge = null):string
   {
       $authcid = $this->formatName($this->authcid);
       if (empty($authcid)) {
@@ -89,9 +89,9 @@ class Auth
    * @param string $username a name to be prepared.
    * @return string the reformated name.
    */
-  private function formatName($username)
+  private function formatName(string $username):string
   {
-      return str_replace(array('=', ','), array('=3D', '=2C'), $username);
+      return str_replace(['=', ','], ['=3D', '=2C'], $username);
   }
 
   /**
@@ -102,7 +102,7 @@ class Auth
    * @param string $authzid Prepared authorization identity.
    * @return string The SCRAM response to send.
    */
-  private function generateInitialResponse($authcid, $authzid)
+  private function generateInitialResponse(string $authcid, string $authzid):string
   {
       $gs2CbindFlag   = 'n,';
       $this->gs2Header = $gs2CbindFlag . (!empty($authzid) ? 'a=' . $authzid : '') . ',';
@@ -111,19 +111,21 @@ class Auth
       $this->cnonce = $this->generateCnonce();
 
       $this->firstMessageBare = 'n=' . $authcid . ',r=' . $this->cnonce;
+
       return $this->gs2Header . $this->firstMessageBare;
   }
 
   /**
    * Parses and verifies a non-empty SCRAM challenge.
    *
-   * @param  string $challenge The SCRAM challenge
-   * @return string|false      The response to send; false in case of wrong challenge or if an initial response has not
+   * @param  string $challenge    The SCRAM challenge
+   * @param  string $password     The password challenge
+   * @return string|false The response to send; false in case of wrong challenge or if an initial response has not
    * been generated first.
    */
-  private function generateResponse($challenge, $password)
+  private function generateResponse(string $challenge, string $password):string|bool
   {
-      $matches = array();
+      $matches = [];
 
       $serverMessageRegexp = "#^r=([\x21-\x2B\x2D-\x7E/]+)"
           . ",s=((?:[A-Za-z0-9/+]{4})*(?:[A-Za-z0-9/+]{3}=|[A-Za-z0-9/+]{2}==)?)"
@@ -166,8 +168,9 @@ class Auth
    * @param string $str  The string to hash.
    * @param string $salt The salt value.
    * @param int $i The   iteration count.
+   * @return string The hashed string.
    */
-  private function hi($str, $salt, $i)
+  private function hi(string $str, string $salt, int $i):string
   {
       $int1   = "\0\0\0\1";
       $ui     = $this->hmac($str, $salt . $int1, true);
@@ -188,11 +191,11 @@ class Auth
    * @return bool Whether the server has been authenticated.
    * If false, the client must close the connection and consider to be under a MITM attack.
    */
-  public function verify($data)
+  public function verify(string $data):bool
   {
       $verifierRegexp = '#^v=((?:[A-Za-z0-9/+]{4})*(?:[A-Za-z0-9/+]{3}=|[A-Za-z0-9/+]{2}==)?)$#';
 
-      $matches = array();
+      $matches = [];
       if (!isset($this->saltedPassword, $this->authMessage) || !preg_match($verifierRegexp, $data, $matches)) {
           // This cannot be an outcome, you never sent the challenge's response.
           return false;
@@ -209,37 +212,55 @@ class Auth
   /**
    * @return string
    */
-  public function getCnonce()
+  public function getCnonce():string
   {
       return $this->cnonce;
   }
 
-  public function getSaltedPassword()
+  /**
+   * @return string
+   */
+  public function getSaltedPassword():string
   {
       return $this->saltedPassword;
   }
 
-  public function getAuthMessage()
+  /**
+   * @return string
+   */
+  public function getAuthMessage():string
   {
       return $this->authMessage;
   }
 
-  public function getHashAlgo()
+  /**
+   * @return string
+   */
+  public function getHashAlgo():string
   {
       return $this->hashAlgo;
   }
 
-  private function hash($data) 
+  /**
+   * @return string
+   */
+  private function hash($data) :string
   {
     return hash('sha1', $data, true);
   }
 
-  private function hmac($key, $str, $raw)
+  /**
+   * @return string
+   */
+  private function hmac($key, $str, $raw):string
   {
     return hash_hmac('sha1', $str, $key, $raw);
   }
 
-  private function generateCnonce()
+  /**
+   * @return string
+   */
+  private function generateCnonce():string
   {
       foreach (array('/dev/urandom', '/dev/random') as $file) {
           if (is_readable($file)) {
@@ -256,7 +277,10 @@ class Auth
       return base64_encode($cnonce);
   }
 
-  static function encodeCredentials($username, $password)
+  /**
+   * @return string
+   */
+  static function encodeCredentials($username, $password):string
   {
     return \md5(\utf8_encode($username . ':mongo:' . $password));
   }

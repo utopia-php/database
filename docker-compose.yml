@@ -18,7 +18,7 @@ services:
     container_name: utopia-adminer
     restart: always
     ports:
-      - "9506:8080"
+      - "8760:8080"
     networks:
       - database
 

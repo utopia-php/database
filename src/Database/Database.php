@@ -121,13 +121,19 @@ class Database
     static protected array $filters = [];
 
     /**
+     * @var array
+     */
+    private array $instanceFilters = [];
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache)
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        $this->instanceFilters = $filters;
 
         self::addFilter(
             'json',
@@ -931,10 +937,9 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-        
+
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
-        
         /** @var Document[] $indexes */
         foreach ($indexes as $index) {
             if (\strtolower($index->getId()) === \strtolower($id)) {
@@ -1036,7 +1041,6 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-
         $document = null;
         $cache = null;
 
@@ -1056,7 +1060,6 @@ class Database
 
         $document->setAttribute('$collection', $collection->getId());
 
-
         $validator = new Authorization(self::PERMISSION_READ);
 
         if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
@@ -1071,6 +1074,7 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
+
         return $document;
     }
 
@@ -1130,7 +1134,6 @@ class Database
             throw new Exception('Must define $id attribute');
         }
 
-        
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);
 
@@ -1516,12 +1519,16 @@ class Database
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['encode']($value, $document, $this);
+            if(array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['encode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -1543,12 +1550,16 @@ class Database
      */
     protected function decodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            if(array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['decode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }

@@ -24,8 +24,6 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
-        $input = (array)$input;
-
         if(isset($input['$read']) && !is_array($input['$read'])) {
             throw new Exception('$read permission must be of type array');
         }
@@ -34,15 +32,10 @@ class Document extends ArrayObject
             throw new Exception('$write permission must be of type array');
         }
 
-        // $res = $input;
-        foreach ($input as $key => $value) {
-            // if(array_key_exists('id', $input)) {
-            //     $res['$id'] = $input['id'];
-            // }
-
+        foreach ($input as $key => &$value) {
             if (\is_array($value)) {
                 if ((isset($value['$id']) || isset($value['$collection']))) {
-                    $res[$key] = new self($value);
+                    $input[$key] = new self($value);
                 } else {
                     foreach ($value as $childKey => $child) {
                         if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
@@ -53,18 +46,7 @@ class Document extends ArrayObject
             }
         }
 
-        
-        // if(array_key_exists('attributes', $input)) {
-        //   $attributes = $input['attributes'];
-
-        //   foreach ($attributes as $attr) {
-        //     $res[$attr] = $input[$attr];
-        //   }
-        // }
-
-        // $input = $res;
-
-        parent::__construct((array)$input);
+        parent::__construct($input);
     }
 
     /**
@@ -139,7 +121,11 @@ class Document extends ArrayObject
      */
     public function getAttribute(string $name, $default = null)
     {
-        return $this[$name] ?? $default;
+        if(isset($this[$name])) {
+            return $this[$name];
+        }
+
+        return $default;
     }
 
     /**

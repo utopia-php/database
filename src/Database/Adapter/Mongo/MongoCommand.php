@@ -2,21 +2,22 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
-class MongoCommand {
-  /**
-   * Defines commands Mongo uses over wire protocol.
-   */
-  const CREATE = "create";
-  const DELETE = "delete";
-  const FIND = "find";
-  const FIND_AND_MODIFY = "findAndModify";
-  const GET_LAST_ERROR = "getLastError";
-  const GET_MORE = "getMore";
-  const INSERT = "insert";
-  const RESET_ERROR = "resetError";
-  const UPDATE = "update";
-  const COUNT = "count";
-  const AGGREGATE = "aggregate";
-  const DISTINCT = "distinct";
-  const MAP_REDUCE = "mapReduce";
+class MongoCommand
+{
+    /**
+     * Defines commands Mongo uses over wire protocol.
+     */
+    public const CREATE = "create";
+    public const DELETE = "delete";
+    public const FIND = "find";
+    public const FIND_AND_MODIFY = "findAndModify";
+    public const GET_LAST_ERROR = "getLastError";
+    public const GET_MORE = "getMore";
+    public const INSERT = "insert";
+    public const RESET_ERROR = "resetError";
+    public const UPDATE = "update";
+    public const COUNT = "count";
+    public const AGGREGATE = "aggregate";
+    public const DISTINCT = "distinct";
+    public const MAP_REDUCE = "mapReduce";
 }

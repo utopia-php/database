@@ -1104,11 +1104,13 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+        $time = time();
+
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', time())
-            ->setAttribute('$updatedAt', time())
+            ->setAttribute('$createdAt', $time)
+            ->setAttribute('$updatedAt', $time)
         ;
 
         $document = $this->encode($collection, $document);

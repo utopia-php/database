@@ -72,7 +72,7 @@ class Structure extends Validator
             'type' => Database::VAR_INTEGER,
             'size' => 0,
             'required' => false,
-            'signed' => true,
+            'signed' => false,
             'array' => false,
             'filters' => [],
         ],
@@ -81,7 +81,7 @@ class Structure extends Validator
             'type' => Database::VAR_INTEGER,
             'size' => 0,
             'required' => false,
-            'signed' => true,
+            'signed' => false,
             'array' => false,
             'filters' => [],
         ]

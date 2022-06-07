@@ -1893,7 +1893,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('indexLimit');
 
         // add unique attributes for indexing
-        for ($i=0; $i < 62; $i++) {
+        for ($i=0; $i < 64; $i++) {
             $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 

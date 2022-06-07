@@ -176,7 +176,9 @@ class MariaDB extends Adapter
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
-                        UNIQUE KEY `_index1` (`_uid`)
+                        UNIQUE KEY `_index1` (`_uid`),
+                        KEY `_created_at` (`_createdAt`),
+                        KEY `_updated_at` (`_updatedAt`)
                     )")
                 ->execute();
 
@@ -1150,7 +1152,7 @@ class MariaDB extends Adapter
 
     public static function getNumberOfDefaultIndexes(): int
     {
-        return 3;
+        return 5;
     }
 
     /**

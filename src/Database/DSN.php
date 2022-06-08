@@ -76,7 +76,7 @@ class DSN {
     /**
      * Return the user.
      * 
-     * @return string
+     * @return ?string
      */
     public function getUser(): ?string 
     {
@@ -86,7 +86,7 @@ class DSN {
     /**
      * Return the password.
      * 
-     * @return string
+     * @return ?string
      */
     public function getPassword(): ?string 
     {
@@ -106,7 +106,7 @@ class DSN {
     /**
      * Return the port
      * 
-     * @return string
+     * @return ?string
      */
     public function getPort(): ?string
     {
@@ -116,7 +116,7 @@ class DSN {
     /**
      * Return the database
      * 
-     * @return string
+     * @return ?string
      */
     public function getDatabase(): ?string 
     {
@@ -126,7 +126,7 @@ class DSN {
     /**
      * Return the query string
      * 
-     * @return string
+     * @return ?string
      */
     public function getQuery(): ?string 
     {

@@ -32,7 +32,7 @@ class DSN {
     /**
      * @var string
      */
-    protected string $path;
+    protected string $database;
 
     /**
      * @var string
@@ -59,7 +59,7 @@ class DSN {
         $this->password = $parts['pass'] ?? '';
         $this->host = $parts['host'] ?? '';
         $this->port = $parts['port'] ?? '';
-        $this->path = $parts['path'] ?? '';
+        $this->database = $parts['path'] ?? '';
         $this->query = $parts['query'] ?? '';
     }
 
@@ -114,13 +114,13 @@ class DSN {
     }
 
     /**
-     * Return the path
+     * Return the database
      * 
      * @return string
      */
-    public function getPath(): string 
+    public function getDatabase(): string 
     {
-        return $this->path;
+        return ltrim($this->database, '/');
     }
 
     /**

@@ -30,7 +30,7 @@ class DSNTest extends TestCase
         $dsn = new DSN("mariadb://user@localhost:3306/database?charset=utf8&timezone=UTC");
         $this->assertEquals("mariadb", $dsn->getScheme());
         $this->assertEquals("user", $dsn->getUser());
-        $this->assertEmpty($dsn->getPassword());
+        $this->assertNull($dsn->getPassword());
         $this->assertEquals("localhost", $dsn->getHost());
         $this->assertEquals("3306", $dsn->getPort());
         $this->assertEquals("database", $dsn->getDatabase());
@@ -39,47 +39,47 @@ class DSNTest extends TestCase
         $dsn = new DSN("mariadb://user@localhost/database?charset=utf8&timezone=UTC");
         $this->assertEquals("mariadb", $dsn->getScheme());
         $this->assertEquals("user", $dsn->getUser());
-        $this->assertEmpty($dsn->getPassword());
+        $this->assertNull($dsn->getPassword());
         $this->assertEquals("localhost", $dsn->getHost());
-        $this->assertEmpty($dsn->getPort());
+        $this->assertNull($dsn->getPort());
         $this->assertEquals("database", $dsn->getDatabase());
         $this->assertEquals("charset=utf8&timezone=UTC", $dsn->getQuery());
 
         $dsn = new DSN("mariadb://user@localhost?charset=utf8&timezone=UTC");
         $this->assertEquals("mariadb", $dsn->getScheme());
         $this->assertEquals("user", $dsn->getUser());
-        $this->assertEmpty($dsn->getPassword());
+        $this->assertNull($dsn->getPassword());
         $this->assertEquals("localhost", $dsn->getHost());
-        $this->assertEmpty($dsn->getPort());
+        $this->assertNull($dsn->getPort());
         $this->assertEmpty($dsn->getDatabase());
         $this->assertEquals("charset=utf8&timezone=UTC", $dsn->getQuery());
 
         $dsn = new DSN("mariadb://user@localhost");
         $this->assertEquals("mariadb", $dsn->getScheme());
         $this->assertEquals("user", $dsn->getUser());
-        $this->assertEmpty($dsn->getPassword());
+        $this->assertNull($dsn->getPassword());
         $this->assertEquals("localhost", $dsn->getHost());
-        $this->assertEmpty($dsn->getPort());
+        $this->assertNull($dsn->getPort());
         $this->assertEmpty($dsn->getDatabase());
-        $this->assertEmpty($dsn->getQuery());
+        $this->assertNull($dsn->getQuery());
 
         $dsn = new DSN("mariadb://user:@localhost");
         $this->assertEquals("mariadb", $dsn->getScheme());
         $this->assertEquals("user", $dsn->getUser());
         $this->assertEmpty($dsn->getPassword());
         $this->assertEquals("localhost", $dsn->getHost());
-        $this->assertEmpty($dsn->getPort());
+        $this->assertNull($dsn->getPort());
         $this->assertEmpty($dsn->getDatabase());
-        $this->assertEmpty($dsn->getQuery());
+        $this->assertNull($dsn->getQuery());
 
         $dsn = new DSN("mariadb://localhost");
         $this->assertEquals("mariadb", $dsn->getScheme());
-        $this->assertEmpty($dsn->getUser());
-        $this->assertEmpty($dsn->getPassword());
+        $this->assertNull($dsn->getUser());
+        $this->assertNull($dsn->getPassword());
         $this->assertEquals("localhost", $dsn->getHost());
-        $this->assertEmpty($dsn->getPort());
+        $this->assertNull($dsn->getPort());
         $this->assertEmpty($dsn->getDatabase());
-        $this->assertEmpty($dsn->getQuery());
+        $this->assertNull($dsn->getQuery());
     }
 
     public function testFail(): void

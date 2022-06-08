@@ -10,14 +10,14 @@ class DSN {
     protected string $scheme;
 
     /**
-     * @var string
+     * @var ?string
      */
-    protected string $user;
+    protected ?string $user;
 
     /**
-     * @var string
+     * @var ?string
      */
-    protected string $password;
+    protected ?string $password;
 
     /**
      * @var string
@@ -25,19 +25,19 @@ class DSN {
     protected string $host; 
 
     /**
-     * @var string
+     * @var ?string
      */
-    protected string $port;
+    protected ?string $port;
 
     /**
-     * @var string
+     * @var ?string
      */
-    protected string $database;
+    protected ?string $database;
 
     /**
-     * @var string
+     * @var ?string
      */
-    protected string $query;
+    protected ?string $query;
 
     /**
      * Construct
@@ -54,13 +54,13 @@ class DSN {
             throw new \InvalidArgumentException("Unable to parse DSN: $dsn");
         }
 
-        $this->scheme = $parts['scheme'] ?? '';
-        $this->user = $parts['user'] ?? '';
-        $this->password = $parts['pass'] ?? '';
-        $this->host = $parts['host'] ?? '';
-        $this->port = $parts['port'] ?? '';
-        $this->database = $parts['path'] ?? '';
-        $this->query = $parts['query'] ?? '';
+        $this->scheme = $parts['scheme'] ?? null;
+        $this->user = $parts['user'] ?? null;
+        $this->password = $parts['pass'] ?? null;
+        $this->host = $parts['host'] ?? null;
+        $this->port = $parts['port'] ?? null;
+        $this->database = $parts['path'] ?? null;
+        $this->query = $parts['query'] ?? null;
     }
 
     /**
@@ -78,7 +78,7 @@ class DSN {
      * 
      * @return string
      */
-    public function getUser(): string 
+    public function getUser(): ?string 
     {
         return $this->user;
     }
@@ -88,7 +88,7 @@ class DSN {
      * 
      * @return string
      */
-    public function getPassword(): string 
+    public function getPassword(): ?string 
     {
         return $this->password;
     }
@@ -108,7 +108,7 @@ class DSN {
      * 
      * @return string
      */
-    public function getPort(): string
+    public function getPort(): ?string
     {
         return $this->port;
     }
@@ -118,7 +118,7 @@ class DSN {
      * 
      * @return string
      */
-    public function getDatabase(): string 
+    public function getDatabase(): ?string 
     {
         return ltrim($this->database, '/');
     }
@@ -128,7 +128,7 @@ class DSN {
      * 
      * @return string
      */
-    public function getQuery(): string 
+    public function getQuery(): ?string 
     {
         return $this->query;
     }

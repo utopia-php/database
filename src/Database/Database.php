@@ -1086,7 +1086,7 @@ class Database
 
     /**
      * Create Document
-     * 
+     *
      * @param string $collection
      * @param Document $document
      *
@@ -1094,6 +1094,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws StructureException
+     * @throws Exception
      */
     public function createDocument(string $collection, Document $document): Document
     {

@@ -512,6 +512,8 @@ class MariaDB extends Adapter
 
         try {
             $stmt->execute();
+            $document['$internalId'] = $this->getPDO()->lastInsertId();
+
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }

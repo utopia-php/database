@@ -54,12 +54,12 @@ class MariaDBTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
             PDO::ATTR_TIMEOUT => 3, // Seconds
             PDO::ATTR_PERSISTENT => true,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Return arrays
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // Handle all errors with exceptions
-            PDO::ATTR_EMULATE_PREPARES => true
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_EMULATE_PREPARES => true,
+            PDO::ATTR_STRINGIFY_FETCHES => true,
         ]);
 
         $redis = new Redis();

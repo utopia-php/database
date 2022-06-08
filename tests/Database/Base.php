@@ -55,6 +55,18 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
+    public function testCreatedAtUpdatedAt()
+    {
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
+
+        $document = static::getDatabase()->createDocument('created_at', new Document([
+            '$id' => 'uid123',
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+        ]));
+
+    }
+
     /**
      * @depends testCreateExistsDelete
      */
@@ -62,18 +74,18 @@ abstract class Base extends TestCase
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
 
-        $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2'));
-        $this->assertCount(2, static::getDatabase()->listCollections());
+        $this->assertCount(3, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors2'));
         $collection = static::getDatabase()->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
-        $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertCount(2, static::getDatabase()->listCollections());
 
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
@@ -1980,7 +1992,7 @@ abstract class Base extends TestCase
 
     public function testGetIndexLimit()
     {
-        $this->assertEquals(61, $this->getDatabase()->getIndexLimit());
+        $this->assertEquals(59, $this->getDatabase()->getIndexLimit());
     }
 
     public function testGetId()
@@ -2247,4 +2259,26 @@ abstract class Base extends TestCase
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
     }
+
+    /**
+     * @depends testCreatedAtUpdatedAt
+     */
+    public function testCreatedAtUpdatedAtAssert()
+    {
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+
+        $this->assertIsInt($document->getCreatedAt());
+        $this->assertIsInt($document->getUpdateAt());
+        $this->assertGreaterThan(1650000000, $document->getCreatedAt());
+        $this->assertGreaterThan(1650000000, $document->getUpdateAt());
+
+        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdateAt());
+
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createCollection('created_at');
+
+    }
+
 }

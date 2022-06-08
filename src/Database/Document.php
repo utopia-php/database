@@ -90,6 +90,22 @@ class Document extends ArrayObject
     }
 
     /**
+     * @return int
+     */
+    public function getCreatedAt(): int
+    {
+        return $this->getAttribute('$createdAt');
+    }
+
+    /**
+     * @return int
+     */
+    public function getUpdateAt(): int
+    {
+        return $this->getAttribute('$updatedAt');
+    }
+
+    /**
      * Get Document Attributes
      * 
      * @return array
@@ -99,7 +115,15 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if(array_key_exists($attribute, ['$id' => true, '$internalId' => true, '$collection' => true, '$read' => true, '$write' => []])) {
+            if(array_key_exists($attribute, [
+                '$id' => true,
+                '$internalId' => true,
+                '$collection' => true,
+                '$read' => true,
+                '$write' => [],
+                '$createdAt' => true,
+                '$updatedAt' => true,
+            ])) {
                 continue;
             }
 

@@ -86,7 +86,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $stmt->fetch();
 
         return (($document[$select] ?? '') === $match);
     }
@@ -171,11 +171,15 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_uid` CHAR(255) NOT NULL,
+                        `_createdAt` int unsigned DEFAULT NULL,
+                        `_updatedAt` int unsigned DEFAULT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
-                        UNIQUE KEY `_index1` (`_uid`)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                        UNIQUE KEY `_index1` (`_uid`),
+                        KEY `_created_at` (`_createdAt`),
+                        KEY `_updated_at` (`_updatedAt`)
+                    )")
                 ->execute();
 
             $this->getPDO()
@@ -185,9 +189,9 @@ class MariaDB extends Adapter
                         `_permission` VARCHAR(255) NOT NULL,
                         `_document` VARCHAR(255) NOT NULL,
                         PRIMARY KEY (`_id`),
-                        UNIQUE INDEX `_index1` (`_type`,`_document`,`_permission`),
+                        UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
                         INDEX `_index2` (`_permission`)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+                    )")
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
@@ -416,18 +420,19 @@ class MariaDB extends Adapter
             LIMIT 1;
         ");
 
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
+        $stmt->bindValue(':_uid', $id);
         $stmt->execute();
 
         /** @var array $document */
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
+        $document = $stmt->fetch();
         if (empty($document)) {
             return new Document([]);
         }
 
         $document['$id'] = $document['_uid'];
-        $document['$internalId'] = (string)$document['_id'];
+        $document['$internalId'] = $document['_id'];
+        $document['$createdAt'] = (int)$document['_createdAt'];
+        $document['$updatedAt'] = (int)$document['_updatedAt'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
 
@@ -435,6 +440,8 @@ class MariaDB extends Adapter
         unset($document['_uid']);
         unset($document['_read']);
         unset($document['_write']);
+        unset($document['_createdAt']);
+        unset($document['_updatedAt']);
 
         return new Document($document);
     }
@@ -452,6 +459,8 @@ class MariaDB extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+        $attributes['_createdAt'] = $document->getCreatedAt();
+        $attributes['_updatedAt'] = $document->getUpdateAt();
         $name = $this->filter($collection);
         $columns = '';
 
@@ -540,6 +549,8 @@ class MariaDB extends Adapter
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+        $attributes['_updatedAt'] = $document->getUpdateAt();
+
         $name = $this->filter($collection);
         $columns = '';
 
@@ -553,7 +564,7 @@ class MariaDB extends Adapter
         ");
         $permissionsStmt->bindValue(':_uid', $document->getId());
         $permissionsStmt->execute();
-        $permissions = $permissionsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $permissions = $permissionsStmt->fetchAll();
 
         $permissions = array_reduce($permissions, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
@@ -874,7 +885,7 @@ class MariaDB extends Adapter
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
             $results[$key]['$id'] = $value['_uid'];
@@ -956,7 +967,7 @@ class MariaDB extends Adapter
         $stmt->execute();
 
         /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -1019,7 +1030,7 @@ class MariaDB extends Adapter
         $stmt->execute();
 
         /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -1141,7 +1152,7 @@ class MariaDB extends Adapter
 
     public static function getNumberOfDefaultIndexes(): int
     {
-        return 3;
+        return 5;
     }
 
     /**

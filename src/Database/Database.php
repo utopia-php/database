@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -241,7 +242,7 @@ class Database
     /**
      * Create Database
      *
-     * @param string $database
+     * @param string $name
      *
      * @return bool
      */
@@ -323,15 +324,20 @@ class Database
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $id
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * 
+     *
      * @return Document
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
+        $collection = $this->getCollection($id);
+        if(!$collection->isEmpty() && $id !== self::METADATA){
+            throw new Duplicate('Collection ' . $id . ' Exists!');
+        }
+
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
@@ -1098,10 +1104,14 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+        $time = time();
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
-            ->setAttribute('$collection', $collection->getId());
+            ->setAttribute('$collection', $collection->getId())
+            ->setAttribute('$createdAt', $time)
+            ->setAttribute('$updatedAt', $time)
+        ;
 
         $document = $this->encode($collection, $document);
 
@@ -1133,6 +1143,8 @@ class Database
         if (!$document->getId() || !$id) {
             throw new Exception('Must define $id attribute');
         }
+
+        $document->setAttribute('$updatedAt', time());
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);

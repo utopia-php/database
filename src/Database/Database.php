@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\InternalId;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -1086,7 +1087,7 @@ class Database
 
     /**
      * Create Document
-     * 
+     *
      * @param string $collection
      * @param Document $document
      *
@@ -1094,6 +1095,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws StructureException
+     * @throws Exception
      */
     public function createDocument(string $collection, Document $document): Document
     {

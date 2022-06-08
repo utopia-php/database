@@ -65,6 +65,11 @@ abstract class Base extends TestCase
             '$write' => ['role:all'],
         ]));
 
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) { //todo: implement in mongo + postgres
+            $this->assertNotEmpty($document->getInternalId());
+            $this->assertNotNull($document->getInternalId());
+        }
+
     }
 
     /**

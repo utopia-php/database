@@ -689,6 +689,12 @@ class MongoDBAdapter extends Adapter
         if (array_key_exists($from . 'read', $array))
             $array[$to . 'read'] = $array[$from . 'read'];
 
+        if (array_key_exists($from . 'createdAt', $array))
+            $array[$to . 'createdAt'] = $array[$from . 'createdAt'];
+
+        if (array_key_exists($from . 'updatedAt', $array))
+            $array[$to . 'updatedAt'] = $array[$from . 'updatedAt'];
+
         if (array_key_exists($from . 'write', $array))
             $array[$to . 'write'] = $array[$from . 'write'];
 
@@ -712,6 +718,8 @@ class MongoDBAdapter extends Adapter
         unset($array[$from . 'read']);
         unset($array[$from . 'write']);
         unset($array[$from . 'collection']);
+        unset($array[$from . 'createdAt']);
+        unset($array[$from . 'updatedAt']);
 
         return $array;
     }
@@ -933,12 +941,12 @@ class MongoDBAdapter extends Adapter
 
     public static function getNumberOfDefaultAttributes(): int
     {
-        return 4;
+        return 6;
     }
 
     public static function getNumberOfDefaultIndexes(): int
     {
-        return 3;
+        return 5;
     }
 
     /**

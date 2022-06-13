@@ -512,6 +512,12 @@ class MariaDB extends Adapter
 
         try {
             $stmt->execute();
+
+            $statment = $this->getPDO()->prepare("select last_insert_id() as id"); // $pdo->lastInsertId(); Not working in Rescue
+            $statment->execute();
+            $last = $statment->fetch();
+            $document['$internalId'] = $last['id'];
+
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }

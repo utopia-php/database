@@ -2271,7 +2271,7 @@ abstract class Base extends TestCase
         $this->assertIsInt($document->getUpdateAt());
         $this->assertGreaterThan(1650000000, $document->getCreatedAt());
         $this->assertGreaterThan(1650000000, $document->getUpdateAt());
-
+        sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdateAt());

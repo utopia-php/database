@@ -1902,9 +1902,7 @@ abstract class Base extends TestCase
             $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
-        // testing for indexLimit = 64
-        // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
-        // MongoDB create 4 indexes per new collection
+        // Testing for indexLimit
         // Add up to the limit, then check if the next index throws IndexLimitException
         for ($i=0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
@@ -2276,7 +2274,7 @@ abstract class Base extends TestCase
         $this->assertIsInt($document->getUpdateAt());
         $this->assertGreaterThan(1650000000, $document->getCreatedAt());
         $this->assertGreaterThan(1650000000, $document->getUpdateAt());
-
+        sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdateAt());

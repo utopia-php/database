@@ -512,7 +512,11 @@ class MariaDB extends Adapter
 
         try {
             $stmt->execute();
-            $document['$internalId'] = $this->getPDO()->lastInsertId();
+
+            $statment = $this->getPDO()->prepare("select last_insert_id() as id");
+            $statment->execute();
+            $last = $statment->fetch();
+            $document['$internalId'] = $last['id'];
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
@@ -892,6 +896,8 @@ class MariaDB extends Adapter
         foreach ($results as $key => $value) {
             $results[$key]['$id'] = $value['_uid'];
             $results[$key]['$internalId'] = $value['_id'];
+            $results[$key]['$createdAt'] = (int)$value['_createdAt'];
+            $results[$key]['$updatedAt'] = (int)$value['_updatedAt'];
             $results[$key]['$read'] = json_decode($value['_read'], true) ?? [];
             $results[$key]['$write'] = json_decode($value['_write'], true) ?? [];
 
@@ -899,6 +905,8 @@ class MariaDB extends Adapter
             unset($results[$key]['_id']);
             unset($results[$key]['_read']);
             unset($results[$key]['_write']);
+            unset($results[$key]['_createdAt']);
+            unset($results[$key]['_updatedAt']);
 
             $results[$key] = new Document($results[$key]);
         }

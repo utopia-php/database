@@ -6,6 +6,8 @@ use Utopia\Validator;
 
 class Key extends Validator
 {
+    protected bool $allowInternal = false; // If true, you keys starting with $ are allowed
+
     /**
      * @var string
      */
@@ -21,6 +23,14 @@ class Key extends Validator
     public function getDescription(): string
     {
         return $this->message;
+    }
+
+    /**
+     * Expression constructor
+     */
+    public function __construct(bool $allowInternal = false)
+    {
+        $this->allowInternal = $allowInternal;
     }
 
     /**
@@ -42,6 +52,19 @@ class Key extends Validator
         $leading = \mb_substr($value, 0, 1);
         if($leading === '_' || $leading === '.' || $leading === '-') {
             return false;
+        }
+
+        $isLeadingInternal = $leading === '$';
+
+        if($isLeadingInternal) {
+            $allowList = [ '$id', '$read', '$write', '$createdAt', '$updatedAt' ];
+
+            if(\in_array($value, $allowList)) {
+                // Exact match, no need for any further checks
+               return true; 
+            } else {
+                return false;
+            }
         }
 
         // Valid chars: A-Z, a-z, 0-9, underscore, hyphen, period

@@ -1231,15 +1231,18 @@ abstract class Base extends TestCase
         /**
          * ORDER BY + CURSOR
          */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['price'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['price'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+
+        /**
+         * ORDER BY + ID CURSOR
+         */
         $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$id'], [Database::ORDER_DESC]);
         $documents = static::getDatabase()->find('movies', [], 1, 0, ['$id'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
-
+        
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
-        $this->assertEquals($documentsTest[1]['name'], $documents[0]['name']);
-        $this->assertEquals($documentsTest[1]['price'], $documents[0]['price']);
-        $this->assertEquals($documentsTest[1]['year'], $documents[0]['year']);
-
-        die();
 
         /**
          * Limit

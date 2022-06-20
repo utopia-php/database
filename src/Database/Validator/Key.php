@@ -57,7 +57,7 @@ class Key extends Validator
         $isLeadingInternal = $leading === '$';
 
         if($isLeadingInternal) {
-            $allowList = [ '$id', '$read', '$write', '$createdAt', '$updatedAt' ];
+            $allowList = [ '$id', '$createdAt', '$updatedAt' ];
 
             if(\in_array($value, $allowList)) {
                 // Exact match, no need for any further checks

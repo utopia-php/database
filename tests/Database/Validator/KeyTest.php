@@ -74,12 +74,12 @@ class KeyTest extends TestCase
         $this->assertEquals(false, $validator->isValid('_appwrite'));
 
         $this->assertEquals(true, $validator->isValid('$id'));
-        $this->assertEquals(true, $validator->isValid('$read'));
-        $this->assertEquals(true, $validator->isValid('$write'));
         $this->assertEquals(true, $validator->isValid('$createdAt'));
         $this->assertEquals(true, $validator->isValid('$updatedAt'));
 
         $this->assertEquals(false, $validator->isValid('$appwrite'));
+        $this->assertEquals(false, $validator->isValid('$read'));
+        $this->assertEquals(false, $validator->isValid('$write'));
 
     }
 }

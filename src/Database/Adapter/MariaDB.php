@@ -359,6 +359,22 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $attributes = \array_map(function($attribute) {
+            if($attribute === '$id') {
+                return '_uid';
+            }
+
+            if($attribute === '$createdAt') {
+                return '_createdAt';
+            }
+
+            if($attribute === '$updatedAt') {
+                return '_updatedAt';
+            }
+
+            return $attribute;
+        }, $attributes);
+
         foreach ($attributes as $key => $attribute) {
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';

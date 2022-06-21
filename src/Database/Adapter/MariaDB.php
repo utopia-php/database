@@ -779,11 +779,8 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $orders = [];
 
-        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $orderAttribute
+        $orderAttributes = \array_map(function($orderAttribute) {
+            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
         }, $orderAttributes);
 
         $hasIdAttribute = false;

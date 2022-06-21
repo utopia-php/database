@@ -522,10 +522,10 @@ class MariaDB extends Adapter
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
                     break;
 
@@ -700,10 +700,10 @@ class MariaDB extends Adapter
                     $stmtAddPermissions->execute();
                 }
             } catch (PDOException $e) {
+                $this->getPDO()->rollBack();
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        $this->getPDO()->rollBack();
                         throw new Duplicate('Duplicated document: ' . $e->getMessage());
                         break;
 
@@ -779,8 +779,11 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $orders = [];
 
-        $orderAttributes = \array_map(function($orderAttribute) {
-            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
+        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
+            '$id' => '_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $orderAttribute
         }, $orderAttributes);
 
         $hasIdAttribute = false;

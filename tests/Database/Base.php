@@ -614,6 +614,53 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('defaults');
     }
 
+    public function testCreateDocumentRequired()
+    {
+        static::getDatabase()->createCollection('required');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('required', 'required', Database::VAR_STRING, 128, true));
+
+        $document = static::getDatabase()->createDocument('required', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'required' => 'Yes!'
+        ]));
+
+        $this->assertNotEmpty(true, $document->getId());
+
+        $this->assertIsString($document->getAttribute('required'));
+        $this->assertEquals('Yes!', $document->getAttribute('required'));
+
+        $errMsg = "";
+        try {
+            $document = static::getDatabase()->createDocument('required', new Document([
+                '$read' => ['role:all'],
+                '$write' => ['role:all'],
+                // 'required' => 'No!'
+            ]));
+        } catch(\Exception $err) {
+            $errMsg = $err->getMessage();
+        }
+
+        $this->assertEquals('Invalid document structure: Missing required attribute "required"', $errMsg);
+
+        $errMsg = "";
+        try {
+            $document = static::getDatabase()->createDocument('required', new Document([
+                '$read' => ['role:all'],
+                '$write' => ['role:all'],
+                'required' => ''
+            ]));
+        } catch(\Exception $err) {
+            $errMsg = $err->getMessage();
+        }
+
+        $this->assertEquals('Invalid document structure: Missing required attribute "required"', $errMsg);
+
+        // cleanup collection
+        static::getDatabase()->deleteCollection('required');
+    }
+
     /**
      * @depends testCreateDocument
      */

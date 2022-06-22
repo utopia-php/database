@@ -229,7 +229,8 @@ class Structure extends Validator
 
             $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
 
-            if($required && !isset($structure[$name])) {
+            // Do not use empty() check here. That would be true for 0 which we dont want
+            if($required && (!isset($structure[$name]) || $structure[$name] === '')) {
                 $this->message = 'Missing required attribute "'.$name.'"';
                 return false;
             }

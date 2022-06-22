@@ -330,7 +330,7 @@ class StructureTest extends TestCase
             '$collection' => 'posts',
             'title' => 'string',
             'description' => 'Demo description',
-            'rating' => '',
+            'rating' => 'text',
             'price' => 1.99,
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
@@ -417,7 +417,7 @@ class StructureTest extends TestCase
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
-            'price' => '',
+            'price' => 'text',
             'published' => false,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
@@ -449,7 +449,7 @@ class StructureTest extends TestCase
             'description' => 'Demo description',
             'rating' => 5,
             'price' => 1.99,
-            'published' => '',
+            'published' => 'text',
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
         ])));
@@ -473,5 +473,23 @@ class StructureTest extends TestCase
         ])));
         
         $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
+    }
+
+    public function testRequiredString()
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => 'posts',
+            'title' => '',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team_appwrite.io',
+        ])));
+        
+        $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
 }

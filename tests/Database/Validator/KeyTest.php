@@ -66,5 +66,20 @@ class KeyTest extends TestCase
         $this->assertEquals(false, $this->object->isValid('socialAccountForYoutubeSubscriberssss'));
         $this->assertEquals(true, $this->object->isValid('5f058a89258075f058a89258075f058t9214'));
         $this->assertEquals(false, $this->object->isValid('5f058a89258075f058a89258075f058tx9214'));
+
+        // Internal keys
+        $validator = new Key(true);
+        $this->assertEquals(true, $validator->isValid('appwrite'));
+        $this->assertEquals(true, $validator->isValid('appwrite_'));
+        $this->assertEquals(false, $validator->isValid('_appwrite'));
+
+        $this->assertEquals(true, $validator->isValid('$id'));
+        $this->assertEquals(true, $validator->isValid('$createdAt'));
+        $this->assertEquals(true, $validator->isValid('$updatedAt'));
+
+        $this->assertEquals(false, $validator->isValid('$appwrite'));
+        $this->assertEquals(false, $validator->isValid('$read'));
+        $this->assertEquals(false, $validator->isValid('$write'));
+
     }
 }

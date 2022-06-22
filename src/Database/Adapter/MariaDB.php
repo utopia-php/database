@@ -359,6 +359,13 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $attributes = \array_map(fn ($attribute) => match ($attribute) {
+            '$id' => '_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $attribute
+        }, $attributes);
+
         foreach ($attributes as $key => $attribute) {
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';
@@ -779,8 +786,11 @@ class MariaDB extends Adapter
         $where = ['1=1'];
         $orders = [];
 
-        $orderAttributes = \array_map(function($orderAttribute) {
-            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
+        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
+            '$id' => '_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $orderAttribute
         }, $orderAttributes);
 
         $hasIdAttribute = false;
@@ -842,9 +852,13 @@ class MariaDB extends Adapter
         }
 
         foreach ($queries as $i => $query) {
-            if ($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            }
+            $query->setAttribute(match ($query->getAttribute()) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $query->getAttribute()
+            });
+
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
@@ -936,9 +950,13 @@ class MariaDB extends Adapter
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $i => $query) {
-            if ($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            }
+            $query->setAttribute(match ($query->getAttribute()) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $query->getAttribute()
+            });
+
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
@@ -1001,9 +1019,13 @@ class MariaDB extends Adapter
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $i => $query) {
-            if ($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            }
+            $query->setAttribute(match ($query->getAttribute()) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $query->getAttribute()
+            });
+
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);

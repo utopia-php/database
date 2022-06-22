@@ -529,10 +529,10 @@ class MariaDB extends Adapter
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
                     break;
 
@@ -707,10 +707,10 @@ class MariaDB extends Adapter
                     $stmtAddPermissions->execute();
                 }
             } catch (PDOException $e) {
+                $this->getPDO()->rollBack();
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        $this->getPDO()->rollBack();
                         throw new Duplicate('Duplicated document: ' . $e->getMessage());
                         break;
 

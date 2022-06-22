@@ -2273,13 +2273,13 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
 
         $this->assertIsInt($document->getCreatedAt());
-        $this->assertIsInt($document->getUpdateAt());
+        $this->assertIsInt($document->getUpdatedAt());
         $this->assertGreaterThan(1650000000, $document->getCreatedAt());
-        $this->assertGreaterThan(1650000000, $document->getUpdateAt());
+        $this->assertGreaterThan(1650000000, $document->getUpdatedAt());
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdateAt());
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
 
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createCollection('created_at');

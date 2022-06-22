@@ -5,7 +5,6 @@ namespace Utopia\Database\Validator;
 use Utopia\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Validator\QueryValidator;
 use Utopia\Database\Query;
 
 class Queries extends Validator
@@ -74,48 +73,63 @@ class Queries extends Validator
      */
     public function isValid($value): bool
     {
-        /**
-         * Array of attributes from Query->getAttribute()
-         *
-         * @var string[]
-         */
         $queries = [];
+        $queryAttributes = [];
 
         foreach ($value as $query) {
-            // [attribute => operator]
-            $queries[$query->getAttribute()] = $query->getOperator(); 
-
+            /**
+             * @var Query $query
+             */
+            // Single Query Validation
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
                 return false;
             }
+
+            $queryAttributes[] = $query->getAttribute();
+
+            $queries[] = [
+                'attribute' => $query->getAttribute(),
+                'operator' => $query->getOperator(),
+                'values' => $query->getValues()
+            ];
         }
 
-        $found = null;
+        $flag = false;
 
-        // Return false if attributes do not exactly match an index
         if ($this->strict) {
-            // look for strict match among indexes
-            foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
-                    $found = $index; 
+           foreach ($this->indexes as $index) { // loop through all indexes
+                $tmp =  $queries; // set attributes origin
+                foreach ($index['attributes'] as $indexKey => $indexAttr){
+                    foreach ($tmp as $a) {
+                        if($a['attribute'] === $indexAttr){ // found match
+                            if($a['operator'] === Query::TYPE_SEARCH && $index['type'] !== Database::INDEX_FULLTEXT){
+                                $this->message = 'Search operator requires fulltext index: ' . implode(',', $queryAttributes);
+                                return false;
+                            }
+                            unset($tmp[$indexKey]);
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                }
+
+                if(count($tmp) === 0){
+                    $flag = true;
+                    break;
                 }
             }
 
-            if (!$found) {
-                $this->message = 'Index not found: ' . implode(",", array_keys($queries));
+            if($flag === false){
+                $this->message = 'Index not found: ' . implode(',', $queryAttributes);
                 return false;
             }
-
-            // search operator requires fulltext index
-            if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search operator requires fulltext index: ' . implode(",", array_keys($queries));
-                return false;
-            } 
         }
 
         return true;
     }
+
     /**
      * Is array
      *
@@ -152,26 +166,4 @@ class Queries extends Validator
         return $this->strict;
     }
 
-    /**
-     * Check if indexed array $indexes matches $queries
-     *
-     * @param array $indexes
-     * @param array $queries
-     *
-     * @return bool
-     */
-    protected function arrayMatch($indexes, $queries): bool
-    {
-        // Check the count of indexes first for performance
-        if (count($indexes) !== count($queries)) {
-            return false;
-        }
-
-        // Only matching arrays will have equal diffs in both directions
-        if (array_diff_assoc($indexes, $queries) !== array_diff_assoc($queries, $indexes)) {
-            return false;
-        }
-
-        return true;
-    }
 }

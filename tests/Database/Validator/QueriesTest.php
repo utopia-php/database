@@ -107,7 +107,10 @@ class QueriesTest extends TestCase
         $query1 = Query::parse('title.notEqual("Iron Man", "Ant Man")');
         $query2 = Query::parse('description.equal("Best movie ever")');
 
-        array_push($this->queries, $query1, $query2);
+        array_push($this->queries,
+            $query1,
+            $query2,
+        );
 
         // Constructor expects Document[] $indexes
         // Object property declaration cannot initialize a Document object

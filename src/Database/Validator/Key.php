@@ -54,17 +54,18 @@ class Key extends Validator
             return false;
         }
 
-        $isLeadingInternal = $leading === '$';
+        $isInternal = $leading === '$';
 
-        if($isLeadingInternal) {
+
+        if($isInternal && !$this->allowInternal) {
+            return false;
+        }
+
+        if($isInternal) {
             $allowList = [ '$id', '$createdAt', '$updatedAt' ];
 
-            if(\in_array($value, $allowList)) {
-                // Exact match, no need for any further checks
-               return true; 
-            } else {
-                return false;
-            }
+            // If exact match, no need for any further checks
+            return \in_array($value, $allowList);
         }
 
         // Valid chars: A-Z, a-z, 0-9, underscore, hyphen, period

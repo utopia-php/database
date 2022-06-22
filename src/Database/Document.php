@@ -89,18 +89,12 @@ class Document extends ArrayObject
         return $this->getAttribute('$write', []);
     }
 
-    /**
-     * @return int
-     */
     public function getCreatedAt(): ?int
     {
         return $this->getAttribute('$createdAt');
     }
 
-    /**
-     * @return int
-     */
-    public function getUpdateAt(): ?int
+    public function getUpdatedAt(): ?int
     {
         return $this->getAttribute('$updatedAt');
     }

@@ -102,9 +102,9 @@ class Queries extends Validator
 
         if ($this->strict) {
            foreach ($this->indexes as $index) { // loop through all indexes
-                $tmp =  $queries; // set attributes origin
+               $_queries =  $queries; // duplicate origin queries
                 foreach ($index['attributes'] as $indexKey => $indexAttr){
-                    foreach ($tmp as $query) {
+                    foreach ($_queries as $query) {
                         if($query['attribute'] === $indexAttr){ // found match
                             if($query['operator'] === Query::TYPE_SEARCH){
                                 if($index['type'] === Database::INDEX_FULLTEXT){
@@ -115,7 +115,7 @@ class Queries extends Validator
                                 }
                             }
                             else {
-                                unset($tmp[$indexKey]);
+                                unset($_queries[$indexKey]);
                             }
                         }
                         else {
@@ -124,7 +124,7 @@ class Queries extends Validator
                     }
                 }
 
-                if(count($tmp) === 0){ // full index match!
+                if(count($_queries) === 0){ // full index match!
                     $flag = true;
                     break;
                 }

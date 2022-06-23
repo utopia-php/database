@@ -96,7 +96,7 @@ class Queries extends Validator
         }
 
         $flag = false;
-        $message = ['Index not found: ' . implode(',', $queryAttributes)];
+        $message = 'Index not found: ' . implode(',', $queryAttributes);
 
         if ($this->strict) {
            foreach ($this->indexes as $index) { // loop through all indexes
@@ -104,11 +104,12 @@ class Queries extends Validator
                 foreach ($index['attributes'] as $indexKey => $indexAttr){
                     foreach ($tmp as $query) {
                         if($query['attribute'] === $indexAttr){ // found match
-                            if($query['operator'] === Query::TYPE_SEARCH && $index['type'] === Database::INDEX_FULLTEXT){
-                                return true;
-                            }
-                            else if($query['operator'] === Query::TYPE_SEARCH && $index['type'] !== Database::INDEX_FULLTEXT){
-                                $message[] = 'Search operator requires fulltext index ' . $indexAttr;
+                            if($query['operator'] === Query::TYPE_SEARCH){
+                                if($index['type'] === Database::INDEX_FULLTEXT){
+                                    return true;
+                                }else{
+                                    $message = 'Search operator requires fulltext index: '.$query['attribute'];
+                                }
                             }
                             else {
                                 unset($tmp[$indexKey]);
@@ -127,7 +128,7 @@ class Queries extends Validator
             }
 
             if($flag === false){
-                $this->message = implode(',', $message);
+                $this->message = $message;
                 return false;
             }
         }

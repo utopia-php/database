@@ -193,10 +193,19 @@ class QueriesTest extends TestCase
 
         // test fulltext
 
-        $query3 = Query::parse('description.search("iron")');
-        $this->queries = [$query3];
+        $this->queries = [
+            Query::parse('title.equal("iron")'),
+            Query::parse('description.search("iron")')
+        ];
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Search operator requires fulltext index: description", $validator->getDescription());
+
+        $this->queries = [
+            Query::parse('title.search("iron")')
+        ];
+
+        $this->assertEquals(true, $validator->isValid($this->queries));
+
     }
 
     public function testIsStrict()

@@ -96,18 +96,23 @@ class Queries extends Validator
         }
 
         $flag = false;
+        $message = ['Index not found: ' . implode(',', $queryAttributes)];
 
         if ($this->strict) {
            foreach ($this->indexes as $index) { // loop through all indexes
                 $tmp =  $queries; // set attributes origin
                 foreach ($index['attributes'] as $indexKey => $indexAttr){
-                    foreach ($tmp as $a) {
-                        if($a['attribute'] === $indexAttr){ // found match
-                            if($a['operator'] === Query::TYPE_SEARCH && $index['type'] !== Database::INDEX_FULLTEXT){
-                                $this->message = 'Search operator requires fulltext index: ' . implode(',', $queryAttributes);
-                                return false;
+                    foreach ($tmp as $query) {
+                        if($query['attribute'] === $indexAttr){ // found match
+                            if($query['operator'] === Query::TYPE_SEARCH && $index['type'] === Database::INDEX_FULLTEXT){
+                                return true;
                             }
-                            unset($tmp[$indexKey]);
+                            else if($query['operator'] === Query::TYPE_SEARCH && $index['type'] !== Database::INDEX_FULLTEXT){
+                                $message[] = 'Search operator requires fulltext index ' . $indexAttr;
+                            }
+                            else {
+                                unset($tmp[$indexKey]);
+                            }
                         }
                         else {
                             break;
@@ -115,14 +120,14 @@ class Queries extends Validator
                     }
                 }
 
-                if(count($tmp) === 0){
+                if(count($tmp) === 0){ // full index match!
                     $flag = true;
                     break;
                 }
             }
 
             if($flag === false){
-                $this->message = 'Index not found: ' . implode(',', $queryAttributes);
+                $this->message = implode(',', $message);
                 return false;
             }
         }

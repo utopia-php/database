@@ -86,13 +86,15 @@ class Queries extends Validator
                 return false;
             }
 
-            $queryAttributes[] = $query->getAttribute();
+            if(!in_array($query->getAttribute(), $queryAttributes)){
+                $queryAttributes[] = $query->getAttribute();
 
-            $queries[] = [
-                'attribute' => $query->getAttribute(),
-                'operator' => $query->getOperator(),
-                'values' => $query->getValues()
-            ];
+                $queries[] = [
+                    'attribute' => $query->getAttribute(),
+                    'operator' => $query->getOperator(),
+                    'values' => $query->getValues()
+                ];
+            }
         }
 
         $flag = false;

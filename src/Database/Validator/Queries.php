@@ -110,7 +110,7 @@ class Queries extends Validator
                                 if($index['type'] === Database::INDEX_FULLTEXT){
                                     return true;
                                 }
-                                else{
+                                else {
                                     $message = 'Search operator requires fulltext index: '.$query['attribute'];
                                 }
                             }

@@ -1151,8 +1151,10 @@ class Database
         $collection = $this->getCollection($collection);
 
         // Make sure reserved keys stay constant
-        // $data['$id'] = $old->getId();
-        // $data['$collection'] = $old->getCollection();
+        $data['$id'] = $old->getId();
+        $data['$internalId'] = $old->getInternalId();
+        $data['$collection'] = $old->getCollection();
+        $data['$createdAt'] =  $old->getCreatedAt();
 
         $validator = new Authorization('write');
 

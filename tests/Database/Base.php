@@ -2281,8 +2281,10 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
 
-        $this->expectException(DuplicateException::class);
-        static::getDatabase()->createCollection('created_at');
+        $this->assertEquals(123, $document->setAttribute('$createdAt', 123)->getCreatedAt());
+        $document = static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertEquals(123, $document->getCreatedAt());
 
     }
 

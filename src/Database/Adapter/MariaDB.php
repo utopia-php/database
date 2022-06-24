@@ -562,6 +562,7 @@ class MariaDB extends Adapter
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+        $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
 
         $name = $this->filter($collection);

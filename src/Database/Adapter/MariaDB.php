@@ -583,14 +583,14 @@ class MariaDB extends Adapter
         /**
          * Get removed Permissions
          */
-        $readRemoved = array_unique(array_diff($permissions['read'], $document->getRead()));
-        $writeRemoved = array_unique(array_diff($permissions['write'], $document->getWrite()));
+        $readRemoved = array_diff($permissions['read'], $document->getRead());
+        $writeRemoved = array_diff($permissions['write'], $document->getWrite());
 
         /**
          * Get added Permissions
          */
-        $readAdded = array_unique(array_diff($document->getRead(), $permissions['read']));
-        $writeAdded = array_unique(array_diff($document->getWrite(), $permissions['write']));
+        $readAdded = array_diff($document->getRead(), $permissions['read']);
+        $writeAdded = array_diff($document->getWrite(), $permissions['write']);
 
         /**
          * Query to remove permissions

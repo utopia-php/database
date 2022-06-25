@@ -725,6 +725,30 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testGetDocument
+     */
+    public function testUpdateDocumentDuplicatePermissions(Document $document)
+    {
+        $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+
+        $new
+            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
+        ;
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('role:guest', $new->getRead());
+        $this->assertContains('role:guest', $new->getWrite());
+
+        return $document;
+    }
+
+    /**
      * @depends testUpdateDocument
      */
     public function testDeleteDocument(Document $document)

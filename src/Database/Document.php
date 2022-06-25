@@ -78,7 +78,7 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return array_unique($this->getAttribute('$read', []));
+        return $this->getAttribute('$read', []);
     }
 
     /**
@@ -86,7 +86,7 @@ class Document extends ArrayObject
      */
     public function getWrite(): array
     {
-        return array_unique($this->getAttribute('$write', []));
+        return $this->getAttribute('$write', []);
     }
 
     /**

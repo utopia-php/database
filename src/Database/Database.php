@@ -935,6 +935,7 @@ class Database
      * @param array $orders
      *
      * @return bool
+     * @throws Exception
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -974,6 +975,18 @@ class Database
                 if (!$this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Fulltext index is not supported');
                 }
+
+                $collectionAttributes = $collection->getAttributes()['attributes'];
+                foreach ($collectionAttributes as $attr) {
+                    foreach ($attributes as $ia) {
+                        if($ia === $attr['key']){
+                            if($attr['type'] !== Database::VAR_STRING){
+                                throw new Exception(sprintf('Column %s cannot be part of FULLTEXT index', $attr['key']));
+                            }
+                        }
+                    }
+                }
+
                 break;
 
             default:

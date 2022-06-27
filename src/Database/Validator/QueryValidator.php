@@ -47,6 +47,20 @@ class QueryValidator extends Validator
             'size' => 512
         ];
 
+        $this->schema[] = [
+            'key' => '$createdAt',
+            'array' => false,
+            'type' => Database::VAR_INTEGER,
+            'size' => 0
+        ];
+
+        $this->schema[] = [
+            'key' => '$updatedAt',
+            'array' => false,
+            'type' => Database::VAR_INTEGER,
+            'size' => 0
+        ];
+
         foreach ($attributes as $attribute) {
             $this->schema[] = $attribute->getArrayCopy();
         }

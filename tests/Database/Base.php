@@ -741,6 +741,17 @@ abstract class Base extends TestCase
      */
     public function testFind(Document $document)
     {
+
+        static::getDatabase()->createCollection('shmuel');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('shmuel', 'date1', Database::VAR_DATETIME, 0, true));
+        static::getDatabase()->createDocument('shmuel', new Document([
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+            'date1' => '2022-06-26 14:46:24',
+        ]));
+
+
         static::getDatabase()->createCollection('movies');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));

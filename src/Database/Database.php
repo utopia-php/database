@@ -19,6 +19,7 @@ class Database
     const VAR_INTEGER = 'integer';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
+    const VAR_DATETIME = 'datetime';
 
     // Relationships Types
     const VAR_DOCUMENT = 'document';
@@ -503,6 +504,7 @@ class Database
                 break;
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
+            case self::VAR_DATETIME:
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);

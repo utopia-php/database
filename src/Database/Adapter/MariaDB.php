@@ -1238,6 +1238,9 @@ class MariaDB extends Adapter
                     $total += 255;
                     break;
 
+                case Database::VAR_DATETIME:
+                    $total += 19; // 2022-06-26 14:46:24
+                    break;
                 default:
                     throw new Exception('Unknown Type');
                     break;
@@ -1329,6 +1332,9 @@ class MariaDB extends Adapter
                 return 'CHAR(255)';
                 break;
 
+            case Database::VAR_DATETIME:
+                return 'DATETIME';
+                break;
             default:
                 throw new Exception('Unknown Type');
                 break;

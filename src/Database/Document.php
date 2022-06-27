@@ -78,7 +78,7 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return $this->getAttribute('$read', []);
+        return array_unique($this->getAttribute('$read', []));
     }
 
     /**
@@ -86,7 +86,7 @@ class Document extends ArrayObject
      */
     public function getWrite(): array
     {
-        return $this->getAttribute('$write', []);
+        return array_unique($this->getAttribute('$write', []));
     }
 
     public function getCreatedAt(): ?int

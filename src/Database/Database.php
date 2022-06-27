@@ -4,10 +4,11 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\IndexValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
@@ -944,6 +945,11 @@ class Database
 
         $collection = $this->getCollection($collection);
 
+        $validator = new IndexValidator($collection);
+        if(!$validator->isValid(['type' => $type, 'attributes' => $attributes])){
+            throw new Exception($validator->getDescription());
+        }
+
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
         /** @var Document[] $indexes */
@@ -975,7 +981,6 @@ class Database
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;
-
             default:
                 throw new Exception('Unknown index type: ' . $type);
                 break;

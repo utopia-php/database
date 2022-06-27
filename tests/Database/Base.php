@@ -637,6 +637,17 @@ abstract class Base extends TestCase
         return $document;
     }
 
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testFulltextIndexWithInteger()
+    {
+        $this->expectException(Exception::class);
+        static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
+    }
+
+
     /**
      * @depends testCreateDocument
      */

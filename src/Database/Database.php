@@ -980,6 +980,7 @@ class Database
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;
+
             default:
                 throw new Exception('Unknown index type: ' . $type);
                 break;

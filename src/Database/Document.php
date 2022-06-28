@@ -90,17 +90,17 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return int
+     * @return string
      */
-    public function getCreatedAt(): int
+    public function getCreatedAt(): string
     {
         return $this->getAttribute('$createdAt');
     }
 
     /**
-     * @return int
+     * @return string
      */
-    public function getUpdateAt(): int
+    public function getUpdateAt(): string
     {
         return $this->getAttribute('$updatedAt');
     }

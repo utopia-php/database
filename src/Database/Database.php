@@ -20,6 +20,7 @@ class Database
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
     const VAR_DATETIME = 'datetime';
+    const DATETIME_FORMAT = 'Y-m-d H:i:s';
 
     // Relationships Types
     const VAR_DOCUMENT = 'document';
@@ -1107,7 +1108,8 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-        $time = time();
+
+        $time = self::getCurrentDateTime();
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
@@ -1147,7 +1149,8 @@ class Database
             throw new Exception('Must define $id attribute');
         }
 
-        $document->setAttribute('$updatedAt', time());
+        $time = self::getCurrentDateTime();
+        $document->setAttribute('$updatedAt', $time);
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);
@@ -1507,7 +1510,8 @@ class Database
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
-
+                    case self::VAR_DATETIME:
+                        break;
                     default:
                         # code...
                         break;
@@ -1623,4 +1627,17 @@ class Database
     {
         return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
     }
+
+    /**
+     * @return string
+     */
+    public function getCurrentDateTime(): string
+    {
+        $time = new \DateTime();
+        return $time->format(Database::DATETIME_FORMAT);
+    }
+
+
+
+
 }

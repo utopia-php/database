@@ -171,8 +171,8 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_uid` CHAR(255) NOT NULL,
-                        `_createdAt` int unsigned DEFAULT NULL,
-                        `_updatedAt` int unsigned DEFAULT NULL,
+                        `_createdAt` datetime DEFAULT NULL,
+                        `_updatedAt` datetime DEFAULT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
@@ -431,8 +431,8 @@ class MariaDB extends Adapter
 
         $document['$id'] = $document['_uid'];
         $document['$internalId'] = $document['_id'];
-        $document['$createdAt'] = (int)$document['_createdAt'];
-        $document['$updatedAt'] = (int)$document['_updatedAt'];
+        $document['$createdAt'] = $document['_createdAt'];
+        $document['$updatedAt'] = $document['_updatedAt'];
         $document['$read'] = json_decode($document['$read'], true) ?? [];
         $document['$write'] = json_decode($document['$write'], true) ?? [];
 

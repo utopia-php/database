@@ -9,7 +9,7 @@ class DatetimeValidation extends Validator
     /**
      * @var string
      */
-    protected string $message = 'Date not valid';
+    protected string $message = 'Date is not valid';
 
     public function __construct()
     {
@@ -55,7 +55,6 @@ class DatetimeValidation extends Validator
         }
 
         return true;
-
     }
 
     /**

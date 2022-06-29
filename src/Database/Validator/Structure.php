@@ -271,7 +271,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new Text(100);
+                    $validator = new DatetimeValidation;
                     break;
 
                 default:
@@ -279,7 +279,7 @@ class Structure extends Validator
                     return false;
             }
 
-            /** @var string $label Error messasage label, either 'format' or 'type' */
+            /** Error message label, either 'format' or 'type' */
             $label = ($format) ? 'format' : 'type';
 
             if ($format) {

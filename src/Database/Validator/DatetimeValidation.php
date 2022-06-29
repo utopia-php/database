@@ -28,7 +28,7 @@ class DatetimeValidation extends Validator
     /**
      * Is valid.
      * Returns true if valid or false if not.
-     * @param $value
+     * @param mixed $value
      * @return bool
      */
     public function isValid($value): bool

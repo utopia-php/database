@@ -13,6 +13,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
+use Utopia\Database\Exception\Structure as StructureException;
 
 abstract class Base extends TestCase
 {
@@ -741,17 +742,6 @@ abstract class Base extends TestCase
      */
     public function testFind(Document $document)
     {
-
-        static::getDatabase()->createCollection('shmuel');
-
-        $this->assertEquals(true, static::getDatabase()->createAttribute('shmuel', 'date1', Database::VAR_DATETIME, 0, true));
-        static::getDatabase()->createDocument('shmuel', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            'date1' => '2022-06-26 14:46:24',
-        ]));
-
-
         static::getDatabase()->createCollection('movies');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
@@ -2280,19 +2270,34 @@ abstract class Base extends TestCase
     public function testCreatedAtUpdatedAtAssert()
     {
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
-
-        $this->assertIsInt($document->getCreatedAt());
-        $this->assertIsInt($document->getUpdateAt());
-        $this->assertGreaterThan(1650000000, $document->getCreatedAt());
-        $this->assertGreaterThan(1650000000, $document->getUpdateAt());
+        $this->assertEquals(true, !$document->isEmpty());
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdateAt());
-
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createCollection('created_at');
 
     }
+
+    public function testCreateDatetime()
+    {
+        static::getDatabase()->createCollection('datetime');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
+
+        static::getDatabase()->createDocument('datetime', new Document([
+            '$write' => ['role:all'],
+            'date' => (new \DateTime())->format(Database::DATETIME_FORMAT),
+        ]));
+
+        $this->expectException(StructureException::class);
+        static::getDatabase()->createDocument('datetime', new Document([
+            '$write' => ['role:all'],
+            'date' => "1975-12-06 00:00:61"
+        ]));
+
+    }
+
 
 }

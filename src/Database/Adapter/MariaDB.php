@@ -896,8 +896,8 @@ class MariaDB extends Adapter
         foreach ($results as $key => $value) {
             $results[$key]['$id'] = $value['_uid'];
             $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$createdAt'] = (int)$value['_createdAt'];
-            $results[$key]['$updatedAt'] = (int)$value['_updatedAt'];
+            $results[$key]['$createdAt'] = $value['_createdAt'];
+            $results[$key]['$updatedAt'] = $value['_updatedAt'];
             $results[$key]['$read'] = json_decode($value['_read'], true) ?? [];
             $results[$key]['$write'] = json_decode($value['_write'], true) ?? [];
 

@@ -46,6 +46,16 @@ class Queries extends Validator
             'attributes' => ['$id']
         ];
 
+        $this->indexes[] = [
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['$createdAt']
+        ];
+
+        $this->indexes[] = [
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['$updatedAt']
+        ];
+
         foreach ($indexes as $index) {
             $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
         }

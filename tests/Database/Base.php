@@ -2300,7 +2300,7 @@ abstract class Base extends TestCase
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdateAt());
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createCollection('created_at');
 

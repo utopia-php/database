@@ -100,7 +100,7 @@ class Document extends ArrayObject
     /**
      * @return string
      */
-    public function getUpdateAt(): string
+    public function getUpdatedAt(): string
     {
         return $this->getAttribute('$updatedAt');
     }

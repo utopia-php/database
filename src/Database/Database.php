@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use DateTime;
 use Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
@@ -1631,10 +1632,27 @@ class Database
     /**
      * @return string
      */
-    public function getCurrentDateTime(): string
+    public static function getCurrentDateTime(): string
     {
-        $time = new \DateTime();
-        return $time->format(Database::DATETIME_FORMAT);
+        $date = new DateTime();
+        return $date->format(Database::DATETIME_FORMAT);
+    }
+
+    /**
+     * @return DateTime
+     */
+    public static function getCurrentDateTimeObject(): DateTime
+    {
+        return new DateTime();
+    }
+
+    /**
+     * @param DateTime $date
+     * @return string
+     */
+    public static function formatDate(DateTime $date): string
+    {
+        return $date->format(Database::DATETIME_FORMAT);
     }
 
 

@@ -2311,11 +2311,16 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('datetime');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
 
         static::getDatabase()->createDocument('datetime', new Document([
+            '$id' => "id123",
             '$write' => ['role:all'],
             'date' => (new \DateTime())->format(Database::DATETIME_FORMAT),
         ]));
+
+        $document = static::getDatabase()->getDocument('datetime', 'id123');
+        $this->assertEquals(NULL, $document->getCreatedAt());
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([

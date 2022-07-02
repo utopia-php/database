@@ -2316,7 +2316,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('datetime', new Document([
             '$id' => "id123",
             '$write' => ['role:all'],
-            'date' => (new \DateTime())->format(Database::DATETIME_FORMAT),
+            'date' => Database::getCurrentDateTime(),
         ]));
 
         $document = static::getDatabase()->getDocument('datetime', 'id123');

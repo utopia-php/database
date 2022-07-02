@@ -1639,14 +1639,6 @@ class Database
     }
 
     /**
-     * @return DateTime
-     */
-    public static function getCurrentDateTimeObject(): DateTime
-    {
-        return new DateTime();
-    }
-
-    /**
      * @param DateTime $date
      * @return string
      */

@@ -1425,7 +1425,7 @@ abstract class Base extends TestCase
                 ],
                 [
                     '$id' => 'passwordUpdate',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
@@ -1435,7 +1435,7 @@ abstract class Base extends TestCase
                 ],
                 [
                     '$id' => 'registration',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
@@ -1543,8 +1543,8 @@ abstract class Base extends TestCase
             'emailVerification' => false,
             'status' => 1,
             'password' => 'randomhash',
-            'passwordUpdate' => 1234,
-            'registration' => 1234,
+            'passwordUpdate' => '2000-06-12 14:12:55',
+            'registration' => '1975-06-12 14:12:55',
             'reset' => false,
             'name' => 'My Name',
             'prefs' => new \stdClass,
@@ -1572,8 +1572,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 14:12:55', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals('{}', $result->getAttribute('prefs'));
@@ -1592,8 +1592,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 14:12:55', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals([], $result->getAttribute('prefs'));

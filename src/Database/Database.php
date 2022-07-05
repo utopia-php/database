@@ -1635,17 +1635,30 @@ class Database
     public static function getCurrentDateTime(): string
     {
         $date = new DateTime();
-        return $date->format(Database::DATETIME_FORMAT);
+        return self::dateFormat($date);
     }
 
     /**
      * @param DateTime $date
      * @return string
      */
-    public static function formatDate(DateTime $date): string
+    public static function dateFormat(DateTime $date): string
     {
-        return $date->format(Database::DATETIME_FORMAT);
+        return $date->format(self::DATETIME_FORMAT);
     }
+
+    /**
+     * @param DateTime $date
+     * @param int $seconds
+     * @return string
+     */
+    public static function dateAddSeconds(DateTime $date, int $seconds): string
+    {
+        $date->add(\DateInterval::createFromDateString($seconds . ' seconds'));
+        return self::dateFormat($date);
+    }
+
+
 
 
 

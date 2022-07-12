@@ -1,0 +1,74 @@
+<?php
+
+namespace Utopia\Database;
+
+use Exception;
+
+class DateTime
+{
+    protected static string $format = 'Y-m-d H:i:s';
+
+    /**
+     * @throws Exception
+     */
+    public function __construct()
+    {
+        Throw new Exception("Use static right now", 500);
+    }
+
+    /**
+     * @param string|null $datetime
+     * @return bool
+     */
+    public static function isValid(?string $datetime): bool
+    {
+        if (empty($datetime)) {
+            return false;
+        }
+
+        if(!preg_match("/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/", $datetime)){
+            return false;
+        }
+
+        try {
+            new \DateTime($datetime);
+        }
+        catch(Exception $e) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return string
+     */
+    public static function getCurrentDateTime(): string
+    {
+        $date = new \DateTime();
+        return self::dateFormat($date);
+    }
+
+    /**
+     * @param \DateTime $date
+     * @return string
+     */
+    public static function dateFormat(\DateTime $date): string
+    {
+        return $date->format(self::$format);
+    }
+
+    /**
+     * @param \DateTime $date
+     * @param int $seconds
+     * @return string
+     */
+    public static function dateAddSeconds(\DateTime $date, int $seconds): string
+    {
+        $date->add(\DateInterval::createFromDateString($seconds . ' seconds'));
+        return self::dateFormat($date);
+    }
+
+
+
+}

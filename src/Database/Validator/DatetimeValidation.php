@@ -37,10 +37,6 @@ class DatetimeValidation extends Validator
             return false;
         }
 
-        if(strlen($value) === 10){
-            $value .= ' 00:00:00';
-        }
-
         if(!preg_match("/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/", $value)){
             return false;
         }

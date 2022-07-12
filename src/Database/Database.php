@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use DateTime;
 use Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
@@ -21,7 +20,6 @@ class Database
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
     const VAR_DATETIME = 'datetime';
-    const DATETIME_FORMAT = 'Y-m-d H:i:s';
 
     // Relationships Types
     const VAR_DOCUMENT = 'document';
@@ -1110,7 +1108,7 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        $time = self::getCurrentDateTime();
+        $time = DateTime::getCurrentDateTime();
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
@@ -1150,7 +1148,7 @@ class Database
             throw new Exception('Must define $id attribute');
         }
 
-        $time = self::getCurrentDateTime();
+        $time = DateTime::getCurrentDateTime();
         $document->setAttribute('$updatedAt', $time);
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
@@ -1628,39 +1626,5 @@ class Database
     {
         return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
     }
-
-    /**
-     * @return string
-     */
-    public static function getCurrentDateTime(): string
-    {
-        $date = new DateTime();
-        return self::dateFormat($date);
-    }
-
-    /**
-     * @param DateTime $date
-     * @return string
-     */
-    public static function dateFormat(DateTime $date): string
-    {
-        return $date->format(self::DATETIME_FORMAT);
-    }
-
-    /**
-     * @param DateTime $date
-     * @param int $seconds
-     * @return string
-     */
-    public static function dateAddSeconds(DateTime $date, int $seconds): string
-    {
-        $date->add(\DateInterval::createFromDateString($seconds . ' seconds'));
-        return self::dateFormat($date);
-    }
-
-
-
-
-
 
 }

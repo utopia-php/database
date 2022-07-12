@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -2313,14 +2314,17 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
 
-        static::getDatabase()->createDocument('datetime', new Document([
-            '$id' => "id123",
+        $doc = static::getDatabase()->createDocument('datetime', new Document([
+            '$id' => 'id1234',
             '$write' => ['role:all'],
-            'date' => Database::getCurrentDateTime(),
+            '$read' => ['role:all'],
+            'date' => DateTime::getCurrentDateTime(),
         ]));
 
-        $document = static::getDatabase()->getDocument('datetime', 'id123');
-        $this->assertEquals(NULL, $document->getCreatedAt());
+        $document = static::getDatabase()->getDocument('datetime', 'id1234');
+        $this->assertEquals(NULL, $document->getAttribute('date2'));
+        $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
+        $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([

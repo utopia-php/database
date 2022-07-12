@@ -92,7 +92,7 @@ class Document extends ArrayObject
     /**
      * @return string|null
      */
-    public function getCreatedAt(): string|null
+    public function getCreatedAt(): ?string
     {
         return $this->getAttribute('$createdAt');
     }
@@ -100,7 +100,7 @@ class Document extends ArrayObject
     /**
      * @return string|null
      */
-    public function getUpdatedAt(): string|null
+    public function getUpdatedAt(): ?string
     {
         return $this->getAttribute('$updatedAt');
     }

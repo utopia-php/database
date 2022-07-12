@@ -896,7 +896,14 @@ class MariaDB extends Adapter
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
-            $attribute = $attribute === '_uid' ? '$id' : $attribute;
+
+            $attribute = match ($attribute) {
+                '_uid' => '$id',
+                '_createdAt' => '$createdAt',
+                '_updatedAt' => '$updatedAt',
+                default => $attribute
+            };
+
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }

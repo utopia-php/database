@@ -1263,10 +1263,26 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
-         * ORDER BY + ID CURSOR
+         * ORDER BY ID + CURSOR
          */
         $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$id'], [Database::ORDER_DESC]);
         $documents = static::getDatabase()->find('movies', [], 1, 0, ['$id'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+
+        /**
+         * ORDER BY DATE + CURSOR
+         */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$createdAt'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$createdAt'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+
+        /**
+         * ORDER BY DATE + CURSOR
+         */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$updatedAt'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$updatedAt'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
         
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 

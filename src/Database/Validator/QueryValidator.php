@@ -29,7 +29,6 @@ class QueryValidator extends Validator
         'lesserEqual',
         'greater',
         'greaterEqual',
-        'contains',
         'search',
     ];
 
@@ -40,6 +39,10 @@ class QueryValidator extends Validator
      */
     public function __construct(array $attributes)
     {
+        foreach ($attributes as $attribute) {
+            $this->schema[] = $attribute->getArrayCopy();
+        }
+
         $this->schema[] = [
             'key' => '$id',
             'array' => false,
@@ -60,10 +63,6 @@ class QueryValidator extends Validator
             'type' => Database::VAR_INTEGER,
             'size' => 0
         ];
-
-        foreach ($attributes as $attribute) {
-            $this->schema[] = $attribute->getArrayCopy();
-        }
     }
 
     /**

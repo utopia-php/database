@@ -37,9 +37,13 @@ class Queries extends Validator
      * @param Document[] $indexes
      * @param bool $strict
      */
-    public function __construct($validator, $indexes, $strict = true)
+    public function __construct(QueryValidator $validator, array $indexes, bool $strict = true)
     {
         $this->validator = $validator;
+
+        foreach ($indexes as $index) {
+            $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
+        }
 
         $this->indexes[] = [
             'type' => Database::INDEX_UNIQUE,
@@ -55,10 +59,6 @@ class Queries extends Validator
             'type' => Database::INDEX_KEY,
             'attributes' => ['$updatedAt']
         ];
-
-        foreach ($indexes as $index) {
-            $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
-        }
 
         $this->strict = $strict;
     }
@@ -79,7 +79,7 @@ class Queries extends Validator
      * Is valid.
      *
      * Returns true if all $queries are valid as a set.
-     * @param mixed $value as array of Query objects
+     * @param Query[] $value as array of Query objects
      * @return bool
      */
     public function isValid($value): bool
@@ -93,7 +93,7 @@ class Queries extends Validator
 
         foreach ($value as $query) {
             // [attribute => operator]
-            $queries[$query->getAttribute()] = $query->getOperator(); 
+            $queries[$query->getAttribute()] = $query->getOperator();
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
@@ -108,7 +108,7 @@ class Queries extends Validator
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
                 if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
-                    $found = $index; 
+                    $found = $index;
                 }
             }
 
@@ -121,7 +121,7 @@ class Queries extends Validator
             if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
                 $this->message = 'Search operator requires fulltext index: ' . implode(",", array_keys($queries));
                 return false;
-            } 
+            }
         }
 
         return true;
@@ -170,12 +170,19 @@ class Queries extends Validator
      *
      * @return bool
      */
-    protected function arrayMatch($indexes, $queries): bool
+    protected function arrayMatch(array $indexes, array $queries): bool
     {
         // Check the count of indexes first for performance
-        if (count($indexes) !== count($queries)) {
+        if (count($queries) > count($indexes)) {
             return false;
         }
+
+        // Remove unused indices to support covering indexes.
+        $indexes = array_slice($indexes, 0, count($queries));
+
+        // Sort them for comparison, the order is not important here anymore.
+        sort($indexes, SORT_STRING);
+        sort($queries, SORT_STRING);
 
         // Only matching arrays will have equal diffs in both directions
         if (array_diff_assoc($indexes, $queries) !== array_diff_assoc($queries, $indexes)) {

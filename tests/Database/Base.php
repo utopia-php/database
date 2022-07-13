@@ -2318,7 +2318,7 @@ abstract class Base extends TestCase
             '$id' => 'id1234',
             '$write' => ['role:all'],
             '$read' => ['role:all'],
-            'date' => DateTime::getCurrentDateTime(),
+            'date' => DateTime::now(),
         ]));
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');

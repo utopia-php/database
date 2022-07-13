@@ -1108,7 +1108,7 @@ class Database
 
         $collection = $this->getCollection($collection);
 
-        $time = DateTime::getCurrentDateTime();
+        $time = DateTime::now();
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
@@ -1148,7 +1148,7 @@ class Database
             throw new Exception('Must define $id attribute');
         }
 
-        $time = DateTime::getCurrentDateTime();
+        $time = DateTime::now();
         $document->setAttribute('$updatedAt', $time);
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations

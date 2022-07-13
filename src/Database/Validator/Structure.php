@@ -271,7 +271,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidation;
+                    $validator = new DatetimeValidator;
                     break;
 
                 default:

@@ -43,17 +43,17 @@ class DateTime
     /**
      * @return string
      */
-    public static function getCurrentDateTime(): string
+    public static function now(): string
     {
         $date = new \DateTime();
-        return self::dateFormat($date);
+        return self::format($date);
     }
 
     /**
      * @param \DateTime $date
      * @return string
      */
-    public static function dateFormat(\DateTime $date): string
+    public static function format(\DateTime $date): string
     {
         return $date->format(self::$format);
     }
@@ -63,10 +63,10 @@ class DateTime
      * @param int $seconds
      * @return string
      */
-    public static function dateAddSeconds(\DateTime $date, int $seconds): string
+    public static function addSeconds(\DateTime $date, int $seconds): string
     {
         $date->add(\DateInterval::createFromDateString($seconds . ' seconds'));
-        return self::dateFormat($date);
+        return self::format($date);
     }
 
 

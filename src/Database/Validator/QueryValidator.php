@@ -29,6 +29,7 @@ class QueryValidator extends Validator
         'lesserEqual',
         'greater',
         'greaterEqual',
+        'contains',
         'search',
     ];
 

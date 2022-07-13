@@ -173,6 +173,7 @@ class QueriesTest extends TestCase
         $this->assertTrue($validator->isValid($this->queries));
 
         $this->queries[] = Query::parse('price.lesserEqual(6.50)');
+        $this->queries[] = Query::parse('price.greaterEqual(5.50)');
         $this->assertTrue($validator->isValid($this->queries));
 
         // Test for FAILURE
@@ -210,6 +211,12 @@ class QueriesTest extends TestCase
         ])], true);
 
         // Test for SUCCESS
+        $this->assertTrue($validator->isValid([
+            Query::parse('price.lesserEqual(6.50)'),
+            Query::parse('title.lesserEqual("string")'),
+            Query::parse('rating.lesserEqual(2002)')
+        ]));
+
         $this->assertTrue($validator->isValid([
             Query::parse('price.lesserEqual(6.50)'),
             Query::parse('title.lesserEqual("string")'),

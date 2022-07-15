@@ -133,6 +133,28 @@ class QueryTest extends TestCase
         $this->assertEquals('Iron Man', $query->getParams()[1]);
     }
 
+    public function testHelperMethods()
+    {
+        $query = Query::parse('equal("title", "Iron Man")');
+
+        $this->assertEquals('title', $query->getFirstParam());
+        $this->assertEquals('title', $query->getParams()[0]);
+
+        $this->assertIsArray($query->getArrayParam(1));
+        $this->assertCount(1, $query->getArrayParam(1));
+
+
+        $query->setFirstParam("name");
+
+        $this->assertEquals('name', $query->getFirstParam());
+        $this->assertEquals('name', $query->getParams()[0]);
+
+        $query = Query::parse('equal("title", ["Iron Man", "Spider Man"])');
+
+        $this->assertIsArray($query->getArrayParam(1));
+        $this->assertCount(2, $query->getArrayParam(1));
+    }
+
     public function testGetMethod()
     {
         $query = Query::parse('equal("title", "Iron Man")');

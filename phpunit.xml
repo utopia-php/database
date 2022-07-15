@@ -10,7 +10,7 @@
     stopOnFailure="false">
     <testsuites>
         <testsuite name="Application Test Suite">
-            <directory>./tests/</directory>
+            <directory>./tests/Database/QueryTestV2.php</directory>
         </testsuite>
     </testsuites>
 </phpunit>

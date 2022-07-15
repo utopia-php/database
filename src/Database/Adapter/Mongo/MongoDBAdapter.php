@@ -740,7 +740,7 @@ class MongoDBAdapter extends Adapter
                 $query->setAttribute('_uid');
             }
             $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getOperator());
+            $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest

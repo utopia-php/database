@@ -97,19 +97,19 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $this->assertEquals(true, $validator->isValid(Query::parse('$id.equal("Iron Man", "Ant Man")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('title.notEqual("Iron Man", "Ant Man")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('description.equal("Best movie ever")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('rating.greater(4)')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('price.lesserEqual(6.50)')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('tags.contains("action")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('equal("$id", ["Iron Man", "Ant Man"])')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('equal("description", "Best movie ever")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('greater("rating" 4)')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('lesserEqual("price", 6.50)')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('contains("tags", "action")')));
     }
 
     public function testInvalidOperator()
     {
         $validator = new QueryValidator($this->schema);
 
-        $response = $validator->isValid(Query::parse('title.eqqual("Iron Man")'));
+        $response = $validator->isValid(Query::parse('eqqual("title", "Iron Man")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query operator invalid: eqqual', $validator->getDescription());
@@ -119,7 +119,7 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $response = $validator->isValid(Query::parse('name.equal("Iron Man")'));
+        $response = $validator->isValid(Query::parse('equal("name", "Iron Man")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
@@ -129,7 +129,7 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $response = $validator->isValid(Query::parse('title.equal(1776)'));
+        $response = $validator->isValid(Query::parse('equal("title", 1776)'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
@@ -139,7 +139,7 @@ class QueryValidatorTest extends TestCase
     {
         $validator = new QueryValidator($this->schema);
 
-        $response = $validator->isValid(Query::parse('title.contains("Iron")'));
+        $response = $validator->isValid(Query::parse('contains("title", "Iron")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query operator only supported on array attributes: contains', $validator->getDescription());

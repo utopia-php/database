@@ -104,8 +104,8 @@ class QueriesTest extends TestCase
 
         $this->queryValidator = new QueryValidator($attributes);
 
-        $query1 = Query::parse('title.notEqual("Iron Man", "Ant Man")');
-        $query2 = Query::parse('description.equal("Best movie ever")');
+        $query1 = Query::parse('notEqual("title", ["Iron Man", "Ant Man"])');
+        $query2 = Query::parse('equal("description", "Best movie ever")');
 
         array_push($this->queries, $query1, $query2);
 
@@ -169,7 +169,7 @@ class QueriesTest extends TestCase
 
         $this->assertEquals(true, $validator->isValid($this->queries));
 
-        $this->queries[] = Query::parse('price.lesserEqual(6.50)');
+        $this->queries[] = Query::parse('lesserEqual("price", 6.50)');
         $this->assertEquals(true, $validator->isValid($this->queries));
 
 
@@ -181,8 +181,8 @@ class QueriesTest extends TestCase
         $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
 
         // test for queued index
-        $query1 = Query::parse('price.lesserEqual(6.50)');
-        $query2 = Query::parse('title.notEqual("Iron Man", "Ant Man")');
+        $query1 = Query::parse('lesserEqual("price", 6.50)');
+        $query2 = Query::parse('notEqual("title", ["Iron Man", "Ant Man"])');
 
         $this->queries = [$query1, $query2];
         $this->assertEquals(false, $validator->isValid($this->queries));
@@ -190,7 +190,7 @@ class QueriesTest extends TestCase
 
         // test fulltext
 
-        $query3 = Query::parse('description.search("iron")');
+        $query3 = Query::parse('search("description", "iron")');
         $this->queries = [$query3];
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Search operator requires fulltext index: description", $validator->getDescription());

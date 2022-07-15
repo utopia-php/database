@@ -90,8 +90,8 @@ class QueryValidator extends Validator
     public function isValid($query): bool
     {
         // Validate operator
-        if (!in_array($query->getOperator(), $this->operators)) {
-            $this->message = 'Query operator invalid: ' . $query->getOperator();
+        if (!in_array($query->getMethod(), $this->operators)) {
+            $this->message = 'Query operator invalid: ' . $query->getMethod();
             return false;
         }
 
@@ -114,8 +114,8 @@ class QueryValidator extends Validator
         }
 
         // Contains operator only supports array attributes
-        if (!$this->schema[$attributeIndex]['array'] && $query->getOperator() === Query::TYPE_CONTAINS) {
-            $this->message = 'Query operator only supported on array attributes: ' . $query->getOperator();
+        if (!$this->schema[$attributeIndex]['array'] && $query->getMethod() === Query::TYPE_CONTAINS) {
+            $this->message = 'Query operator only supported on array attributes: ' . $query->getMethod();
             return false;
         } 
 

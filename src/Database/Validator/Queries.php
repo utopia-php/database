@@ -93,7 +93,7 @@ class Queries extends Validator
 
         foreach ($value as $query) {
             // [attribute => operator]
-            $queries[$query->getAttribute()] = $query->getOperator(); 
+            $queries[$query->getAttribute()] = $query->getMethod(); 
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();

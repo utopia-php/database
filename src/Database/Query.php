@@ -2,8 +2,6 @@
 
 namespace Utopia\Database;
 
-use Error;
-
 class Query
 {
     // Filter methods
@@ -100,7 +98,6 @@ class Query
      * */
     public static function parse(string $filter): Query
     {
-        // TODO: Support for array [] (there are commas and spaces inside)
         $method = '';
         $params = [];
 
@@ -117,34 +114,84 @@ class Query
 
         // Check for deprecated query syntax
         if(\str_contains($method, '.')) {
-            throw new Error("Invalid query method");
+            throw new \Exception("Invalid query method");
         }
 
         // Keep track of what hasn't been processed yet
         $unprocessedFilter = substr($filter, $paramsStart + 1);
 
         // While ends when we only have ')'
-        while(\strlen($unprocessedFilter) > 1 ) {
+        while(\strlen($unprocessedFilter) > 1) {
+            $arrayStart = mb_strpos($unprocessedFilter, '[');
             $paramEnd = mb_strpos($unprocessedFilter, ',');
 
+            // Array parameter support
+            if($arrayStart !== false && $arrayStart < $paramEnd) {
+                $paramEnd = mb_strpos($unprocessedFilter, ']') + 1;
+            }
+
+            // No comma found, this is last param
             if($paramEnd === false) {
                 $paramEnd = \strlen($unprocessedFilter) - 1;
             }
 
+            // Extract parameter from correct place
             $param = mb_substr($unprocessedFilter, 0, $paramEnd);
-            $params[] = self::parseParam($param);
+            $param = \trim($param);
 
+            // Empty parameter means comma without anything after. We ignore such empty parameter
+            if(!empty($param)) {
+                $params[] = self::parseParam($param);
+            }
+
+            // Shorten unprocessed list until it finishes
             $unprocessedFilter = substr($unprocessedFilter, $paramEnd + 1);
         }
-
-        \var_dump($method);
-        \var_dump($params);
 
         return new Query($method, $params);
     }
 
     public static function parseParam(string $param) {
         $param = \trim($param);
+
+        // Array param
+        if(\str_starts_with($param, '[')) {
+            $param = substr($param, 1, -1); // Remove [ and ]
+
+            $array = [];
+
+            foreach (\explode(',', $param) as $value) {
+                $array[] = self::parseParam($value);
+            }
+
+            return $array;
+        }
+
+        // Numeric param
+        if(\is_numeric($param)) {
+            // Cast to number
+            return $param + 0;
+        }
+
+        // Boolean param
+        if($param === 'false') {
+            return false;
+        } else if($param === 'true') {
+            return true;
+        }
+
+        // Null param
+        if($param === 'null') {
+            return null;
+        }
+
+        // String param
+        if(\str_starts_with($param, '"') || \str_starts_with($param, '\'')) {
+            $param = substr($param, 1, -1); // Remove '' or ""
+            return $param;
+        }
+
+        // Unknown format
         return $param;
     }
 }

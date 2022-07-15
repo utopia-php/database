@@ -96,17 +96,17 @@ class QueryValidator extends Validator
         }
 
         // Search for attribute in schema
-        $attributeIndex = array_search($query->getAttribute(), array_column($this->schema, 'key'));
+        $attributeIndex = array_search($query->getFirstParam(), array_column($this->schema, 'key'));
 
         if ($attributeIndex === false) {
-            $this->message = 'Attribute not found in schema: ' . $query->getAttribute();
+            $this->message = 'Attribute not found in schema: ' . $query->getFirstParam();
             return false;
         }
 
         // Extract the type of desired attribute from collection $schema
         $attributeType = $this->schema[$attributeIndex]['type'];
 
-        foreach ($query->getValues() as $value) {
+        foreach ($query->getArrayParam(1) as $value) {
             if (gettype($value) !== $attributeType) {
                 $this->message = 'Query type does not match expected: ' . $attributeType;
                 return false;

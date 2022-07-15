@@ -114,7 +114,7 @@ static::getDatabase()->createDocument('movies', new Document([
 
 ```php
 $documents = static::getDatabase()->find('movies', [
-    new Query('year', Query::TYPE_EQUAL, [2019]),
+    new Query(Query::TYPE_EQUAL, ['year', 2019]),
 ]);
 ```
 

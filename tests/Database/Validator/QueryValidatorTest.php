@@ -100,7 +100,7 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(Query::parse('equal("$id", ["Iron Man", "Ant Man"])')));
         $this->assertEquals(true, $validator->isValid(Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')));
         $this->assertEquals(true, $validator->isValid(Query::parse('equal("description", "Best movie ever")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('greater("rating" 4)')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('greater("rating", 4)')));
         $this->assertEquals(true, $validator->isValid(Query::parse('lesserEqual("price", 6.50)')));
         $this->assertEquals(true, $validator->isValid(Query::parse('contains("tags", "action")')));
     }

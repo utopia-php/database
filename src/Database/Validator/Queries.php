@@ -85,7 +85,7 @@ class Queries extends Validator
     public function isValid($value): bool
     {
         /**
-         * Array of attributes from Query->getAttribute()
+         * Array of attributes from query
          *
          * @var string[]
          */
@@ -93,7 +93,7 @@ class Queries extends Validator
 
         foreach ($value as $query) {
             // [attribute => operator]
-            $queries[$query->getAttribute()] = $query->getMethod(); 
+            $queries[$query->getFirstParam()] = $query->getMethod(); 
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();

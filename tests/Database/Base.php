@@ -659,7 +659,7 @@ abstract class Base extends TestCase
          * Allow reserved keywords for search
          */
         $documents = static::getDatabase()->find('documents', [
-            new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']),
+            new Query(Query::TYPE_SEARCH, ['string', '*test+alias@email-provider.com']),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -905,7 +905,7 @@ abstract class Base extends TestCase
          * Check an Integer condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('year', Query::TYPE_EQUAL, [2019]),
+            new Query(Query::TYPE_EQUAL, ['year', 2019]),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -916,7 +916,7 @@ abstract class Base extends TestCase
          * Boolean condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('active', Query::TYPE_EQUAL, [true]),
+            new Query(Query::TYPE_EQUAL, ['active', true]),
         ]);
 
         $this->assertEquals(4, count($documents));
@@ -925,7 +925,7 @@ abstract class Base extends TestCase
          * String condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD']),
+            new Query(Query::TYPE_EQUAL, ['director', 'TBD']),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -934,8 +934,8 @@ abstract class Base extends TestCase
          * Float condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('price', Query::TYPE_LESSER, [26.00]),
-            new Query('price', Query::TYPE_GREATER, [25.98]),
+            new Query(Query::TYPE_LESSER, ['price', 26.00]),
+            new Query(Query::TYPE_GREATER, ['price', 25.98]),
         ]);
 
         // TODO@kodumbeats hacky way to pass mariadb tests
@@ -946,7 +946,7 @@ abstract class Base extends TestCase
              * Array contains condition
              */
             $documents = static::getDatabase()->find('movies', [
-                new Query('generes', Query::TYPE_CONTAINS, ['comics']),
+                new Query(Query::TYPE_CONTAINS, ['generes', 'comics']),
             ]);
 
             $this->assertEquals(2, count($documents));
@@ -955,7 +955,7 @@ abstract class Base extends TestCase
              * Array contains OR condition
              */
             $documents = static::getDatabase()->find('movies', [
-                new Query('generes', Query::TYPE_CONTAINS, ['comics', 'kids']),
+                new Query(Query::TYPE_CONTAINS, ['generes', ['comics', 'kids']]),
             ]);
 
             $this->assertEquals(4, count($documents));
@@ -968,7 +968,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $success);
 
         $documents = static::getDatabase()->find('movies', [
-            new Query('name', Query::TYPE_SEARCH, ['captain']),
+            new Query(Query::TYPE_SEARCH, ['name', 'captain']),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -979,7 +979,7 @@ abstract class Base extends TestCase
         // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
         if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
             $documents = static::getDatabase()->find('movies', [
-                new Query('name', Query::TYPE_SEARCH, ['cap']),
+                new Query(Query::TYPE_SEARCH, ['name', 'cap']),
             ]);
 
             $this->assertEquals(2, count($documents));
@@ -989,8 +989,8 @@ abstract class Base extends TestCase
          * Multiple conditions
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD']),
-            new Query('year', Query::TYPE_EQUAL, [2026]),
+            new Query(Query::TYPE_EQUAL, ['director', 'TBD']),
+            new Query(Query::TYPE_EQUAL, ['year', 2026]),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -999,7 +999,7 @@ abstract class Base extends TestCase
          * Multiple conditions and OR values
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('name', Query::TYPE_EQUAL, ['Frozen II', 'Captain Marvel']),
+            new Query(Query::TYPE_EQUAL, ['name', ['Frozen II', 'Captain Marvel']]),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1010,7 +1010,7 @@ abstract class Base extends TestCase
          * $id condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('$id', Query::TYPE_EQUAL, ['frozen']),
+            new Query(Query::TYPE_EQUAL, ['$id', 'frozen']),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -1312,8 +1312,8 @@ abstract class Base extends TestCase
          * Test that OR queries are handled correctly
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
-            new Query('year', Query::TYPE_EQUAL, [2025]),
+            new Query(Query::TYPE_EQUAL, ['director', ['TBD', 'Joe Johnston']]),
+            new Query(Query::TYPE_EQUAL, ['year', 2025]),
         ]);
         $this->assertEquals(1, count($documents));
 
@@ -1349,7 +1349,7 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         
-        $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $count = static::getDatabase()->count('movies', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(2, $count);
         
         Authorization::unsetRole('userx');
@@ -1371,8 +1371,8 @@ abstract class Base extends TestCase
          */
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
-            new Query('year', Query::TYPE_EQUAL, [2025]),
+            new Query(Query::TYPE_EQUAL, ['director', ['TBD', 'Joe Johnston']]),
+            new Query(Query::TYPE_EQUAL, ['year', 2025]),
         ]);
         $this->assertEquals(1, $count);
         Authorization::reset();
@@ -1384,26 +1384,26 @@ abstract class Base extends TestCase
     public function testSum()
     {
         Authorization::setRole('userx');
-        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(2019+2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
         $this->assertEquals(2013+2019+2011+2019+2025+2026, $sum);
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
         
-        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query(Query::TYPE_EQUAL, ['year', 2019])], 1);
         $this->assertEquals(2019, $sum);
 
         Authorization::unsetRole('userx');
-        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $sum = static::getDatabase()->sum('movies', 'year', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(2019+2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
         $this->assertEquals(2013+2019+2011+2019+2025, $sum);
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $sum = static::getDatabase()->sum('movies', 'price', [new Query(Query::TYPE_EQUAL, ['year', 2019]),]);
         $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
     }
 

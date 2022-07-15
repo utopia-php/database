@@ -36,25 +36,25 @@ class QueryTest extends TestCase
         $query = Query::parse('lesser("year", 2001)'); 
 
         $this->assertEquals('lesser', $query->getMethod());
-        $this->assertContains('year', $query->getParams()[0]);
+        $this->assertEquals('year', $query->getParams()[0]);
         $this->assertEquals(2001, $query->getParams()[1]);
 
         $query = Query::parse('equal("published", true)');
 
         $this->assertEquals('equal', $query->getMethod());
-        $this->assertContains('published', $query->getParams()[0]);
+        $this->assertEquals('published', $query->getParams()[0]);
         $this->assertEquals(true, $query->getParams()[1]);
 
         $query = Query::parse('equal("published", false)');
 
         $this->assertEquals('equal', $query->getMethod());
-        $this->assertContains('published', $query->getParams()[0]);
+        $this->assertEquals('published', $query->getParams()[0]);
         $this->assertEquals(false, $query->getParams()[1]);
 
         $query = Query::parse('notContains("actors", [ " Johnny Depp ",  " Brad Pitt" , \'Al Pacino \' ])');
 
-        $this->assertEquals('actors', $query->getMethod());
-        $this->assertContains('notContains', $query->getParams()[0]);
+        $this->assertEquals('notContains', $query->getMethod());
+        $this->assertEquals('actors', $query->getParams()[0]);
         $this->assertEquals(" Johnny Depp ", $query->getParams()[1][0]);
         $this->assertEquals(" Brad Pitt", $query->getParams()[1][1]);
         $this->assertEquals("Al Pacino ", $query->getParams()[1][2]);
@@ -62,32 +62,32 @@ class QueryTest extends TestCase
         $query = Query::parse('equal("actors", ["Brad Pitt", "Johnny Depp"])');
 
         $this->assertEquals('equal', $query->getMethod());
-        $this->assertContains('actors', $query->getParams()[0]);
+        $this->assertEquals('actors', $query->getParams()[0]);
         $this->assertEquals("Brad Pitt", $query->getParams()[1][0]);
         $this->assertEquals("Johnny Depp", $query->getParams()[1][1]);
 
         $query = Query::parse('contains("writers","Tim O\'Reilly")');
 
         $this->assertEquals('contains', $query->getMethod());
-        $this->assertContains('writers', $query->getParams()[0]);
+        $this->assertEquals('writers', $query->getParams()[0]);
         $this->assertEquals("Tim O'Reilly", $query->getParams()[1]);
 
         $query = Query::parse('greater("score", 8.5)');
 
         $this->assertEquals('greater', $query->getMethod());
-        $this->assertContains('score', $query->getParams()[0]);
+        $this->assertEquals('score', $query->getParams()[0]);
         $this->assertEquals(8.5, $query->getParams()[1]);
 
         $query = Query::parse('notEqual("director", "null")');
 
         $this->assertEquals('notEqual', $query->getMethod());
-        $this->assertContains('director', $query->getParams()[0]);
+        $this->assertEquals('director', $query->getParams()[0]);
         $this->assertEquals('null', $query->getParams()[1]);
 
         $query = Query::parse('notEqual("director", null)');
 
         $this->assertEquals('notEqual', $query->getMethod());
-        $this->assertContains('director', $query->getParams()[0]);
+        $this->assertEquals('director', $query->getParams()[0]);
         $this->assertEquals(null, $query->getParams()[1]);
     }
 
@@ -145,10 +145,10 @@ class QueryTest extends TestCase
 
         $this->assertEquals(true, Query::isMethod('equal'));
         $this->assertEquals(true, Query::isMethod('notEqual'));
-        $this->assertEquals(true, Query::isMethod('lesser'));
-        $this->assertEquals(true, Query::isMethod('lesserEqual'));
-        $this->assertEquals(true, Query::isMethod('greater'));
-        $this->assertEquals(true, Query::isMethod('greaterEqual'));
+        $this->assertEquals(true, Query::isMethod('lessThan'));
+        $this->assertEquals(true, Query::isMethod('lessThanEqual'));
+        $this->assertEquals(true, Query::isMethod('greaterThan'));
+        $this->assertEquals(true, Query::isMethod('greaterThanEqual'));
         $this->assertEquals(true, Query::isMethod('contains'));
         $this->assertEquals(true, Query::isMethod('search'));
         $this->assertEquals(true, Query::isMethod('orderDesc'));

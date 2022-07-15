@@ -8,9 +8,9 @@ class Query
     const TYPE_EQUAL = 'equal';
     const TYPE_NOTEQUAL = 'notEqual';
     const TYPE_LESSER = 'lessThan';
-    const TYPE_LESSEREQUAL = 'greaterEqualThan';
+    const TYPE_LESSEREQUAL = 'lessThanEqual';
     const TYPE_GREATER = 'greaterThan';
-    const TYPE_GREATEREQUAL = 'greaterEqualThan';
+    const TYPE_GREATEREQUAL = 'greaterThanEqual';
     const TYPE_CONTAINS = 'contains';
     const TYPE_SEARCH = 'search';
 
@@ -47,6 +47,34 @@ class Query
     public function getParams(): array
     {
         return $this->params;
+    }
+
+    /**
+     * Helper method returning first param. In first param we often store attribute
+     */
+    public function getFirstParam(): mixed
+    {
+        return $this->params[0];
+    }
+
+    /**
+     * Helper method changing first param. In first param we often store attribute
+     */
+    public function setFirstParam(mixed $value): void
+    {
+        $this->params[0] = $value;
+    }
+
+    /**
+     * Helper method. Returns param, but in form of array array 
+     */
+    public function getArrayParam(int $index): array
+    {
+        if(\is_array($this->params[$index])) {
+            return $this->params[$index];
+        }
+
+        return [ $this->params[$index] ];
     }
 
     public function setMethod(string $method): self

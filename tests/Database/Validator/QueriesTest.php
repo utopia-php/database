@@ -175,7 +175,7 @@ class QueriesTest extends TestCase
 
         // test for FAILURE
 
-        $this->queries[] = Query::parse('rating.greater(4)');
+        $this->queries[] = Query::parse('greater("rating", 4)');
 
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());

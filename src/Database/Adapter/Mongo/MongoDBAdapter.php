@@ -736,18 +736,18 @@ class MongoDBAdapter extends Adapter
         $filters = [];
 
         foreach ($queries as $i => $query) {
-            if ($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
+            if ($query->getFirstParam() === '$id') {
+                $query->setFirstParam('_uid');
             }
-            $attribute = $query->getAttribute();
+            $attribute = $query->getFirstParam();
             $operator = $this->getQueryOperator($query->getMethod());
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
+            $value = (count($query->getArrayParam(1)) > 1) ? $query->getArrayParam(1) : $query->getArrayParam(1)[0];
 
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
             if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
-                $filters[$attribute]['$in'] = $query->getValues();
+                $filters[$attribute]['$in'] = $query->getArrayParam(1);
             } elseif ($operator === '$search') {
                 // only one fulltext index per mongo collection, so attribute not necessary
                 $filters['$text'][$operator] = $value;

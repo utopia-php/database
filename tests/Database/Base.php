@@ -61,6 +61,23 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
+    public function testCreatedAtUpdatedAt()
+    {
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
+
+        $document = static::getDatabase()->createDocument('created_at', new Document([
+            '$id' => 'uid123',
+            '$read' => ['role:all'],
+            '$write' => ['role:all'],
+        ]));
+
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) { //todo: implement in mongo + postgres
+            $this->assertNotEmpty($document->getInternalId());
+            $this->assertNotNull($document->getInternalId());
+        }
+
+    }
+
     /**
      * @depends testCreateExistsDelete
      */
@@ -68,18 +85,18 @@ abstract class Base extends TestCase
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
 
-        $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2'));
-        $this->assertCount(2, static::getDatabase()->listCollections());
+        $this->assertCount(3, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors2'));
         $collection = static::getDatabase()->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
-        $this->assertCount(1, static::getDatabase()->listCollections());
+        $this->assertCount(2, static::getDatabase()->listCollections());
 
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
@@ -255,16 +272,18 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
         
         $collection = static::getDatabase()->getCollection('indexes');
-        $this->assertCount(5, $collection->getAttribute('indexes'));
+        $this->assertCount(6, $collection->getAttribute('indexes'));
 
         // Delete Indexes
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index4'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index5'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'order'));
 
         $collection = static::getDatabase()->getCollection('indexes');
@@ -709,6 +728,30 @@ abstract class Base extends TestCase
 
         $this->assertNotContains('role:guest', $new->getRead());
         $this->assertNotContains('role:guest', $new->getWrite());
+
+        return $document;
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testUpdateDocumentDuplicatePermissions(Document $document)
+    {
+        $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+
+        $new
+            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
+            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
+        ;
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('role:guest', $new->getRead());
+        $this->assertContains('role:guest', $new->getWrite());
 
         return $document;
     }
@@ -1216,6 +1259,38 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[0], Database::CURSOR_BEFORE);
         $this->assertEmpty(count($documents));
+
+        /**
+         * ORDER BY + CURSOR
+         */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['price'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['price'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+
+        /**
+         * ORDER BY ID + CURSOR
+         */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$id'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$id'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+
+        /**
+         * ORDER BY CREATE DATE + CURSOR
+         */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$createdAt'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$createdAt'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+
+        /**
+         * ORDER BY UPDATE DATE + CURSOR
+         */
+        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$updatedAt'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$updatedAt'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
+        
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
          * Limit
@@ -1891,9 +1966,7 @@ abstract class Base extends TestCase
             $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
-        // testing for indexLimit = 64
-        // MariaDB, MySQL, and MongoDB create 3 indexes per new collection
-        // MongoDB create 4 indexes per new collection
+        // Testing for indexLimit
         // Add up to the limit, then check if the next index throws IndexLimitException
         for ($i=0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
@@ -1986,7 +2059,7 @@ abstract class Base extends TestCase
 
     public function testGetIndexLimit()
     {
-        $this->assertEquals(61, $this->getDatabase()->getIndexLimit());
+        $this->assertEquals(59, $this->getDatabase()->getIndexLimit());
     }
 
     public function testGetId()
@@ -2228,6 +2301,29 @@ abstract class Base extends TestCase
             'cartModel' => '{}',
             'price' => 15000
         ]));
+    }
+
+    /**
+     * @depends testCreatedAtUpdatedAt
+     */
+    public function testCreatedAtUpdatedAtAssert()
+    {
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+
+        $this->assertIsInt($document->getCreatedAt());
+        $this->assertIsInt($document->getUpdatedAt());
+        $this->assertGreaterThan(1650000000, $document->getCreatedAt());
+        $this->assertGreaterThan(1650000000, $document->getUpdatedAt());
+        sleep(1);
+        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
+
+        $this->assertEquals(123, $document->setAttribute('$createdAt', 123)->getCreatedAt());
+        $document = static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertEquals(123, $document->getCreatedAt());
+
     }
 
     /**

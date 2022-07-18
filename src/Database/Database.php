@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -121,13 +122,19 @@ class Database
     static protected array $filters = [];
 
     /**
+     * @var array
+     */
+    private array $instanceFilters = [];
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache)
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        $this->instanceFilters = $filters;
 
         self::addFilter(
             'json',
@@ -235,7 +242,7 @@ class Database
     /**
      * Create Database
      *
-     * @param string $database
+     * @param string $name
      *
      * @return bool
      */
@@ -317,15 +324,20 @@ class Database
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $id
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * 
+     *
      * @return Document
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
+        $collection = $this->getCollection($id);
+        if(!$collection->isEmpty() && $id !== self::METADATA){
+            throw new Duplicate('Collection ' . $id . ' Exists!');
+        }
+
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
@@ -1074,7 +1086,7 @@ class Database
 
     /**
      * Create Document
-     * 
+     *
      * @param string $collection
      * @param Document $document
      *
@@ -1082,6 +1094,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws StructureException
+     * @throws Exception
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -1092,10 +1105,14 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
+        $time = time();
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
-            ->setAttribute('$collection', $collection->getId());
+            ->setAttribute('$collection', $collection->getId())
+            ->setAttribute('$createdAt', $time)
+            ->setAttribute('$updatedAt', $time)
+        ;
 
         $document = $this->encode($collection, $document);
 
@@ -1127,6 +1144,8 @@ class Database
         if (!$document->getId() || !$id) {
             throw new Exception('Must define $id attribute');
         }
+
+        $document->setAttribute('$updatedAt', time());
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);
@@ -1513,12 +1532,16 @@ class Database
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['encode']($value, $document, $this);
+            if(array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['encode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }
@@ -1540,12 +1563,16 @@ class Database
      */
     protected function decodeAttribute(string $name, $value, Document $document)
     {
-        if (!isset(self::$filters[$name])) {
+        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
         try {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            if(array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['decode']($value, $document, $this);
+            }
         } catch (\Throwable $th) {
             throw $th;
         }

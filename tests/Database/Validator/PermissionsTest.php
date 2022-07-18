@@ -143,5 +143,17 @@ class PermissionsTest extends TestCase
         $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char');
         $this->assertEquals($object->isValid(['team:abcd/ef*gh']), false);
         $this->assertEquals($object->getDescription(), '[team:$teamId/$role] $teamID and $role must be valid keys: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char');
+    
+        // Permission-list length must be valid
+        $object = new Permissions(100);
+
+        $permissions = \array_fill(0, 100, "role:all");
+
+        $this->assertEquals($object->isValid($permissions), true);
+
+        $permissions[] = "role:all";
+
+        $this->assertEquals($object->isValid($permissions), false);
+        $this->assertEquals($object->getDescription(), 'You can only provide up to 100 permissions.');
     }
 }

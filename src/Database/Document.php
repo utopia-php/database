@@ -78,7 +78,7 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return $this->getAttribute('$read', []);
+        return array_unique($this->getAttribute('$read', []));
     }
 
     /**
@@ -86,7 +86,17 @@ class Document extends ArrayObject
      */
     public function getWrite(): array
     {
-        return $this->getAttribute('$write', []);
+        return array_unique($this->getAttribute('$write', []));
+    }
+
+    public function getCreatedAt(): ?int
+    {
+        return $this->getAttribute('$createdAt');
+    }
+
+    public function getUpdatedAt(): ?int
+    {
+        return $this->getAttribute('$updatedAt');
     }
 
     /**
@@ -99,7 +109,15 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if(array_key_exists($attribute, ['$id' => true, '$internalId' => true, '$collection' => true, '$read' => true, '$write' => []])) {
+            if(array_key_exists($attribute, [
+                '$id' => true,
+                '$internalId' => true,
+                '$collection' => true,
+                '$read' => true,
+                '$write' => [],
+                '$createdAt' => true,
+                '$updatedAt' => true,
+            ])) {
                 continue;
             }
 

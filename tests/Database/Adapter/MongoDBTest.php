@@ -113,7 +113,7 @@ class MongoDBTest extends Base
             'empty' => [],
         ]));
 
-        $documents = static::getDatabase()->find('documents', ['string' => '*test+alias@email-provider.com']);
+        $documents = static::getDatabase()->find('documents', [ new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']) ]);
 
         $this->assertEquals(1, count($documents));
 
@@ -303,13 +303,12 @@ class MongoDBTest extends Base
 
     /**
      * Return keywords reserved by database backend
-     * Refference: 
      *
      * @return string[]
      */
     static function getReservedKeywords(): array
     {
-        // TODO: Get official list with a refference for reserved keywords
-        return [];
+        // Mongo does not have concept of reserverd words. We put something here just to run the rests for this adapter too
+        return [ 'mogno' ];
     }
 }

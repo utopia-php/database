@@ -8,6 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
@@ -37,27 +38,6 @@ class MariaDBTest extends Base
     static function getAdapterRowLimit(): int
     {
         return MariaDB::getRowLimit();
-    }
-
-    /**
-     * Return keywords reserved by database backend
-     *
-     * @return string[]
-     */
-    static function getReservedKeywords(): array
-    {
-        // TODO: Get official list with a refference for reserved keywords
-        return [
-            'order',
-            'where',
-            'create',
-            'delete',
-            'update',
-            'table',
-            'from',
-            'by',
-            'in'
-        ];
     }
 
     /**
@@ -93,5 +73,16 @@ class MariaDBTest extends Base
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;
+    }
+
+    /**
+     * Return keywords reserved by database backend
+     *
+     * @return string[]
+     */
+    static function getReservedKeywords(): array
+    {
+        // Same as MySQL
+        return MySQLTest::getReservedKeywords();
     }
 }

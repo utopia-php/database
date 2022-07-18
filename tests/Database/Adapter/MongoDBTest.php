@@ -300,4 +300,16 @@ class MongoDBTest extends Base
 
         $this->assertEquals(true, $res);
     }
+
+    /**
+     * Return keywords reserved by database backend
+     * Refference: 
+     *
+     * @return string[]
+     */
+    static function getReservedKeywords(): array
+    {
+        // TODO: Get official list with a refference for reserved keywords
+        return [];
+    }
 }

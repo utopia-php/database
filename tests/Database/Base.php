@@ -2352,7 +2352,6 @@ abstract class Base extends TestCase
 
     public function testReservedKeywords() {
         $keywords = $this->getReservedKeywords();
-
         $database = static::getDatabase();
 
         // Collection name tests
@@ -2401,73 +2400,53 @@ abstract class Base extends TestCase
             $this->assertTrue($collection);
         }
 
-        // TODO: Test rename, update (if that is a thing)
+        // TODO: updateCollection name tests
 
         // Attribute name tests
-
-        $collection = $database->createCollection('reservedKeywords');
-
-        $this->assertEquals('reservedKeywords', $collection->getId());
-
         foreach ($keywords as $keyword) {
-            $attribute = static::getDatabase()->createAttribute('reservedKeywords', $keyword, Database::VAR_STRING, 128, true);
+            $collectionName = 'rk' . $keyword; // rk is short-hand for reserved-keyword. We do this sicne there are some limits (64 chars max)
+
+            $collection = $database->createCollection($collectionName);
+            $this->assertEquals($collectionName, $collection->getId());
+
+            $attribute = static::getDatabase()->createAttribute($collectionName, $keyword, Database::VAR_STRING, 128, true);
             $this->assertEquals(true, $attribute);
+
+            $document = new Document([
+                '$read' => ['role:all'],
+                '$write' => ['role:all'],
+                '$id' => 'reservedKeyDocument'
+            ]);
+            $document->setAttribute($keyword, 'Reserved:' . $keyword);
+
+            $document = $database->createDocument($collectionName, $document);
+            $this->assertEquals('reservedKeyDocument', $document->getId());
+            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+
+            $document = $database->getDocument($collectionName, 'reservedKeyDocument');
+            $this->assertEquals('reservedKeyDocument', $document->getId());
+            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+
+            $documents = $database->find($collectionName);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+            $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
+
+            $documents = $database->find($collectionName, [ new Query($keyword, Query::TYPE_EQUAL, ["Reserved:${keyword}"]) ]);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+            $documents = $database->find($collectionName, orderAttributes: [$keyword], orderTypes: ['DESC']);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+
+            $collection = $database->deleteCollection($collectionName);
+            $this->assertTrue($collection);
+
+            // TODO: updateAttribute name tests
         }
 
-        $template = new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            '$id' => 'reservedKeyDocument'
-        ]);
-
-        foreach ($keywords as $keyword) {
-            $template->setAttribute($keyword, 'Reserved: ' . $keyword);
-        }
-
-        $document = $database->createDocument('reservedKeywords', $template);
-        $this->assertEquals('reservedKeyDocument', $document->getId());
-        foreach ($keywords as $keyword) {
-            $this->assertEquals('Reserved: ' . $keyword, $document->getAttribute($keyword));
-        }
-
-        $document = $database->getDocument('reservedKeywords', 'reservedKeyDocument');
-        $this->assertEquals('reservedKeyDocument', $document->getId());
-        foreach ($keywords as $keyword) {
-            $this->assertEquals('Reserved: ' . $keyword, $document->getAttribute($keyword));
-        }
-
-        $documents = $database->find('reservedKeywords');
-        $this->assertCount(1, $documents);
-        $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-        foreach ($keywords as $keyword) {
-            $this->assertEquals('Reserved: ' . $keyword, $documents[0]->getAttribute($keyword));
-        }
-
-        $queries = \array_map(function($keyword) {
-            return new Query($keyword, Query::TYPE_EQUAL, ["Reserved: ${keyword}"]);
-        }, $keywords);
-
-        $documents = $database->find('reservedKeywords', $queries);
-        $this->assertCount(1, $documents);
-        $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-
-        $orderTypes = \array_map(function() {
-            return 'DESC';
-        }, $keywords);
-
-        $orderAttributes = $keywords;
-
-        $documents = $database->find('reservedKeywords', orderAttributes: $orderAttributes, orderTypes: $orderTypes);
-        $this->assertCount(1, $documents);
-        $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-
-        // TODO: Test updateAttribute too (if that is a thing)
-
-        $collection = $database->deleteCollection('reservedKeywords');
-        $this->assertTrue($collection);
-
-        // Index nam tests
-
-        // TODO: Crete, rename, delete, update (if that is a thing)
+        // TODO: Index name tests
     }
 }

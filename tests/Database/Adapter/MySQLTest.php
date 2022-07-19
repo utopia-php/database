@@ -5,6 +5,7 @@ namespace Utopia\Tests\Adapter;
 use PDO;
 use Redis;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
@@ -62,15 +63,7 @@ class MySQLTest extends Base
         $dbUser = 'root';
         $dbPass = 'password';
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, array(
-            PDO::ATTR_TIMEOUT => 3, // Seconds
-            PDO::ATTR_PERSISTENT => true,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_EMULATE_PREPARES => true,
-            PDO::ATTR_STRINGIFY_FETCHES => true,
-        ));
-
+        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPdoAttributes());
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();

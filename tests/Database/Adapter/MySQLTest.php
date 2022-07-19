@@ -64,9 +64,11 @@ class MySQLTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPdoAttributes());
+
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();
+
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MySQL($pdo), $cache);

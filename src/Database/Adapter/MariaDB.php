@@ -147,7 +147,7 @@ class MariaDB extends Adapter
 
         foreach ($indexes as $key => $index) {
             $indexId = $this->filter($index->getId());
-            $indexType = $this->getSQLIndexType($index->getAttribute('type'));
+            $indexType = $index->getAttribute('type');
 
             $indexAttributes = $index->getAttribute('attributes');
             foreach ($indexAttributes as $nested => $attribute) {
@@ -1335,7 +1335,6 @@ class MariaDB extends Adapter
                 }
 
                 return "VARCHAR({$size})";
-                break;
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
@@ -1345,24 +1344,19 @@ class MariaDB extends Adapter
                 }
 
                 return 'INT' . $signed;
-                break;
 
             case Database::VAR_FLOAT:
                 $signed = ($signed) ? '' : ' UNSIGNED';
                 return 'FLOAT' . $signed;
-                break;
 
             case Database::VAR_BOOLEAN:
                 return 'TINYINT(1)';
-                break;
 
             case Database::VAR_DOCUMENT:
                 return 'CHAR(255)';
-                break;
 
             default:
                 throw new Exception('Unknown Type');
-                break;
         }
     }
 
@@ -1391,11 +1385,9 @@ class MariaDB extends Adapter
                 $value = "'{$value}*'";
 
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
-                break;
 
             default:
                 return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                break;
         }
     }
 
@@ -1411,31 +1403,24 @@ class MariaDB extends Adapter
         switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '=';
-                break;
 
             case Query::TYPE_NOTEQUAL:
                 return '!=';
-                break;
 
             case Query::TYPE_LESSER:
                 return '<';
-                break;
 
             case Query::TYPE_LESSEREQUAL:
                 return '<=';
-                break;
 
             case Query::TYPE_GREATER:
                 return '>';
-                break;
 
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
-                break;
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
-                break;
         }
     }
 
@@ -1452,19 +1437,15 @@ class MariaDB extends Adapter
             case Database::INDEX_KEY:
             case Database::INDEX_ARRAY:
                 return 'INDEX';
-                break;
 
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
-                break;
 
             case Database::INDEX_FULLTEXT:
                 return 'FULLTEXT INDEX';
-                break;
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
     }
 

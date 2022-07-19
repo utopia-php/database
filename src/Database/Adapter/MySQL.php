@@ -47,8 +47,8 @@ class MySQL extends MariaDB
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
 
-                foreach ($attributes as $key => &$value) {
-                    $value = '(CAST(' . $value . ' AS char(255) ARRAY))';
+                foreach ($attributes as $key => $value) {
+                    $attributes[$key] = '(CAST(' . $value . ' AS char(255) ARRAY))';
                 }
                 break;
 

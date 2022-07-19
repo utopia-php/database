@@ -28,40 +28,6 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Get SQL Index Type
-     * 
-     * @param string $type
-     * 
-     * @return string
-     */
-    protected function getSQLIndexType(string $type): string
-    {
-        switch ($type) {
-            case Database::INDEX_KEY:
-                $type = 'INDEX';
-                break;
-
-            case Database::INDEX_ARRAY:
-                $type = 'INDEX';
-                break;
-
-            case Database::INDEX_UNIQUE:
-                $type = 'UNIQUE INDEX';
-                break;
-
-            case Database::INDEX_FULLTEXT:
-                $type = 'FULLTEXT INDEX';
-                break;
-
-            default:
-                throw new Exception('Unknown Index Type:' . $type);
-                break;
-        }
-
-        return $type;
-    }
-
-    /**
      * Get SQL Index
      * 
      * @param string $collection

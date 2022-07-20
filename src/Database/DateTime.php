@@ -27,7 +27,7 @@ class DateTime
         }
 
         try {
-            $date = new \DateTime($datetime);
+            new \DateTime($datetime);
         }
         catch(Exception $e) {
             return false;

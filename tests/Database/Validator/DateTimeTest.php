@@ -21,6 +21,7 @@ class DateTimeTest extends TestCase
         $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());
         $this->assertEquals(false, DateTime::isValid("2022-13-04 11:31:52.680"));
         $this->assertGreaterThan('2022-7-2', '2022-7-2 11:31:52.680');
+        $this->assertEquals(23, strlen(DateTime::now()));
     }
 
     public function testDisableConstructor()

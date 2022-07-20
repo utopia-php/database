@@ -2325,7 +2325,7 @@ abstract class Base extends TestCase
         $this->assertEquals(NULL, $document->getAttribute('date2'));
         $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
         $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
-        $this->assertEquals(23, strlen($document->getAttribute('date')));
+
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([

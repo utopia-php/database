@@ -37,10 +37,6 @@ class DatetimeValidator extends Validator
             return false;
         }
 
-        if(!preg_match("/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/", $value)){
-            return false;
-        }
-
         try {
             new \DateTime($value);
         }

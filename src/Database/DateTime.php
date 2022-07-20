@@ -6,7 +6,7 @@ use Exception;
 
 class DateTime
 {
-    protected static string $format = 'Y-m-d H:i:s';
+    protected static string $format = 'Y-m-d H:i:s.v';
 
     /**
      * @throws Exception
@@ -26,12 +26,8 @@ class DateTime
             return false;
         }
 
-        if(!preg_match("/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/", $datetime)){
-            return false;
-        }
-
         try {
-            new \DateTime($datetime);
+            $date = new \DateTime($datetime);
         }
         catch(Exception $e) {
             return false;

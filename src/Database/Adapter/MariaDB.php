@@ -171,8 +171,8 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_uid` CHAR(255) NOT NULL,
-                        `_createdAt` datetime DEFAULT NULL,
-                        `_updatedAt` datetime DEFAULT NULL,
+                        `_createdAt` datetime(3) DEFAULT NULL,
+                        `_updatedAt` datetime(3) DEFAULT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
@@ -1356,7 +1356,7 @@ class MariaDB extends Adapter
                 break;
 
             case Database::VAR_DATETIME:
-                return 'DATETIME';
+                return 'DATETIME(3)';
                 break;
             default:
                 throw new Exception('Unknown Type');

@@ -2327,10 +2327,6 @@ abstract class Base extends TestCase
         $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
         $this->assertEquals(23, strlen($document->getAttribute('date')));
 
-        $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());
-        $this->assertEquals(false, DateTime::isValid("2022-13-04 11:31:52.680"));
-        $this->assertGreaterThan('2022-7-2', '2022-7-2 11:31:52.680');
-
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([
             '$write' => ['role:all'],

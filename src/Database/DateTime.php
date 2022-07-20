@@ -8,12 +8,8 @@ class DateTime
 {
     protected static string $format = 'Y-m-d H:i:s.v';
 
-    /**
-     * @throws Exception
-     */
-    public function __construct()
+    private function __construct()
     {
-        Throw new Exception("Use static right now", 500);
     }
 
     /**

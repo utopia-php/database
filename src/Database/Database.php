@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Utopia\App;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
@@ -187,7 +188,7 @@ class Database
              */
             function (string $value) {
                 $value = new \DateTime($value);
-                $value->setTimezone(new \DateTimeZone('UTC'));
+                $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                 return DateTime::format($value);
             },
             /**

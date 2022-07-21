@@ -177,6 +177,28 @@ class Database
                 return $value;
             }
         );
+
+        self::addFilter(
+            'datetime',
+            /**
+             * @param string $value
+             * @return string
+             * @throws Exception
+             */
+            function (string $value) {
+                $value = new \DateTime($value);
+                $value->setTimezone(new \DateTimeZone('UTC'));
+                return DateTime::format($value);
+            },
+            /**
+             * @param string $value
+             * @return string
+             */
+            function (string $value) {
+                return $value;
+            }
+        );
+
     }
 
     /**

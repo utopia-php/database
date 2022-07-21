@@ -910,11 +910,37 @@ class MariaDB extends Adapter
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $offsetChanged = false;
+
+        if($offset > 0) {
+            $offset--;
+            $offsetChanged = true;
+        }
+
+        $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
         $results = $stmt->fetchAll();
+
+        // hasNext, hasPrevious logic
+        // TODO: Support cursor
+        if(\count($results) === $limit + 2) {
+            \array_pop($results);
+            \array_shift($results);
+        } else if(\count($results) === $limit + 1) {
+            if($offsetChanged) {
+                \array_shift($results);
+            } else {
+                \array_pop($results);
+            }
+        } else if(\count($results) === $limit) {
+            // All good
+        } else {
+            if($offsetChanged) {
+                \array_shift($results);
+            }
+        }
 
         foreach ($results as $key => $value) {
             $results[$key]['$id'] = $value['_uid'];

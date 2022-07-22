@@ -24,8 +24,6 @@ class Query
     const TYPE_CURSORAFTER = 'cursorAfter';
     const TYPE_CURSORBEFORE = 'cursorBefore';
 
-    public static mixed $TYPE_ALIASES; // Filled from constructor
-
     protected string $method = '';
 
     protected array $params = [];
@@ -70,11 +68,11 @@ class Query
      */
     public function getArrayParam(int $index): array
     {
-        if(\is_array($this->params[$index])) {
+        if (\is_array($this->params[$index])) {
             return $this->params[$index];
         }
 
-        return [ $this->params[$index] ];
+        return [$this->params[$index]];
     }
 
     public function setMethod(string $method): self
@@ -96,7 +94,7 @@ class Query
      */
     public static function isMethod(string $value): bool
     {
-        switch ($value) {
+        switch (static::getMethodFromAlias($value)) {
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
             case self::TYPE_LESSER:
@@ -112,10 +110,6 @@ class Query
             case self::TYPE_CURSORAFTER:
             case self::TYPE_CURSORBEFORE:
                 return true;
-        }
-
-        if(\array_key_exists($value, self::$TYPE_ALIASES)) {
-            return true;
         }
 
         return false;
@@ -139,7 +133,7 @@ class Query
         $parametersStart = $paramsStart + 1; // +1 to ignore (
 
         // Check for deprecated query syntax
-        if(\str_contains($method, '.')) {
+        if (\str_contains($method, '.')) {
             throw new \Exception("Invalid query method");
         }
 
@@ -147,88 +141,47 @@ class Query
         $currentArrayParam = []; // We build array param here before pushing when it's ended
         $stack = []; // Stack of syntactical symbols
 
-        // Utility method to know if we are inside string
-        $isInStringStack = function() use (&$stack) {
-            if(
-                \count($stack) > 0 && // Stack is not empty
-                ($stack[\count($stack) - 1] === '"' || $stack[\count($stack) - 1] === '\'')) // Stack ends with string symbol
-            {
-                return true;
-            }
-
-            return false;
-        };
-
-        // Utility method to know if we are inside array
-        $isInArrayStack = function() use (&$stack) {
-            if(
-                \count($stack) > 0 && // Stack is not empty
-                $stack[\count($stack) - 1] === '[') // Stack ends with array symbol
-            {
-                return true;
-            }
-
-            return false;
-        };
-
-        // Utility method to only add symbol is relevant
-        $addSymbol = function (string $char, int $index) use (&$filter, &$currentParam, $isInStringStack) {
-            $nextChar = $filter[$index + 1] ?? '';
-            if(
-                $char === '\\' && // Current char might be escaping
-                ($nextChar === '"' || $nextChar === '\'') // Next char must be string syntax symbol
-            ) {
-                return;
-            }
-
-            // Ignore spaces and commas outside of string
-            if($char === ' ' || $char === ',') {
-                if(\call_user_func($isInStringStack)) {
-                    $currentParam .= $char;
-                }
-            } else {
-                $currentParam .= $char;
-            }
-        };
+        //TODO: make util methods part of the class
 
         // Loop thorough all characters
-        for($i = $parametersStart; $i < $paramsEnd; $i++) {
+        for ($i = $parametersStart; $i < $paramsEnd; $i++) {
             $char = $filter[$i];
 
             // String support + escaping support
-            if(
-                ($char === '"' || $char === '\'') && // Must be string indicator
-                $filter[$i - 1] !== '\\') // Must not be escaped; first cant be
+            if (
+                (\in_array($char, ['"', '\''])) && // Must be string indicator
+                $filter[$i - 1] !== '\\'
+            ) // Must not be escaped; first cant be
             {
-                if(\call_user_func($isInStringStack)) {
+                if (static::isInStringStack($stack)) {
                     // Dont mix-up string symbols. Only allow the same as on start
-                    if($char === $stack[\count($stack) - 1]) {
+                    if ($char === $stack[\count($stack) - 1]) {
                         // End of string
                         \array_pop($stack);
                     }
 
                     // Either way, add symbol to builder
-                    \call_user_func($addSymbol, $char, $i);
+                    static::appendSymbol($stack, $char, $i, $filter, $currentParam);
                 } else {
                     // Start of string
                     $stack[] = $char;
-                    \call_user_func($addSymbol, $char, $i);
+                    static::appendSymbol($stack, $char, $i, $filter, $currentParam);
                 }
 
                 continue;
             }
 
             // Array support
-            if(!(\call_user_func($isInStringStack))) {
-                if($char === '[') {
+            if (!(static::isInStringStack($stack))) {
+                if ($char === '[') {
                     // Start of array
                     $stack[] = $char;
                     continue;
-                } else if($char === ']') {
+                } else if ($char === ']') {
                     // End of array
                     \array_pop($stack);
 
-                    if(!empty($currentParam)) {
+                    if (!empty($currentParam)) {
                         $currentArrayParam[] = $currentParam;
                     }
 
@@ -241,112 +194,173 @@ class Query
             }
 
             // Params separation support
-            if($char === ',') {
+            if ($char === ',') {
                 // Only consider it end of param if stack doesn't end with string
-                if(!(\call_user_func($isInStringStack))) {
-                    // If in array stack, dont merge yet, just mark in array param builder
-                    if(\call_user_func($isInArrayStack)) {
+                if (!static::isInStringStack($stack)) {
+                    // If in array stack, dont merge yet, just mark it in array param builder
+                    if (static::isInArrayStack($stack)) {
                         $currentArrayParam[] = $currentParam;
                         $currentParam = "";
                     } else {
                         // Append from parap builder. Either value, or array
-                        if(!empty($currentArrayParam)) {
-                            // Do nothing, it's done in ] check
-                        } else {
-                            if(!empty($currentParam)) {
+                        if (empty($currentArrayParam)) {
+                            if (!empty($currentParam)) {
                                 $params[] = $currentParam;
                             }
 
                             $currentParam = "";
                         }
                     }
-
                 }
             }
 
             // Value, not relevant to syntax
-            \call_user_func($addSymbol, $char, $i);
+            static::appendSymbol($stack, $char, $i, $filter, $currentParam);
         }
 
-        if(!empty($currentParam)) {
+        if (!empty($currentParam)) {
             $params[] = $currentParam;
             $currentParam = "";
         }
 
         $parsedParams = [];
 
-        foreach($params as $param) {
+        foreach ($params as $param) {
             // If array, parse each child separatelly
-            if(\is_array($param)) {
-                $arr = [];
-
-                foreach($param as $element) {
+            if (\is_array($param)) {
+                foreach ($param as $element) {
                     $arr[] = self::parseParam($element);
                 }
 
-                $parsedParams[] = $arr;
+                $parsedParams[] = $arr ?? [];
             } else {
                 $parsedParams[] = self::parseParam($param);
             }
         }
-
+        $method = static::getMethodFromAlias($method);
 
         return new Query($method, $parsedParams);
     }
 
-    public static function parseParam(string $param) {
+    /**
+     * Utility method to know if we are inside String.
+     *
+     * @param array $stack
+     * @return bool
+     */
+    protected static function isInStringStack(array $stack): bool
+    {
+        if (\count($stack) > 0 && \in_array($stack[\count($stack) - 1], ['"', '\''])) // Stack ends with string symbol ' or "
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Utility method to know if we are inside Array.
+     *
+     * @param array $stack
+     * @return bool
+     */
+    protected static function isInArrayStack(array $stack): bool
+    {
+        if (
+            \count($stack) > 0 && // Stack is not empty
+            $stack[\count($stack) - 1] === '['
+        ) // Stack ends with array symbol
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Utility method to only append symbol if relevant.
+     *
+     * @param array $stack
+     * @param string $char
+     * @param int $index
+     * @param string $filter
+     * @param string $currentParam
+     * @return void
+     */
+    protected static function appendSymbol(array $stack, string $char, int $index, string $filter, string &$currentParam): void
+    {
+        $nextChar = $filter[$index + 1] ?? '';
+        if (
+            $char === '\\' && // Current char might be escaping
+            (\in_array($nextChar, ['"', '\''])) // Next char must be string syntax symbol
+        ) {
+            return;
+        }
+
+        // Ignore spaces and commas outside of string
+        if (\in_array($char, [' ', ','])) {
+            if (static::isInStringStack($stack)) {
+                $currentParam .= $char;
+            }
+        } else {
+            $currentParam .= $char;
+        }
+    }
+
+    /**
+     * Parses param value.
+     *
+     * @param string $param
+     * @return mixed
+     */
+    protected static function parseParam(string $param)
+    {
         $param = \trim($param);
 
-
-        /*
-        // Array param
-        if(\str_starts_with($param, '[')) {
-            $param = substr($param, 1, -1); // Remove [ and ]
-
-            $array = [];
-
-            foreach (\explode(',', $param) as $value) {
-                $array[] = self::parseParam($value);
-            }
-
-            return $array;
-        }
-        */
-
         // Numeric param
-        if(\is_numeric($param)) {
+        if (\is_numeric($param)) {
             // Cast to number
             return $param + 0;
         }
 
         // Boolean param
-        if($param === 'false') {
+        if ($param === 'false') {
             return false;
-        } else if($param === 'true') {
+        } else if ($param === 'true') {
             return true;
         }
 
         // Null param
-        if($param === 'null') {
+        if ($param === 'null') {
             return null;
         }
 
         // String param
-        if(\str_starts_with($param, '"') || \str_starts_with($param, '\'')) {
+        if (\str_starts_with($param, '"') || \str_starts_with($param, '\'')) {
             $param = substr($param, 1, -1); // Remove '' or ""
+
             return $param;
         }
 
         // Unknown format
         return $param;
     }
-}
 
-Query::$TYPE_ALIASES = [
-    'lt' => fn(array $params) => [new Query(Query::TYPE_LESSER, $params)],
-    'lte' => fn(array $params) => [new Query(Query::TYPE_LESSEREQUAL, $params)],
-    'gt' => fn(array $params) => [new Query(Query::TYPE_GREATER, $params)],
-    'gte' => fn(array $params) => [new Query(Query::TYPE_GREATEREQUAL, $params)],
-    'eq' => fn(array $params) => [new Query(Query::TYPE_EQUAL, $params)],
-    'page' => fn(array $params) => [new Query(Query::TYPE_LIMIT, [$params[1]]), new Query(Query::TYPE_OFFSET, [($params[0]-1)*$params[1]])],
-];
+    /**
+     * Returns Method from Alias.
+     *
+     * @param string $method
+     * @return string
+     */
+    static protected function getMethodFromAlias(string $method): string
+    {
+        return match ($method) {
+            'lt' => Query::TYPE_LESSER,
+            'lte' => Query::TYPE_LESSEREQUAL,
+            'gt' => Query::TYPE_GREATER,
+            'gte' => Query::TYPE_GREATEREQUAL,
+            'eq' => Query::TYPE_EQUAL,
+            default => $method
+        };
+    }
+}

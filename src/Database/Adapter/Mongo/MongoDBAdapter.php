@@ -552,6 +552,8 @@ class MongoDBAdapter extends Adapter
          */
         $found = [];
 
+        $filters = $this->buildFilters($filters);
+
         $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
 
         foreach ($this->client->toArray($results) as $i => $result) {

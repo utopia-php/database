@@ -50,7 +50,7 @@ class MongoDBTest extends Base
     }
 
     /**
-     * @return Adapter
+     * @return Database
      */
     static function getDatabase(): Database
     {
@@ -113,7 +113,7 @@ class MongoDBTest extends Base
             'empty' => [],
         ]));
 
-        $documents = static::getDatabase()->find('documents', [ new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']) ]);
+        $documents = static::getDatabase()->find('documents', [ new Query(Query::TYPE_SEARCH, ['string', '*test+alias@email-provider.com']) ]);
 
         $this->assertEquals(1, count($documents));
 

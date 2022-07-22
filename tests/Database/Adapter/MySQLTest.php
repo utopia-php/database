@@ -49,7 +49,7 @@ class MySQLTest extends Base
     }
 
     /**
-     * @reture Adapter
+     * @return Database
      */
     static function getDatabase(): Database
     {

@@ -17,7 +17,7 @@ use Utopia\Validator\Range;
 abstract class Base extends TestCase
 {
     /**
-     * @return Adapter
+     * @return Database
      */
     abstract static protected function getDatabase(): Database;
 
@@ -2432,7 +2432,7 @@ abstract class Base extends TestCase
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
             $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
 
-            $documents = $database->find($collectionName, [ new Query($keyword, Query::TYPE_EQUAL, ["Reserved:${keyword}"]) ]);
+            $documents = $database->find($collectionName, [ new Query(Query::TYPE_EQUAL, [$keyword, "Reserved:${keyword}"]) ]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 

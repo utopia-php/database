@@ -40,7 +40,7 @@ class MariaDBTest extends Base
     }
 
     /**
-     * @return Adapter
+     * @return Database
      */
     static function getDatabase(): Database
     {

@@ -145,7 +145,6 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
         $query = Query::parse('gte(1)');
         $this->assertEquals(Query::TYPE_GREATEREQUAL, $query->getMethod());
-
     }
 
     public function testParseComplex()
@@ -200,7 +199,6 @@ class QueryTest extends TestCase
         $this->assertIsArray($query->getArrayParam(1));
         $this->assertCount(1, $query->getArrayParam(1));
 
-
         $query->setFirstParam("name");
 
         $this->assertEquals('name', $query->getFirstParam());
@@ -221,7 +219,6 @@ class QueryTest extends TestCase
 
     public function testisMethod()
     {
-
         $this->assertTrue(Query::isMethod('equal'));
         $this->assertTrue(Query::isMethod('notEqual'));
         $this->assertTrue(Query::isMethod('lessThan'));

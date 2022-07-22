@@ -24,6 +24,16 @@ class Query
     const TYPE_CURSORAFTER = 'cursorAfter';
     const TYPE_CURSORBEFORE = 'cursorBefore';
 
+    protected const CHAR_ALL_QUOTES = [self::CHAR_SINGLE_QUOTE, self::CHAR_DOUBLE_QUOTE];
+    protected const CHAR_SINGLE_QUOTE = '\'';
+    protected const CHAR_DOUBLE_QUOTE = '"';
+    protected const CHAR_COMMA = ',';
+    protected const CHAR_SPACE = ' ';
+    protected const CHAR_BRACKET_START = '[';
+    protected const CHAR_BRACKET_END = ']';
+    protected const CHAR_PARENTHESES_START = '(';
+    protected const CHAR_PARENTHESES_END = ')';
+
     protected string $method = '';
 
     protected array $params = [];
@@ -49,22 +59,32 @@ class Query
 
     /**
      * Helper method returning first param. In first param we often store attribute
+     *
+     * @return null|string
      */
-    public function getFirstParam(): mixed
+    public function getFirstParam(): ?string
     {
-        return $this->params[0];
+        return $this->params[0] ?? null;
     }
 
     /**
      * Helper method changing first param. In first param we often store attribute
+     *
+     * @param string $value
+     * @return self
      */
-    public function setFirstParam(mixed $value): void
+    public function setFirstParam(string $value): self
     {
         $this->params[0] = $value;
+
+        return $this;
     }
 
     /**
-     * Helper method. Returns param, but in form of array array 
+     * Helper method. Returns param, but in form of array array.
+     *
+     * @param int $index
+     * @return array
      */
     public function getArrayParam(int $index): array
     {
@@ -75,6 +95,11 @@ class Query
         return [$this->params[$index]];
     }
 
+    /**
+     * Sets Method.
+     * @param string $method
+     * @return self
+     */
     public function setMethod(string $method): self
     {
         $this->method = $method;
@@ -82,6 +107,11 @@ class Query
         return $this;
     }
 
+    /**
+     * Sets Param.
+     * @param array $params
+     * @return self
+     */
     public function setParams(array $params): self
     {
         $this->params = $params;
@@ -91,6 +121,9 @@ class Query
 
     /**
      * Check if method is supported
+     *
+     * @param string $value
+     * @return bool
      */
     public static function isMethod(string $value): bool
     {
@@ -117,15 +150,19 @@ class Query
 
     /**
      * Parse query filter
-     * */
-    public static function parse(string $filter): Query
+     *
+     * @param string $filter
+     * @return self
+     * @throws \Exception
+     */
+    public static function parse(string $filter): self
     {
         // Init empty vars we fill later
         $method = '';
         $params = [];
 
         // Separate method from filter
-        $paramsStart = mb_strpos($filter, '(');
+        $paramsStart = mb_strpos($filter, static::CHAR_PARENTHESES_START);
         $method = mb_substr($filter, 0, $paramsStart);
 
         // Separate params from filter
@@ -141,15 +178,13 @@ class Query
         $currentArrayParam = []; // We build array param here before pushing when it's ended
         $stack = []; // Stack of syntactical symbols
 
-        //TODO: make util methods part of the class
-
         // Loop thorough all characters
         for ($i = $parametersStart; $i < $paramsEnd; $i++) {
             $char = $filter[$i];
 
             // String support + escaping support
             if (
-                (\in_array($char, ['"', '\''])) && // Must be string indicator
+                (\in_array($char, static::CHAR_ALL_QUOTES)) && // Must be string indicator
                 $filter[$i - 1] !== '\\'
             ) // Must not be escaped; first cant be
             {
@@ -173,11 +208,11 @@ class Query
 
             // Array support
             if (!(static::isInStringStack($stack))) {
-                if ($char === '[') {
+                if ($char === static::CHAR_BRACKET_START) {
                     // Start of array
                     $stack[] = $char;
                     continue;
-                } else if ($char === ']') {
+                } else if ($char === static::CHAR_BRACKET_END) {
                     // End of array
                     \array_pop($stack);
 
@@ -194,7 +229,7 @@ class Query
             }
 
             // Params separation support
-            if ($char === ',') {
+            if ($char === static::CHAR_COMMA) {
                 // Only consider it end of param if stack doesn't end with string
                 if (!static::isInStringStack($stack)) {
                     // If in array stack, dont merge yet, just mark it in array param builder
@@ -250,7 +285,7 @@ class Query
      */
     protected static function isInStringStack(array $stack): bool
     {
-        if (\count($stack) > 0 && \in_array($stack[\count($stack) - 1], ['"', '\''])) // Stack ends with string symbol ' or "
+        if (\count($stack) > 0 && \in_array($stack[\count($stack) - 1], static::CHAR_ALL_QUOTES)) // Stack ends with string symbol ' or "
         {
             return true;
         }
@@ -268,7 +303,7 @@ class Query
     {
         if (
             \count($stack) > 0 && // Stack is not empty
-            $stack[\count($stack) - 1] === '['
+            $stack[\count($stack) - 1] === static::CHAR_BRACKET_START
         ) // Stack ends with array symbol
         {
             return true;
@@ -292,13 +327,13 @@ class Query
         $nextChar = $filter[$index + 1] ?? '';
         if (
             $char === '\\' && // Current char might be escaping
-            (\in_array($nextChar, ['"', '\''])) // Next char must be string syntax symbol
+            (\in_array($nextChar, static::CHAR_ALL_QUOTES)) // Next char must be string syntax symbol
         ) {
             return;
         }
 
         // Ignore spaces and commas outside of string
-        if (\in_array($char, [' ', ','])) {
+        if (\in_array($char, [static::CHAR_SPACE, static::CHAR_COMMA])) {
             if (static::isInStringStack($stack)) {
                 $currentParam .= $char;
             }
@@ -313,7 +348,7 @@ class Query
      * @param string $param
      * @return mixed
      */
-    protected static function parseParam(string $param)
+    protected static function parseParam(string $param): mixed
     {
         $param = \trim($param);
 
@@ -336,7 +371,7 @@ class Query
         }
 
         // String param
-        if (\str_starts_with($param, '"') || \str_starts_with($param, '\'')) {
+        if (\str_starts_with($param, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($param, static::CHAR_SINGLE_QUOTE)) {
             $param = substr($param, 1, -1); // Remove '' or ""
 
             return $param;

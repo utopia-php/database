@@ -21,7 +21,7 @@ class QueryBench
         yield '128 Attributes' => ['attributes' => str_repeat('"' . $this->generateRandomString() . '",', 128)];
     }
 
-    protected function generateRandomString(int $length = 10)
+    protected function generateRandomString(int $length = 10): string
     {
         return substr(str_shuffle(str_repeat($x = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length / strlen($x)))), 1, $length);
     }

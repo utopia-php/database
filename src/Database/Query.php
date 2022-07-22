@@ -126,62 +126,179 @@ class Query
      * */
     public static function parse(string $filter): Query
     {
+        // Init empty vars we fill later
         $method = '';
         $params = [];
 
-        // Separate method and params
+        // Separate method from filter
         $paramsStart = mb_strpos($filter, '(');
         $method = mb_substr($filter, 0, $paramsStart);
 
-        // Remove everything after end of query
-        $paramsEnd = mb_strpos($filter, ')');
-        $overflowChars = \strlen($filter) - 1 - $paramsEnd;
-        if($overflowChars > 0) {
-            $filter = substr($filter, 0, -1 * $overflowChars);
-        }
+        // Separate params from filter
+        $paramsEnd = \strlen($filter) - 1; // -1 to ignore )
+        $parametersStart = $paramsStart + 1; // +1 to ignore (
 
         // Check for deprecated query syntax
         if(\str_contains($method, '.')) {
             throw new \Exception("Invalid query method");
         }
 
-        // Keep track of what hasn't been processed yet
-        $unprocessedFilter = substr($filter, $paramsStart + 1);
+        $currentParam = ""; // We build param here before pushing when it's ended
+        $currentArrayParam = []; // We build array param here before pushing when it's ended
+        $stack = []; // Stack of syntactical symbols
 
-        // While ends when we only have ')'
-        while(\strlen($unprocessedFilter) > 1) {
-            $arrayStart = mb_strpos($unprocessedFilter, '[');
-            $paramEnd = mb_strpos($unprocessedFilter, ',');
-
-            // Array parameter support
-            if($arrayStart !== false && $arrayStart < $paramEnd) {
-                $paramEnd = mb_strpos($unprocessedFilter, ']') + 1;
+        // Utility method to know if we are inside string
+        $isInStringStack = function() use (&$stack) {
+            if(
+                \count($stack) > 0 && // Stack is not empty
+                ($stack[\count($stack) - 1] === '"' || $stack[\count($stack) - 1] === '\'')) // Stack ends with string symbol
+            {
+                return true;
             }
 
-            // No comma found, this is last param
-            if($paramEnd === false) {
-                $paramEnd = \strlen($unprocessedFilter) - 1;
+            return false;
+        };
+
+        // Utility method to know if we are inside array
+        $isInArrayStack = function() use (&$stack) {
+            if(
+                \count($stack) > 0 && // Stack is not empty
+                $stack[\count($stack) - 1] === '[') // Stack ends with array symbol
+            {
+                return true;
             }
 
-            // Extract parameter from correct place
-            $param = mb_substr($unprocessedFilter, 0, $paramEnd);
-            $param = \trim($param);
+            return false;
+        };
 
-            // Empty parameter means comma without anything after. We ignore such empty parameter
-            if(!empty($param)) {
-                $params[] = self::parseParam($param);
+        // Utility method to only add symbol is relevant
+        $addSymbol = function (string $char, int $index) use (&$filter, &$currentParam, $isInStringStack) {
+            $nextChar = $filter[$index + 1] ?? '';
+            if(
+                $char === '\\' && // Current char might be escaping
+                ($nextChar === '"' || $nextChar === '\'') // Next char must be string syntax symbol
+            ) {
+                return;
             }
 
-            // Shorten unprocessed list until it finishes
-            $unprocessedFilter = substr($unprocessedFilter, $paramEnd + 1);
+            // Ignore spaces and commas outside of string
+            if($char === ' ' || $char === ',') {
+                if(\call_user_func($isInStringStack)) {
+                    $currentParam .= $char;
+                }
+            } else {
+                $currentParam .= $char;
+            }
+        };
+
+        // Loop thorough all characters
+        for($i = $parametersStart; $i < $paramsEnd; $i++) {
+            $char = $filter[$i];
+
+            // String support + escaping support
+            if(
+                ($char === '"' || $char === '\'') && // Must be string indicator
+                $filter[$i - 1] !== '\\') // Must not be escaped; first cant be
+            {
+                if(\call_user_func($isInStringStack)) {
+                    // Dont mix-up string symbols. Only allow the same as on start
+                    if($char === $stack[\count($stack) - 1]) {
+                        // End of string
+                        \array_pop($stack);
+                    }
+
+                    // Either way, add symbol to builder
+                    \call_user_func($addSymbol, $char, $i);
+                } else {
+                    // Start of string
+                    $stack[] = $char;
+                    \call_user_func($addSymbol, $char, $i);
+                }
+
+                continue;
+            }
+
+            // Array support
+            if(!(\call_user_func($isInStringStack))) {
+                if($char === '[') {
+                    // Start of array
+                    $stack[] = $char;
+                    continue;
+                } else if($char === ']') {
+                    // End of array
+                    \array_pop($stack);
+
+                    if(!empty($currentParam)) {
+                        $currentArrayParam[] = $currentParam;
+                    }
+
+                    $params[] = $currentArrayParam;
+                    $currentArrayParam = [];
+                    $currentParam = "";
+
+                    continue;
+                }
+            }
+
+            // Params separation support
+            if($char === ',') {
+                // Only consider it end of param if stack doesn't end with string
+                if(!(\call_user_func($isInStringStack))) {
+                    // If in array stack, dont merge yet, just mark in array param builder
+                    if(\call_user_func($isInArrayStack)) {
+                        $currentArrayParam[] = $currentParam;
+                        $currentParam = "";
+                    } else {
+                        // Append from parap builder. Either value, or array
+                        if(!empty($currentArrayParam)) {
+                            // Do nothing, it's done in ] check
+                        } else {
+                            if(!empty($currentParam)) {
+                                $params[] = $currentParam;
+                            }
+
+                            $currentParam = "";
+                        }
+                    }
+
+                }
+            }
+
+            // Value, not relevant to syntax
+            \call_user_func($addSymbol, $char, $i);
         }
 
-        return new Query($method, $params);
+        if(!empty($currentParam)) {
+            $params[] = $currentParam;
+            $currentParam = "";
+        }
+
+        $parsedParams = [];
+
+        foreach($params as $param) {
+            // If array, parse each child separatelly
+            if(\is_array($param)) {
+                $arr = [];
+
+                foreach($param as $element) {
+                    $arr[] = self::parseParam($element);
+                }
+
+                $parsedParams[] = $arr;
+            } else {
+                $parsedParams[] = self::parseParam($param);
+            }
+        }
+
+
+        return new Query($method, $parsedParams);
     }
 
     public static function parseParam(string $param) {
         $param = \trim($param);
 
+
+        /*
         // Array param
         if(\str_starts_with($param, '[')) {
             $param = substr($param, 1, -1); // Remove [ and ]
@@ -194,6 +311,7 @@ class Query
 
             return $array;
         }
+        */
 
         // Numeric param
         if(\is_numeric($param)) {

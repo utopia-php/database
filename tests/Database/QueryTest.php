@@ -91,6 +91,35 @@ class QueryTest extends TestCase
         $this->assertEquals(null, $query->getParams()[1]);
     }
 
+    public function testParseV2() {
+        $query = Query::parse('equal(1)');
+        $this->assertEquals(1, $query->getParams()[0]);
+
+        $query = Query::parse('equal(1, ["[Hello] World"])');
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("[Hello] World", $query->getParams()[1][0]);
+
+        $query = Query::parse('equal(1, ["(Hello) World"])');
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("(Hello) World", $query->getParams()[1][0]);
+
+        $query = Query::parse('equal(1, ["Hello , World"])');
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("Hello , World", $query->getParams()[1][0]);
+
+        $query = Query::parse('equal(1, ["Hello , World"])');
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("Hello , World", $query->getParams()[1][0]);
+
+        $query = Query::parse('equal(1, ["Hello /\ World"])');
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("Hello /\ World", $query->getParams()[1][0]);
+
+        $query = Query::parse('equal(1, ["I\'m [**awesome**], \"Dev\"eloper"])');
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("I'm [**awesome**], \"Dev\"eloper", $query->getParams()[1][0]);
+    }
+
     public function testParseComplex()
     {
         $queries = [

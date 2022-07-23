@@ -177,19 +177,16 @@ class Query
         $currentArrayParam = []; // We build array param here before pushing when it's ended
         $stack = []; // Stack of syntactical symbols
 
+        $stringStackState = false;
+        $arrayStackState = false;
+
         // Loop thorough all characters
         for ($i = $parametersStart; $i < $paramsEnd; $i++) {
             $char = $filter[$i];
 
-            $isStringStack = static::isInStringStack($stack);
-
-            // If not special symbol, continue asap
-            $isSpecialSymbol = self::isSpecialChar($char);
-            if(!$isSpecialSymbol) {
-                static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
-                continue;
-            }
-
+            $isStringStack = $stringStackState;
+            $isArrayStack = $arrayStackState;
+            
             // String support + escaping support
             if (
                 (self::isQuote($char)) && // Must be string indicator
@@ -201,6 +198,19 @@ class Query
                     if ($char === $stack[\count($stack) - 1]) {
                         // End of string
                         \array_pop($stack);
+
+                        $stackCount = \count($stack);
+                        if ($stackCount > 0) {
+                            $lastChar = $stack[\count($stack) - 1];
+                            $stringStackState = $lastChar === static::CHAR_SINGLE_QUOTE || $lastChar === static::CHAR_DOUBLE_QUOTE;
+
+                            if(!$stringStackState) {
+                                $arrayStackState = $lastChar === static::CHAR_BRACKET_START;
+                            }
+                        } else {
+                            $stringStackState = false;
+                            $arrayStackState = false;
+                        }
                     }
 
                     // Either way, add symbol to builder
@@ -208,6 +218,8 @@ class Query
                 } else {
                     // Start of string
                     $stack[] = $char;
+                    $stringStackState = true;
+                    $arrayStackState = false;
                     static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
                 }
 
@@ -219,10 +231,25 @@ class Query
                 if ($char === static::CHAR_BRACKET_START) {
                     // Start of array
                     $stack[] = $char;
+                    $stringStackState = false;
+                    $arrayStackState = true;
                     continue;
                 } else if ($char === static::CHAR_BRACKET_END) {
                     // End of array
                     \array_pop($stack);
+
+                    $stackCount = \count($stack);
+                    if ($stackCount > 0) {
+                        $lastChar = $stack[\count($stack) - 1];
+                        $stringStackState = $lastChar === static::CHAR_SINGLE_QUOTE || $lastChar === static::CHAR_DOUBLE_QUOTE;
+
+                        if(!$stringStackState) {
+                            $arrayStackState = $lastChar === static::CHAR_BRACKET_START;
+                        }
+                    } else {
+                        $stringStackState = false;
+                        $arrayStackState = false;
+                    }
 
                     if (!empty($currentParam)) {
                         $currentArrayParam[] = $currentParam;
@@ -235,7 +262,7 @@ class Query
                     continue;
                 } else if ($char === static::CHAR_COMMA) { // Params separation support
                     // If in array stack, dont merge yet, just mark it in array param builder
-                    if (static::isInArrayStack($stack)) {
+                    if ($isArrayStack) {
                         $currentArrayParam[] = $currentParam;
                         $currentParam = "";
                     } else {
@@ -279,42 +306,6 @@ class Query
         $method = static::getMethodFromAlias($method);
 
         return new Query($method, $parsedParams);
-    }
-
-    /**
-     * Utility method to know if we are inside String.
-     *
-     * @param array $stack
-     * @return bool
-     */
-    protected static function isInStringStack(array $stack): bool
-    {
-        $stackLength = \count($stack);
-
-        if ($stackLength > 0 && self::isQuote($stack[$stackLength - 1])) // Stack ends with string symbol ' or "
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Utility method to know if we are inside Array.
-     *
-     * @param array $stack
-     * @return bool
-     */
-    protected static function isInArrayStack(array $stack): bool
-    {
-        $stackLength = \count($stack);
-        
-        if ($stackLength > 0 && $stack[$stackLength - 1] === static::CHAR_BRACKET_START) // Stack ends with array symbol
-        {
-            return true;
-        }
-
-        return false;
     }
 
     /**

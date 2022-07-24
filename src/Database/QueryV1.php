@@ -153,7 +153,7 @@ class QueryV1
      *
      * @return QueryV1
      * */
-    public static function parse(string $filter): QueryV1
+    public static function parse(string $filter): self
     {
         $attribute = '';
         $operator = '';
@@ -176,7 +176,7 @@ class QueryV1
                 break;
         }
 
-        return new QueryV1($attribute, $operator, $values);
+        return new self($attribute, $operator, $values);
     }
 
     /**

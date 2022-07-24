@@ -305,7 +305,7 @@ class Query
 
         $method = static::getMethodFromAlias($method);
 
-        return new Query($method, $parsedParams);
+        return new self($method, $parsedParams);
     }
 
     /**
@@ -409,11 +409,11 @@ class Query
     static protected function getMethodFromAlias(string $method): string
     {
         return match ($method) {
-            'lt' => Query::TYPE_LESSER,
-            'lte' => Query::TYPE_LESSEREQUAL,
-            'gt' => Query::TYPE_GREATER,
-            'gte' => Query::TYPE_GREATEREQUAL,
-            'eq' => Query::TYPE_EQUAL,
+            'lt' => self::TYPE_LESSER,
+            'lte' => self::TYPE_LESSEREQUAL,
+            'gt' => self::TYPE_GREATER,
+            'gte' => self::TYPE_GREATEREQUAL,
+            'eq' => self::TYPE_EQUAL,
             default => $method
         };
     }

@@ -805,21 +805,21 @@ class MariaDB extends Adapter
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
-                $orderOperatorInternalId = Query::TYPE_GREATER; // To preserve natural order
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderOperator)} :cursor 
+                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
                             table_main.{$attribute} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
+                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } else if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -832,10 +832,10 @@ class MariaDB extends Adapter
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
             ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderOperator)} {$cursor['$internalId']} )";
+            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1364,15 +1364,15 @@ class MariaDB extends Adapter
      * Get SQL Conditions
      *
      * @param string $attribute
-     * @param string $operator
+     * @param string $method
      * @param string $placeholder
      * @param mixed $value
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(string $attribute, string $operator, string $placeholder, $value): string
+    protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
     {
-        switch ($operator) {
+        switch ($method) {
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1387,20 +1387,21 @@ class MariaDB extends Adapter
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             default:
-                return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                break;
         }
     }
 
     /**
      * Get SQL Operator
      *
-     * @param string $operator
+     * @param string $method
      * @return string
      * @throws Exception
      */
-    protected function getSQLOperator(string $operator): string
+    protected function getSQLOperator(string $method): string
     {
-        switch ($operator) {
+        switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
 
@@ -1420,7 +1421,8 @@ class MariaDB extends Adapter
                 return '>=';
 
             default:
-                throw new Exception('Unknown Operator:' . $operator);
+                throw new Exception('Unknown method:' . $method);
+                break;
         }
     }
 

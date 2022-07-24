@@ -92,7 +92,7 @@ class Queries extends Validator
         $queries = [];
 
         foreach ($value as $query) {
-            // [attribute => operator]
+            // [attribute => method]
             $queries[$query->getFirstParam()] = $query->getMethod(); 
 
             if (!$this->validator->isValid($query)) {
@@ -117,9 +117,9 @@ class Queries extends Validator
                 return false;
             }
 
-            // search operator requires fulltext index
+            // search method requires fulltext index
             if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search operator requires fulltext index: ' . implode(",", array_keys($queries));
+                $this->message = 'Search method requires fulltext index: ' . implode(",", array_keys($queries));
                 return false;
             } 
         }

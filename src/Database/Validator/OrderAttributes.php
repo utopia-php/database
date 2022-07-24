@@ -134,9 +134,9 @@ class OrderAttributes extends Validator
                 return false;
             }
 
-            // search operator requires fulltext index
+            // search method requires fulltext index
             if (in_array(Query::TYPE_SEARCH, $attributes) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search operator requires fulltext index: ' . implode(",", $attributes);
+                $this->message = 'Search method requires fulltext index: ' . implode(",", $attributes);
                 return false;
             }
         }

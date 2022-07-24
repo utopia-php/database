@@ -945,7 +945,7 @@ abstract class Base extends TestCase
         ]);
 
         // TODO@kodumbeats hacky way to pass mariadb tests
-        // Remove when $operator="contains" is supported
+        // Remove when query method contains() is supported
         if (static::getAdapterName() === "mongodb")
         {
             /**

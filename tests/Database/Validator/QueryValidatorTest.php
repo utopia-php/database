@@ -105,14 +105,14 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(Query::parse('contains("tags", "action")')));
     }
 
-    public function testInvalidOperator()
+    public function testInvalidMethod()
     {
         $validator = new QueryValidator($this->schema);
 
         $response = $validator->isValid(Query::parse('eqqual("title", "Iron Man")'));
 
         $this->assertEquals(false, $response);
-        $this->assertEquals('Query operator invalid: eqqual', $validator->getDescription());
+        $this->assertEquals('Query method invalid: eqqual', $validator->getDescription());
     }
 
     public function testAttributeNotFound()
@@ -135,13 +135,13 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
     }
 
-    public function testOperatorWrongType()
+    public function testMethodWrongType()
     {
         $validator = new QueryValidator($this->schema);
 
         $response = $validator->isValid(Query::parse('contains("title", "Iron")'));
 
         $this->assertEquals(false, $response);
-        $this->assertEquals('Query operator only supported on array attributes: contains', $validator->getDescription());
+        $this->assertEquals('Query method only supported on array attributes: contains', $validator->getDescription());
     }
 }

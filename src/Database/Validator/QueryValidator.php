@@ -22,7 +22,7 @@ class QueryValidator extends Validator
     /**
      * @var array
      */
-    protected $operators = [
+    protected $methods = [
         'equal',
         'notEqual',
         'lesser',
@@ -89,9 +89,9 @@ class QueryValidator extends Validator
      */
     public function isValid($query): bool
     {
-        // Validate operator
-        if (!in_array($query->getMethod(), $this->operators)) {
-            $this->message = 'Query operator invalid: ' . $query->getMethod();
+        // Validate method
+        if (!in_array($query->getMethod(), $this->methods)) {
+            $this->message = 'Query method invalid: ' . $query->getMethod();
             return false;
         }
 
@@ -113,9 +113,9 @@ class QueryValidator extends Validator
             }
         }
 
-        // Contains operator only supports array attributes
+        // Contains method only supports array attributes
         if (!$this->schema[$attributeIndex]['array'] && $query->getMethod() === Query::TYPE_CONTAINS) {
-            $this->message = 'Query operator only supported on array attributes: ' . $query->getMethod();
+            $this->message = 'Query method only supported on array attributes: ' . $query->getMethod();
             return false;
         } 
 

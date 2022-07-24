@@ -24,7 +24,6 @@ class Query
     const TYPE_CURSORAFTER = 'cursorAfter';
     const TYPE_CURSORBEFORE = 'cursorBefore';
 
-    protected const CHAR_ALL_QUOTES = [self::CHAR_SINGLE_QUOTE, self::CHAR_DOUBLE_QUOTE];
     protected const CHAR_SINGLE_QUOTE = '\'';
     protected const CHAR_DOUBLE_QUOTE = '"';
     protected const CHAR_COMMA = ',';
@@ -178,43 +177,79 @@ class Query
         $currentArrayParam = []; // We build array param here before pushing when it's ended
         $stack = []; // Stack of syntactical symbols
 
+        $stringStackState = false;
+        $arrayStackState = false;
+
         // Loop thorough all characters
         for ($i = $parametersStart; $i < $paramsEnd; $i++) {
             $char = $filter[$i];
 
+            $isStringStack = $stringStackState;
+            $isArrayStack = $arrayStackState;
+            
             // String support + escaping support
             if (
-                (\in_array($char, static::CHAR_ALL_QUOTES)) && // Must be string indicator
-                $filter[$i - 1] !== '\\'
-            ) // Must not be escaped; first cant be
+                (self::isQuote($char)) && // Must be string indicator
+                $filter[$i - 1] !== '\\' // Must not be escaped; first cant be
+            )
             {
-                if (static::isInStringStack($stack)) {
+                if ($isStringStack) {
                     // Dont mix-up string symbols. Only allow the same as on start
                     if ($char === $stack[\count($stack) - 1]) {
                         // End of string
                         \array_pop($stack);
+
+                        $stackCount = \count($stack);
+                        if ($stackCount > 0) {
+                            $lastChar = $stack[\count($stack) - 1];
+                            $stringStackState = $lastChar === static::CHAR_SINGLE_QUOTE || $lastChar === static::CHAR_DOUBLE_QUOTE;
+
+                            if(!$stringStackState) {
+                                $arrayStackState = $lastChar === static::CHAR_BRACKET_START;
+                            }
+                        } else {
+                            $stringStackState = false;
+                            $arrayStackState = false;
+                        }
                     }
 
                     // Either way, add symbol to builder
-                    static::appendSymbol($stack, $char, $i, $filter, $currentParam);
+                    static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
                 } else {
                     // Start of string
                     $stack[] = $char;
-                    static::appendSymbol($stack, $char, $i, $filter, $currentParam);
+                    $stringStackState = true;
+                    $arrayStackState = false;
+                    static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
                 }
 
                 continue;
             }
 
             // Array support
-            if (!(static::isInStringStack($stack))) {
+            if (!($isStringStack)) {
                 if ($char === static::CHAR_BRACKET_START) {
                     // Start of array
                     $stack[] = $char;
+                    $stringStackState = false;
+                    $arrayStackState = true;
                     continue;
                 } else if ($char === static::CHAR_BRACKET_END) {
                     // End of array
                     \array_pop($stack);
+
+                    $stackCount = \count($stack);
+                    if ($stackCount > 0) {
+                        $lastChar = $stack[\count($stack) - 1];
+                        $stringStackState = $lastChar === static::CHAR_SINGLE_QUOTE || $lastChar === static::CHAR_DOUBLE_QUOTE;
+
+                        if(!$stringStackState) {
+                            $arrayStackState = $lastChar === static::CHAR_BRACKET_START;
+                        }
+                    } else {
+                        $stringStackState = false;
+                        $arrayStackState = false;
+                    }
 
                     if (!empty($currentParam)) {
                         $currentArrayParam[] = $currentParam;
@@ -225,15 +260,9 @@ class Query
                     $currentParam = "";
 
                     continue;
-                }
-            }
-
-            // Params separation support
-            if ($char === static::CHAR_COMMA) {
-                // Only consider it end of param if stack doesn't end with string
-                if (!static::isInStringStack($stack)) {
+                } else if ($char === static::CHAR_COMMA) { // Params separation support
                     // If in array stack, dont merge yet, just mark it in array param builder
-                    if (static::isInArrayStack($stack)) {
+                    if ($isArrayStack) {
                         $currentArrayParam[] = $currentParam;
                         $currentParam = "";
                     } else {
@@ -242,15 +271,16 @@ class Query
                             if (!empty($currentParam)) {
                                 $params[] = $currentParam;
                             }
-
+    
                             $currentParam = "";
                         }
                     }
+                    continue;
                 }
             }
 
             // Value, not relevant to syntax
-            static::appendSymbol($stack, $char, $i, $filter, $currentParam);
+            static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
         }
 
         if (!empty($currentParam)) {
@@ -272,44 +302,10 @@ class Query
                 $parsedParams[] = self::parseParam($param);
             }
         }
+
         $method = static::getMethodFromAlias($method);
 
         return new Query($method, $parsedParams);
-    }
-
-    /**
-     * Utility method to know if we are inside String.
-     *
-     * @param array $stack
-     * @return bool
-     */
-    protected static function isInStringStack(array $stack): bool
-    {
-        if (\count($stack) > 0 && \in_array($stack[\count($stack) - 1], static::CHAR_ALL_QUOTES)) // Stack ends with string symbol ' or "
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Utility method to know if we are inside Array.
-     *
-     * @param array $stack
-     * @return bool
-     */
-    protected static function isInArrayStack(array $stack): bool
-    {
-        if (
-            \count($stack) > 0 && // Stack is not empty
-            $stack[\count($stack) - 1] === static::CHAR_BRACKET_START
-        ) // Stack ends with array symbol
-        {
-            return true;
-        }
-
-        return false;
     }
 
     /**
@@ -322,24 +318,58 @@ class Query
      * @param string $currentParam
      * @return void
      */
-    protected static function appendSymbol(array $stack, string $char, int $index, string $filter, string &$currentParam): void
+    protected static function appendSymbol(bool $isStringStack, string $char, int $index, string $filter, string &$currentParam): void
     {
         $nextChar = $filter[$index + 1] ?? '';
         if (
             $char === '\\' && // Current char might be escaping
-            (\in_array($nextChar, static::CHAR_ALL_QUOTES)) // Next char must be string syntax symbol
+            self::isQuote($nextChar) // Next char must be string syntax symbol
         ) {
             return;
         }
 
         // Ignore spaces and commas outside of string
-        if (\in_array($char, [static::CHAR_SPACE, static::CHAR_COMMA])) {
-            if (static::isInStringStack($stack)) {
+        $canBeIgnored = false;
+
+        if($char === static::CHAR_SPACE) {
+            $canBeIgnored = true;
+        } else if($char === static::CHAR_COMMA) {
+            $canBeIgnored = true;
+        }
+
+        if ($canBeIgnored) {
+            if ($isStringStack) {
                 $currentParam .= $char;
             }
         } else {
             $currentParam .= $char;
         }
+    }
+
+    protected static function isQuote(string $char) {
+        if($char === self::CHAR_SINGLE_QUOTE) {
+            return true;
+        } else if($char === self::CHAR_DOUBLE_QUOTE) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected static function isSpecialChar(string $char) {
+        if($char === static::CHAR_COMMA) {
+            return true;
+        } else if($char === static::CHAR_BRACKET_END) {
+            return true;
+        } else if($char === static::CHAR_BRACKET_START) {
+            return true;
+        } else if($char === static::CHAR_DOUBLE_QUOTE) {
+            return true;
+        } else if($char === static::CHAR_SINGLE_QUOTE) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -351,29 +381,18 @@ class Query
     protected static function parseParam(string $param): mixed
     {
         $param = \trim($param);
-
-        // Numeric param
-        if (\is_numeric($param)) {
-            // Cast to number
-            return $param + 0;
-        }
-
-        // Boolean param
-        if ($param === 'false') {
+        
+        if ($param === 'false') { // Boolean param
             return false;
         } else if ($param === 'true') {
             return true;
-        }
-
-        // Null param
-        if ($param === 'null') {
+        } else if ($param === 'null') { // Null param
             return null;
-        }
-
-        // String param
-        if (\str_starts_with($param, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($param, static::CHAR_SINGLE_QUOTE)) {
-            $param = substr($param, 1, -1); // Remove '' or ""
-
+        }  else if (\is_numeric($param)) { // Numeric param
+            // Cast to number
+            return $param + 0;
+        } else if (\str_starts_with($param, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($param, static::CHAR_SINGLE_QUOTE)) { // String param
+            $param = \substr($param, 1, -1); // Remove '' or ""
             return $param;
         }
 

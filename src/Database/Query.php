@@ -32,6 +32,7 @@ class Query
     protected const CHAR_BRACKET_END = ']';
     protected const CHAR_PARENTHESES_START = '(';
     protected const CHAR_PARENTHESES_END = ')';
+    protected const CHAR_BACKSLASH = '\\';
 
     protected string $method = '';
 
@@ -190,7 +191,7 @@ class Query
             // String support + escaping support
             if (
                 (self::isQuote($char)) && // Must be string indicator
-                $filter[$i - 1] !== '\\' // Must not be escaped; first cant be
+                $filter[$i - 1] !== static::CHAR_BACKSLASH // Must not be escaped; first cant be
             )
             {
                 if ($isStringStack) {
@@ -321,9 +322,11 @@ class Query
     protected static function appendSymbol(bool $isStringStack, string $char, int $index, string $filter, string &$currentParam): void
     {
         $nextChar = $filter[$index + 1] ?? '';
+        $prevChar = $filter[$index - 1] ?? '';
         if (
-            $char === '\\' && // Current char might be escaping
-            self::isQuote($nextChar) // Next char must be string syntax symbol
+            $char === static::CHAR_BACKSLASH && // Current char might be escaping
+            self::isQuote($nextChar) && // Next char must be string syntax symbol
+            $prevChar !== static::CHAR_BACKSLASH // Current \ can't be escaped
         ) {
             return;
         }

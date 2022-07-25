@@ -2331,9 +2331,9 @@ abstract class Base extends TestCase
             new Query('date', Query::TYPE_LESSER, ['2030-12-06 10:00:00-01:00']),
         ]);
 
-        var_dump(count($documents));
-
-        //$this->assertEquals(1, count($documents)); // todo: fix in mongo
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {// todo: fix in mongo
+            $this->assertEquals(1, count($documents));
+        }
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([

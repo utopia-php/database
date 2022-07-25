@@ -176,17 +176,17 @@ class Query
 
         $currentParam = ""; // We build param here before pushing when it's ended
         $currentArrayParam = []; // We build array param here before pushing when it's ended
-        $stack = []; // Stack of syntactical symbols
 
-        $stringStackState = false;
-        $arrayStackState = false;
+        $stack = []; // State for stack of parentheses
+        $stackCount = 0; // Length of stack array. Kept as variable to improve performance
+        $stringStackState = null; // State for string support
 
         // Loop thorough all characters
         for ($i = $parametersStart; $i < $paramsEnd; $i++) {
             $char = $filter[$i];
 
-            $isStringStack = $stringStackState;
-            $isArrayStack = $arrayStackState;
+            $isStringStack = $stringStackState !== null;
+            $isArrayStack = !$isStringStack && $stackCount > 0;
             
             // String support + escaping support
             if (
@@ -196,31 +196,16 @@ class Query
             {
                 if ($isStringStack) {
                     // Dont mix-up string symbols. Only allow the same as on start
-                    if ($char === $stack[\count($stack) - 1]) {
+                    if ($char === $stringStackState) {
                         // End of string
-                        \array_pop($stack);
-
-                        $stackCount = \count($stack);
-                        if ($stackCount > 0) {
-                            $lastChar = $stack[\count($stack) - 1];
-                            $stringStackState = $lastChar === static::CHAR_SINGLE_QUOTE || $lastChar === static::CHAR_DOUBLE_QUOTE;
-
-                            if(!$stringStackState) {
-                                $arrayStackState = $lastChar === static::CHAR_BRACKET_START;
-                            }
-                        } else {
-                            $stringStackState = false;
-                            $arrayStackState = false;
-                        }
+                        $stringStackState = null;
                     }
 
                     // Either way, add symbol to builder
                     static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
                 } else {
                     // Start of string
-                    $stack[] = $char;
-                    $stringStackState = true;
-                    $arrayStackState = false;
+                    $stringStackState = $char;
                     static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
                 }
 
@@ -232,25 +217,12 @@ class Query
                 if ($char === static::CHAR_BRACKET_START) {
                     // Start of array
                     $stack[] = $char;
-                    $stringStackState = false;
-                    $arrayStackState = true;
+                    $stackCount++;
                     continue;
                 } else if ($char === static::CHAR_BRACKET_END) {
                     // End of array
                     \array_pop($stack);
-
-                    $stackCount = \count($stack);
-                    if ($stackCount > 0) {
-                        $lastChar = $stack[\count($stack) - 1];
-                        $stringStackState = $lastChar === static::CHAR_SINGLE_QUOTE || $lastChar === static::CHAR_DOUBLE_QUOTE;
-
-                        if(!$stringStackState) {
-                            $arrayStackState = $lastChar === static::CHAR_BRACKET_START;
-                        }
-                    } else {
-                        $stringStackState = false;
-                        $arrayStackState = false;
-                    }
+                    $stackCount--;
 
                     if (!empty($currentParam)) {
                         $currentArrayParam[] = $currentParam;

@@ -1314,39 +1314,52 @@ class Database
 
     /**
      * Count Documents
-     * 
+     *
      * Count the number of documents. Pass $max=0 for unlimited count
-     * 
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $max
      *
      * @return int
+     * @throws Exception
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        $count = $this->adapter->count($collection, $queries, $max);
+        $collection = $this->getCollection($collection);
 
-        return $count;
+        if ($collection->isEmpty()) {
+            throw new Exception("Collection not found");
+        }
+
+        $queries = self::convertQueries($collection, $queries);
+
+        return $this->adapter->count($collection->getId(), $queries, $max);
     }
 
     /**
      * Sum an attribute
-     * 
+     *
      * Sum an attribute for all the documents. Pass $max=0 for unlimited count
-     * 
+     *
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
      * @param int $max
      *
      * @return int|float
+     * @throws Exception
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        $count = $this->adapter->sum($collection, $attribute, $queries, $max);
+        $collection = $this->getCollection($collection);
 
-        return $count;
+        if ($collection->isEmpty()) {
+            throw new Exception("Collection not found");
+        }
+
+        $queries = self::convertQueries($collection, $queries);
+        return $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
     }
 
     // /**
@@ -1661,7 +1674,9 @@ class Database
      */
     public static function convertQueries(Document $collection, array $queries):array
     {
-        foreach ($collection->getAttributes()['attributes'] as $v){
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $v){
             /* @var $v Document */
             switch ($v->getAttribute('type')) {
                 case Database::VAR_DATETIME:

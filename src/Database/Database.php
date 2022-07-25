@@ -1259,7 +1259,7 @@ class Database
 
     /**
      * Find Documents
-     * 
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $limit
@@ -1270,6 +1270,7 @@ class Database
      * @param string $cursorDirection
      *
      * @return Document[]
+     * @throws Exception
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = self::CURSOR_AFTER): array
     {
@@ -1280,6 +1281,8 @@ class Database
         }
 
         $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
+
+        $queries = DateTime::queries($collection, $queries);
 
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 

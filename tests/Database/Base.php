@@ -2326,6 +2326,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
         $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
 
+        $documents = static::getDatabase()->find('datetime', [
+            new Query('date', Query::TYPE_GREATER, ['1975-12-06 10:00:00+01:00']),
+            new Query('date', Query::TYPE_LESSER, ['2030-12-06 10:00:00-01:00']),
+        ]);
+
+        var_dump(count($documents));
+
+        //$this->assertEquals(1, count($documents)); // todo: fix in mongo
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([

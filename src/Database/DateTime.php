@@ -62,5 +62,41 @@ class DateTime
     }
 
 
+    /**
+     * @param Document $collection
+     * @param Query[] $queries
+     * @return Query[]
+     * @throws Exception
+     */
+    public static function queries(Document $collection, array $queries):array
+    {
+        foreach ($collection->getAttributes()['attributes'] as $v){
+            /* @var $v Document */
+            if($v->getAttribute('type') === Database::VAR_DATETIME){
+                foreach ($queries as $qk => $q){
+                    $arr = $q->getValues();
+                    foreach ($arr as $vk => $vv){
+                        $arr[$vk] = self::setTimezone($vv);
+                    }
+                    $q->setValues($arr);
+                    $queries[$qk] = $q;
+                }
+            }
+        }
+        return $queries;
+    }
+
+    /**
+     * @param string $datetime
+     * @return string
+     * @throws Exception
+     */
+    public static function setTimezone(string $datetime): string
+    {
+        $value = new \DateTime($datetime);
+        $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+        return DateTime::format($value);
+    }
+
 
 }

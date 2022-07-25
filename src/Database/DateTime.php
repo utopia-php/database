@@ -61,33 +61,6 @@ class DateTime
         return self::format($date);
     }
 
-
-    /**
-     * @param Document $collection
-     * @param Query[] $queries
-     * @return Query[]
-     * @throws Exception
-     */
-    public static function convertQueries(Document $collection, array $queries):array
-    {
-        foreach ($collection->getAttributes()['attributes'] as $v){
-            /* @var $v Document */
-            switch ($v->getAttribute('type')) {
-                case Database::VAR_DATETIME:
-                    foreach ($queries as $qk => $q){
-                        $arr = $q->getValues();
-                        foreach ($arr as $vk => $vv){
-                            $arr[$vk] = self::setTimezone($vv);
-                        }
-                        $q->setValues($arr);
-                        $queries[$qk] = $q;
-                    }
-                    break;
-            }
-        }
-        return $queries;
-    }
-
     /**
      * @param string $datetime
      * @return string

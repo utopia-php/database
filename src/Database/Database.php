@@ -1282,7 +1282,7 @@ class Database
 
         $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
 
-        $queries = DateTime::convertQueries($collection, $queries);
+        $queries = self::convertQueries($collection, $queries);
 
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
@@ -1651,6 +1651,32 @@ class Database
     public function getIndexLimit()
     {
         return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
+    }
+
+    /**
+     * @param Document $collection
+     * @param Query[] $queries
+     * @return Query[]
+     * @throws Exception
+     */
+    public static function convertQueries(Document $collection, array $queries):array
+    {
+        foreach ($collection->getAttributes()['attributes'] as $v){
+            /* @var $v Document */
+            switch ($v->getAttribute('type')) {
+                case Database::VAR_DATETIME:
+                    foreach ($queries as $qk => $q){
+                        $arr = $q->getValues();
+                        foreach ($arr as $vk => $vv){
+                            $arr[$vk] = DateTime::setTimezone($vv);
+                        }
+                        $q->setValues($arr);
+                        $queries[$qk] = $q;
+                    }
+                    break;
+            }
+        }
+        return $queries;
     }
 
 }

@@ -147,6 +147,17 @@ class QueryTest extends TestCase
         $this->assertEquals(1, $query->getParams()[0]);
         $this->assertEquals("Hello\\\\", $query->getParams()[1]);
         $this->assertEquals("World", $query->getParams()[2]);
+
+        $query = Query::parse('equal(1, "Hello\\", World")');
+        $this->assertCount(2, $query->getParams());
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("Hello\", World", $query->getParams()[1]);
+
+        $query = Query::parse('equal(1, "Hello\\\\\\", ", "World")');
+        $this->assertCount(3, $query->getParams());
+        $this->assertEquals(1, $query->getParams()[0]);
+        $this->assertEquals("Hello\\\\\", ", $query->getParams()[1]);
+        $this->assertEquals("World", $query->getParams()[2]);
     }
 
     public function testAlias()

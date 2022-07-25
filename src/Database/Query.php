@@ -187,6 +187,17 @@ class Query
 
             $isStringStack = $stringStackState !== null;
             $isArrayStack = !$isStringStack && $stackCount > 0;
+
+            if($char === static::CHAR_BACKSLASH) {
+                if(!(static::isSpecialChar($filter[$i + 1]))) {
+                    static::appendSymbol($isStringStack, $filter[$i], $i, $filter, $currentParam);
+                }
+
+                static::appendSymbol($isStringStack, $filter[$i + 1], $i, $filter, $currentParam);
+                $i++;
+
+                continue;
+            }
             
             // String support + escaping support
             if (
@@ -293,16 +304,6 @@ class Query
      */
     protected static function appendSymbol(bool $isStringStack, string $char, int $index, string $filter, string &$currentParam): void
     {
-        $nextChar = $filter[$index + 1] ?? '';
-        $prevChar = $filter[$index - 1] ?? '';
-        if (
-            $char === static::CHAR_BACKSLASH && // Current char might be escaping
-            self::isQuote($nextChar) && // Next char must be string syntax symbol
-            $prevChar !== static::CHAR_BACKSLASH // Current \ can't be escaped
-        ) {
-            return;
-        }
-
         // Ignore spaces and commas outside of string
         $canBeIgnored = false;
 

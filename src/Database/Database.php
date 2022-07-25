@@ -1282,7 +1282,7 @@ class Database
 
         $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
 
-        $queries = DateTime::queries($collection, $queries);
+        $queries = DateTime::convertQueries($collection, $queries);
 
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 

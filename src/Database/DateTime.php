@@ -68,19 +68,21 @@ class DateTime
      * @return Query[]
      * @throws Exception
      */
-    public static function queries(Document $collection, array $queries):array
+    public static function convertQueries(Document $collection, array $queries):array
     {
         foreach ($collection->getAttributes()['attributes'] as $v){
             /* @var $v Document */
-            if($v->getAttribute('type') === Database::VAR_DATETIME){
-                foreach ($queries as $qk => $q){
-                    $arr = $q->getValues();
-                    foreach ($arr as $vk => $vv){
-                        $arr[$vk] = self::setTimezone($vv);
+            switch ($v->getAttribute('type')) {
+                case Database::VAR_DATETIME:
+                    foreach ($queries as $qk => $q){
+                        $arr = $q->getValues();
+                        foreach ($arr as $vk => $vv){
+                            $arr[$vk] = self::setTimezone($vv);
+                        }
+                        $q->setValues($arr);
+                        $queries[$qk] = $q;
                     }
-                    $q->setValues($arr);
-                    $queries[$qk] = $q;
-                }
+                    break;
             }
         }
         return $queries;

@@ -35,7 +35,6 @@
         "phpunit/phpunit": "^9.4",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",
-        "vimeo/psalm": "4.0.1",
-        "phpbench/phpbench": "1.2.0"
+        "vimeo/psalm": "4.0.1"
     }
 }

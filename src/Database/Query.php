@@ -191,7 +191,7 @@ class Query
             // String support + escaping support
             if (
                 (self::isQuote($char)) && // Must be string indicator
-                $filter[$i - 1] !== static::CHAR_BACKSLASH // Must not be escaped; first cant be
+                ($filter[$i - 1] !== static::CHAR_BACKSLASH || $filter[$i - 2] === static::CHAR_BACKSLASH) // Must not be escaped;
             )
             {
                 if ($isStringStack) {

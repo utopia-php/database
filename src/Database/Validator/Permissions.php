@@ -3,32 +3,35 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
-use Utopia\Database\Validator\Key;
 
 class Permissions extends Validator
 {
-    /**
-     * @var string
-     */
-    protected $message = 'Permissions Error';
+    protected string $message = 'Permissions Error';
 
-    /**
-     * @var string[]
-     */
-    protected $permissions = [
-        'member',
-        'role',
-        'team',
-        'user',
+    protected array $methods = [
+        'create',
+        'read',
+        'update',
+        'delete',
+        'write',
+
+        'admin',
     ];
 
-    /**
-     * @var string[]
-     */
-    protected $roles = [
-        'all',
-        'guest',
+    protected array $permissions = [
+        'users',
+        'user',
+        'team',
         'member',
+        'guests',
+        'any',
+
+        'status',
+    ];
+
+    protected array $dimensions = [
+        'verified',
+        'unverified',
     ];
 
     protected int $length;
@@ -60,138 +63,83 @@ class Permissions extends Validator
      *
      * Returns true if valid or false if not.
      *
-     * @param mixed $roles
+     * @param mixed $permissions
      *
      * @return bool
      */
-    public function isValid($roles): bool
+    public function isValid($permissions): bool
     {
-        if(!is_array($roles)) {
-            $this->message = 'Permissions roles must be an array of strings.';
+        if (!\is_array($permissions)) {
+            $this->message = 'Permissions must be an array of strings.';
             return false;
         }
-
-        if ($this->length && \count($roles) > $this->length) {
+        if ($this->length && \count($permissions) > $this->length) {
             $this->message = 'You can only provide up to ' . $this->length . ' permissions.';
             return false;
         }
 
-        foreach ($roles as $role) {
-            if (!\is_string($role)) {
-                $this->message = 'Permissions role must be of type string.';
-
+        foreach ($permissions as $permission) {
+            if (!\is_string($permission)) {
+                $this->message = 'Permission must be of type string.';
+                return false;
+            }
+            if ($permission === '*') {
+                $this->message = 'Wildcard permissions "*" have been replaced. Use "any" instead.';
+                return false;
+            }
+            if (\str_starts_with($permission, 'role:')) {
+                $this->message = 'Permissions using the "role:" prefix have been replaced. Use "users", "guests", or "any" instead.';
                 return false;
             }
 
-            if ($role === '*') {
-                $this->message = 'Wildcard permission "*" deprecated. Use "role:all" instead.';
+            $matches = [];
 
+            $regex = '/^(?<method>' . \implode('|', $this->methods) . ')\((?<permission>' . \implode('|', $this->permissions) . ')(:(?<id>[a-z\d]+))?(\/(?<dimension>' . \implode('|', $this->dimensions) . '))?\)$/';
+            if (!\preg_match($regex, $permission, $matches)) {
+                $this->message = 'Permission must be of the form "method(permission:id/dimension)", got "' . $permission . '".  ID and dimension are optional. Method must be one of: ' . \implode(', ', $this->methods) . '. Permission must be one of: ' . \implode(', ', $this->permissions) . '. Dimension must be one of: ' . \implode(', ', $this->dimensions);
                 return false;
             }
 
-            // Should only contain a single ":" char
-            $pos = \strpos($role, ':');
+            $method = $matches['method'];
+            $permission = $matches['permission'];
+            $id = $matches['id'] ?? '';
+            $dimension = $matches['dimension'] ?? '';
 
-            if ($pos === false || $pos !== \strrpos($role, ':')) {
-                $this->message = 'Permission roles must contain one and only one ":" character.';
-
-                return false;
-            }
-
-            /**
-             * Split role into format {$type}:{$value}
-             *
-             * Substring before ":" $type must be a known permission type
-             * Substring after ":" $value must not be empty and satisty requirements per $type
-             */
-
-            $type = \substr($role, 0, $pos);
-            $value = \substr($role, $pos + 1);
-
-            if (strlen($value) === 0) {
-                $this->message = 'Permission role value must not be empty';
-
-                return false;
-            }
-
-            switch ($type) {
-                case 'role':
-                    // role:$value must be in list of $roles
-                    if (!\in_array($value, $this->roles)) {
-                        $this->message = 'Permission roles must be one of: ' . \implode(", ", $this->roles);
+            switch ($permission) {
+                case 'any':
+                case 'guests':
+                case 'users':
+                    if (!empty($id)) {
+                        $this->message = '"' . $permission . '"' . ' permission can not have a value.';
+                        return false;
+                    }
+                    if (!empty($dimension) && !\in_array($dimension, $this->dimensions)) {
+                        $this->message = 'Dimension must be one of: ' . \implode(', ', $this->dimensions);
                         return false;
                     }
                     break;
                 case 'user':
                 case 'member':
-                    // user:$id and member:$id must be valid Keys
-                    $key = new Key();
-                    if (!$key->isValid($value)) {
-                        $this->message = '[role:$id] $id must be a valid key: ' . $key->getDescription();
-
-                        return false;
-                    }
-                    break;
                 case 'team':
-                    // team:$teamId or team:$teamId/$teamRole
-                    $key = new Key();
-
-                    // must have at most a single "/" char
-                    $pos = \strpos($value, '/');
-
-                    // if no team role is given and and $id is not valid
-                    if ($pos === false && !$key->isValid($value)) {
-                        $this->message = '[role:$id] $id must be a valid key: ' . $key->getDescription();
-
+                    if (empty($id)) {
+                        $this->message = 'ID must be a valid key: ';
                         return false;
-                    }
-
-                    // if "/" is at index zero
-                    if ($pos === 0) {
-                        $this->message = 'Team ID must not be empty.';
-
-                        return false;
-                    }
-
-                    // if a "/" is found, ensure is unique and both substrings are valid
-                    if ($pos > 0) {
-                        // Split into format {$teamId}/{$teamRole}
-                        $teamId = \substr($value, 0, $pos);
-                        $teamRole = \substr($value, $pos + 1);
-
-                        // $teamRole must not be empty
-                        // Case $teamId < 1 already covered.
-                        if (strlen($teamRole) < 1) {
-                            $this->message = 'Team role must not be empty.';
-
-                            return false;
-                        } 
-
-                        // Ensure "/" is unique
-                        if ($pos !== \strrpos($value, '/')) {
-                            $this->message = 'Permission roles may contain at most one "/" character.';
-
-                            return false;
-                        }
-
-                        // $teamId and $teamRole must both be valid Keys
-                        if (!$key->isValid($teamId) || !$key->isValid($teamRole)) {
-                            $this->message = '[team:$teamId/$role] $teamID and $role must be valid keys: ' . $key->getDescription();
-
-                            return false;
-                        }
                     }
                     break;
-
+                case 'status':
+                    if (!\in_array($id, $this->dimensions)) {
+                        $this->message = 'Dimension must be one of: ' . \implode(', ', $this->dimensions);
+                        return false;
+                    }
+                    break;
                 default:
-                    $this->message = 'Permission role must begin with one of: ' . \implode(", ", $this->permissions);
-                    return false; break;
+                    $this->message = 'Permission must begin with one of: ' . \implode(", ", $this->permissions);
+                    return false;
             }
         }
-
         return true;
     }
-    
+
     /**
      * Is array
      *

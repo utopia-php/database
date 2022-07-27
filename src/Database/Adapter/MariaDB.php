@@ -862,7 +862,7 @@ class MariaDB extends Adapter
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -890,7 +890,8 @@ class MariaDB extends Adapter
         foreach ($queries as $i => $query) {
             if ($query->getOperator() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $attribute = preg_replace("/[^:\w]+/", "_", $query->getAttribute());
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $attribute, $value, $this->getPDOType($value));
             }
         }
 
@@ -968,7 +969,7 @@ class MariaDB extends Adapter
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -993,7 +994,8 @@ class MariaDB extends Adapter
         foreach ($queries as $i => $query) {
             if ($query->getOperator() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $attribute = preg_replace("/[^\w]+/", "_", $query->getAttribute());
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $attribute, $value, $this->getPDOType($value));
             }
         }
 
@@ -1037,7 +1039,7 @@ class MariaDB extends Adapter
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1048,9 +1050,9 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()->prepare("
-            SELECT SUM({$attribute}) as sum
+            SELECT SUM(`{$attribute}`) as sum
             FROM (
-                SELECT {$attribute}
+                SELECT `{$attribute}`
                 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
                 WHERE " . implode(' AND ', $where) . "
                 {$limit}
@@ -1060,7 +1062,8 @@ class MariaDB extends Adapter
         foreach ($queries as $i => $query) {
             if ($query->getOperator() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $attribute = preg_replace("/[^\w]+/", "_", $query->getAttribute());
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $attribute, $value, $this->getPDOType($value));
             }
         }
 
@@ -1387,6 +1390,7 @@ class MariaDB extends Adapter
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             default:
+                $placeholder = preg_replace("/[^:\w]+/", "_", $placeholder);
                 return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
         }
     }

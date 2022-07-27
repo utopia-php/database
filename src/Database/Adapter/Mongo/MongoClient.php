@@ -569,14 +569,7 @@ class MongoClient
         $obj = new \stdClass();
 
         foreach ($dict as $k => $v) {
-            $key = $k == 'id' ? '_id' : $k;
-            $val = $v;
-
-            if ($k == '_id') {
-                $val = new \MongoDB\BSON\ObjectId($val);
-            }
-
-            $obj->{$key} = $val;
+            $obj->{$key} = \is_array($v) ? $this->toObject($v) : $v;
         }
 
         return $obj;

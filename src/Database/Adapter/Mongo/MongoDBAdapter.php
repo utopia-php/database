@@ -188,7 +188,7 @@ class MongoDBAdapter extends Adapter
                 $newIndexes[$i] = ['key' => $key, 'name' => $this->filter($index->getId()), 'unique' => $unique];
             }
 
-            if (!$this->getClient()->createIndexes($name, $newIndexes)) {
+            if (!$this->getClient()->createIndexes($id, $newIndexes)) {
                 return false;
             }
         }

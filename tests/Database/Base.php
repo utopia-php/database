@@ -2449,4 +2449,39 @@ abstract class Base extends TestCase
 
         // TODO: Index name tests
     }
+
+        /**
+     * Ensure unique indexes work against null values
+     */
+    public function testUniqueIndexWithNull()
+    {
+        static::getDatabase()->createCollection('superheroes');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('superheroes', 'name', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('superheroes', 'powers', Database::VAR_STRING, 128, false));
+
+        $this->assertEquals(true, static::getDatabase()->createIndex('superheroes', 'uniqueIndex', Database::INDEX_UNIQUE, ['powers'], [128], [Database::ORDER_ASC]));
+
+        static::getDatabase()->createDocument('superheroes', new Document([
+          '$read' => ['role:all', 'user1', 'user2'],
+          '$write' => ['role:all', 'user1x', 'user2x'],
+          'name' => 'batman',
+          'powers' => 'rich'
+        ]));
+
+        static::getDatabase()->createDocument('superheroes', new Document([
+          '$read' => ['role:all', 'user1', 'user2'],
+          '$write' => ['role:all', 'user1x', 'user2x'],
+          'name' => 'robin',
+          'powers' => null
+        ]));
+
+        static::getDatabase()->createDocument('superheroes', new Document([
+          '$read' => ['role:all', 'user1', 'user2'],
+          '$write' => ['role:all', 'user1x', 'user2x'],
+          'name' => 'alfred',
+          'powers' => null
+        ]));
+      }
+
 }

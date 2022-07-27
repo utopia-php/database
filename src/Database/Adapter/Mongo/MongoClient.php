@@ -304,7 +304,15 @@ class MongoClient
      */
     public function createIndexes(string $collection, array $indexes, array $options = []): bool
     {
-
+          foreach ($indexes as $key => $index) {
+            if (\array_key_exists('unique', $index) && $index['unique'] == true) {
+                /**
+                 * TODO: Unique Indexes are now sparse indexes, which results into incomplete indexes.
+                 */
+                $indexes[$key] = \array_merge($index, ['sparse' => true]);
+            }
+        }
+        
         $qry = array_merge(
             [
                 'createIndexes' => $collection,
@@ -355,6 +363,8 @@ class MongoClient
         $docObj = new \stdClass();
 
         foreach ($documents as $key => $value) {
+            if(\is_null($value)) continue;
+            
             $docObj->{$key} = $value;
         }
 

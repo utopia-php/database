@@ -384,6 +384,9 @@ class Query
      */
     static protected function getMethodFromAlias(string $method): string
     {
+        return $method;
+        /*
+        Commented out as we didn't consider this important at the moment, since IDE autocomplete should do the job.
         return match ($method) {
             'lt' => self::TYPE_LESSER,
             'lte' => self::TYPE_LESSEREQUAL,
@@ -392,5 +395,6 @@ class Query
             'eq' => self::TYPE_EQUAL,
             default => $method
         };
+        */
     }
 }

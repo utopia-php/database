@@ -160,6 +160,8 @@ class QueryTest extends TestCase
         $this->assertEquals("World", $query->getParams()[2]);
     }
 
+    /*
+    Tests for aliases if we enable them:
     public function testAlias()
     {
         $query = Query::parse('eq(1)');
@@ -173,6 +175,7 @@ class QueryTest extends TestCase
         $query = Query::parse('gte(1)');
         $this->assertEquals(Query::TYPE_GREATEREQUAL, $query->getMethod());
     }
+    */
 
     public function testParseComplex()
     {
@@ -276,11 +279,14 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORAFTER));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORBEFORE));
 
+        /*
+        Tests for aliases if we enable them:
         $this->assertTrue(Query::isMethod('lt'));
         $this->assertTrue(Query::isMethod('lte'));
         $this->assertTrue(Query::isMethod('gt'));
         $this->assertTrue(Query::isMethod('gte'));
         $this->assertTrue(Query::isMethod('eq'));
+        */
 
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));

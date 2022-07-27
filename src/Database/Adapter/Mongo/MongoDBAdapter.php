@@ -374,7 +374,7 @@ class MongoDBAdapter extends Adapter
 
         $this->client->insert($name, $record);
 
-        return $document;
+        return $this->getDocument($collection, $document->getId());
     }
 
     /**

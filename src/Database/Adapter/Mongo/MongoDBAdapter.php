@@ -157,9 +157,7 @@ class MongoDBAdapter extends Adapter
             // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
                 $key = [];
-                $name = $this->filter($index->getId());
                 $unique = false;
-
                 $attributes = $index->getAttribute('attributes');
                 $orders = $index->getAttribute('orders');
 
@@ -187,7 +185,7 @@ class MongoDBAdapter extends Adapter
                     $key[$attribute] = $order;
                 }
 
-                $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
+                $newIndexes[$i] = ['key' => $key, 'name' => $this->filter($index->getId()), 'unique' => $unique];
             }
 
             if (!$this->getClient()->createIndexes($name, $newIndexes)) {

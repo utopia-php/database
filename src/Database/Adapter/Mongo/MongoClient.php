@@ -569,7 +569,7 @@ class MongoClient
         $obj = new \stdClass();
 
         foreach ($dict as $k => $v) {
-            $obj->{$k} = \is_array($v) ? $this->toObject($v) : $v;
+            $obj->{$k} = $v;
         }
 
         return $obj;

@@ -1681,12 +1681,14 @@ class Database
             switch ($v->getAttribute('type')) {
                 case Database::VAR_DATETIME:
                     foreach ($queries as $qk => $q){
-                        $arr = $q->getValues();
-                        foreach ($arr as $vk => $vv){
-                            $arr[$vk] = DateTime::setTimezone($vv);
+                        if($q->getAttribute() === $v->getId()){
+                            $arr = $q->getValues();
+                            foreach ($arr as $vk => $vv){
+                                $arr[$vk] = DateTime::setTimezone($vv);
+                            }
+                            $q->setValues($arr);
+                            $queries[$qk] = $q;
                         }
-                        $q->setValues($arr);
-                        $queries[$qk] = $q;
                     }
                     break;
             }

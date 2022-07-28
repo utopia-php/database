@@ -10,7 +10,12 @@ class Authorization extends Validator
     /**
      * @var array
      */
-    static $roles = ['role:all' => true];
+    static $roles = [
+        'any' => true,
+
+        // Legacy
+        'role:all' => true,
+    ];
 
     /**
      * @var string
@@ -64,14 +69,13 @@ class Authorization extends Validator
 
         $permission = '-';
 
-        
         foreach ($permissions as $permission) {
           if (\array_key_exists($permission, self::$roles)) {
               return true;
             } 
         }
 
-        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only this scopes "'.\json_encode(self::getRoles()).'" are given and only this are allowed "'.\json_encode($permissions).'".';
+        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only "'.\json_encode(self::getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
 
         return false;
     }

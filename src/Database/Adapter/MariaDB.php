@@ -420,14 +420,17 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("
             SELECT 
                 table_main.*,
-                {$this->getSQLPermissionsQuery($name, 'read', '$read')},
-                {$this->getSQLPermissionsQuery($name, 'write', '$write')}
+                {$this->getSQLPermissionsQuery($name, 'read', '_read')},
+                {$this->getSQLPermissionsQuery($name, 'create', '_create')},
+                {$this->getSQLPermissionsQuery($name, 'update', '_update')},
+                {$this->getSQLPermissionsQuery($name, 'delete', '_delete')}
             FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
             WHERE _uid = :_uid
             LIMIT 1;
         ");
 
         $stmt->bindValue(':_uid', $id);
+
         $stmt->execute();
 
         /** @var array $document */
@@ -440,13 +443,20 @@ class MariaDB extends Adapter
         $document['$internalId'] = $document['_id'];
         $document['$createdAt'] = (int)$document['_createdAt'];
         $document['$updatedAt'] = (int)$document['_updatedAt'];
-        $document['$read'] = json_decode($document['$read'], true) ?? [];
-        $document['$write'] = json_decode($document['$write'], true) ?? [];
+        $permissions = \array_merge(
+            \json_decode($document['_create'], true) ?? [],
+            \json_decode($document['_read'], true) ?? [],
+            \json_decode($document['_update'], true) ?? [],
+            \json_decode($document['_delete'], true) ?? [],
+        );
+        $document['$permissions'] = $permissions;
 
         unset($document['_id']);
         unset($document['_uid']);
+        unset($document['_create']);
         unset($document['_read']);
-        unset($document['_write']);
+        unset($document['_update']);
+        unset($document['_delete']);
         unset($document['_createdAt']);
         unset($document['_updatedAt']);
 
@@ -507,10 +517,18 @@ class MariaDB extends Adapter
         foreach ($document->getRead() as $permission) {
             $permissions[] = "('read', '{$permission}', '{$document->getId()}')";
         }
-
-        foreach ($document->getWrite() as $permission) {
-            $permissions[] = "('write', '{$permission}', '{$document->getId()}')";
+        foreach ($document->getCreate() as $permission) {
+            $permissions[] = "('create', '{$permission}', '{$document->getId()}')";
         }
+        foreach ($document->getUpdate() as $permission) {
+            $permissions[] = "('update', '{$permission}', '{$document->getId()}')";
+        }
+        foreach ($document->getUpdate() as $permission) {
+            $permissions[] = "('delete', '{$permission}', '{$document->getId()}')";
+        }
+        \var_dump('BEFORE');
+        \var_dump($permissions);
+        \var_dump('AFTER');
 
         if (!empty($permissions)) {
             $queryPermissions = "INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
@@ -878,7 +896,9 @@ class MariaDB extends Adapter
             SELECT
                 table_main.*,
                 {$this->getSQLPermissionsQuery($name, 'read', '_read')},
-                {$this->getSQLPermissionsQuery($name, 'write', '_write')}
+                {$this->getSQLPermissionsQuery($name, 'create', '_create')},
+                {$this->getSQLPermissionsQuery($name, 'update', '_update')},
+                {$this->getSQLPermissionsQuery($name, 'delete', '_delete')}
             FROM 
                 `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
             WHERE " . implode(' AND ', $where) . "
@@ -921,13 +941,16 @@ class MariaDB extends Adapter
             $results[$key]['$internalId'] = $value['_id'];
             $results[$key]['$createdAt'] = (int)$value['_createdAt'];
             $results[$key]['$updatedAt'] = (int)$value['_updatedAt'];
-            $results[$key]['$read'] = json_decode($value['_read'], true) ?? [];
-            $results[$key]['$write'] = json_decode($value['_write'], true) ?? [];
+            $results[$key]['$permissions'] = \array_merge(
+                \json_decode($value['_create'], true) ?? [],
+                \json_decode($value['_read'], true) ?? [],
+                \json_decode($value['_update'], true) ?? [],
+                \json_decode($value['_delete'], true) ?? [],
+            );
 
             unset($results[$key]['_uid']);
             unset($results[$key]['_id']);
-            unset($results[$key]['_read']);
-            unset($results[$key]['_write']);
+            unset($results[$key]['_permissions']);
             unset($results[$key]['_createdAt']);
             unset($results[$key]['_updatedAt']);
 

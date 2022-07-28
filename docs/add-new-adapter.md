@@ -53,7 +53,7 @@ The existing test suite is helpful when developing a new database adapter. To ge
 
 - Keep it simple :)
 - Databases are namespaced, so name them with `$this->getNamespace()` from the parent Adapter class.
-- Create indexes for `$id`, `$read`, and `$write` fields by default for query performance.
+- Create indexes for `$id` and `$permissions` fields by default for query performance.
 - Filter new IDs with `$this->filter($id);`
 - Prioritize code performance.
 - The Query and Queries validators contain the information about which queries the adapters support.

@@ -229,9 +229,11 @@ function createSchema($database) {
 function addArticle($database, $faker) {
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
-        '$read' => [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
         // Three random users out of 10,000 get write access
-        '$write' => ['role:all', $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')],
+        '$permissions' => [
+            'read(' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')]) . ')',
+            'write(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
+        ],
         'author' => $faker->name(),
         'created' => $faker->unixTime(),
         'text' => $faker->realTextBetween(1000, 4000),

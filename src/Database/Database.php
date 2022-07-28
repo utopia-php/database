@@ -348,8 +348,12 @@ class Database
 
         $collection = new Document([
             '$id' => $id,
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
+            ],
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
@@ -1052,12 +1056,17 @@ class Database
         $document = null;
         $cache = null;
 
+        $validator = new Authorization(self::PERMISSION_READ);
+
         // TODO@kodumbeats Check if returned cache id matches request
         if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
-            $validator = new Authorization(self::PERMISSION_READ);
 
-            if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
+            $permitted = $validator->isValid($collection->getRead());
+            if ($collection->getAttribute('documentSecurity', false)) {
+                $permitted &= $validator->isValid($document->getRead());
+            }
+            if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
                 return new Document();
             }
 
@@ -1065,15 +1074,15 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id);
-
         $document->setAttribute('$collection', $collection->getId());
 
-        $validator = new Authorization(self::PERMISSION_READ);
-
-        if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
+        $permitted = $validator->isValid($collection->getRead());
+        if ($collection->getAttribute('documentSecurity', false)) {
+            $permitted &= $validator->isValid($document->getRead());
+        }
+        if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
             return new Document();
         }
-
         if ($document->isEmpty()) {
             return $document;
         }
@@ -1100,14 +1109,14 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $validator = new Authorization(self::PERMISSION_WRITE);
-
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-            throw new AuthorizationException($validator->getDescription());
-        }
+        $validator = new Authorization(self::PERMISSION_CREATE);
 
         $collection = $this->getCollection($collection);
         $time = time();
+
+        if (!$validator->isValid($collection->getCreate())) { // Check if user has create access to this collection
+            throw new AuthorizationException($validator->getDescription());
+        }
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
@@ -1156,13 +1165,14 @@ class Database
         // $data['$id'] = $old->getId();
         // $data['$collection'] = $old->getCollection();
 
-        $validator = new Authorization('write');
+        $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
-            throw new AuthorizationException($validator->getDescription());
+        $permitted = $validator->isValid($collection->getUpdate());
+        if ($collection->getAttribute('documentSecurity', false)) {
+            $permitted &= $validator->isValid($old->getUpdate());
+            $permitted &= $validator->isValid($document->getUpdate());
         }
-
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+        if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1196,9 +1206,15 @@ class Database
     {
         $document = $this->getDocument($collection, $id);
 
-        $validator = new Authorization('write');
+        $validator = new Authorization(self::PERMISSION_DELETE);
 
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+        $collection = $this->getCollection($collection);
+
+        $permitted = $validator->isValid($collection->getDelete());
+        if ($collection->getAttribute('documentSecurity', false)) {
+            $permitted &= $validator->isValid($document->getDelete());
+        }
+        if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }
 

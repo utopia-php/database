@@ -36,8 +36,10 @@ class DocumentTest extends TestCase
         $this->document = new Document([
             '$id' => $this->id,
             '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(user:123, team:123)',
+                'write(any)',
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -71,7 +73,7 @@ class DocumentTest extends TestCase
     public function testPermissions()
     {
         $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals(['role:all'], $this->document->getWrite());
+        $this->assertEquals(['any'], $this->document->getWrite());
     }
 
     public function testGetAttributes()
@@ -143,8 +145,10 @@ class DocumentTest extends TestCase
         $document = new Document([
             '$id' => $this->id,
             '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(user:123, team:123)',
+                'write(any)',
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -182,8 +186,10 @@ class DocumentTest extends TestCase
         $document = new Document([
             '$id' => $this->id,
             '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(user:123, team:123)',
+                'write(any)',
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -233,8 +239,10 @@ class DocumentTest extends TestCase
         $this->assertEquals([
             '$id' => $this->id,
             '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(user:123, team:123)',
+                'write(any)',
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'

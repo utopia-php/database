@@ -21,8 +21,10 @@ class AuthorizationTest extends TestCase
         $document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(user:123, team:123)',
+                'write(any)',
+            ],
         ]);
         $object = new Authorization('read');
 

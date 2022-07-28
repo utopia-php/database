@@ -102,8 +102,10 @@ class MongoDBTest extends Base
     {
         static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'read(any)',
+                'write(any)',
+            ],
             'string' => '*test+alias@email-provider.com',
             'integer' => 0,
             'bigint' => 8589934592, // 2^33
@@ -136,8 +138,10 @@ class MongoDBTest extends Base
 
         static::getDatabase()->createDocument('movies', new Document([
             '$id' => 'frozen',
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                'read(any, user:1, user:2)',
+                'write(any, user:1x, user:2x)',
+            ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
@@ -147,8 +151,10 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                'read(any, user:1, user:2)',
+                'write(any, user:1x, user:2x)',
+            ],
             'name' => 'Frozen II',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2019,
@@ -158,8 +164,10 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                'read(any, user:1, user:2)',
+                'write(any, user:1x, user:2x)',
+            ],
             'name' => 'Captain America: The First Avenger',
             'director' => 'Joe Johnston',
             'year' => 2011,
@@ -169,8 +177,10 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                'read(any, user:1, user:2)',
+                'write(any, user:1x, user:2x)',
+            ],
             'name' => 'Captain Marvel',
             'director' => 'Anna Boden & Ryan Fleck',
             'year' => 2019,
@@ -180,8 +190,10 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                'read(any, user:1, user:2)',
+                'write(any, user:1x, user:2x)',
+            ],
             'name' => 'Work in Progress',
             'director' => 'TBD',
             'year' => 2025,
@@ -191,8 +203,10 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['userx'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                'read(user:x)',
+                'write(any, user:1x, user:2x)',
+            ],
             'name' => 'Work in Progress 2',
             'director' => 'TBD',
             'year' => 2026,

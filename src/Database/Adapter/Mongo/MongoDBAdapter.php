@@ -468,9 +468,7 @@ class MongoDBAdapter extends Adapter
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-
         $filters = [];
-
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
 
         // orders
@@ -492,9 +490,9 @@ class MongoDBAdapter extends Adapter
             // Allow after pagination without any order
             if (!empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-                ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
-                );
+                $orderOperator = $cursorDirection === Database::CURSOR_AFTER 
+                    ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER) 
+                    : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
                 $filters = array_merge($filters, [
                     '_id' => [
@@ -514,6 +512,7 @@ class MongoDBAdapter extends Adapter
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
+            
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
@@ -749,8 +748,7 @@ class MongoDBAdapter extends Adapter
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
             } elseif ($operator === '$search') {
-                // only one fulltext index per mongo collection, so attribute not necessary
-                $filters['$text'][$operator] = $value;
+                $filters[$attribute]['$in'] = \array_merge([$value], \explode(' ', $value));
             } else {
                 $filters[$attribute][$operator] = $value;
             }

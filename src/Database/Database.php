@@ -36,7 +36,9 @@ class Database
 
     // Permissions
     const PERMISSION_READ = 'read';
-    const PERMISSION_WRITE = 'write';
+    const PERMISSION_CREATE= 'create';
+    const PERMISSION_UPDATE = 'update';
+    const PERMISSION_DELETE = 'delete';
 
     // Collections
     const METADATA = '_metadata';

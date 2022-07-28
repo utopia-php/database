@@ -512,7 +512,7 @@ class MongoDBAdapter extends Adapter
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
-            
+
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
@@ -748,7 +748,8 @@ class MongoDBAdapter extends Adapter
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
             } elseif ($operator === '$search') {
-                $filters[$attribute]['$in'] = \array_merge([$value], \explode(' ', $value));
+                // $filters[$attribute]['$in'] = \array_merge([$value], \explode(' ', $value));
+                $filters['$text']['$search'] = $value;
             } else {
                 $filters[$attribute][$operator] = $value;
             }

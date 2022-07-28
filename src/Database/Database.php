@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use Utopia\App;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;

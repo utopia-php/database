@@ -31,6 +31,18 @@ class Permissions extends Validator
         'member',
     ];
 
+    protected int $length;
+
+    /**
+     * Permissions constructor.
+     *
+     * @param int $length maximum amount of permissions. 0 means unlimited.
+     */
+    public function __construct(int $length = 0)
+    {
+        $this->length = $length;
+    }
+
     /**
      * Get Description.
      *
@@ -56,6 +68,11 @@ class Permissions extends Validator
     {
         if(!is_array($roles)) {
             $this->message = 'Permissions roles must be an array of strings.';
+            return false;
+        }
+
+        if ($this->length && \count($roles) > $this->length) {
+            $this->message = 'You can only provide up to ' . $this->length . ' permissions.';
             return false;
         }
 

@@ -77,4 +77,16 @@ class MySQLTest extends Base
 
         return self::$database = $database;
     }
+
+    /**
+     * Return keywords reserved by database backend
+     * Refference: https://mariadb.com/kb/en/reserved-words/
+     *
+     * @return string[]
+     */
+    static function getReservedKeywords(): array
+    {
+        // Same as MariaDB
+        return MariaDBTest::getReservedKeywords();
+    }
 }

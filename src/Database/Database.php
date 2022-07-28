@@ -182,20 +182,21 @@ class Database
         self::addFilter(
             'datetime',
             /**
-             * @param string $value
-             * @return string
+             * @param string|null $value
+             * @return string|null
              * @throws Exception
              */
-            function (string $value) {
+            function (?string $value) {
+                if (is_null($value)) return null;
                 $value = new \DateTime($value);
                 $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                 return DateTime::format($value);
             },
             /**
-             * @param string $value
-             * @return string
+             * @param string|null $value
+             * @return string|null
              */
-            function (string $value) {
+            function (?string $value) {
                 return $value;
             }
         );

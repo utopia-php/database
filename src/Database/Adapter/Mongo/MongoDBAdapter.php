@@ -375,7 +375,9 @@ class MongoDBAdapter extends Adapter
 
         $this->client->insert($name, $record);
 
-        return $this->getDocument($collection, $document->getId());
+        $result = $this->getDocument($collection, $document->getId());
+
+        return $result;
     }
 
     /**
@@ -390,17 +392,17 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-
         $this->client->update(
             $name,
             ['_uid' => $document->getId()],
             $this->replaceChars('$', '_', $document->getArrayCopy()),
         );
 
-        $newDoc = $document->getArrayCopy();
-        $newDoc = $this->replaceChars('_', '$', $newDoc);
+        $result = $this->getDocument($collection, $document->getId())->getArrayCopy();
+        $docCopy = $document->getArrayCopy();
+        $merged = \array_merge($docCopy, $result);
 
-        return new Document($newDoc);
+        return new Document($merged);
     }
 
     /**

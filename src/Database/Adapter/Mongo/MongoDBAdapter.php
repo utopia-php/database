@@ -62,7 +62,8 @@ class MongoDBAdapter extends Adapter
     public function exists(string $database, string $collection = null): bool
     {
         if (!\is_null($collection)) {
-            $list = $this->flattenArray($this->list());
+            $collection = "{$this->getNamespace()}_{$collection}";
+            $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
 
             foreach ($list as $obj) {
                 if (\is_object($obj)) {

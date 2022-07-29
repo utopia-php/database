@@ -58,6 +58,8 @@ class MongoClient
      */
     public function connect(): MongoClient
     {
+        if($this->client->isConnected()) return $this; 
+        
         $this->client->connect($this->options->host, $this->options->port);
         [$payload, $db] = $this->auth->start();
 

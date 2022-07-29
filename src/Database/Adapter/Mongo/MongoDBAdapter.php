@@ -468,7 +468,7 @@ class MongoDBAdapter extends Adapter
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $filters = [];
+        $filters = $this->buildFilters($queries);
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
 
         // orders
@@ -484,7 +484,6 @@ class MongoDBAdapter extends Adapter
         $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
 
         // queries
-        $filters = $queries;
 
         if (empty($orderAttributes)) {
             // Allow after pagination without any order
@@ -548,8 +547,6 @@ class MongoDBAdapter extends Adapter
          * @var Document[]
          */
         $found = [];
-
-        $filters = $this->buildFilters($filters);
 
         $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
 

@@ -582,8 +582,10 @@ class MongoClient
      *
      * @return array
      */
-    public function toArray(\stdClass|array|string $obj): array
+    public function toArray(\stdClass|array|string|null $obj): array|null
     {
+        if(\is_null($obj)) return null;
+
         if (is_object($obj) || is_array($obj)) {
             $ret = (array) $obj;
             foreach ($ret as $item) {

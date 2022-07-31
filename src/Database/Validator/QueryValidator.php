@@ -107,7 +107,10 @@ class QueryValidator extends Validator
         $attributeType = $this->schema[$attributeIndex]['type'];
 
         foreach ($query->getValues() as $value) {
-            if (gettype($value) !== $attributeType) {
+            if(Database::VAR_DATETIME === $attributeType && gettype($value) === Database::VAR_STRING){
+                //
+            }
+            else if (gettype($value) !== $attributeType) {
                 $this->message = 'Query type does not match expected: ' . $attributeType;
                 return false;
             }

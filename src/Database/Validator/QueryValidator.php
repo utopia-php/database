@@ -50,14 +50,14 @@ class QueryValidator extends Validator
         $this->schema[] = [
             'key' => '$createdAt',
             'array' => false,
-            'type' => Database::VAR_INTEGER,
+            'type' => Database::VAR_DATETIME,
             'size' => 0
         ];
 
         $this->schema[] = [
             'key' => '$updatedAt',
             'array' => false,
-            'type' => Database::VAR_INTEGER,
+            'type' => Database::VAR_DATETIME,
             'size' => 0
         ];
 
@@ -108,7 +108,7 @@ class QueryValidator extends Validator
 
         foreach ($query->getValues() as $value) {
             if(Database::VAR_DATETIME === $attributeType && gettype($value) === Database::VAR_STRING){
-                //
+
             }
             else if (gettype($value) !== $attributeType) {
                 $this->message = 'Query type does not match expected: ' . $attributeType;

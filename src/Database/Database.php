@@ -187,9 +187,13 @@ class Database
              */
             function (?string $value) {
                 if (is_null($value)) return null;
-                $value = new \DateTime($value);
-                $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
-                return DateTime::format($value);
+                try {
+                    $value = new \DateTime($value);
+                    $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+                    return DateTime::format($value);
+                } catch (\Throwable $th) {
+                    return $value;
+                }
             },
             /**
              * @param string|null $value

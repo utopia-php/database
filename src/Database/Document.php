@@ -93,7 +93,7 @@ class Document extends ArrayObject
 
     public function getWrite(): array
     {
-        return \array_merge(
+        return \array_intersect(
             $this->getCreate(),
             $this->getUpdate(),
             $this->getDelete()
@@ -104,10 +104,11 @@ class Document extends ArrayObject
     {
         return \array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace('create(', '', $perm);
+            $perm = \str_replace(['create(', 'write('], '', $perm);
             return \explode(', ', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'create');
+            return \str_starts_with($permission, 'create') ||
+                \str_starts_with($permission, 'write');
         })));
     }
 
@@ -115,10 +116,11 @@ class Document extends ArrayObject
     {
         return \array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace('update(', '', $perm);
+            $perm = \str_replace(['update(', 'write('], '', $perm);
             return \explode(', ', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'update');
+            return \str_starts_with($permission, 'update') ||
+                \str_starts_with($permission, 'write');
         })));
     }
 
@@ -126,10 +128,11 @@ class Document extends ArrayObject
     {
         return \array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace('delete(', '', $perm);
+            $perm = \str_replace(['delete(', 'write('], '', $perm);
             return \explode(', ', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'delete');
+            return \str_starts_with($permission, 'delete') ||
+                \str_starts_with($permission, 'write');
         })));
     }
 

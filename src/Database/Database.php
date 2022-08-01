@@ -122,6 +122,16 @@ class Database
                 'array' => false,
                 'filters' => ['json'],
             ],
+            [
+                '$id' => 'documentSecurity',
+                'key' => 'documentSecurity',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 1,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]
         ],
         'indexes' => [],
     ];
@@ -289,6 +299,7 @@ class Database
             ['name', self::VAR_STRING, 512, true],
             ['attributes', self::VAR_STRING, 1000000, false],
             ['indexes', self::VAR_STRING, 1000000, false],
+            ['documentSecurity', self::VAR_BOOLEAN, 1, false],
         ]);
 
         $this->createCollection(self::METADATA, $attributes);
@@ -341,11 +352,17 @@ class Database
      *
      * @return Document
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
+    public function createCollection(
+        string $id,
+        array $attributes = [],
+        array $indexes = [],
+        array $permissions = ['read(any)', 'write(any)'],
+        bool $documentSecurity = false,
+    ): Document
     {
         $collection = $this->getCollection($id);
-        if(!$collection->isEmpty() && $id !== self::METADATA){
-            throw new Duplicate('Collection ' . $id . ' Exists!');
+        if (!$collection->isEmpty() && $id !== self::METADATA){
+            throw new Duplicate('Collection ' . $id . ' exists!');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -360,6 +377,7 @@ class Database
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
+            'documentSecurity' => $documentSecurity,
         ]);
 
         // Check index limits, if given

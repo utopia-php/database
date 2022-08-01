@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -13,6 +14,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
+use Utopia\Database\Exception\Structure as StructureException;
 
 abstract class Base extends TestCase
 {
@@ -238,7 +240,7 @@ abstract class Base extends TestCase
 
     /**
      * Ensure the collection is removed after use
-     * 
+     *
      * @depends testIndexCaseInsensitivity
      */
     public function testCleanupAttributeTests()
@@ -274,7 +276,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
-        
+
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
 
@@ -1354,19 +1356,19 @@ abstract class Base extends TestCase
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
-        
+
         $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(2, $count);
-        
+
         Authorization::unsetRole('userx');
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
-        
+
         Authorization::disable();
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         Authorization::reset();
-        
+
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [], 3);
         $this->assertEquals(3, $count);
@@ -1398,7 +1400,7 @@ abstract class Base extends TestCase
         $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
         $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        
+
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
         $this->assertEquals(2019, $sum);
 
@@ -1462,23 +1464,23 @@ abstract class Base extends TestCase
                 ],
                 [
                     '$id' => 'passwordUpdate',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => [],
+                    'filters' => ['datetime'],
                 ],
                 [
                     '$id' => 'registration',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => [],
+                    'filters' => ['datetime'],
                 ],
                 [
                     '$id' => 'emailVerification',
@@ -1580,8 +1582,8 @@ abstract class Base extends TestCase
             'emailVerification' => false,
             'status' => 1,
             'password' => 'randomhash',
-            'passwordUpdate' => 1234,
-            'registration' => 1234,
+            'passwordUpdate' => '2000-06-12 14:12:55',
+            'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
             'prefs' => new \stdClass,
@@ -1609,8 +1611,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals('{}', $result->getAttribute('prefs'));
@@ -1629,8 +1631,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals([], $result->getAttribute('prefs'));
@@ -1668,7 +1670,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
 
         $this->assertEquals(true, $document->isEmpty());
-        
+
         Authorization::setRole('role:all');
 
         return $document;
@@ -1690,7 +1692,7 @@ abstract class Base extends TestCase
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
-        ]));           
+        ]));
 
         return $document;
     }
@@ -1795,7 +1797,7 @@ abstract class Base extends TestCase
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
-        } 
+        }
 
         // Default assertion for other adapters
         $this->assertEquals(1,1);
@@ -1922,7 +1924,7 @@ abstract class Base extends TestCase
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
-        } 
+        }
 
         // Default assertion for other adapters
         $this->assertEquals(1,1);
@@ -2001,7 +2003,7 @@ abstract class Base extends TestCase
 
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
-        
+
         return $document;
     }
 
@@ -2223,7 +2225,7 @@ abstract class Base extends TestCase
         $database->updateAttributeRequired('flowers', 'inStock', true);
 
         $this->expectExceptionMessage('Invalid document structure: Missing required attribute "inStock"');
-    
+
         $doc = $database->createDocument('flowers', new Document([
             '$read' => ['role:all'],
             '$write' => ['role:all'],
@@ -2292,7 +2294,7 @@ abstract class Base extends TestCase
         $database->updateAttributeFormatOptions('flowers', 'price', ['min' => 1, 'max' => 10000]);
 
         $this->expectExceptionMessage('Invalid document structure: Attribute "price" has invalid format. Value must be a valid range between 1 and 10,000');
-    
+
         $doc = $database->createDocument('flowers', new Document([
             '$read' => ['role:all'],
             '$write' => ['role:all'],
@@ -2301,29 +2303,6 @@ abstract class Base extends TestCase
             'cartModel' => '{}',
             'price' => 15000
         ]));
-    }
-
-    /**
-     * @depends testCreatedAtUpdatedAt
-     */
-    public function testCreatedAtUpdatedAtAssert()
-    {
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-
-        $this->assertIsInt($document->getCreatedAt());
-        $this->assertIsInt($document->getUpdatedAt());
-        $this->assertGreaterThan(1650000000, $document->getCreatedAt());
-        $this->assertGreaterThan(1650000000, $document->getUpdatedAt());
-        sleep(1);
-        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
-
-        $this->assertEquals(123, $document->setAttribute('$createdAt', 123)->getCreatedAt());
-        $document = static::getDatabase()->updateDocument('created_at', 'uid123', $document);
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertEquals(123, $document->getCreatedAt());
-
     }
 
     /**
@@ -2348,6 +2327,57 @@ abstract class Base extends TestCase
 
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
+    }
+
+    /**
+     * @depends testCreatedAtUpdatedAt
+     */
+    public function testCreatedAtUpdatedAtAssert()
+    {
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertEquals(true, !$document->isEmpty());
+        sleep(1);
+        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createCollection('created_at');
+
+    }
+
+    public function testCreateDatetime()
+    {
+        static::getDatabase()->createCollection('datetime');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
+
+        $doc = static::getDatabase()->createDocument('datetime', new Document([
+            '$id' => 'id1234',
+            '$write' => ['role:all'],
+            '$read' => ['role:all'],
+            'date' => DateTime::now(),
+        ]));
+
+        $document = static::getDatabase()->getDocument('datetime', 'id1234');
+        $this->assertEquals(NULL, $document->getAttribute('date2'));
+        $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
+        $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
+
+        $documents = static::getDatabase()->find('datetime', [
+            new Query('date', Query::TYPE_GREATER, ['1975-12-06 10:00:00+01:00']),
+            new Query('date', Query::TYPE_LESSER, ['2030-12-06 10:00:00-01:00']),
+        ]);
+
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {// todo: fix in mongo
+            $this->assertEquals(1, count($documents));
+        }
+
+        $this->expectException(StructureException::class);
+        static::getDatabase()->createDocument('datetime', new Document([
+            '$write' => ['role:all'],
+            'date' => "1975-12-06 00:00:61"
+        ]));
     }
 
     public function testReservedKeywords() {

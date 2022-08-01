@@ -36,9 +36,17 @@ class Database
 
     // Permissions
     const PERMISSION_READ = 'read';
+    const PERMISSION_WRITE = 'write';
     const PERMISSION_CREATE= 'create';
     const PERMISSION_UPDATE = 'update';
     const PERMISSION_DELETE = 'delete';
+    const PERMISSIONS = [
+        self::PERMISSION_READ,
+        self::PERMISSION_WRITE,
+        self::PERMISSION_CREATE,
+        self::PERMISSION_UPDATE,
+        self::PERMISSION_DELETE,
+    ];
 
     // Collections
     const METADATA = '_metadata';
@@ -350,9 +358,7 @@ class Database
             '$id' => $id,
             '$permissions' => [
                 'read(any)',
-                'create(any)',
-                'update(any)',
-                'delete(any)',
+                'write(any)',
             ],
             'name' => $id,
             'attributes' => $attributes,
@@ -1062,11 +1068,13 @@ class Database
         if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
 
-            $permitted = $validator->isValid($collection->getRead());
+            $permitted = $collection->getId() === self::METADATA
+                || $validator->isValid($collection->getRead());
+
             if ($collection->getAttribute('documentSecurity', false)) {
                 $permitted &= $validator->isValid($document->getRead());
             }
-            if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
+            if (!$permitted) { // Check if user has read access to this document
                 return new Document();
             }
 
@@ -1076,7 +1084,9 @@ class Database
         $document = $this->adapter->getDocument($collection->getId(), $id);
         $document->setAttribute('$collection', $collection->getId());
 
-        $permitted = $validator->isValid($collection->getRead());
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getRead());
+
         if ($collection->getAttribute('documentSecurity', false)) {
             $permitted &= $validator->isValid($document->getRead());
         }
@@ -1114,7 +1124,13 @@ class Database
         $collection = $this->getCollection($collection);
         $time = time();
 
-        if (!$validator->isValid($collection->getCreate())) { // Check if user has create access to this collection
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getCreate());
+
+        if ($collection->getAttribute('documentSecurity', false)) {
+            $permitted &= $validator->isValid($document->getCreate());
+        }
+        if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1167,7 +1183,9 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $permitted = $validator->isValid($collection->getUpdate());
+        $permitted = $collection->getId() === self::METADATA
+                || $validator->isValid($collection->getUpdate());
+
         if ($collection->getAttribute('documentSecurity', false)) {
             $permitted &= $validator->isValid($old->getUpdate());
             $permitted &= $validator->isValid($document->getUpdate());
@@ -1204,13 +1222,13 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = $this->getDocument($collection, $id);
-
         $validator = new Authorization(self::PERMISSION_DELETE);
-
+        $document = $this->getDocument($collection, $id);
         $collection = $this->getCollection($collection);
 
-        $permitted = $validator->isValid($collection->getDelete());
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getDelete());
+
         if ($collection->getAttribute('documentSecurity', false)) {
             $permitted &= $validator->isValid($document->getDelete());
         }
@@ -1218,9 +1236,9 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
-        return $this->adapter->deleteDocument($collection, $id);
+        return $this->adapter->deleteDocument($collection->getId(), $id);
     }
 
     /**
@@ -1336,48 +1354,6 @@ class Database
 
         return $count;
     }
-
-    // /**
-    //  * @param array $data
-    //  *
-    //  * @return Document|false
-    //  *
-    //  * @throws Exception
-    //  */
-    // public function overwriteDocument(array $data)
-    // {
-    //     if (!isset($data['$id'])) {
-    //         throw new Exception('Must define $id attribute');
-    //     }
-
-    //     $document = $this->getDocument($data['$collection'], $data['$id']); // TODO make sure user don\'t need read permission for write operations
-
-    //     $validator = new Authorization($document, 'write');
-
-    //     if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription());
-    //     }
-
-    //     $new = new Document($data);
-
-    //     if (!$validator->isValid($new->getWrite())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription());
-    //     }
-
-    //     $new = $this->encode($new);
-
-    //     $validator = new Structure($this);
-
-    //     if (!$validator->isValid($new)) { // Make sure updated structure still apply collection rules (if any)
-    //         throw new StructureException($validator->getDescription());
-    //     }
-
-    //     $new = new Document($this->adapter->updateDocument($this->getCollection($new->getCollection()), $new->getId(), $new->getArrayCopy()));
-
-    //     $new = $this->decode($new);
-
-    //     return $new;
-    // }
 
     /**
      * Add Attribute Filter

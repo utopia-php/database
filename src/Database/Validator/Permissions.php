@@ -25,8 +25,6 @@ class Permissions extends Validator
         'member',
         'guests',
         'status',
-
-        // Legacy
         'role',
     ];
 

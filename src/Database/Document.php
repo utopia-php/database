@@ -80,6 +80,17 @@ class Document extends ArrayObject
     /**
      * @return array
      */
+    public function getPermission(string $type): array
+    {
+        if (\method_exists($this, 'get' . \ucfirst($type))) {
+            return [$this, 'get' . \ucfirst($type)]();
+        }
+        return [];
+    }
+
+    /**
+     * @return array
+     */
     public function getRead(): array
     {
         return \array_merge(...\array_map(function ($perm) {

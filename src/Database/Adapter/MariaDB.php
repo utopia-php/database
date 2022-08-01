@@ -417,13 +417,18 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
+        $permissions = '';
+        foreach (Database::PERMISSIONS as $i => $type) {
+            $permissions .= $this->getSQLPermissionsQuery($name, $type, '_' . $type);
+            if ($i !== \count(Database::PERMISSIONS) - 1) {
+                $permissions .= ",\n";
+            }
+        }
+
         $stmt = $this->getPDO()->prepare("
             SELECT 
                 table_main.*,
-                {$this->getSQLPermissionsQuery($name, 'read', '_read')},
-                {$this->getSQLPermissionsQuery($name, 'create', '_create')},
-                {$this->getSQLPermissionsQuery($name, 'update', '_update')},
-                {$this->getSQLPermissionsQuery($name, 'delete', '_delete')}
+                {$permissions}
             FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
             WHERE _uid = :_uid
             LIMIT 1;
@@ -443,20 +448,19 @@ class MariaDB extends Adapter
         $document['$internalId'] = $document['_id'];
         $document['$createdAt'] = (int)$document['_createdAt'];
         $document['$updatedAt'] = (int)$document['_updatedAt'];
-        $permissions = \array_merge(
-            \json_decode($document['_create'], true) ?? [],
-            \json_decode($document['_read'], true) ?? [],
-            \json_decode($document['_update'], true) ?? [],
-            \json_decode($document['_delete'], true) ?? [],
-        );
-        $document['$permissions'] = $permissions;
+        $document['$permissions'] = [];
+
+        foreach (Database::PERMISSIONS as $type) {
+            $key = '_' . $type;
+            if (!empty($document[$key] ?? '')) {
+                $permissions = \implode(',', \json_decode($document[$key]));
+                $document['$permissions'][] = "{$type}({$permissions})";
+            }
+            unset($document[$key]);
+        }
 
         unset($document['_id']);
         unset($document['_uid']);
-        unset($document['_create']);
-        unset($document['_read']);
-        unset($document['_update']);
-        unset($document['_delete']);
         unset($document['_createdAt']);
         unset($document['_updatedAt']);
 
@@ -514,21 +518,11 @@ class MariaDB extends Adapter
         }
 
         $permissions = [];
-        foreach ($document->getRead() as $permission) {
-            $permissions[] = "('read', '{$permission}', '{$document->getId()}')";
+        foreach (Database::PERMISSIONS as $type) {
+            foreach ([$document, 'get' . \ucfirst($type)]() as $permission) {
+                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+            }
         }
-        foreach ($document->getCreate() as $permission) {
-            $permissions[] = "('create', '{$permission}', '{$document->getId()}')";
-        }
-        foreach ($document->getUpdate() as $permission) {
-            $permissions[] = "('update', '{$permission}', '{$document->getId()}')";
-        }
-        foreach ($document->getUpdate() as $permission) {
-            $permissions[] = "('delete', '{$permission}', '{$document->getId()}')";
-        }
-        \var_dump('BEFORE');
-        \var_dump($permissions);
-        \var_dump('AFTER');
 
         if (!empty($permissions)) {
             $queryPermissions = "INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
@@ -598,52 +592,61 @@ class MariaDB extends Adapter
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll();
 
+        $initial = [];
+        foreach (Database::PERMISSIONS as $type) {
+            $initial[$type] = [];
+        }
+
         $permissions = array_reduce($permissions, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
 
             return $carry;
-        }, ['read' => [], 'write' => []]);
+        }, $initial);
 
         $this->getPDO()->beginTransaction();
 
         /**
          * Get removed Permissions
          */
-        $readRemoved = array_diff($permissions['read'], $document->getRead());
-        $writeRemoved = array_diff($permissions['write'], $document->getWrite());
+        $removals = [];
+        foreach(Database::PERMISSIONS as $type) {
+            $diff = \array_diff($permissions[$type], [$document, 'get' . \ucfirst($type)]());
+            if (!empty($diff)) {
+                $removals[$type] = $diff;
+            }
+        }
 
         /**
          * Get added Permissions
          */
-        $readAdded = array_diff($document->getRead(), $permissions['read']);
-        $writeAdded = array_diff($document->getWrite(), $permissions['write']);
+        $additions = [];
+        foreach(Database::PERMISSIONS as $type) {
+            $additions[$type] = \array_diff([$document, 'get' . \ucfirst($type)](), $permissions[$type]);
+        }
 
         /**
          * Query to remove permissions
          */
-        if (!empty($readRemoved) || !empty($writeRemoved)) {
-            $removeQuery = 'AND (';
-            if ($readRemoved) {
-                $removeQuery .= "(
-                    _type = 'read'
-                    AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_read_{$i}", array_keys($readRemoved))) . ")
-                )";
+        $removeQuery = '';
+        foreach ($removals as $type => $permissions) {
+            if (empty($permissions)) {
+                continue;
             }
-
-            if ($readRemoved && $writeRemoved) {
+            if (empty($removeQuery)) {
+                $removeQuery = 'AND (';
+            }
+            $removeQuery .= "(
+                    _type = '{$type}'
+                    AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_{$type}_{$i}", array_keys($permissions))) . ")
+                )";
+            if ($type !== \array_key_last($removals)) {
                 $removeQuery .= ' OR ';
             }
-
-            if ($writeRemoved) {
-                $removeQuery .= "(
-                    _type = 'write'
-                    AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_write_{$i}", array_keys($writeRemoved))) . ")
-                )";
-            }
-            $removeQuery .= ')';
         }
 
-        if (isset($removeQuery)) {
+        if (!empty($removeQuery)) {
+            $removeQuery .= ')';
+
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
                 DELETE
@@ -652,36 +655,36 @@ class MariaDB extends Adapter
                     _document = :_uid
                     {$removeQuery}
             ");
-            $stmtRemovePermissions->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+            $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-            foreach ($readRemoved as $i => $role) {
-                $stmtRemovePermissions->bindValue(":_remove_read_{$i}", $role);
-            }
-            foreach ($writeRemoved as $i => $role) {
-                $stmtRemovePermissions->bindValue(":_remove_write_{$i}", $role);
+            foreach ($removals as $type => $permissions) {
+                foreach ($permissions as $i => $permission) {
+                    $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
+                }
             }
         }
 
         /**
          * Query to add permissions
          */
-        if ($readAdded || $writeAdded) {
+        if (!\array_search([], $additions)) {
+            $values = [];
+            foreach (Database::PERMISSIONS as $type) {
+                $values[] = \array_map(fn(string $i) => "( :_uid, '{$type}', :_add_{$type}_{$i} )", \array_keys($additions[$type]));
+            }
+
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(
                     "
                     INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
-                    (_document, _type, _permission) VALUES " . implode(', ', [
-                        ...array_map(fn (string $i) => "( :_uid, 'read', :_add_read_{$i} )", array_keys($readAdded)),
-                        ...array_map(fn (string $i) => "( :_uid, 'write', :_add_write_{$i} )", array_keys($writeAdded))
-                    ])
+                    (_document, _type, _permission) VALUES " . implode(', ', $values)
                 );
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            foreach ($readAdded as $i => $role) {
-                $stmtAddPermissions->bindValue(":_add_read_{$i}", $role);
-            }
-            foreach ($writeAdded as $i => $role) {
-                $stmtAddPermissions->bindValue(":_add_write_{$i}", $role);
+            foreach ($additions as $type => $permissions) {
+                foreach ($permissions as $i => $permission) {
+                    $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
+                }
             }
         }
 
@@ -763,10 +766,10 @@ class MariaDB extends Adapter
         $this->getPDO()->beginTransaction();
 
         $stmt = $this->getPDO()->prepare("DELETE FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` WHERE _uid = :_uid LIMIT 1");
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+        $stmt->bindValue(':_uid', $id);
 
         $stmtPermissions = $this->getPDO()->prepare("DELETE FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms` WHERE _document = :_uid");
-        $stmtPermissions->bindValue(':_uid', $id, PDO::PARAM_STR);
+        $stmtPermissions->bindValue(':_uid', $id);
 
         try {
             $stmt->execute() || throw new Exception('Failed to delete document');
@@ -892,13 +895,18 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
+        $permissions = '';
+        foreach (Database::PERMISSIONS as $i => $type) {
+            $permissions .= $this->getSQLPermissionsQuery($name, $type, '_' . $type);
+            if ($i !== \count(Database::PERMISSIONS) - 1) {
+                $permissions .= ",\n";
+            }
+        }
+
         $stmt = $this->getPDO()->prepare("
             SELECT
                 table_main.*,
-                {$this->getSQLPermissionsQuery($name, 'read', '_read')},
-                {$this->getSQLPermissionsQuery($name, 'create', '_create')},
-                {$this->getSQLPermissionsQuery($name, 'update', '_update')},
-                {$this->getSQLPermissionsQuery($name, 'delete', '_delete')}
+                {$permissions}
             FROM 
                 `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
             WHERE " . implode(' AND ', $where) . "
@@ -941,16 +949,19 @@ class MariaDB extends Adapter
             $results[$key]['$internalId'] = $value['_id'];
             $results[$key]['$createdAt'] = (int)$value['_createdAt'];
             $results[$key]['$updatedAt'] = (int)$value['_updatedAt'];
-            $results[$key]['$permissions'] = \array_merge(
-                \json_decode($value['_create'], true) ?? [],
-                \json_decode($value['_read'], true) ?? [],
-                \json_decode($value['_update'], true) ?? [],
-                \json_decode($value['_delete'], true) ?? [],
-            );
+            $results[$key]['$permissions'] = [];
+
+            foreach (Database::PERMISSIONS as $type) {
+                $typeKey = '_' . $type;
+                if (!empty($results[$key][$typeKey] ?? '')) {
+                    $permissions = \implode(',', \json_decode($results[$key][$typeKey]));
+                    $results[$key]['$permissions'][] = "{$type}({$permissions})";
+                }
+                unset($results[$key][$typeKey]);
+            }
 
             unset($results[$key]['_uid']);
             unset($results[$key]['_id']);
-            unset($results[$key]['_permissions']);
             unset($results[$key]['_createdAt']);
             unset($results[$key]['_updatedAt']);
 

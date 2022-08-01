@@ -84,7 +84,7 @@ class Database
     /**
      * Parent Collection
      * Defines the structure for both system and custom collections
-     * 
+     *
      * @var array
      */
     protected array $collection = [
@@ -267,10 +267,10 @@ class Database
 
     /**
      * Create Metadata collection.
-     * @return bool 
-     * @throws LimitException 
-     * @throws AuthorizationException 
-     * @throws StructureException 
+     * @return bool
+     * @throws LimitException
+     * @throws AuthorizationException
+     * @throws StructureException
      */
     public function createMetadata(): bool
     {
@@ -356,10 +356,7 @@ class Database
 
         $collection = new Document([
             '$id' => $id,
-            '$permissions' => [
-                'read(any)',
-                'write(any)',
-            ],
+            '$permissions' => $permissions,
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
@@ -392,7 +389,7 @@ class Database
 
     /**
      * Get Collection
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -405,10 +402,10 @@ class Database
 
     /**
      * List Collections
-     * 
+     *
      * @param int $offset
      * @param int $limit
-     * 
+     *
      * @return array
      */
     public function listCollections($limit = 25, $offset = 0): array
@@ -424,9 +421,9 @@ class Database
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteCollection(string $id): bool
@@ -438,7 +435,7 @@ class Database
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
@@ -450,7 +447,7 @@ class Database
      * @param string $format optional validation format of attribute
      * @param string $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
-     * 
+     *
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
@@ -561,12 +558,12 @@ class Database
 
     /**
      * Update attribute metadata. Utility method for update attribute methods.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $key Metadata key to update
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
-     * 
+     *
      * @return Document
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
@@ -595,11 +592,11 @@ class Database
 
     /**
      * Update required status of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param bool $required
-     * 
+     *
      * @return void
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): void
@@ -611,11 +608,11 @@ class Database
 
     /**
      * Update format of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $format validation format of attribute
-     * 
+     *
      * @return void
      */
     public function updateAttributeFormat(string $collection, string $id, string $format): void
@@ -631,11 +628,11 @@ class Database
 
     /**
      * Update format options of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param array $formatOptions assoc array with custom options that can be passed for the format validation
-     * 
+     *
      * @return void
      */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): void
@@ -647,11 +644,11 @@ class Database
 
     /**
      * Update filters of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param array $filters
-     * 
+     *
      * @return void
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): void
@@ -663,11 +660,11 @@ class Database
 
     /**
      * Update default value of attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param array|bool|callable|int|float|object|resource|string|null $default
-     * 
+     *
      * @return void
      */
     public function updateAttributeDefault(string $collection, string $id, $default = null): void
@@ -701,23 +698,23 @@ class Database
                     throw new Exception('Unknown attribute type for: ' . $default);
                     break;
             }
-    
+
             $attribute->setAttribute('default', $default);
         });
     }
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $signed
      * @param bool $array
-     * 
+     *
      * To update attribute key (ID), use renameAttribute instead.
-     * 
+     *
      * @return bool
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
@@ -728,14 +725,14 @@ class Database
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
                 $array ??= $attribute->getAttribute('array');
-                
+
                 switch ($type) {
                     case self::VAR_STRING:
                         if ($size > $this->adapter->getStringLimit()) {
                             throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
                         }
                         break;
-        
+
                     case self::VAR_INTEGER:
                         $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
                         if ($size > $limit) {
@@ -749,7 +746,7 @@ class Database
                         throw new Exception('Unknown attribute type: ' . $type);
                         break;
                 }
-    
+
                 $attribute
                     ->setAttribute('type', $type)
                     ->setAttribute('size', $size)
@@ -766,7 +763,7 @@ class Database
                 ) {
                     throw new LimitException('Row width limit reached. Cannot create new attribute.');
                 }
-    
+
                 $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
             }
         });
@@ -812,10 +809,10 @@ class Database
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
@@ -1042,7 +1039,7 @@ class Database
 
     /**
      * Get Document
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1128,7 +1125,7 @@ class Database
             || $validator->isValid($collection->getCreate());
 
         if ($collection->getAttribute('documentSecurity', false)) {
-            $permitted &= $validator->isValid($document->getCreate());
+            $permitted |= $validator->isValid($document->getCreate());
         }
         if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -1158,7 +1155,7 @@ class Database
 
     /**
      * Update Document
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1184,11 +1181,10 @@ class Database
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
         $permitted = $collection->getId() === self::METADATA
-                || $validator->isValid($collection->getUpdate());
+            || $validator->isValid($collection->getUpdate());
 
         if ($collection->getAttribute('documentSecurity', false)) {
-            $permitted &= $validator->isValid($old->getUpdate());
-            $permitted &= $validator->isValid($document->getUpdate());
+            $permitted |= ($validator->isValid($old->getUpdate()) && $validator->isValid($document->getUpdate()));
         }
         if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
@@ -1211,8 +1207,8 @@ class Database
     }
 
     /**
-     * Delete Document 
-     * 
+     * Delete Document
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1243,7 +1239,7 @@ class Database
 
     /**
      * Cleans the all the collection's documents from the cache
-     * 
+     *
      * @param string $collection
      *
      * @return bool
@@ -1255,7 +1251,7 @@ class Database
 
     /**
      * Cleans a specific document from cache
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1268,7 +1264,7 @@ class Database
 
     /**
      * Find Documents
-     * 
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $limit
@@ -1309,7 +1305,7 @@ class Database
      * @param array $orderTypes
      * @param Document|null $cursor
      * @param string $cursorDirection
-     * 
+     *
      * @return Document|bool
      */
     public function findOne(string $collection, array $queries = [], int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = Database::CURSOR_AFTER)
@@ -1320,9 +1316,9 @@ class Database
 
     /**
      * Count Documents
-     * 
+     *
      * Count the number of documents. Pass $max=0 for unlimited count
-     * 
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $max
@@ -1338,9 +1334,9 @@ class Database
 
     /**
      * Sum an attribute
-     * 
+     *
      * Sum an attribute for all the documents. Pass $max=0 for unlimited count
-     * 
+     *
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
@@ -1374,10 +1370,10 @@ class Database
 
     /**
      * Encode Document
-     * 
+     *
      * @param Document $collection
      * @param Document $document
-     * 
+     *
      * @return Document
      */
     public function encode(Document $collection, Document $document): Document
@@ -1423,10 +1419,10 @@ class Database
 
     /**
      * Decode Document
-     * 
+     *
      * @param Document $collection
      * @param Document $document
-     * 
+     *
      * @return Document
      */
     public function decode(Document $collection, Document $document): Document
@@ -1456,10 +1452,10 @@ class Database
 
     /**
      * Casting
-     * 
+     *
      * @param Document $collection
      * @param Document $document
-     * 
+     *
      * @return Document
      */
     public function casting(Document $collection, Document $document): Document
@@ -1517,11 +1513,11 @@ class Database
      *
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the input format of the given attribute.
-     * 
+     *
      * @param string $name
      * @param mixed $value
      * @param Document $document
-     * 
+     *
      * @return mixed
      */
     protected function encodeAttribute(string $name, $value, Document $document)
@@ -1545,14 +1541,14 @@ class Database
 
     /**
      * Decode Attribute
-     * 
+     *
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
-     * 
+     *
      * @param string $name
      * @param mixed $value
      * @param Document $document
-     * 
+     *
      * @return mixed
      */
     protected function decodeAttribute(string $name, $value, Document $document)

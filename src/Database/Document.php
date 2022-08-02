@@ -338,7 +338,7 @@ class Document extends ArrayObject
      */
     public function findAndRemove(string $key, $find, string $subject = ''): bool
     {
-        $subject = $this[$subject] ?? null;
+        $subject = &$this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
         if (is_array($subject)) {

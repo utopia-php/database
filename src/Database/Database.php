@@ -406,6 +406,62 @@ class Database
     }
 
     /**
+     * Update Collection permissions
+     *
+     * @param string $id
+     * @param string[] $permissions
+     *
+     * @return Document
+     * @throws AuthorizationException
+     * @throws Exception
+     */
+    public function updateCollectionPermissions(string $id, array $permissions): Document {
+        $validator = new Permissions();
+        if (!$validator->isValid($permissions)) {
+            throw new Exception('Invalid permissions: ', $validator->getDescription());
+        }
+
+        $collection = $this->getCollection($id);
+        if ($collection->isEmpty()) {
+            throw new Exception('Collection ' . $id . ' does not exist!');
+        }
+
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+        if (!$validator->isValid($collection->getUpdate())) {
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $collection->setAttribute('$permissions', $permissions);
+
+        return $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+    }
+
+    /**
+     * Update Collection document security
+     *
+     * @param string $id
+     * @param bool $documentSecurity
+     *
+     * @return Document
+     * @throws AuthorizationException
+     */
+    public function updateCollectionDocumentSecurity(string $id, bool $documentSecurity): Document {
+        $collection = $this->getCollection($id);
+        if ($collection->isEmpty()) {
+            throw new Exception('Collection ' . $id . ' does not exist!');
+        }
+
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+        if (!$validator->isValid($collection->getUpdate())) {
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $collection->setAttribute('documentSecurity', $documentSecurity);
+
+        return $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+    }
+
+    /**
      * Get Collection
      *
      * @param string $collection

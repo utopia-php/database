@@ -93,69 +93,69 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return \array_merge(...\array_map(function ($perm) {
+        return \array_unique(\array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace('read(', '', $perm);
-            return \explode(', ', $perm);
+            $perm = \str_replace(['read(', ' '], '', $perm);
+            return \explode(',', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
             return \str_starts_with($permission, 'read');
-        })));
+        }))));
     }
 
     public function getWrite(): array
     {
-        return \array_intersect(
+        return \array_unique(\array_intersect(
             $this->getCreate(),
             $this->getUpdate(),
             $this->getDelete()
-        );
+        ));
     }
 
     public function getCreate(): array
     {
-        return \array_merge(...\array_map(function ($perm) {
+        return \array_unique(\array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['create(', 'write('], '', $perm);
-            return \explode(', ', $perm);
+            $perm = \str_replace(['create(', 'write(', ' '], '', $perm);
+            return \explode(',', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
             return \str_starts_with($permission, 'create') ||
                 \str_starts_with($permission, 'write');
-        })));
+        }))));
     }
 
     public function getUpdate(): array
     {
-        return \array_merge(...\array_map(function ($perm) {
+        return \array_unique(\array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['update(', 'write('], '', $perm);
-            return \explode(', ', $perm);
+            $perm = \str_replace(['update(', 'write(', ' '], '', $perm);
+            return \explode(',', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
             return \str_starts_with($permission, 'update') ||
                 \str_starts_with($permission, 'write');
-        })));
+        }))));
     }
 
     public function getDelete(): array
     {
-        return \array_merge(...\array_map(function ($perm) {
+        return \array_unique(\array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['delete(', 'write('], '', $perm);
-            return \explode(', ', $perm);
+            $perm = \str_replace(['delete(', 'write(', ' '], '', $perm);
+            return \explode(',', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
             return \str_starts_with($permission, 'delete') ||
                 \str_starts_with($permission, 'write');
-        })));
+        }))));
     }
 
     public function getAdmin(): array
     {
-        return \array_merge(...\array_map(function ($perm) {
+        return \array_unique(\array_merge(...\array_map(function ($perm) {
             $perm = \rtrim($perm, ') ');
-            $perm = \str_replace('admin(', '', $perm);
-            return \explode(', ', $perm);
+            $perm = \str_replace(['admin(', ' '], '', $perm);
+            return \explode(',', $perm);
         }, \array_filter($this->getPermissions(), function ($permission) {
             return \str_starts_with($permission, 'admin');
-        })));
+        }))));
     }
 
     public function getCreatedAt(): ?int

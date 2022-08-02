@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
 
+use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
@@ -116,7 +117,7 @@ class MongoDBAdapter extends Adapter
      * @param Document[] $indexes (optional)
      * @return bool
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = [], array $permissions = ['read(any)', 'write(any)'], bool $documentSecurity = false): bool
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
@@ -593,9 +594,11 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        $roles = \implode('|', Authorization::getRoles());
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $filters['_permissions']['$in'] = [new Regex("read\(.*(?:{$roles}).*\)", 'i')];
         }
 
         return $this->client->count($name, $filters, $options);
@@ -621,9 +624,11 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        $roles = \implode('|', Authorization::getRoles());
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $filters['_permissions']['$in'] = [new Regex("read\(.*(?:{$roles}).*\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in

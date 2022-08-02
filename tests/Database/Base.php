@@ -2430,8 +2430,10 @@ abstract class Base extends TestCase
 
         $doc = static::getDatabase()->createDocument('datetime', new Document([
             '$id' => 'id1234',
-            '$write' => ['role:all'],
-            '$read' => ['role:all'],
+            '$permissions' => [
+                'read(any)',
+                'write(any)',
+            ],
             'date' => DateTime::now(),
         ]));
 
@@ -2451,7 +2453,9 @@ abstract class Base extends TestCase
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([
-            '$write' => ['role:all'],
+            '$permissions' => [
+                'write(any)',
+            ],
             'date' => "1975-12-06 00:00:61"
         ]));
     }

@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -349,6 +350,8 @@ class Database
      * @param string $id
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
+     * @param string[] $permissions (optional)
+     * @param bool $documentSecurity (optional)
      *
      * @return Document
      */

@@ -18,6 +18,8 @@ class AuthorizationTest extends TestCase
 
     public function testValues()
     {
+        Authorization::setRole('role:all');
+
         $document = new Document([
             '$id' => uniqid(),
             '$collection' => uniqid(),

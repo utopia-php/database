@@ -882,8 +882,8 @@ abstract class Base extends TestCase
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
         $this->assertEquals('movies', $documents[0]->getCollection());
-        $this->assertEquals(['role:all', 'user1', 'user2'], $documents[0]->getRead());
-        $this->assertEquals(['role:all', 'user1x', 'user2x'], $documents[0]->getWrite());
+        $this->assertEquals(['any', 'user:1', 'user:2'], $documents[0]->getRead());
+        $this->assertEquals(['any', 'user:1x', 'user:2x'], $documents[0]->getWrite());
         $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
         $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
         $this->assertIsString($documents[0]->getAttribute('director'));
@@ -925,7 +925,7 @@ abstract class Base extends TestCase
         /**
          * Check Permissions
          */
-        Authorization::setRole('userx');
+        Authorization::setRole('user:x');
 
         $documents = static::getDatabase()->find('movies');
 
@@ -1381,7 +1381,7 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(2, $count);
 
-        Authorization::unsetRole('userx');
+        Authorization::unsetRole('user:x');
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
 
@@ -1412,7 +1412,7 @@ abstract class Base extends TestCase
      */
     public function testSum()
     {
-        Authorization::setRole('userx');
+        Authorization::setRole('user:x');
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
@@ -1425,7 +1425,7 @@ abstract class Base extends TestCase
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
         $this->assertEquals(2019, $sum);
 
-        Authorization::unsetRole('userx');
+        Authorization::unsetRole('user:x');
         $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');

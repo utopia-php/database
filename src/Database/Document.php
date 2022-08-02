@@ -158,12 +158,18 @@ class Document extends ArrayObject
         }))));
     }
 
-    public function getCreatedAt(): ?int
+    /**
+     * @return string|null
+     */
+    public function getCreatedAt(): ?string
     {
         return $this->getAttribute('$createdAt');
     }
 
-    public function getUpdatedAt(): ?int
+    /**
+     * @return string|null
+     */
+    public function getUpdatedAt(): ?string
     {
         return $this->getAttribute('$updatedAt');
     }

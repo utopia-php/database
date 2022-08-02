@@ -169,14 +169,15 @@ abstract class Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * 
+     * @param array $permissions (optional)
+     * @param bool $documentPermissions (optional)
      * @return bool
      */
-    abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
+    abstract public function createCollection(string $name, array $attributes = [], array $indexes = [], array $permissions = ['read(any)', 'write(any)'], bool $documentSecurity = false): bool;
 
     /**
      * Delete Collection

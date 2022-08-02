@@ -621,29 +621,30 @@ class MariaDB extends Adapter
          */
         $additions = [];
         foreach(Database::PERMISSIONS as $type) {
-            $additions[$type] = \array_diff([$document, 'get' . \ucfirst($type)](), $permissions[$type]);
+            $diff = \array_diff([$document, 'get' . \ucfirst($type)](), $permissions[$type]);
+            if (!empty($diff)) {
+                $additions[$type] = $diff;
+            }
         }
 
         /**
          * Query to remove permissions
          */
         $removeQuery = '';
-        foreach ($removals as $type => $permissions) {
-            if (empty($permissions)) {
-                continue;
-            }
-            if (empty($removeQuery)) {
-                $removeQuery = 'AND (';
-            }
-            $removeQuery .= "(
+        if (!empty($removals)) {
+            foreach ($removals as $type => $permissions) {
+                if (empty($removeQuery)) {
+                    $removeQuery = 'AND (';
+                }
+                $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_{$type}_{$i}", array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', array_map(fn(string $i) => ":_remove_{$type}_{$i}", array_keys($permissions))) . ")
                 )";
-            if ($type !== \array_key_last($removals)) {
-                $removeQuery .= ' OR ';
+                if ($type !== \array_key_last($removals)) {
+                    $removeQuery .= ' OR ';
+                }
             }
         }
-
         if (!empty($removeQuery)) {
             $removeQuery .= ')';
 
@@ -667,11 +668,12 @@ class MariaDB extends Adapter
         /**
          * Query to add permissions
          */
-        if (!\array_search([], $additions)) {
+        if (!empty($additions)) {
             $values = [];
-            foreach (Database::PERMISSIONS as $type) {
-                $values[] = \array_map(fn(string $i) => "( :_uid, '{$type}', :_add_{$type}_{$i} )", \array_keys($additions[$type]));
+            foreach ($additions as $type => $permissions) {
+                $values[] = \array_map(fn(string $i) => "( :_uid, '{$type}', :_add_{$type}_{$i} )", \array_keys($permissions));
             }
+            $values = \array_merge(...$values);
 
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(

@@ -717,12 +717,15 @@ abstract class Base extends TestCase
             ->setAttribute('$permissions', 'read(guests)', Document::SET_TYPE_APPEND)
             ->setAttribute('$permissions', 'write(guests)', Document::SET_TYPE_APPEND);
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertContains('read(guests)', $new->getPermissions());
-        $this->assertContains('write(guests)', $new->getPermissions());
+        $this->assertContains('guests', $new->getRead());
+        $this->assertContains('guests', $new->getWrite());
+        $this->assertContains('guests', $new->getCreate());
+        $this->assertContains('guests', $new->getUpdate());
+        $this->assertContains('guests', $new->getDelete());
 
         $new->setAttribute('$permissions', $oldPermissions);
 
@@ -730,8 +733,11 @@ abstract class Base extends TestCase
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertNotContains('read(guests)', $new->getPermissions());
-        $this->assertNotContains('write(guests)', $new->getPermissions());
+        $this->assertNotContains('guests', $new->getRead());
+        $this->assertNotContains('guests', $new->getWrite());
+        $this->assertNotContains('guests', $new->getCreate());
+        $this->assertNotContains('guests', $new->getUpdate());
+        $this->assertNotContains('guests', $new->getDelete());
 
         return $document;
     }
@@ -753,8 +759,11 @@ abstract class Base extends TestCase
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertContains('read(guests)', $new->getPermissions());
-        $this->assertContains('write(guests)', $new->getPermissions());
+        $this->assertContains('guests', $new->getRead());
+        $this->assertContains('guests', $new->getWrite());
+        $this->assertContains('guests', $new->getCreate());
+        $this->assertContains('guests', $new->getUpdate());
+        $this->assertContains('guests', $new->getDelete());
 
         return $document;
     }
@@ -1619,8 +1628,12 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->encode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertContains(['read(any)'], $result->getAttribute('$permissions'));
-        $this->assertContains(['write(user:608fdbe51361a)'], $result->getAttribute('$permissions'));
+        $this->assertContains('read(any)', $result->getAttribute('$permissions'));
+        $this->assertContains('read(any)', $result->getPermissions());
+        $this->assertContains('any', $result->getRead());
+        $this->assertContains('write(user:608fdbe51361a)', $result->getAttribute('$permissions'));
+        $this->assertContains('write(user:608fdbe51361a)', $result->getPermissions());
+        $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
@@ -1639,8 +1652,12 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->decode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertContains(['read(any)'], $result->getAttribute('$permissions'));
-        $this->assertContains(['write(user:608fdbe51361a)'], $result->getAttribute('$permissions'));
+        $this->assertContains('read(any)', $result->getAttribute('$permissions'));
+        $this->assertContains('read(any)', $result->getPermissions());
+        $this->assertContains('any', $result->getRead());
+        $this->assertContains('write(user:608fdbe51361a)', $result->getAttribute('$permissions'));
+        $this->assertContains('write(user:608fdbe51361a)', $result->getPermissions());
+        $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
@@ -1687,32 +1704,39 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $document->isEmpty());
 
-        Authorization::setRole('role:all');
+        Authorization::setRole('any');
 
         return $document;
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testReadPermissionsFailure(Document $document)
+    public function testReadPermissionsFailure()
     {
-        $this->expectException(ExceptionAuthorization::class);
-
-        $document = static::getDatabase()->createDocument('documents', new Document([
+        $collection = static::getDatabase()->createCollection('readperms', permissions: [
+            'read(user:1)',
+            'write(any)',
+        ]);
+        $attr = static::getDatabase()->createAttribute(
+            'readperms',
+            'string',
+            Database::VAR_STRING,
+            128,
+            true
+        );
+        $document = static::getDatabase()->createDocument($collection->getId(), new Document([
             '$permissions' => [
                 'read(user:1)',
                 'write(user:1)',
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
         ]));
+        static::getDatabase()->updateCollectionPermissions($collection->getId(), [
+            'read(user:2)',
+            'delete(user:2)',
+        ]);
 
-        return $document;
+        $document = static::getDatabase()->getDocument($collection->getId(), $document->getId());
+
+        $this->assertEquals(true, $document->isEmpty());
     }
 
     /**

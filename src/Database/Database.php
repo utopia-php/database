@@ -123,16 +123,6 @@ class Database
                 'signed' => true,
                 'array' => false,
                 'filters' => ['json'],
-            ],
-            [
-                '$id' => 'documentSecurity',
-                'key' => 'documentSecurity',
-                'type' => self::VAR_BOOLEAN,
-                'size' => 1,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
             ]
         ],
         'indexes' => [],
@@ -328,7 +318,6 @@ class Database
             ['name', self::VAR_STRING, 512, true],
             ['attributes', self::VAR_STRING, 1000000, false],
             ['indexes', self::VAR_STRING, 1000000, false],
-            ['documentSecurity', self::VAR_BOOLEAN, 1, false],
         ]);
 
         $this->createCollection(self::METADATA, $attributes);
@@ -379,7 +368,6 @@ class Database
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
      * @param string[] $permissions (optional)
-     * @param bool $documentSecurity (optional)
      *
      * @return Document
      */
@@ -387,10 +375,8 @@ class Database
         string $id,
         array $attributes = [],
         array $indexes = [],
-        array $permissions = ['read(any)', 'write(any)'],
-        bool $documentSecurity = false,
-    ): Document
-    {
+        array $permissions = ['read(any)', 'write(any)']
+    ): Document {
         $collection = $this->getCollection($id);
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' exists!');
@@ -407,8 +393,7 @@ class Database
             '$permissions' => $permissions,
             'name' => $id,
             'attributes' => $attributes,
-            'indexes' => $indexes,
-            'documentSecurity' => $documentSecurity,
+            'indexes' => $indexes
         ]);
 
         // Check index limits, if given
@@ -434,62 +419,6 @@ class Database
         }
 
         return $this->createDocument(self::METADATA, $collection);
-    }
-
-    /**
-     * Update Collection permissions
-     *
-     * @param string $id
-     * @param string[] $permissions
-     *
-     * @return Document
-     * @throws AuthorizationException
-     * @throws Exception
-     */
-    public function updateCollectionPermissions(string $id, array $permissions): Document {
-        $validator = new Permissions();
-        if (!$validator->isValid($permissions)) {
-            throw new Exception('Invalid permissions: ', $validator->getDescription());
-        }
-
-        $collection = $this->getCollection($id);
-        if ($collection->isEmpty()) {
-            throw new Exception('Collection ' . $id . ' does not exist!');
-        }
-
-        $validator = new Authorization(self::PERMISSION_UPDATE);
-        if (!$validator->isValid($collection->getUpdate())) {
-            throw new AuthorizationException($validator->getDescription());
-        }
-
-        $collection->setAttribute('$permissions', $permissions);
-
-        return $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-    }
-
-    /**
-     * Update Collection document security
-     *
-     * @param string $id
-     * @param bool $documentSecurity
-     *
-     * @return Document
-     * @throws AuthorizationException
-     */
-    public function updateCollectionDocumentSecurity(string $id, bool $documentSecurity): Document {
-        $collection = $this->getCollection($id);
-        if ($collection->isEmpty()) {
-            throw new Exception('Collection ' . $id . ' does not exist!');
-        }
-
-        $validator = new Authorization(self::PERMISSION_UPDATE);
-        if (!$validator->isValid($collection->getUpdate())) {
-            throw new AuthorizationException($validator->getDescription());
-        }
-
-        $collection->setAttribute('documentSecurity', $documentSecurity);
-
-        return $this->updateDocument(self::METADATA, $collection->getId(), $collection);
     }
 
     /**
@@ -1174,9 +1103,6 @@ class Database
             $permitted = $collection->getId() === self::METADATA
                 || $validator->isValid($collection->getRead());
 
-            if ($collection->getAttribute('documentSecurity', false)) {
-                $permitted &= $validator->isValid($document->getRead());
-            }
             if (!$permitted) { // Check if user has read access to this document
                 return new Document();
             }
@@ -1190,9 +1116,6 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getRead());
 
-        if ($collection->getAttribute('documentSecurity', false)) {
-            $permitted &= $validator->isValid($document->getRead());
-        }
         if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
             return new Document();
         }
@@ -1231,9 +1154,6 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getCreate());
 
-        if ($collection->getAttribute('documentSecurity', false)) {
-            $permitted |= $validator->isValid($document->getCreate());
-        }
         if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }
@@ -1291,9 +1211,6 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getUpdate());
 
-        if ($collection->getAttribute('documentSecurity', false)) {
-            $permitted |= ($validator->isValid($old->getUpdate()) && $validator->isValid($document->getUpdate()));
-        }
         if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }
@@ -1333,9 +1250,6 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getDelete());
 
-        if ($collection->getAttribute('documentSecurity', false)) {
-            $permitted &= $validator->isValid($document->getDelete());
-        }
         if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }

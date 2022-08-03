@@ -128,7 +128,7 @@ class MariaDB extends Adapter
      * @throws Exception
      * @throws PDOException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = [], array $permissions = ['read(any)', 'write(any)'], bool $documentSecurity = false): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = [], array $permissions = ['read(any)', 'write(any)']): bool
     {
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();

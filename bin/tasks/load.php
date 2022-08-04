@@ -33,7 +33,7 @@ $cli
         $start = null;
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
-        Runtime::enableCoroutine();
+        Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
             case 'mariadb': 
                 Co\run(function() use (&$start, $limit, $name) {

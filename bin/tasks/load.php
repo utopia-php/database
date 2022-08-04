@@ -21,7 +21,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
-
+use Swoole\Runtime;
 $cli
     ->task('load')
     ->desc('Load database with mock data for testing')
@@ -33,7 +33,7 @@ $cli
         $start = null;
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
-        Swoole\Runtime::enableCoroutine();
+        Runtime::enableCoroutine();
         switch ($adapter) {
             case 'mariadb': 
                 Co\run(function() use (&$start, $limit, $name) {
@@ -43,13 +43,7 @@ $cli
                     $dbUser = 'root';
                     $dbPass = 'password';
 
-                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                        PDO::ATTR_TIMEOUT => 3, // Seconds
-                        PDO::ATTR_PERSISTENT => true,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    ]);
+                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPdoAttributes());
 
                     $cache = new Cache(new NoCache());
 
@@ -110,13 +104,7 @@ $cli
                     $dbUser = 'root';
                     $dbPass = 'password';
 
-                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                        PDO::ATTR_TIMEOUT => 3, // Seconds
-                        PDO::ATTR_PERSISTENT => true,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    ]);
+                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPdoAttributes());
 
                     $cache = new Cache(new NoCache());
 

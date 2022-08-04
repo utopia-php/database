@@ -1,7 +1,7 @@
 <?php
 
 // require_once __DIR__.'/init.php';
-require_once '/usr/src/code/vendor/autoload.php';
+require_once './vendor/autoload.php';
 
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;

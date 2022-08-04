@@ -1713,32 +1713,22 @@ abstract class Base extends TestCase
 
     public function testReadPermissionsFailure()
     {
-        $collection = static::getDatabase()->createCollection('readperms', permissions: [
-            'read(user:1)',
-            'write(any)',
-        ]);
-        $attr = static::getDatabase()->createAttribute(
-            'readperms',
-            'string',
-            Database::VAR_STRING,
-            128,
-            true
-        );
-        $document = static::getDatabase()->createDocument($collection->getId(), new Document([
+        $this->expectException(ExceptionAuthorization::class);
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(user:1)',
                 'write(user:1)',
             ],
             'string' => 'text📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
         ]));
-        static::getDatabase()->updateCollectionPermissions($collection->getId(), [
-            'read(user:2)',
-            'delete(user:2)',
-        ]);
 
-        $document = static::getDatabase()->getDocument($collection->getId(), $document->getId());
-
-        $this->assertEquals(true, $document->isEmpty());
+        return $document;
     }
 
     /**

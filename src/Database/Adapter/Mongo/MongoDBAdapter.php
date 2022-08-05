@@ -111,13 +111,20 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
+     * @param string[] $permissions
      * @return bool
+     * @throws Exception
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = [], array $permissions = ['read(any)', 'write(any)']): bool
+    public function createCollection(
+        string $name,
+        array $attributes = [],
+        array $indexes = [],
+        array $permissions = ['read(any)', 'create(any)', 'update(any)', 'delete(any)']
+    ): bool
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 

@@ -45,22 +45,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['create(status:verified)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(any)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(users)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(user:123abc)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(team:123abc)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(team:123abc/edit)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(member:123abc)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(guests)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['write(status:verified)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
+
         $document['$permissions'] = ['read(any)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['read(users)'];
@@ -77,6 +62,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['read(status:verified)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
+
         $document['$permissions'] = ['update(any)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['update(users)'];
@@ -93,6 +79,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['update(status:verified)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
+
         $document['$permissions'] = ['delete(any)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['delete(users)'];
@@ -109,6 +96,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['delete(status:verified)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
+
         $document['$permissions'] = ['admin(users)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['admin(user:123abc)'];
@@ -211,7 +199,7 @@ class PermissionsTest extends TestCase
         // Role prefix values deprecated
         $this->assertTrue($object->isValid(['read(role:all)']));
         $this->assertEquals('Permissions using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.', $object->getDescription());
-        $this->assertTrue($object->isValid(['write(role:guest)']));
+        $this->assertTrue($object->isValid(['create(role:guest)']));
         $this->assertEquals('Permissions using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.', $object->getDescription());
         $this->assertTrue($object->isValid(['update(role:member)']));
         $this->assertEquals('Permissions using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.', $object->getDescription());

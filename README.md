@@ -102,7 +102,9 @@ $database->createIndex('movies', 'index1', Database::INDEX_KEY, ['year'], [128],
 static::getDatabase()->createDocument('movies', new Document([
     '$permissions' => [
         'read(any, user:1, user:2)',
-        'write(any, user:1x, user:2x)',
+        'create(any, user:1x, user:2x)',
+        'update(any, user:1x, user:2x)',
+        'delete(any, user:1x, user:2x)',
     ],   
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',

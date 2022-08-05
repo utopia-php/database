@@ -232,7 +232,9 @@ function addArticle($database, $faker) {
         // Three random users out of 10,000 get write access
         '$permissions' => [
             'read(' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')]) . ')',
-            'write(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
+            'create(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
+            'update(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
+            'delete(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
         ],
         'author' => $faker->name(),
         'created' => $faker->unixTime(),

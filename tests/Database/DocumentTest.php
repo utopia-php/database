@@ -38,7 +38,9 @@ class DocumentTest extends TestCase
             '$collection' => $this->collection,
             '$permissions' => [
                 'read(user:123, team:123)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'title' => 'This is a test.',
             'list' => [
@@ -147,7 +149,9 @@ class DocumentTest extends TestCase
             '$collection' => $this->collection,
             '$permissions' => [
                 'read(user:123, team:123)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'title' => 'This is a test.',
             'list' => [
@@ -188,7 +192,9 @@ class DocumentTest extends TestCase
             '$collection' => $this->collection,
             '$permissions' => [
                 'read(user:123, team:123)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'title' => 'This is a test.',
             'list' => [
@@ -241,7 +247,9 @@ class DocumentTest extends TestCase
             '$collection' => $this->collection,
             '$permissions' => [
                 'read(user:123, team:123)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'title' => 'This is a test.',
             'list' => [

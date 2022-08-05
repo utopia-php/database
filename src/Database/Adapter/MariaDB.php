@@ -120,15 +120,20 @@ class MariaDB extends Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param Document[] $attributes (optional)
+     * @param Document[] $indexes (optional)
+     * @param string[] $permissions
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = [], array $permissions = ['read(any)', 'write(any)']): bool
+    public function createCollection(
+        string $name,
+        array $attributes = [],
+        array $indexes = [],
+        array $permissions = ['read(any)', 'create(any)', 'update(any)', 'delete(any)']
+    ): bool
     {
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
@@ -420,7 +425,7 @@ class MariaDB extends Adapter
         $permissions = '';
         foreach (Database::PERMISSIONS as $i => $type) {
             $permissions .= $this->getSQLPermissionsQuery($name, $type, '_' . $type);
-            if ($i !== \count(Database::PERMISSIONS) - 1) {
+            if ($i !== \array_key_last(Database::PERMISSIONS)) {
                 $permissions .= ",\n";
             }
         }
@@ -435,7 +440,6 @@ class MariaDB extends Adapter
         ");
 
         $stmt->bindValue(':_uid', $id);
-
         $stmt->execute();
 
         /** @var array $document */
@@ -632,13 +636,11 @@ class MariaDB extends Adapter
          */
         $removeQuery = '';
         if (!empty($removals)) {
+            $removeQuery = 'AND (';
             foreach ($removals as $type => $permissions) {
-                if (empty($removeQuery)) {
-                    $removeQuery = 'AND (';
-                }
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', array_map(fn(string $i) => ":_remove_{$type}_{$i}", array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
                 )";
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
@@ -647,7 +649,6 @@ class MariaDB extends Adapter
         }
         if (!empty($removeQuery)) {
             $removeQuery .= ')';
-
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
                 DELETE
@@ -679,7 +680,7 @@ class MariaDB extends Adapter
                 ->prepare(
                     "
                     INSERT INTO `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}_perms`
-                    (_document, _type, _permission) VALUES " . implode(', ', $values)
+                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
                 );
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
@@ -900,7 +901,7 @@ class MariaDB extends Adapter
         $permissions = '';
         foreach (Database::PERMISSIONS as $i => $type) {
             $permissions .= $this->getSQLPermissionsQuery($name, $type, '_' . $type);
-            if ($i !== \count(Database::PERMISSIONS) - 1) {
+            if ($i !== \array_key_last(Database::PERMISSIONS)) {
                 $permissions .= ",\n";
             }
         }

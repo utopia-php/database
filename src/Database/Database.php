@@ -37,15 +37,13 @@ class Database
     const ORDER_DESC = 'DESC';
 
     // Permissions
-    const PERMISSION_READ = 'read';
-    const PERMISSION_WRITE = 'write';
     const PERMISSION_CREATE= 'create';
+    const PERMISSION_READ = 'read';
     const PERMISSION_UPDATE = 'update';
     const PERMISSION_DELETE = 'delete';
     const PERMISSIONS = [
-        self::PERMISSION_READ,
-        self::PERMISSION_WRITE,
         self::PERMISSION_CREATE,
+        self::PERMISSION_READ,
         self::PERMISSION_UPDATE,
         self::PERMISSION_DELETE,
     ];
@@ -375,7 +373,7 @@ class Database
         string $id,
         array $attributes = [],
         array $indexes = [],
-        array $permissions = ['read(any)', 'write(any)']
+        array $permissions = ['read(any)', 'create(any)', 'update(any)', 'delete(any)']
     ): Document {
         $collection = $this->getCollection($id);
         if (!$collection->isEmpty() && $id !== self::METADATA){

@@ -104,7 +104,9 @@ class MongoDBTest extends Base
         static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => '*test+alias@email-provider.com',
             'integer' => 0,
@@ -140,7 +142,9 @@ class MongoDBTest extends Base
             '$id' => 'frozen',
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -153,7 +157,9 @@ class MongoDBTest extends Base
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Frozen II',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -166,7 +172,9 @@ class MongoDBTest extends Base
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Captain America: The First Avenger',
             'director' => 'Joe Johnston',
@@ -179,7 +187,9 @@ class MongoDBTest extends Base
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Captain Marvel',
             'director' => 'Anna Boden & Ryan Fleck',
@@ -192,7 +202,9 @@ class MongoDBTest extends Base
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Work in Progress',
             'director' => 'TBD',
@@ -205,7 +217,9 @@ class MongoDBTest extends Base
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(user:x)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Work in Progress 2',
             'director' => 'TBD',

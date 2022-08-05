@@ -71,7 +71,9 @@ abstract class Base extends TestCase
             '$id' => 'uid123',
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
         ]));
 
@@ -538,7 +540,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -582,7 +586,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents_nulls', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
         ]));
 
@@ -608,7 +614,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('defaults', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
         ]));
 
@@ -662,7 +670,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => '*test+alias@email-provider.com',
             'integer' => 0,
@@ -717,7 +727,9 @@ abstract class Base extends TestCase
 
         $new
             ->setAttribute('$permissions', 'read(guests)', Document::SET_TYPE_APPEND)
-            ->setAttribute('$permissions', 'write(guests)', Document::SET_TYPE_APPEND);
+            ->setAttribute('$permissions', 'create(guests)', Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', 'update(guests)', Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', 'delete(guests)', Document::SET_TYPE_APPEND);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
@@ -754,18 +766,15 @@ abstract class Base extends TestCase
         $new
             ->setAttribute('$permissions', 'read(guests)', Document::SET_TYPE_APPEND)
             ->setAttribute('$permissions', 'read(guests)', Document::SET_TYPE_APPEND)
-            ->setAttribute('$permissions', 'write(guests)', Document::SET_TYPE_APPEND)
-            ->setAttribute('$permissions', 'write(guests)', Document::SET_TYPE_APPEND);
+            ->setAttribute('$permissions', 'create(guests)', Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', 'create(guests)', Document::SET_TYPE_APPEND);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
         $this->assertContains('guests', $new->getRead());
-        $this->assertContains('guests', $new->getWrite());
         $this->assertContains('guests', $new->getCreate());
-        $this->assertContains('guests', $new->getUpdate());
-        $this->assertContains('guests', $new->getDelete());
 
         return $document;
     }
@@ -800,7 +809,9 @@ abstract class Base extends TestCase
             '$id' => 'frozen',
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -813,7 +824,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Frozen II',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -826,7 +839,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Captain America: The First Avenger',
             'director' => 'Joe Johnston',
@@ -839,7 +854,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Captain Marvel',
             'director' => 'Anna Boden & Ryan Fleck',
@@ -852,7 +869,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Work in Progress',
             'director' => 'TBD',
@@ -865,7 +884,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(user:x)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Work in Progress 2',
             'director' => 'TBD',
@@ -1601,7 +1622,9 @@ abstract class Base extends TestCase
             '$id' => '608fdbe51361a',
             '$permissions' => [
                 'read(any)',
-                'write(user:608fdbe51361a)'
+                'create(user:608fdbe51361a)',
+                'update(user:608fdbe51361a)',
+                'delete(user:608fdbe51361a)',
             ],
             'email' => 'test@example.com',
             'emailVerification' => false,
@@ -1633,8 +1656,8 @@ abstract class Base extends TestCase
         $this->assertContains('read(any)', $result->getAttribute('$permissions'));
         $this->assertContains('read(any)', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
-        $this->assertContains('write(user:608fdbe51361a)', $result->getAttribute('$permissions'));
-        $this->assertContains('write(user:608fdbe51361a)', $result->getPermissions());
+        $this->assertContains('create(user:608fdbe51361a)', $result->getPermissions());
+        $this->assertContains('user:608fdbe51361a', $result->getCreate());
         $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
@@ -1657,8 +1680,8 @@ abstract class Base extends TestCase
         $this->assertContains('read(any)', $result->getAttribute('$permissions'));
         $this->assertContains('read(any)', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
-        $this->assertContains('write(user:608fdbe51361a)', $result->getAttribute('$permissions'));
-        $this->assertContains('write(user:608fdbe51361a)', $result->getPermissions());
+        $this->assertContains('create(user:608fdbe51361a)', $result->getPermissions());
+        $this->assertContains('user:608fdbe51361a', $result->getCreate());
         $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
@@ -1688,7 +1711,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -1718,7 +1743,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(user:1)',
-                'write(user:1)',
+                'create(user:1)',
+                'update(user:1)',
+                'delete(user:1)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -1739,7 +1766,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -1766,7 +1795,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -1789,7 +1820,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -1805,7 +1838,9 @@ abstract class Base extends TestCase
             '$id' => $document->getId(),
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -2061,7 +2096,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -2081,7 +2118,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
                 'read(any, user:1, user:2)',
-                'write(any, user:1x, user:2x)',
+                'create(any, user:1x, user:2x)',
+                'update(any, user:1x, user:2x)',
+                'delete(any, user:1x, user:2x)',
             ],
             'name' => 'Frozen 5',
             'director' => 'Chris Buck & Jennifer Lee',
@@ -2178,7 +2217,9 @@ abstract class Base extends TestCase
         $database->createDocument('colors', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'black',
             'hex' => '#000000'
@@ -2238,7 +2279,9 @@ abstract class Base extends TestCase
         $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'Violet',
             'inStock' => 51
@@ -2247,7 +2290,9 @@ abstract class Base extends TestCase
         $doc = $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'Lily'
         ]));
@@ -2259,7 +2304,9 @@ abstract class Base extends TestCase
         $doc = $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'Iris'
         ]));
@@ -2284,7 +2331,9 @@ abstract class Base extends TestCase
         $doc = $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'Lily With Missing Stocks'
         ]));
@@ -2302,7 +2351,9 @@ abstract class Base extends TestCase
         $doc = $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'Lily With CartData',
             'inStock' => 50,
@@ -2334,7 +2385,9 @@ abstract class Base extends TestCase
         $doc = $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             '$id' => 'LiliPriced',
             'name' => 'Lily Priced',
@@ -2361,7 +2414,9 @@ abstract class Base extends TestCase
         $doc = $database->createDocument('flowers', new Document([
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'name' => 'Lily Overpriced',
             'inStock' => 50,
@@ -2422,7 +2477,9 @@ abstract class Base extends TestCase
             '$id' => 'id1234',
             '$permissions' => [
                 'read(any)',
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'date' => DateTime::now(),
         ]));
@@ -2444,7 +2501,9 @@ abstract class Base extends TestCase
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([
             '$permissions' => [
-                'write(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
             ],
             'date' => "1975-12-06 00:00:61"
         ]));
@@ -2484,7 +2543,9 @@ abstract class Base extends TestCase
             $document = $database->createDocument($keyword, new Document([
                 '$permissions' => [
                     'read(any)',
-                    'write(any)',
+                    'create(any)',
+                    'update(any)',
+                    'delete(any)',
                 ],
                 '$id' => 'helloWorld',
                 'attribute1' => 'Hello World',
@@ -2517,7 +2578,9 @@ abstract class Base extends TestCase
             $document = new Document([
                 '$permissions' => [
                     'read(any)',
-                    'write(any)',
+                    'create(any)',
+                    'update(any)',
+                    'delete(any)',
                 ],
                 '$id' => 'reservedKeyDocument'
             ]);

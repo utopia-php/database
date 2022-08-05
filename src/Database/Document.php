@@ -147,13 +147,12 @@ class Document extends ArrayObject
 
     public function getAdmin(): array
     {
-        return \array_unique(\array_merge(...\array_map(function ($perm) {
-            $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['admin(', ' '], '', $perm);
-            return \explode(',', $perm);
-        }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'admin');
-        }))));
+        return \array_unique(\array_intersect(
+            $this->getRead(),
+            $this->getCreate(),
+            $this->getUpdate(),
+            $this->getDelete()
+        ));
     }
 
     /**

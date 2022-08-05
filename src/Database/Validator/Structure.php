@@ -75,15 +75,6 @@ class Structure extends Validator
             'signed' => false,
             'array' => false,
             'filters' => [],
-        ],
-        [
-            '$id' => 'documentSecurity',
-            'type' => Database::VAR_BOOLEAN,
-            'size' => 1,
-            'required' => false,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
         ]
     ];
 

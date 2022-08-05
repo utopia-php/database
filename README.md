@@ -25,7 +25,7 @@ A list of the utopia/php concepts and their relevant equivalent using the differ
 - **Document** - A simple JSON object that will be stored in one of the utopia/database collections. For SQL-based adapters, this will be equivalent to a row. For a No-SQL adapter, this will equivalent to a native document.
 - **Attribute** - A simple document attribute. For SQL-based adapters, this will be equivalent to a column. For a No-SQL adapter, this will equivalent to a native document field.
 - **Index** - A simple collection index used to improve the performance of your database queries.
-- **Permissions** - Using permissions, you can decide which roles will grant read or write access for a specific document. The special attribute `$permissions` is used to store permission metadata for each document in the collection. A permission role can be any string you want. You can use `Authorization::setRole()` to delegate new roles to your users, once obtained a new role a user would gain read or write access to a relevant document.
+- **Permissions** - Using permissions, you can decide which roles have read, create, update and delete access for a specific document. The special attribute `$permissions` is used to store permission metadata for each document in the collection. A permission role can be any string you want. You can use `Authorization::setRole()` to delegate new roles to your users, once obtained a new role a user would gain read, create, update or delete access to a relevant document.
 
 ### Filters
 
@@ -37,7 +37,7 @@ Attribute filters are functions that manipulate attributes before saving them to
 - `$createdAt` - the document creation date, this attribute is automatically set when the document is created.
 - `$updatedAt` - the document update date, this attribute is automatically set when the document is updated.
 - `$collection` - an attribute containing the name of the collection the document is stored in.
-- `$permissions` - an attribute containing an array of strings. Each string represent a specific action and role. If your user obtains that role for that action he will have access for this document.
+- `$permissions` - an attribute containing an array of strings. Each string represent a specific action and role. If your user obtains that role for that action they will have access for this document.
 
 ### Attribute Types
 

@@ -62,7 +62,7 @@ The existing test suite is helpful when developing a new database adapter. To ge
 
 #### SQL Databases
 - Treat Collections as tables and Documents as rows, with attributes as columns. NoSQL databases are more straight-forward to translate.
-- For row-level permissions, create a pair of tables: one for data and one for read/write permissions. The MariaDB adapter demonstrates the implementation.
+- For row-level permissions, create a pair of tables: one for data and one for permissions. The MariaDB adapter demonstrates the implementation.
 
 #### NoSQL Databases
 - NoSQL databases may not need to implement the attribute functions. See the MongoDB adapter as an example.

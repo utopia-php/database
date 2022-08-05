@@ -98,8 +98,8 @@ class Permissions extends Validator
 
             // Parse permissions string in two parts:
             //  1. Match method name against known methods, and capture entire permissions strings.
-            //    - Given ["read(users)", "write(user:123abc)", "delete(team:123abc/edit)"]
-            //      - The "read", "write" and delete partitions will be matched against all of $this->methods.
+            //    - Given ["read(users)", "create(user:123abc)", "delete(team:123abc/edit)"]
+            //      - The "read", "create" and delete partitions will be matched against all of $this->methods.
             //      - Then "users", "user:123abc", "team:123abc/edit" permission strings will be captured.
             //      - If any invalid method is found, the entire permission parameter will be considered invalid.
             //  2. Match permission name against known permissions and capture permission name, id and dimension.
@@ -117,7 +117,7 @@ class Permissions extends Validator
             //          - If the dimension should be from the known set and is not found, the entire permission parameter will be considered invalid.
             //        - If any invalid permission name is found, the entire permission string will be considered invalid.
 
-            // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role")where permission name is matched against known permissions.
+            // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role") where permission name is matched against known permissions.
             $permissionMatcher = '((?:' . \implode('|', $this->permissions) . ')(?::(?:[a-z\d]+))?(?:\/(?:[a-z]+))?)';
 
             // Captures the permissions type (e.g. "read", "update") and ensures at least 1 permission string is provided.
@@ -136,7 +136,7 @@ class Permissions extends Validator
             \array_shift($matches);
             foreach ($matches as $match) {
                 if (!\preg_match($permissionCapture, $match, $submatches)) {
-                    $this->message = 'Permission must be of the form "permission:id/dimension", got "' . $match . '". ID and dimension are optional for some types. Permission must be one of: ' . \implode(', ', $permissions) . '.';
+                    $this->message = 'Permissions must be of the form "permission:id/dimension", got "' . $match . '". ID and dimension are optional for some types. Permission must be one of: ' . \implode(', ', $permissions) . '.';
                     return false;
                 }
 

@@ -2,18 +2,16 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Validator;
 
 class Permissions extends Validator
 {
     protected string $message = 'Permissions Error';
 
-    protected array $methods = [
-        'create',
+    protected array $methods = [...Database::PERMISSIONS,
+        // Validator allows aggregate permissions
         'write',
-        'read',
-        'update',
-        'delete',
         'admin',
     ];
 

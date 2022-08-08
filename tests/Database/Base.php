@@ -1740,6 +1740,8 @@ abstract class Base extends TestCase
     {
         $this->expectException(ExceptionAuthorization::class);
 
+        Authorization::cleanRoles();
+
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 'read(user:1)',

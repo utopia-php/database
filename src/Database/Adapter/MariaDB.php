@@ -152,7 +152,7 @@ class MariaDB extends Adapter
             $indexAttributes = $index->getAttribute('attributes');
             foreach ($indexAttributes as $nested => $attribute) {
                 $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
+                $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$key] ?? '';
                 $indexAttribute = $this->filter($attribute);
 
@@ -795,8 +795,8 @@ class MariaDB extends Adapter
         }, $orderAttributes);
 
         $hasIdAttribute = false;
-        foreach($orderAttributes as $i => $attribute) {
-            if($attribute === '_uid') {
+        foreach ($orderAttributes as $i => $attribute) {
+            if ($attribute === '_uid') {
                 $hasIdAttribute = true;
             }
 
@@ -839,13 +839,13 @@ class MariaDB extends Adapter
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
-        if(!$hasIdAttribute) {
+        if (!$hasIdAttribute) {
             if (empty($orderAttributes) && !empty($orderTypes)) {
                 $order = $orderTypes[0] ?? Database::ORDER_ASC;
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
-    
+
                 $orders[] = 'table_main._id ' . $this->filter($order);
             } else {
                 $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
@@ -853,16 +853,16 @@ class MariaDB extends Adapter
         }
 
         foreach ($queries as $i => $query) {
-            $query->setFirstParam(match ($query->getFirstParam()) {
+            $query->setAttribute(match ($query->getAttribute()) {
                 '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
-                default => $query->getFirstParam()
+                default => $query->getAttribute()
             });
 
             $conditions = [];
-            foreach ($query->getArrayParam(1) as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getFirstParam(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getFirstParam(), $value);
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -889,8 +889,8 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach ($query->getArrayParam(1) as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getFirstParam(), $value, $this->getPDOType($value));
+            foreach ($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }
 
@@ -959,16 +959,16 @@ class MariaDB extends Adapter
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $i => $query) {
-            $query->setFirstParam(match ($query->getFirstParam()) {
+            $query->setAttribute(match ($query->getAttribute()) {
                 '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
-                default => $query->getFirstParam()
+                default => $query->getAttribute()
             });
 
             $conditions = [];
-            foreach ($query->getArrayParam(1) as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getFirstParam(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getFirstParam(), $value);
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -992,8 +992,8 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach ($query->getArrayParam(1) as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getFirstParam(), $value, $this->getPDOType($value));
+            foreach ($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }
 
@@ -1028,16 +1028,16 @@ class MariaDB extends Adapter
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $i => $query) {
-            $query->setFirstParam(match ($query->getFirstParam()) {
+            $query->setAttribute(match ($query->getAttribute()) {
                 '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
-                default => $query->getFirstParam()
+                default => $query->getAttribute()
             });
 
             $conditions = [];
-            foreach ($query->getArrayParam(1) as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getFirstParam(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getFirstParam(), $value);
+            foreach ($query->getValues() as $key => $value) {
+                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1059,8 +1059,8 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach ($query->getArrayParam(1) as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getFirstParam(), $value, $this->getPDOType($value));
+            foreach ($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }
 
@@ -1488,7 +1488,7 @@ class MariaDB extends Adapter
                 break;
         }
 
-        return "CREATE {$type} `{$id}` ON `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` ( ". implode(', ', $attributes) ." )";
+        return "CREATE {$type} `{$id}` ON `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . " )";
     }
 
     /**
@@ -1584,7 +1584,7 @@ class MariaDB extends Adapter
     /**
      * Returns default PDO configuration
      */
-    public static function getPdoAttributes():array
+    public static function getPdoAttributes(): array
     {
         return [
             PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
@@ -1595,6 +1595,4 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
-
-
 }

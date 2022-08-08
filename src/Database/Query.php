@@ -35,16 +35,18 @@ class Query
     protected const CHAR_BACKSLASH = '\\';
 
     protected string $method = '';
+    protected string $attribute = '';
+    protected array $values = [];
 
-    protected array $params = [];
 
     /**
      * Construct a new query object
      */
-    public function __construct(string $method, array $params)
+    public function __construct(string $method, string $attribute = '', array $values = [])
     {
         $this->method = $method;
-        $this->params = $params;
+        $this->attribute = $attribute;
+        $this->values = $values;
     }
 
     public function getMethod(): string
@@ -52,47 +54,14 @@ class Query
         return $this->method;
     }
 
-    public function getParams(): array
+    public function getValues(): array
     {
-        return $this->params;
+        return $this->values;
     }
 
-    /**
-     * Helper method returning first param. In first param we often store attribute
-     *
-     * @return null|string
-     */
-    public function getFirstParam(): ?string
+    public function getAttribute(): string
     {
-        return $this->params[0] ?? null;
-    }
-
-    /**
-     * Helper method changing first param. In first param we often store attribute
-     *
-     * @param string $value
-     * @return self
-     */
-    public function setFirstParam(string $value): self
-    {
-        $this->params[0] = $value;
-
-        return $this;
-    }
-
-    /**
-     * Helper method. Returns param, but in form of array array.
-     *
-     * @param int $index
-     * @return array
-     */
-    public function getArrayParam(int $index): array
-    {
-        if (\is_array($this->params[$index])) {
-            return $this->params[$index];
-        }
-
-        return [$this->params[$index]];
+        return $this->attribute;
     }
 
     /**
@@ -108,13 +77,25 @@ class Query
     }
 
     /**
-     * Sets Param.
-     * @param array $params
+     * Sets Values.
+     * @param array $values
      * @return self
      */
-    public function setParams(array $params): self
+    public function setValues(array $values): self
     {
-        $this->params = $params;
+        $this->values = $values;
+
+        return $this;
+    }
+
+    /**
+     * Sets Attribute.
+     * @param string $attribute
+     * @return self
+     */
+    public function setAttribute(string $attribute): self
+    {
+        $this->attribute = $attribute;
 
         return $this;
     }
@@ -188,8 +169,8 @@ class Query
             $isStringStack = $stringStackState !== null;
             $isArrayStack = !$isStringStack && $stackCount > 0;
 
-            if($char === static::CHAR_BACKSLASH) {
-                if(!(static::isSpecialChar($filter[$i + 1]))) {
+            if ($char === static::CHAR_BACKSLASH) {
+                if (!(static::isSpecialChar($filter[$i + 1]))) {
                     static::appendSymbol($isStringStack, $filter[$i], $i, $filter, $currentParam);
                 }
 
@@ -198,13 +179,12 @@ class Query
 
                 continue;
             }
-            
+
             // String support + escaping support
             if (
                 (self::isQuote($char)) && // Must be string indicator
                 ($filter[$i - 1] !== static::CHAR_BACKSLASH || $filter[$i - 2] === static::CHAR_BACKSLASH) // Must not be escaped;
-            )
-            {
+            ) {
                 if ($isStringStack) {
                     // Dont mix-up string symbols. Only allow the same as on start
                     if ($char === $stringStackState) {
@@ -255,7 +235,7 @@ class Query
                             if (!empty($currentParam)) {
                                 $params[] = $currentParam;
                             }
-    
+
                             $currentParam = "";
                         }
                     }
@@ -278,18 +258,41 @@ class Query
             // If array, parse each child separatelly
             if (\is_array($param)) {
                 foreach ($param as $element) {
-                    $arr[] = self::parseParam($element);
+                    $arr[] = self::parseValue($element);
                 }
 
                 $parsedParams[] = $arr ?? [];
             } else {
-                $parsedParams[] = self::parseParam($param);
+                $parsedParams[] = self::parseValue($param);
             }
         }
 
         $method = static::getMethodFromAlias($method);
 
-        return new self($method, $parsedParams);
+        switch ($method) {
+            case self::TYPE_EQUAL:
+            case self::TYPE_NOTEQUAL:
+            case self::TYPE_LESSER:
+            case self::TYPE_LESSEREQUAL:
+            case self::TYPE_GREATER:
+            case self::TYPE_GREATEREQUAL:
+            case self::TYPE_CONTAINS:
+            case self::TYPE_SEARCH:
+                return new self($method, $parsedParams[0], \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
+
+            case self::TYPE_ORDERASC:
+            case self::TYPE_ORDERDESC:
+                return new self($method, $parsedParams[0]);
+
+            case self::TYPE_LIMIT:
+            case self::TYPE_OFFSET:
+            case self::TYPE_CURSORAFTER:
+            case self::TYPE_CURSORBEFORE:
+                return new self($method, values: $parsedParams[0]);
+
+            default:
+                return new self($method);
+        }
     }
 
     /**
@@ -307,9 +310,9 @@ class Query
         // Ignore spaces and commas outside of string
         $canBeIgnored = false;
 
-        if($char === static::CHAR_SPACE) {
+        if ($char === static::CHAR_SPACE) {
             $canBeIgnored = true;
-        } else if($char === static::CHAR_COMMA) {
+        } else if ($char === static::CHAR_COMMA) {
             $canBeIgnored = true;
         }
 
@@ -322,26 +325,28 @@ class Query
         }
     }
 
-    protected static function isQuote(string $char) {
-        if($char === self::CHAR_SINGLE_QUOTE) {
+    protected static function isQuote(string $char)
+    {
+        if ($char === self::CHAR_SINGLE_QUOTE) {
             return true;
-        } else if($char === self::CHAR_DOUBLE_QUOTE) {
+        } else if ($char === self::CHAR_DOUBLE_QUOTE) {
             return true;
         }
 
         return false;
     }
 
-    protected static function isSpecialChar(string $char) {
-        if($char === static::CHAR_COMMA) {
+    protected static function isSpecialChar(string $char)
+    {
+        if ($char === static::CHAR_COMMA) {
             return true;
-        } else if($char === static::CHAR_BRACKET_END) {
+        } else if ($char === static::CHAR_BRACKET_END) {
             return true;
-        } else if($char === static::CHAR_BRACKET_START) {
+        } else if ($char === static::CHAR_BRACKET_START) {
             return true;
-        } else if($char === static::CHAR_DOUBLE_QUOTE) {
+        } else if ($char === static::CHAR_DOUBLE_QUOTE) {
             return true;
-        } else if($char === static::CHAR_SINGLE_QUOTE) {
+        } else if ($char === static::CHAR_SINGLE_QUOTE) {
             return true;
         }
 
@@ -349,31 +354,31 @@ class Query
     }
 
     /**
-     * Parses param value.
+     * Parses value.
      *
-     * @param string $param
+     * @param string $value
      * @return mixed
      */
-    protected static function parseParam(string $param): mixed
+    protected static function parseValue(string $value): mixed
     {
-        $param = \trim($param);
-        
-        if ($param === 'false') { // Boolean param
+        $value = \trim($value);
+
+        if ($value === 'false') { // Boolean value
             return false;
-        } else if ($param === 'true') {
+        } else if ($value === 'true') {
             return true;
-        } else if ($param === 'null') { // Null param
+        } else if ($value === 'null') { // Null value
             return null;
-        }  else if (\is_numeric($param)) { // Numeric param
+        } else if (\is_numeric($value)) { // Numeric value
             // Cast to number
-            return $param + 0;
-        } else if (\str_starts_with($param, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($param, static::CHAR_SINGLE_QUOTE)) { // String param
-            $param = \substr($param, 1, -1); // Remove '' or ""
-            return $param;
+            return $value + 0;
+        } else if (\str_starts_with($value, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($value, static::CHAR_SINGLE_QUOTE)) { // String param
+            $value = \substr($value, 1, -1); // Remove '' or ""
+            return $value;
         }
 
         // Unknown format
-        return $param;
+        return $value;
     }
 
     /**
@@ -396,5 +401,117 @@ class Query
             default => $method
         };
         */
+    }
+
+    /**
+     * Helper method to create Query with equal method
+     */
+    public static function equal(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_EQUAL, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with notEqual method
+     */
+    public static function notEqual(string $attribute, $value): self
+    {
+        return new self(self::TYPE_NOTEQUAL, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with lessThan method
+     */
+    public static function lessThan(string $attribute, $value): self
+    {
+        return new self(self::TYPE_LESSER, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with lessThanEqual method
+     */
+    public static function lessThanEqual(string $attribute, $value): self
+    {
+        return new self(self::TYPE_LESSEREQUAL, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with greaterThan method
+     */
+    public static function greaterThan(string $attribute, $value): self
+    {
+        return new self(self::TYPE_GREATER, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with greaterThanEqual method
+     */
+    public static function greaterThanEqual(string $attribute, $value): self
+    {
+        return new self(self::TYPE_GREATEREQUAL, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with contains method
+     */
+    public static function contains(string $attribute, $value): self
+    {
+        return new self(self::TYPE_CONTAINS, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with search method
+     */
+    public static function search(string $attribute, $value): self
+    {
+        return new self(self::TYPE_SEARCH, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with orderDesc method
+     */
+    public static function orderDesc(string $attribute): self
+    {
+        return new self(self::TYPE_ORDERDESC, $attribute);
+    }
+
+    /**
+     * Helper method to create Query with orderAsc method
+     */
+    public static function orderAsc(string $attribute): self
+    {
+        return new self(self::TYPE_ORDERASC, $attribute);
+    }
+
+    /**
+     * Helper method to create Query with limit method
+     */
+    public static function limit(int $value): self
+    {
+        return new self(self::TYPE_LIMIT, values: [$value]);
+    }
+
+    /**
+     * Helper method to create Query with offset method
+     */
+    public static function offset(int $value): self
+    {
+        return new self(self::TYPE_OFFSET, values: [$value]);
+    }
+
+    /**
+     * Helper method to create Query with cursorAfter method
+     */
+    public static function cursorAfter(string $value): self
+    {
+        return new self(self::TYPE_CURSORAFTER, values: [$value]);
+    }
+
+    /**
+     * Helper method to create Query with cursorBefore method
+     */
+    public static function cursorBefore(string $value): self
+    {
+        return new self(self::TYPE_CURSORBEFORE, values: [$value]);
     }
 }

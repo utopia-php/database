@@ -97,7 +97,8 @@ class QueriesTest extends TestCase
     public function setUp(): void
     {
         // Query validator expects Document[]
-        $attributes = []; /** @var Document[] $attributes */
+        $attributes = [];
+        /** @var Document[] $attributes */
         foreach ($this->collection['attributes'] as $attribute) {
             $attributes[] = new Document($attribute);
         }
@@ -169,19 +170,19 @@ class QueriesTest extends TestCase
 
         $this->assertEquals(true, $validator->isValid($this->queries));
 
-        $this->queries[] = Query::parse('lesserEqual("price", 6.50)');
+        $this->queries[] = Query::parse('lessThan("price", 6.50)');
         $this->assertEquals(true, $validator->isValid($this->queries));
 
 
         // test for FAILURE
 
-        $this->queries[] = Query::parse('greater("rating", 4)');
+        $this->queries[] = Query::parse('greaterThan("rating", 4)');
 
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
 
         // test for queued index
-        $query1 = Query::parse('lesserEqual("price", 6.50)');
+        $query1 = Query::parse('lessThan("price", 6.50)');
         $query2 = Query::parse('notEqual("title", ["Iron Man", "Ant Man"])');
 
         $this->queries = [$query1, $query2];

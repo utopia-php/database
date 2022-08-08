@@ -93,7 +93,7 @@ class Queries extends Validator
 
         foreach ($value as $query) {
             // [attribute => method]
-            $queries[$query->getFirstParam()] = $query->getMethod(); 
+            $queries[$query->getAttribute()] = $query->getMethod();
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
@@ -108,7 +108,7 @@ class Queries extends Validator
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
                 if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
-                    $found = $index; 
+                    $found = $index;
                 }
             }
 
@@ -121,7 +121,7 @@ class Queries extends Validator
             if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
                 $this->message = 'Search method requires fulltext index: ' . implode(",", array_keys($queries));
                 return false;
-            } 
+            }
         }
 
         return true;

@@ -20,20 +20,6 @@ class QueryValidator extends Validator
     protected $schema = [];
 
     /**
-     * @var array
-     */
-    protected $methods = [
-        'equal',
-        'notEqual',
-        'lesser',
-        'lesserEqual',
-        'greater',
-        'greaterEqual',
-        'contains',
-        'search',
-    ];
-
-    /**
      * Expression constructor
      *
      * @param Document[] $attributes
@@ -90,16 +76,16 @@ class QueryValidator extends Validator
     public function isValid($query): bool
     {
         // Validate method
-        if (!in_array($query->getMethod(), $this->methods)) {
+        if (!Query::isMethod($query->getMethod())) {
             $this->message = 'Query method invalid: ' . $query->getMethod();
             return false;
         }
 
         // Search for attribute in schema
-        $attributeIndex = array_search($query->getFirstParam(), array_column($this->schema, 'key'));
+        $attributeIndex = array_search($query->getAttribute(), array_column($this->schema, 'key'));
 
         if ($attributeIndex === false) {
-            $this->message = 'Attribute not found in schema: ' . $query->getFirstParam();
+            $this->message = 'Attribute not found in schema: ' . $query->getAttribute();
             return false;
         }
 
@@ -107,7 +93,7 @@ class QueryValidator extends Validator
         $attributeType = $this->schema[$attributeIndex]['type'];
 
         foreach ($query->getValues() as $value) {
-            $condition = match($attributeType) {
+            $condition = match ($attributeType) {
                 Database::VAR_DATETIME => gettype($value) === Database::VAR_STRING,
                 default => gettype($value) === $attributeType
             };

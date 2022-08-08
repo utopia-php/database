@@ -939,6 +939,20 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
 
         /**
+         * Not Equal query
+         */
+        $documents = static::getDatabase()->find('movies', [
+            new Query('director', Query::TYPE_NOTEQUAL, ['TBD', 'Joe Johnston']),
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        foreach ($documents as $document) {
+            $isAllowed = $document['director'] !== 'TBD' || $document['director'] !== 'Joe Johnston';
+            $this->assertTrue($isAllowed);
+        }
+
+        /**
          * Float condition
          */
         $documents = static::getDatabase()->find('movies', [

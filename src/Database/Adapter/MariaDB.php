@@ -523,7 +523,7 @@ class MariaDB extends Adapter
 
         $permissions = [];
         foreach (Database::PERMISSIONS as $type) {
-            foreach ([$document, 'get' . \ucfirst($type)]() as $permission) {
+            foreach ($document->getPermission($type) as $permission) {
                 $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
             }
         }
@@ -614,7 +614,7 @@ class MariaDB extends Adapter
          */
         $removals = [];
         foreach(Database::PERMISSIONS as $type) {
-            $diff = \array_diff($permissions[$type], [$document, 'get' . \ucfirst($type)]());
+            $diff = \array_diff($permissions[$type], $document->getPermission($type));
             if (!empty($diff)) {
                 $removals[$type] = $diff;
             }
@@ -625,7 +625,7 @@ class MariaDB extends Adapter
          */
         $additions = [];
         foreach(Database::PERMISSIONS as $type) {
-            $diff = \array_diff([$document, 'get' . \ucfirst($type)](), $permissions[$type]);
+            $diff = \array_diff($document->getPermission($type), $permissions[$type]);
             if (!empty($diff)) {
                 $additions[$type] = $diff;
             }

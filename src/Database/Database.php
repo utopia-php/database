@@ -1150,7 +1150,7 @@ class Database
         $time = DateTime::now();
 
         $permitted = $collection->getId() === self::METADATA
-            || $validator->isValid($document->getCreate());
+            || $validator->isValid($collection->getCreate());
 
         if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());

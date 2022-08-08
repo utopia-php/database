@@ -50,14 +50,14 @@ class QueryValidator extends Validator
         $this->schema[] = [
             'key' => '$createdAt',
             'array' => false,
-            'type' => Database::VAR_INTEGER,
+            'type' => Database::VAR_DATETIME,
             'size' => 0
         ];
 
         $this->schema[] = [
             'key' => '$updatedAt',
             'array' => false,
-            'type' => Database::VAR_INTEGER,
+            'type' => Database::VAR_DATETIME,
             'size' => 0
         ];
 
@@ -106,8 +106,13 @@ class QueryValidator extends Validator
         // Extract the type of desired attribute from collection $schema
         $attributeType = $this->schema[$attributeIndex]['type'];
 
-        foreach ($query->getArrayParam(1) as $value) {
-            if (gettype($value) !== $attributeType) {
+        foreach ($query->getValues() as $value) {
+            $condition = match($attributeType) {
+                Database::VAR_DATETIME => gettype($value) === Database::VAR_STRING,
+                default => gettype($value) === $attributeType
+            };
+
+            if (!$condition) {
                 $this->message = 'Query type does not match expected: ' . $attributeType;
                 return false;
             }
@@ -117,7 +122,7 @@ class QueryValidator extends Validator
         if (!$this->schema[$attributeIndex]['array'] && $query->getMethod() === Query::TYPE_CONTAINS) {
             $this->message = 'Query method only supported on array attributes: ' . $query->getMethod();
             return false;
-        } 
+        }
 
         return true;
     }

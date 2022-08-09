@@ -184,4 +184,86 @@ class Queries extends Validator
 
         return true;
     }
+
+    /**
+     * Iterates through $queries and returns an array with:
+     * - filters: array of filter queries
+     * - limit: int
+     * - offset: int
+     * - orderAttributes: array of attribute keys
+     * - orderTypes: array of Database::ORDER_ASC or Database::ORDER_DESC
+     * - cursor: Document
+     * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
+     * 
+     * @param Query[] $queries
+     * @param int $defaultLimit
+     * @param int $defaultOffset
+     * @param string $defaultCursorDirection
+     * 
+     * @return array
+     */
+    public static function byMethod(array $queries, int $defaultLimit = 25, int $defaultOffset = 0, string $defaultCursorDirection = Database::CURSOR_AFTER): array
+    {
+        $filters = [];
+        $limit = null;
+        $offset = null;
+        $orderAttributes = [];
+        $orderTypes = [];
+        $cursor = null;
+        $cursorDirection = null;
+        foreach ($queries as $query) {
+            if (!$query instanceof Query) continue;
+
+            $method = $query->getMethod();
+            $attribute = $query->getAttribute();
+            $values = $query->getValues();
+            switch ($method) {
+                case Query::TYPE_ORDERASC:
+                case Query::TYPE_ORDERDESC:
+                    if (!empty($attribute)) {
+                        $orderAttributes[] = $attribute;
+                    }
+
+                    $orderTypes[] = $method === Query::TYPE_ORDERASC ? Database::ORDER_ASC : Database::ORDER_DESC;
+                    break;
+
+                case Query::TYPE_LIMIT:
+                    // keep the 1st limit encountered and ignore the rest
+                    if ($limit !== null) break;
+
+                    $limit = $values[0] ?? $limit;
+                    break;
+
+                case Query::TYPE_OFFSET:
+                    // keep the 1st offset encountered and ignore the rest
+                    if ($offset !== null) break;
+
+                    $offset = $values[0] ?? $limit;
+                    break;
+
+                case Query::TYPE_CURSORAFTER:
+                case Query::TYPE_CURSORBEFORE:
+                    // keep the 1st cursor encountered and ignore the rest
+                    if ($cursor !== null) break;
+
+                    $cursor = $values[0] ?? $limit;
+                    $cursorDirection = $method === Query::TYPE_CURSORAFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
+                    break;
+
+                default:
+                    $filters[] = $query;
+                    break;
+            }
+        }
+
+        return [
+            'filters' => $filters,
+            'limit' => $limit ?? $defaultLimit,
+            'offset' => $offset ?? $defaultOffset,
+            'orderAttributes' => $orderAttributes,
+            'orderTypes' => $orderTypes,
+            'cursor' => $cursor,
+            'cursorDirection' => $cursorDirection ?? $defaultCursorDirection,
+        ];
+    }
 }

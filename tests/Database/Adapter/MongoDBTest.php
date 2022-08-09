@@ -113,7 +113,9 @@ class MongoDBTest extends Base
             'empty' => [],
         ]));
 
-        $documents = static::getDatabase()->find('documents', [new Query(Query::TYPE_SEARCH, 'string', ['*test+alias@email-provider.com'])]);
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*test+alias@email-provider.com')
+        ]);
 
         $this->assertEquals(1, count($documents));
 

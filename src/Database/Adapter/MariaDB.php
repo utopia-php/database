@@ -776,6 +776,7 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
+     * 
      * @return Document[]
      * @throws Exception 
      * @throws PDOException 

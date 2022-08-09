@@ -454,9 +454,9 @@ class Query
     /**
      * Helper method to create Query with contains method
      */
-    public static function contains(string $attribute, $value): self
+    public static function contains(string $attribute, array $values): self
     {
-        return new self(self::TYPE_CONTAINS, $attribute, [$value]);
+        return new self(self::TYPE_CONTAINS, $attribute, $values);
     }
 
     /**
@@ -502,7 +502,7 @@ class Query
     /**
      * Helper method to create Query with cursorAfter method
      */
-    public static function cursorAfter(string $value): self
+    public static function cursorAfter(Document $value): self
     {
         return new self(self::TYPE_CURSORAFTER, values: [$value]);
     }
@@ -510,7 +510,7 @@ class Query
     /**
      * Helper method to create Query with cursorBefore method
      */
-    public static function cursorBefore(string $value): self
+    public static function cursorBefore(Document $value): self
     {
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
     }

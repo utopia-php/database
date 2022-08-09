@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests;
 
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 use PHPUnit\Framework\TestCase;
 
@@ -66,11 +67,12 @@ class QueryTest extends TestCase
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([10], $query->getValues());
 
-        $query = Query::cursorAfter('cursor');
+        $cursor = new Document();
+        $query = Query::cursorAfter($cursor);
 
         $this->assertEquals(Query::TYPE_CURSORAFTER, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(['cursor'], $query->getValues());
+        $this->assertEquals([$cursor], $query->getValues());
     }
 
     public function testParse()

@@ -370,12 +370,14 @@ class MongoDBAdapter extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        
+        $id = $document->getId();
+        $document = $this->remove_null_keys($document);
+        $record =  $this->replaceChars('$', '_',$document);
 
-        $record =  $this->replaceChars('$', '_', $document->getArrayCopy());
+        $this->client->insert($name, $this->remove_null_keys($record));
 
-        $this->client->insert($name, $record);
-
-        $result = $this->getDocument($collection, $document->getId());
+        $result = $this->getDocument($collection, $id);
 
         return $result;
     }
@@ -398,9 +400,9 @@ class MongoDBAdapter extends Adapter
             $this->replaceChars('$', '_', $document->getArrayCopy()),
         );
 
-        $result = $this->getDocument($collection, $document->getId())->getArrayCopy();
-        $docCopy = $document->getArrayCopy();
-        $merged = \array_merge($docCopy, $result);
+        $current = $this->remove_null_keys($this->getDocument($collection, $document->getId()));
+        $docCopy = $this->remove_null_keys($document);
+        $merged = $this->remove_null_keys(\array_merge($docCopy, $current));
 
         return new Document($merged);
     }
@@ -1045,4 +1047,19 @@ class MongoDBAdapter extends Adapter
 
         return $new_array;
     }
+
+    function remove_null_keys(array|Document $target): array {
+        $target = is_array($target) ? $target : $target->getArrayCopy();
+        $cleaned = [];
+
+        foreach($target as $key => $value) {
+            if(\is_null($value)) continue;
+
+            $cleaned[$key] = $value;
+        }
+
+
+        return $cleaned;
+    }
+
 }

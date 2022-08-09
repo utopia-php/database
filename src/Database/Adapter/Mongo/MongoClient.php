@@ -392,13 +392,20 @@ class MongoClient
     public function update(string $collection, array $where = [], array $updates = [], array $options = []): MongoClient
     {
 
+        $clean_updates = [];
+
+        foreach($updates as $k => $v) {
+            if(\is_null($v)) continue;
+            $clean_updates[$k] = $v;
+        }
+
         $this->query(
             array_merge([
                 MongoCommand::UPDATE => $collection,
                 'updates' => [
                     [
                         'q' => $this->toObject($where),
-                        'u' => $this->toObject($updates),
+                        'u' => $this->toObject($clean_updates),
                         'multi' => false,
                         'upsert' => false
                     ]
@@ -423,6 +430,14 @@ class MongoClient
 
     public function upsert(string $collection, array $where = [], array $updates = [], array $options = []): MongoClient
     {
+        $clean_updates = [];
+
+        foreach($updates as $k => $v) {
+            if(\is_null($v)) continue;
+            $clean_updates[$k] = $v;
+        }
+
+
         $this->query(
             array_merge(
                 [
@@ -430,7 +445,7 @@ class MongoClient
                     'updates' => [
                         [
                             'q' => ['_uid' => $where['_uid']],
-                            'u' => ['$set' => $updates],
+                            'u' => ['$set' => $clean_updates],
                         ]
                     ],
                 ],

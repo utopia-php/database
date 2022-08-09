@@ -94,13 +94,22 @@ class Document extends ArrayObject
      */
     public function getRead(): array
     {
-        return \array_unique(\array_merge(...\array_map(function ($perm) {
-            $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['read(', ' '], '', $perm);
-            return \explode(',', $perm);
-        }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'read');
-        }))));
+        return $this->processPermissionsForType(Database::PERMISSION_READ);
+    }
+
+    public function getCreate(): array
+    {
+        return $this->processPermissionsForType(Database::PERMISSION_CREATE);
+    }
+
+    public function getUpdate(): array
+    {
+        return $this->processPermissionsForType(Database::PERMISSION_UPDATE);
+    }
+
+    public function getDelete(): array
+    {
+        return $this->processPermissionsForType(Database::PERMISSION_DELETE);
     }
 
     public function getWrite(): array
@@ -110,39 +119,6 @@ class Document extends ArrayObject
             $this->getUpdate(),
             $this->getDelete()
         ));
-    }
-
-    public function getCreate(): array
-    {
-        return \array_unique(\array_merge(...\array_map(function ($perm) {
-            $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['create(', ' '], '', $perm);
-            return \explode(',', $perm);
-        }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'create');
-        }))));
-    }
-
-    public function getUpdate(): array
-    {
-        return \array_unique(\array_merge(...\array_map(function ($perm) {
-            $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['update(', ' '], '', $perm);
-            return \explode(',', $perm);
-        }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'update');
-        }))));
-    }
-
-    public function getDelete(): array
-    {
-        return \array_unique(\array_merge(...\array_map(function ($perm) {
-            $perm = \rtrim($perm, ') ');
-            $perm = \str_replace(['delete(', ' '], '', $perm);
-            return \explode(',', $perm);
-        }, \array_filter($this->getPermissions(), function ($permission) {
-            return \str_starts_with($permission, 'delete');
-        }))));
     }
 
     public function getAdmin(): array

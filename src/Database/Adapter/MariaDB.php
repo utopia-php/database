@@ -124,7 +124,7 @@ class MariaDB extends Adapter
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * @param string[] $permissions
+     * @param string[] $permissions (optional)
      * @return bool
      * @throws Exception
      */
@@ -672,9 +672,10 @@ class MariaDB extends Adapter
         if (!empty($additions)) {
             $values = [];
             foreach ($additions as $type => $permissions) {
-                $values[] = \array_map(fn(string $i) => "( :_uid, '{$type}', :_add_{$type}_{$i} )", \array_keys($permissions));
+                foreach ($permissions as $i => $_) {
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                }
             }
-            $values = \array_merge(...$values);
 
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(

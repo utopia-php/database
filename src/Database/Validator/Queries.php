@@ -173,12 +173,9 @@ class Queries extends Validator
     protected function arrayMatch(array $indexes, array $queries): bool
     {
         // Check the count of indexes first for performance
-        if (count($queries) > count($indexes)) {
+        if (count($queries) !== count($indexes)) {
             return false;
         }
-
-        // Remove unused indices to support covering indexes.
-        $indexes = array_slice($indexes, 0, count($queries));
 
         // Sort them for comparison, the order is not important here anymore.
         sort($indexes, SORT_STRING);

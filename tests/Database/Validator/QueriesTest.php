@@ -254,60 +254,6 @@ class QueriesTest extends TestCase
         ]));
     }
 
-    public function testCoveringIndexQueries()
-    {
-        $validator = new Queries($this->queryValidator, [new Document([
-            '$id' => 'testindex5',
-            'type' => 'key',
-            'attributes' => [
-                'title',
-                'price',
-                'rating'
-            ],
-            'orders' => []
-        ])], true);
-
-        // Test for SUCCESS
-        $this->assertTrue($validator->isValid([
-            Query::parse('title.lesserEqual("string")')
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            Query::parse('title.lesserEqual("string")'),
-            Query::parse('price.lesserEqual(6.50)')
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            Query::parse('price.lesserEqual(6.50)'),
-            Query::parse('title.lesserEqual("string")')
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            Query::parse('title.lesserEqual("string")'),
-            Query::parse('price.lesserEqual(6.50)'),
-            Query::parse('rating.lesserEqual(2002)')
-        ]));
-
-        // Test for Failure
-        $this->assertFalse($validator->isValid([
-            Query::parse('price.lesserEqual(6.50)'),
-        ]));
-
-        $this->assertFalse($validator->isValid([
-            Query::parse('rating.lesserEqual(2002)'),
-        ]));
-
-        $this->assertFalse($validator->isValid([
-            Query::parse('price.lesserEqual(6.50)'),
-            Query::parse('year.lesserEqual(2002)')
-        ]));
-
-        $this->assertFalse($validator->isValid([
-            Query::parse('rating.lesserEqual(2002)'),
-            Query::parse('price.lesserEqual(6.50)')
-        ]));
-    }
-
     public function testIsStrict()
     {
         $validator = new Queries($this->queryValidator, $this->collection['indexes']);

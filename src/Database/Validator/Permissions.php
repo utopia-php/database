@@ -9,7 +9,8 @@ class Permissions extends Validator
 {
     protected string $message = 'Permissions Error';
 
-    protected array $methods = [...Database::PERMISSIONS,
+    protected array $methods = [
+        ...Database::PERMISSIONS,
         // Validator allows aggregate permissions
         'write',
         'admin',
@@ -115,6 +116,9 @@ class Permissions extends Validator
             //          - If the dimension should be from the known set and is not found, the entire permission parameter will be considered invalid.
             //        - If any invalid permission name is found, the entire permission string will be considered invalid.
 
+            $allowedPermissions = \implode('|', $this->permissions);
+
+            $allowedMethods = \implode('|', $this->methods);
 
             // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role") where permission name is matched against known permissions.
             $permissionMatcher = "((?:{$allowedPermissions})(?::(?:[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?:[a-zA-Z\d]+[a-zA-Z._\-]*))?)";

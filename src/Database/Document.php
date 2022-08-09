@@ -155,6 +155,27 @@ class Document extends ArrayObject
         ));
     }
 
+    private function processPermissionsForType($type): array
+    {
+        $typePermissions = [];
+
+        foreach ($this->getPermissions() as $permission) {
+            if (!\str_starts_with($permission, $type)) {
+                continue;
+            }
+
+            $permission = \str_replace([$type . '(', ')', ' '], '', $permission);
+            $permission = \explode(',', $permission);
+
+            \array_reduce($permission, function (array $carry, string $item) use (&$typePermissions) {
+                $typePermissions[] = $item;
+                return $carry;
+            }, []);
+        }
+
+        return \array_unique($typePermissions);
+    }
+
     /**
      * @return string|null
      */

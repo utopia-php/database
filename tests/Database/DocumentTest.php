@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use PHPUnit\Framework\TestCase;
 
@@ -38,9 +39,9 @@ class DocumentTest extends TestCase
             '$collection' => $this->collection,
             '$permissions' => [
                 'read(user:123, team:123)',
-                'create(any)',
-                'update(any)',
-                'delete(any)',
+                'create(any, user:creator)',
+                'update(any, user:updater)',
+                'delete(any, user:deleter)',
             ],
             'title' => 'This is a test.',
             'list' => [
@@ -72,10 +73,53 @@ class DocumentTest extends TestCase
         $this->assertEquals(null, $this->empty->getCollection());
     }
 
-    public function testPermissions()
+    public function testGetCreate()
+    {
+        $this->assertEquals(['any', 'user:creator'], $this->document->getCreate());
+        $this->assertEquals([], $this->empty->getCreate());
+    }
+
+    public function testGetRead()
     {
         $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals(['any'], $this->document->getWrite());
+        $this->assertEquals([], $this->empty->getRead());
+    }
+
+    public function testGetUpdate()
+    {
+        $this->assertEquals(['any', 'user:updater'], $this->document->getUpdate());
+        $this->assertEquals([], $this->empty->getUpdate());
+    }
+
+    public function testGetDelete()
+    {
+        $this->assertEquals(['any', 'user:deleter'], $this->document->getDelete());
+        $this->assertEquals([], $this->empty->getDelete());
+    }
+
+    public function testGetPermissionByType()
+    {
+        $this->assertEquals(['any','user:creator'], $this->document->getPermission(Database::PERMISSION_CREATE));
+        $this->assertEquals([], $this->empty->getPermission(Database::PERMISSION_CREATE));
+
+        $this->assertEquals(['user:123','team:123'], $this->document->getPermission(Database::PERMISSION_READ));
+        $this->assertEquals([], $this->empty->getPermission(Database::PERMISSION_READ));
+
+        $this->assertEquals(['any','user:updater'], $this->document->getPermission(Database::PERMISSION_UPDATE));
+        $this->assertEquals([], $this->empty->getPermission(Database::PERMISSION_UPDATE));
+
+        $this->assertEquals(['any','user:deleter'], $this->document->getPermission(Database::PERMISSION_DELETE));
+        $this->assertEquals([], $this->empty->getPermission(Database::PERMISSION_DELETE));
+    }
+
+    public function testGetPermissions()
+    {
+        $this->assertEquals([
+            'read(user:123, team:123)',
+            'create(any, user:creator)',
+            'update(any, user:updater)',
+            'delete(any, user:deleter)',
+        ], $this->document->getPermissions());
     }
 
     public function testGetAttributes()
@@ -247,9 +291,9 @@ class DocumentTest extends TestCase
             '$collection' => $this->collection,
             '$permissions' => [
                 'read(user:123, team:123)',
-                'create(any)',
-                'update(any)',
-                'delete(any)',
+                'create(any, user:creator)',
+                'update(any, user:updater)',
+                'delete(any, user:deleter)',
             ],
             'title' => 'This is a test.',
             'list' => [

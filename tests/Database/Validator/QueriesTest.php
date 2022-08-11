@@ -2,11 +2,11 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Validator\QueryValidator;
+use Utopia\Database\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
+use Utopia\Database\Query as DatabaseQuery;
 use Utopia\Database\Validator\Queries;
 
 class QueriesTest extends TestCase
@@ -17,7 +17,7 @@ class QueriesTest extends TestCase
     protected $collection = [];
 
     /**
-     * @var Query[] $queries
+     * @var DatabaseQuery[] $queries
      */
     protected $queries = [];
 
@@ -99,8 +99,8 @@ class QueriesTest extends TestCase
 
         $this->queryValidator = new Query($this->collection['attributes']);
 
-        $query1 = Query::parse('notEqual("title", ["Iron Man", "Ant Man"])');
-        $query2 = Query::parse('equal("description", "Best movie ever")');
+        $query1 = DatabaseQuery::parse('notEqual("title", ["Iron Man", "Ant Man"])');
+        $query2 = DatabaseQuery::parse('equal("description", "Best movie ever")');
 
         array_push($this->queries, $query1, $query2);
 
@@ -160,11 +160,11 @@ class QueriesTest extends TestCase
     public function testQueries()
     {
         // test for SUCCESS
-        $validator = new Queries($this->queryValidator, new Document($this->collection));
+        $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
         $this->assertEquals(true, $validator->isValid($this->queries), $validator->getDescription());
 
-        $this->queries[] = Query::parse('lessThan("price", 6.50)');
+        $this->queries[] = DatabaseQuery::parse('lessThan("price", 6.50)');
         $this->assertEquals(true, $validator->isValid($this->queries));
 
         $queries = [DatabaseQuery::orderDesc('')];
@@ -172,14 +172,14 @@ class QueriesTest extends TestCase
 
         // test for FAILURE
 
-        $this->queries[] = Query::parse('greaterThan("rating", 4)');
+        $this->queries[] = DatabaseQuery::parse('greaterThan("rating", 4)');
 
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
 
         // test for queued index
-        $query1 = Query::parse('lessThan("price", 6.50)');
-        $query2 = Query::parse('notEqual("title", ["Iron Man", "Ant Man"])');
+        $query1 = DatabaseQuery::parse('lessThan("price", 6.50)');
+        $query2 = DatabaseQuery::parse('notEqual("title", ["Iron Man", "Ant Man"])');
 
         $this->queries = [$query1, $query2];
         $this->assertEquals(false, $validator->isValid($this->queries));
@@ -187,7 +187,7 @@ class QueriesTest extends TestCase
 
         // test fulltext
 
-        $query3 = Query::parse('search("description", "iron")');
+        $query3 = DatabaseQuery::parse('search("description", "iron")');
         $this->queries = [$query3];
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
@@ -195,11 +195,11 @@ class QueriesTest extends TestCase
 
     public function testIsStrict()
     {
-        $validator = new Queries($this->queryValidator, new Document($this->collection));
+        $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
         $this->assertEquals(true, $validator->isStrict());
 
-        $validator = new Queries($this->queryValidator, new Document($this->collection), false);
+        $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes'], false);
 
         $this->assertEquals(false, $validator->isStrict());
     }

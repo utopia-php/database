@@ -1296,12 +1296,12 @@ class Database
         $results = $this->adapter->find(
             $collection->getId(),
             $queries,
-            $limit,
-            $offset,
+            $limit ?? 25,
+            $offset ?? 0,
             $orderAttributes,
             $orderTypes,
-            $cursor,
-            $cursorDirection,
+            $cursor ?? [],
+            $cursorDirection ?? Database::CURSOR_AFTER,
         );
 
         foreach ($results as &$node) {

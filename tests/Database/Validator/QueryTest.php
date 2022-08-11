@@ -2,13 +2,13 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Validator\QueryValidator;
+use Utopia\Database\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
+use Utopia\Database\Query as DatabaseQuery;
 
-class QueryValidatorTest extends TestCase
+class QueryTest extends TestCase
 {
     /**
      * @var Document[]
@@ -105,25 +105,25 @@ class QueryValidatorTest extends TestCase
 
     public function testQuery()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $this->assertEquals(true, $validator->isValid(Query::parse('equal("$id", ["Iron Man", "Ant Man"])')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('equal("description", "Best movie ever")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('greaterThan("rating", 4)')), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(Query::parse('lessThan("price", 6.50)')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('contains("tags", "action")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('cursorAfter("docId")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('cursorBefore("docId")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('orderAsc("title")')));
-        $this->assertEquals(true, $validator->isValid(Query::parse('orderDesc("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('equal("$id", ["Iron Man", "Ant Man"])')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('notEqual("title", ["Iron Man", "Ant Man"])')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('equal("description", "Best movie ever")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('greaterThan("rating", 4)')), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('lessThan("price", 6.50)')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('contains("tags", "action")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('cursorAfter("docId")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('cursorBefore("docId")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderAsc("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderDesc("title")')));
     }
 
     public function testInvalidMethod()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('eqqual("title", "Iron Man")'));
+        $response = $validator->isValid(DatabaseQuery::parse('eqqual("title", "Iron Man")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query method invalid: eqqual', $validator->getDescription());
@@ -131,14 +131,14 @@ class QueryValidatorTest extends TestCase
 
     public function testAttributeNotFound()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('equal("name", "Iron Man")'));
+        $response = $validator->isValid(DatabaseQuery::parse('equal("name", "Iron Man")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
 
-        $response = $validator->isValid(Query::parse('orderAsc("name")'));
+        $response = $validator->isValid(DatabaseQuery::parse('orderAsc("name")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
@@ -146,9 +146,9 @@ class QueryValidatorTest extends TestCase
 
     public function testAttributeWrongType()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('equal("title", 1776)'));
+        $response = $validator->isValid(DatabaseQuery::parse('equal("title", 1776)'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
@@ -156,9 +156,9 @@ class QueryValidatorTest extends TestCase
 
     public function testMethodWrongType()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('contains("title", "Iron")'));
+        $response = $validator->isValid(DatabaseQuery::parse('contains("title", "Iron")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query method only supported on array attributes: contains', $validator->getDescription());
@@ -166,67 +166,70 @@ class QueryValidatorTest extends TestCase
 
     public function testQueryDate()
     {
-        $validator = new QueryValidator($this->schema);
-        $response = $validator->isValid(Query::parse('greaterThan("birthDay", "1960-01-01 10:10:10")'));
+        $validator = new Query($this->schema);
+        $response = $validator->isValid(DatabaseQuery::parse('greaterThan("birthDay", "1960-01-01 10:10:10")'));
         $this->assertEquals(true, $response);
     }
 
     public function testQueryLimit()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('limit(25)'));
+        $response = $validator->isValid(DatabaseQuery::parse('limit(25)'));
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid(Query::parse('limit()'));
+        $response = $validator->isValid(DatabaseQuery::parse('limit()'));
         $this->assertEquals(false, $response);
 
-        $response = $validator->isValid(Query::parse('limit(-1)'));
+        $response = $validator->isValid(DatabaseQuery::parse('limit(-1)'));
         $this->assertEquals(false, $response);
 
-        $response = $validator->isValid(Query::parse('limit(10000)'));
+        $response = $validator->isValid(DatabaseQuery::parse('limit(10000)'));
         $this->assertEquals(false, $response);
     }
 
     public function testQueryOffset()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('offset(25)'));
+        $response = $validator->isValid(DatabaseQuery::parse('offset(25)'));
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid(Query::parse('offset()'));
+        $response = $validator->isValid(DatabaseQuery::parse('offset()'));
         $this->assertEquals(false, $response);
 
-        $response = $validator->isValid(Query::parse('offset(-1)'));
+        $response = $validator->isValid(DatabaseQuery::parse('offset(-1)'));
         $this->assertEquals(false, $response);
 
-        $response = $validator->isValid(Query::parse('offset(10000)'));
+        $response = $validator->isValid(DatabaseQuery::parse('offset(10000)'));
         $this->assertEquals(false, $response);
     }
 
     public function testQueryOrder()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('orderAsc("title")'));
+        $response = $validator->isValid(DatabaseQuery::parse('orderAsc("title")'));
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid(Query::parse('orderAsc("")'));
+        $response = $validator->isValid(DatabaseQuery::parse('orderAsc("")'));
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid(Query::parse('orderAsc("doesNotExist")'));
+        $response = $validator->isValid(DatabaseQuery::parse('orderAsc()'));
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid(DatabaseQuery::parse('orderAsc("doesNotExist")'));
         $this->assertEquals(false, $response);
     }
 
     public function testQueryCursor()
     {
-        $validator = new QueryValidator($this->schema);
+        $validator = new Query($this->schema);
 
-        $response = $validator->isValid(Query::parse('cursorAfter("asdf")'));
+        $response = $validator->isValid(DatabaseQuery::parse('cursorAfter("asdf")'));
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid(Query::parse('cursorAfter()'));
+        $response = $validator->isValid(DatabaseQuery::parse('cursorAfter()'));
         $this->assertEquals(false, $response);
     }
 }

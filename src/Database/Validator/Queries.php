@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator;
 use Utopia\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Validator\QueryValidator;
+use Utopia\Database\Validator\Query as QueryValidator;
 use Utopia\Database\Query;
 
 class Queries extends Validator
@@ -38,14 +38,15 @@ class Queries extends Validator
     /**
      * Queries constructor
      *
-     * @param QueryValidator $validator
-     * @param Document $collection
+     * @param QueryValidator $validator used to validate each query
+     * @param Document[] $attributes allowed attributes to be queried
+     * @param Document[] $indexes available for strict query matching
      * @param bool $strict
      */
-    public function __construct($validator, $collection, $strict = true)
+    public function __construct($validator, $attributes = [], $indexes = [], $strict = true)
     {
         $this->validator = $validator;
-        $this->attributes = $collection->getAttribute('attributes', []);
+        $this->attributes = $attributes;
 
         $this->indexes[] = new Document([
             'type' => Database::INDEX_UNIQUE,
@@ -62,7 +63,7 @@ class Queries extends Validator
             'attributes' => ['$updatedAt']
         ]);
 
-        foreach ($collection->getAttribute('indexes', []) as $index) {
+        foreach ($indexes ?? [] as $index) {
             $this->indexes[] = $index;
         }
 
@@ -89,7 +90,7 @@ class Queries extends Validator
      * 
      * In addition, if $strict is true, this returns false if:
      * 1. there is no index with an exact match of the filters
-     * 2. there is no index with an exact mathc of the order attributes
+     * 2. there is no index with an exact match of the order attributes
      * 
      * Otherwise, returns true.
      * 
@@ -225,7 +226,7 @@ class Queries extends Validator
      * 
      * @return array
      */
-    public static function groupByType(array $queries, int $defaultLimit = 25, int $defaultOffset = 0, string $defaultCursorDirection = Database::CURSOR_AFTER): array
+    public static function groupByType(array $queries): array
     {
         $filters = [];
         $limit = null;
@@ -281,12 +282,12 @@ class Queries extends Validator
 
         return [
             'filters' => $filters,
-            'limit' => $limit ?? $defaultLimit,
-            'offset' => $offset ?? $defaultOffset,
+            'limit' => $limit,
+            'offset' => $offset,
             'orderAttributes' => $orderAttributes,
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
-            'cursorDirection' => $cursorDirection ?? $defaultCursorDirection,
+            'cursorDirection' => $cursorDirection,
         ];
     }
 }

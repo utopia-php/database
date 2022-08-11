@@ -78,38 +78,26 @@ class Document extends ArrayObject
     }
 
     /**
-     * @param string $type
-     * @return array
-     */
-    public function getPermission(string $type): array
-    {
-        if (\method_exists($this, 'get' . \ucfirst($type))) {
-            return [$this, 'get' . \ucfirst($type)]();
-        }
-        return [];
-    }
-
-    /**
      * @return array
      */
     public function getRead(): array
     {
-        return $this->processPermissionsForType(Database::PERMISSION_READ);
+        return $this->getPermissionsByType(Database::PERMISSION_READ);
     }
 
     public function getCreate(): array
     {
-        return $this->processPermissionsForType(Database::PERMISSION_CREATE);
+        return $this->getPermissionsByType(Database::PERMISSION_CREATE);
     }
 
     public function getUpdate(): array
     {
-        return $this->processPermissionsForType(Database::PERMISSION_UPDATE);
+        return $this->getPermissionsByType(Database::PERMISSION_UPDATE);
     }
 
     public function getDelete(): array
     {
-        return $this->processPermissionsForType(Database::PERMISSION_DELETE);
+        return $this->getPermissionsByType(Database::PERMISSION_DELETE);
     }
 
     public function getWrite(): array
@@ -121,17 +109,7 @@ class Document extends ArrayObject
         ));
     }
 
-    public function getAdmin(): array
-    {
-        return \array_unique(\array_intersect(
-            $this->getRead(),
-            $this->getCreate(),
-            $this->getUpdate(),
-            $this->getDelete()
-        ));
-    }
-
-    private function processPermissionsForType($type): array
+    public function getPermissionsByType(string $type): array
     {
         $typePermissions = [];
 

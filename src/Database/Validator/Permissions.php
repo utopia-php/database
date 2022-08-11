@@ -13,7 +13,6 @@ class Permissions extends Validator
         ...Database::PERMISSIONS,
         // Validator allows aggregate permissions
         'write',
-        'admin',
     ];
 
     protected array $permissions = [

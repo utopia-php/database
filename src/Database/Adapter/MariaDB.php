@@ -420,13 +420,7 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        $permissions = '';
-        foreach (Database::PERMISSIONS as $i => $type) {
-            $permissions .= $this->getSQLPermissionsQuery($name, $type, '_' . $type);
-            if ($i !== \array_key_last(Database::PERMISSIONS)) {
-                $permissions .= ",\n";
-            }
-        }
+        $permissions = $this->getSQLPermissionsQuery($name);
 
         $stmt = $this->getPDO()->prepare("
             SELECT 
@@ -452,6 +446,7 @@ class MariaDB extends Adapter
         $document['$updatedAt'] = $document['_updatedAt'];
         $document['$permissions'] = [];
 
+        /** Decompose permissions JSON into a string array per type */
         foreach (Database::PERMISSIONS as $type) {
             $key = '_' . $type;
             if (!empty($document[$key] ?? '')) {
@@ -521,7 +516,7 @@ class MariaDB extends Adapter
 
         $permissions = [];
         foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermission($type) as $permission) {
+            foreach ($document->getPermissionsByType($type) as $permission) {
                 $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
             }
         }
@@ -612,7 +607,7 @@ class MariaDB extends Adapter
          */
         $removals = [];
         foreach(Database::PERMISSIONS as $type) {
-            $diff = \array_diff($permissions[$type], $document->getPermission($type));
+            $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
             if (!empty($diff)) {
                 $removals[$type] = $diff;
             }
@@ -623,7 +618,7 @@ class MariaDB extends Adapter
          */
         $additions = [];
         foreach(Database::PERMISSIONS as $type) {
-            $diff = \array_diff($document->getPermission($type), $permissions[$type]);
+            $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
             if (!empty($diff)) {
                 $additions[$type] = $diff;
             }
@@ -897,13 +892,7 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $permissions = '';
-        foreach (Database::PERMISSIONS as $i => $type) {
-            $permissions .= $this->getSQLPermissionsQuery($name, $type, '_' . $type);
-            if ($i !== \array_key_last(Database::PERMISSIONS)) {
-                $permissions .= ",\n";
-            }
-        }
+        $permissions = $this->getSQLPermissionsQuery($name);
 
         $stmt = $this->getPDO()->prepare("
             SELECT
@@ -1552,21 +1541,27 @@ class MariaDB extends Adapter
     /**
      * Get SQL query to aggregate permissions as JSON array
      *
-     * @param string $collection 
-     * @param string $type 
-     * @param string $alias 
+     * @param string $collection
      * @return string 
      * @throws Exception 
      */
-    protected function getSQLPermissionsQuery(string $collection, string $type, string $alias): string
+    protected function getSQLPermissionsQuery(string $collection): string
     {
-        return "(
+        $permissions = '';
+        foreach (Database::PERMISSIONS as $i => $type) {
+            $permissions .= "(
                     SELECT JSON_ARRAYAGG(DISTINCT _permission)
                     FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
                     WHERE
                         _document = table_main._uid
                         AND _type = {$this->getPDO()->quote($type)}
-                ) as {$alias}";
+                ) as _{$type}";
+
+            if ($i !== \array_key_last(Database::PERMISSIONS)) {
+                $permissions .= ",\n";
+            }
+        }
+        return $permissions;
     }
 
     /**

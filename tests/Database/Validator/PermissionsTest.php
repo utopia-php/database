@@ -96,21 +96,6 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = ['delete(status:verified)'];
         $this->assertTrue($object->isValid($document->getPermissions()));
-
-        $document['$permissions'] = ['admin(users)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['admin(user:123abc)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['admin(team:123abc)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['admin(team:123abc/administrator)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['admin(member:123abc)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['admin(guests)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['admin(status:verified)'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
     public function testMultipleMethodSingleValue()

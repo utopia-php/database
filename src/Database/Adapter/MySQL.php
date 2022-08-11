@@ -71,20 +71,26 @@ class MySQL extends MariaDB
     /**
      * Get SQL query to aggregate permissions as JSON array
      *
-     * @param string $collection 
-     * @param string $type 
-     * @param string $alias 
+     * @param string $collection
      * @return string 
      * @throws Exception 
      */
-    protected function getSQLPermissionsQuery(string $collection, string $type, string $alias): string
+    protected function getSQLPermissionsQuery(string $collection): string
     {
-        return "(
+        $permissions = '';
+        foreach (Database::PERMISSIONS as $i => $type) {
+            $permissions .= "(
                     SELECT JSON_ARRAYAGG(_permission)
                     FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
                     WHERE
                         _document = table_main._uid
                         AND _type = {$this->getPDO()->quote($type)}
-                ) as {$alias}";
+                ) as _{$type}";
+
+            if ($i !== \array_key_last(Database::PERMISSIONS)) {
+                $permissions .= ",\n";
+            }
+        }
+        return $permissions;
     }
 }

@@ -373,7 +373,6 @@ class Database
         string $id,
         array $attributes = [],
         array $indexes = [],
-        array $permissions = ['read(any)', 'create(any)', 'update(any)', 'delete(any)']
     ): Document {
         $collection = $this->getCollection($id);
         if (!$collection->isEmpty() && $id !== self::METADATA){
@@ -388,7 +387,12 @@ class Database
 
         $collection = new Document([
             '$id' => $id,
-            '$permissions' => $permissions,
+            '$permissions' => [
+                'read(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
+            ],
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes

@@ -124,7 +124,6 @@ class MariaDB extends Adapter
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * @param string[] $permissions (optional)
      * @return bool
      * @throws Exception
      */
@@ -132,7 +131,6 @@ class MariaDB extends Adapter
         string $name,
         array $attributes = [],
         array $indexes = [],
-        array $permissions = ['read(any)', 'create(any)', 'update(any)', 'delete(any)']
     ): bool
     {
         $database = $this->getDefaultDatabase();

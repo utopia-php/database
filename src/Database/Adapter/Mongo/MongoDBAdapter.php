@@ -115,7 +115,6 @@ class MongoDBAdapter extends Adapter
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * @param string[] $permissions
      * @return bool
      * @throws Exception
      */
@@ -123,7 +122,6 @@ class MongoDBAdapter extends Adapter
         string $name,
         array $attributes = [],
         array $indexes = [],
-        array $permissions = ['read(any)', 'create(any)', 'update(any)', 'delete(any)']
     ): bool
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);

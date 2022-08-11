@@ -19,28 +19,32 @@ class QueryValidator extends Validator
      */
     protected $schema = [];
 
+    protected int $maxLimit;
+    protected int $maxOffset;
+    protected int $maxValuesCount;
+
     /**
      * Expression constructor
      *
      * @param Document[] $attributes
      */
-    public function __construct(array $attributes)
+    public function __construct(array $attributes, int $maxLimit = 100, int $maxOffset = 5000, int $maxValuesCount = 100)
     {
-        $this->schema[] = [
+        $this->schema['$id'] = [
             'key' => '$id',
             'array' => false,
             'type' => Database::VAR_STRING,
             'size' => 512
         ];
 
-        $this->schema[] = [
+        $this->schema['$createdAt'] = [
             'key' => '$createdAt',
             'array' => false,
             'type' => Database::VAR_DATETIME,
             'size' => 0
         ];
 
-        $this->schema[] = [
+        $this->schema['$updatedAt'] = [
             'key' => '$updatedAt',
             'array' => false,
             'type' => Database::VAR_DATETIME,
@@ -48,8 +52,12 @@ class QueryValidator extends Validator
         ];
 
         foreach ($attributes as $attribute) {
-            $this->schema[] = $attribute->getArrayCopy();
+            $this->schema[$attribute->getAttribute('key')] = $attribute->getArrayCopy();
         }
+
+        $this->maxLimit = $maxLimit;
+        $this->maxOffset = $maxOffset;
+        $this->maxValuesCount = $maxValuesCount;
     }
 
     /**
@@ -67,32 +75,85 @@ class QueryValidator extends Validator
     /**
      * Is valid.
      *
-     * Returns true if query typed according to schema.
+     * Returns false if:
+     * 1. $query has an invalid method
+     * 2. limit value is not a number, less than 0, or greater than $maxLimit
+     * 3. offset value is not a number, less than 0, or greater than $maxOffset
+     * 4. attribute does not exist
+     * 5. count of values is greater than $maxValuesCount
+     * 6. value type does not match attribute type
+     * 6. contains method is used on non-array attribute
+     * 
+     * Otherwise, returns true.
      *
-     * @param $query
+     * @param Query $query
      *
      * @return bool
      */
     public function isValid($query): bool
     {
         // Validate method
-        if (!Query::isMethod($query->getMethod())) {
-            $this->message = 'Query method invalid: ' . $query->getMethod();
+        $method = $query->getMethod();
+        if (!Query::isMethod($method)) {
+            $this->message = 'Query method invalid: ' . $method;
             return false;
         }
 
-        // Search for attribute in schema
-        $attributeIndex = array_search($query->getAttribute(), array_column($this->schema, 'key'));
+        if ($method === Query::TYPE_LIMIT) {
+            $limit = $query->getValue();
+            if ($limit === null || $limit < 0 || $limit > $this->maxLimit) {
+                $this->message = 'Limit must be between 0 and ' . $this->maxLimit . '(inclusive)';
+                return false;
+            }
+            return true;
+        }
 
-        if ($attributeIndex === false) {
-            $this->message = 'Attribute not found in schema: ' . $query->getAttribute();
+        if ($method === Query::TYPE_OFFSET) {
+            $offset = $query->getValue();
+            if ($offset === null || $offset < 0 || $offset > $this->maxOffset) {
+                $this->message = 'Offset must be between 0 and ' . $this->maxOffset . '(inclusive)';
+                return false;
+            }
+            return true;
+        }
+
+        if ($method === Query::TYPE_CURSORAFTER || $method === Query::TYPE_CURSORBEFORE) {
+            $value = $query->getValue();
+            if ($value === null) {
+                $this->message = 'Cursor must not be null';
+                return false;
+            }
+            return true;
+        }
+
+        // Allow empty string for order attribute so we can order by natural order
+        $attribute = $query->getAttribute();
+        if ($attribute === '' && ($method === DatabaseQuery::TYPE_ORDERASC || $method === DatabaseQuery::TYPE_ORDERDESC)) {
+            return true;
+        }
+
+        // Search for attribute in schema
+        if (!isset($this->schema[$attribute])) {
+            $this->message = 'Attribute not found in schema: ' . $attribute;
+            return false;
+        }
+
+        if ($method === Query::TYPE_ORDERASC || $method === Query::TYPE_ORDERDESC) {
+            return true;
+        }
+
+        $attributeSchema = $this->schema[$attribute];
+
+        $values = $query->getValues();
+        if (count($values) > $this->maxValuesCount) {
+            $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
             return false;
         }
 
         // Extract the type of desired attribute from collection $schema
-        $attributeType = $this->schema[$attributeIndex]['type'];
+        $attributeType = $attributeSchema['type'];
 
-        foreach ($query->getValues() as $value) {
+        foreach ($values as $value) {
             $condition = match ($attributeType) {
                 Database::VAR_DATETIME => gettype($value) === Database::VAR_STRING,
                 default => gettype($value) === $attributeType
@@ -105,7 +166,7 @@ class QueryValidator extends Validator
         }
 
         // Contains method only supports array attributes
-        if (!$this->schema[$attributeIndex]['array'] && $query->getMethod() === Query::TYPE_CONTAINS) {
+        if (!$attributeSchema['array'] && $query->getMethod() === Query::TYPE_CONTAINS) {
             $this->message = 'Query method only supported on array attributes: ' . $query->getMethod();
             return false;
         }

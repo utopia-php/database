@@ -207,6 +207,31 @@ class QueryTest extends TestCase
         $this->assertCount(1, $query->getValues());
         $this->assertEquals(1, $query->getAttribute());
         $this->assertEquals("Hello\\\\\", ", $query->getValues()[0]);
+
+        $query = Query::parse('equal()');
+        $this->assertCount(0, $query->getValues());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals(null, $query->getValue());
+
+        $query = Query::parse('limit()');
+        $this->assertCount(0, $query->getValues());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals(null, $query->getValue());
+
+        $query = Query::parse('offset()');
+        $this->assertCount(0, $query->getValues());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals(null, $query->getValue());
+
+        $query = Query::parse('cursorAfter()');
+        $this->assertCount(0, $query->getValues());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals(null, $query->getValue());
+
+        $query = Query::parse('orderDesc()');
+        $this->assertCount(0, $query->getValues());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals(null, $query->getValue());
     }
 
     /*

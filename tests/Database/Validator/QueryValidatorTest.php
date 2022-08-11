@@ -113,6 +113,10 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(Query::parse('greaterThan("rating", 4)')), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid(Query::parse('lessThan("price", 6.50)')));
         $this->assertEquals(true, $validator->isValid(Query::parse('contains("tags", "action")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('cursorAfter("docId")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('cursorBefore("docId")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('orderAsc("title")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('orderDesc("title")')));
     }
 
     public function testInvalidMethod()
@@ -130,6 +134,11 @@ class QueryValidatorTest extends TestCase
         $validator = new QueryValidator($this->schema);
 
         $response = $validator->isValid(Query::parse('equal("name", "Iron Man")'));
+
+        $this->assertEquals(false, $response);
+        $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
+
+        $response = $validator->isValid(Query::parse('orderAsc("name")'));
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
@@ -160,5 +169,64 @@ class QueryValidatorTest extends TestCase
         $validator = new QueryValidator($this->schema);
         $response = $validator->isValid(Query::parse('greaterThan("birthDay", "1960-01-01 10:10:10")'));
         $this->assertEquals(true, $response);
+    }
+
+    public function testQueryLimit()
+    {
+        $validator = new QueryValidator($this->schema);
+
+        $response = $validator->isValid(Query::parse('limit(25)'));
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid(Query::parse('limit()'));
+        $this->assertEquals(false, $response);
+
+        $response = $validator->isValid(Query::parse('limit(-1)'));
+        $this->assertEquals(false, $response);
+
+        $response = $validator->isValid(Query::parse('limit(10000)'));
+        $this->assertEquals(false, $response);
+    }
+
+    public function testQueryOffset()
+    {
+        $validator = new QueryValidator($this->schema);
+
+        $response = $validator->isValid(Query::parse('offset(25)'));
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid(Query::parse('offset()'));
+        $this->assertEquals(false, $response);
+
+        $response = $validator->isValid(Query::parse('offset(-1)'));
+        $this->assertEquals(false, $response);
+
+        $response = $validator->isValid(Query::parse('offset(10000)'));
+        $this->assertEquals(false, $response);
+    }
+
+    public function testQueryOrder()
+    {
+        $validator = new QueryValidator($this->schema);
+
+        $response = $validator->isValid(Query::parse('orderAsc("title")'));
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid(Query::parse('orderAsc("")'));
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid(Query::parse('orderAsc("doesNotExist")'));
+        $this->assertEquals(false, $response);
+    }
+
+    public function testQueryCursor()
+    {
+        $validator = new QueryValidator($this->schema);
+
+        $response = $validator->isValid(Query::parse('cursorAfter("asdf")'));
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid(Query::parse('cursorAfter()'));
+        $this->assertEquals(false, $response);
     }
 }

@@ -14,75 +14,7 @@ class QueriesTest extends TestCase
     /**
      * @var array
      */
-    protected $collection = [
-        '$id' => Database::METADATA,
-        '$collection' => Database::METADATA,
-        'name' => 'movies',
-        'attributes' => [
-            [
-                '$id' => 'title',
-                'key' => 'title',
-                'type' => Database::VAR_STRING,
-                'size' => 256,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                '$id' => 'description',
-                'key' => 'description',
-                'type' => Database::VAR_STRING,
-                'size' => 1000000,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                '$id' => 'rating',
-                'key' => 'rating',
-                'type' => Database::VAR_INTEGER,
-                'size' => 5,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                '$id' => 'price',
-                'key' => 'price',
-                'type' => Database::VAR_FLOAT,
-                'size' => 5,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                '$id' => 'published',
-                'key' => 'published',
-                'type' => Database::VAR_BOOLEAN,
-                'size' => 5,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                '$id' => 'tags',
-                'key' => 'tags',
-                'type' => Database::VAR_STRING,
-                'size' => 55,
-                'required' => true,
-                'signed' => true,
-                'array' => true,
-                'filters' => [],
-            ],
-        ],
-        'indexes' => [],
-    ];
-
+    protected $collection = [];
 
     /**
      * @var Query[] $queries
@@ -96,14 +28,76 @@ class QueriesTest extends TestCase
 
     public function setUp(): void
     {
-        // Query validator expects Document[]
-        $attributes = [];
-        /** @var Document[] $attributes */
-        foreach ($this->collection['attributes'] as $attribute) {
-            $attributes[] = new Document($attribute);
-        }
+        $this->collection = [
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'movies',
+            'attributes' => [
+                new Document([
+                    '$id' => 'title',
+                    'key' => 'title',
+                    'type' => Database::VAR_STRING,
+                    'size' => 256,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'description',
+                    'key' => 'description',
+                    'type' => Database::VAR_STRING,
+                    'size' => 1000000,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'rating',
+                    'key' => 'rating',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 5,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'price',
+                    'key' => 'price',
+                    'type' => Database::VAR_FLOAT,
+                    'size' => 5,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'published',
+                    'key' => 'published',
+                    'type' => Database::VAR_BOOLEAN,
+                    'size' => 5,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'tags',
+                    'key' => 'tags',
+                    'type' => Database::VAR_STRING,
+                    'size' => 55,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => true,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => [],
+        ];
 
-        $this->queryValidator = new QueryValidator($attributes);
+        $this->queryValidator = new Query($this->collection['attributes']);
 
         $query1 = Query::parse('notEqual("title", ["Iron Man", "Ant Man"])');
         $query2 = Query::parse('equal("description", "Best movie ever")');
@@ -166,13 +160,15 @@ class QueriesTest extends TestCase
     public function testQueries()
     {
         // test for SUCCESS
-        $validator = new Queries($this->queryValidator, $this->collection['indexes']);
+        $validator = new Queries($this->queryValidator, new Document($this->collection));
 
-        $this->assertEquals(true, $validator->isValid($this->queries));
+        $this->assertEquals(true, $validator->isValid($this->queries), $validator->getDescription());
 
         $this->queries[] = Query::parse('lessThan("price", 6.50)');
         $this->assertEquals(true, $validator->isValid($this->queries));
 
+        $queries = [DatabaseQuery::orderDesc('')];
+        $this->assertEquals(true, $validator->isValid($queries), $validator->getDescription());
 
         // test for FAILURE
 
@@ -199,11 +195,11 @@ class QueriesTest extends TestCase
 
     public function testIsStrict()
     {
-        $validator = new Queries($this->queryValidator, $this->collection['indexes']);
+        $validator = new Queries($this->queryValidator, new Document($this->collection));
 
         $this->assertEquals(true, $validator->isStrict());
 
-        $validator = new Queries($this->queryValidator, $this->collection['indexes'], false);
+        $validator = new Queries($this->queryValidator, new Document($this->collection), false);
 
         $this->assertEquals(false, $validator->isStrict());
     }

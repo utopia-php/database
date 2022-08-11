@@ -54,14 +54,19 @@ class Query
         return $this->method;
     }
 
+    public function getAttribute(): string
+    {
+        return $this->attribute;
+    }
+
     public function getValues(): array
     {
         return $this->values;
     }
 
-    public function getAttribute(): string
+    public function getValue($default = null)
     {
-        return $this->attribute;
+        return $this->values[0] ?? $default;
     }
 
     /**
@@ -72,6 +77,18 @@ class Query
     public function setMethod(string $method): self
     {
         $this->method = $method;
+
+        return $this;
+    }
+
+    /**
+     * Sets Attribute.
+     * @param string $attribute
+     * @return self
+     */
+    public function setAttribute(string $attribute): self
+    {
+        $this->attribute = $attribute;
 
         return $this;
     }
@@ -89,13 +106,13 @@ class Query
     }
 
     /**
-     * Sets Attribute.
-     * @param string $attribute
+     * Sets Value.
+     * @param $value
      * @return self
      */
-    public function setAttribute(string $attribute): self
+    public function setValue($value): self
     {
-        $this->attribute = $attribute;
+        $this->values = [$value];
 
         return $this;
     }
@@ -278,17 +295,24 @@ class Query
             case self::TYPE_GREATEREQUAL:
             case self::TYPE_CONTAINS:
             case self::TYPE_SEARCH:
-                return new self($method, $parsedParams[0], \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
+                $attribute = $parsedParams[0] ?? '';
+                if (count($parsedParams) < 2) {
+                    return new self($method, $attribute);
+                }
+                return new self($method, $attribute, \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
 
             case self::TYPE_ORDERASC:
             case self::TYPE_ORDERDESC:
-                return new self($method, $parsedParams[0]);
+                return new self($method, $parsedParams[0] ?? '');
 
             case self::TYPE_LIMIT:
             case self::TYPE_OFFSET:
             case self::TYPE_CURSORAFTER:
             case self::TYPE_CURSORBEFORE:
-                return new self($method, values: $parsedParams[0]);
+                if (count($parsedParams) > 0) {
+                    return new self($method, values: [$parsedParams[0]]);
+                }
+                return new self($method);
 
             default:
                 return new self($method);

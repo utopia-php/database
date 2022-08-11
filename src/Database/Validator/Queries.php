@@ -21,7 +21,12 @@ class Queries extends Validator
     protected $validator;
 
     /**
-     * @var array
+     * @var Document[]
+     */
+    protected $attributes = [];
+
+    /**
+     * @var Document[]
      */
     protected $indexes = [];
 
@@ -34,30 +39,31 @@ class Queries extends Validator
      * Queries constructor
      *
      * @param QueryValidator $validator
-     * @param Document[] $indexes
+     * @param Document $collection
      * @param bool $strict
      */
-    public function __construct($validator, $indexes, $strict = true)
+    public function __construct($validator, $collection, $strict = true)
     {
         $this->validator = $validator;
+        $this->attributes = $collection->getAttribute('attributes', []);
 
-        $this->indexes[] = [
+        $this->indexes[] = new Document([
             'type' => Database::INDEX_UNIQUE,
             'attributes' => ['$id']
-        ];
+        ]);
 
-        $this->indexes[] = [
+        $this->indexes[] = new Document([
             'type' => Database::INDEX_KEY,
             'attributes' => ['$createdAt']
-        ];
+        ]);
 
-        $this->indexes[] = [
+        $this->indexes[] = new Document([
             'type' => Database::INDEX_KEY,
             'attributes' => ['$updatedAt']
-        ];
+        ]);
 
-        foreach ($indexes as $index) {
-            $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
+        foreach ($collection->getAttribute('indexes', []) as $index) {
+            $this->indexes[] = $index;
         }
 
         $this->strict = $strict;
@@ -78,50 +84,67 @@ class Queries extends Validator
     /**
      * Is valid.
      *
-     * Returns true if all $queries are valid as a set.
+     * Returns false if:
+     * 1. any query in $value is invalid based on $validator
+     * 
+     * In addition, if $strict is true, this returns false if:
+     * 1. there is no index with an exact match of the filters
+     * 2. there is no index with an exact mathc of the order attributes
+     * 
+     * Otherwise, returns true.
+     * 
      * @param mixed $value as array of Query objects
      * @return bool
      */
     public function isValid($value): bool
     {
-        /**
-         * Array of attributes from query
-         *
-         * @var string[]
-         */
-        $queries = [];
-
         foreach ($value as $query) {
-            // [attribute => method]
-            $queries[$query->getAttribute()] = $query->getMethod();
-
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
                 return false;
             }
         }
 
-        $found = null;
+        if (!$this->strict) {
+            return true;
+        }
 
-        // Return false if attributes do not exactly match an index
-        if ($this->strict) {
-            // look for strict match among indexes
+        $queriesByMethod = self::groupByType($value);
+        /** @var Query[] */ $filters = $queriesByMethod['filters'];
+        /** @var string[] */ $orderAttributes = $queriesByMethod['orderAttributes'];
+
+        // Check filter queries for exact index match
+        if (count($filters) > 0) {
+            $filtersByAttribute = [];
+            foreach ($filters as $filter) {
+                $filtersByAttribute[$filter->getAttribute()] = $filter->getMethod();
+            }
+
+            $found = null;
+
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
+                if ($this->arrayMatch($index->getAttribute('attributes'),  array_keys($filtersByAttribute))) {
                     $found = $index;
                 }
             }
 
             if (!$found) {
-                $this->message = 'Index not found: ' . implode(",", array_keys($queries));
+                $this->message = 'Index not found: ' . implode(",", array_keys($filtersByAttribute));
                 return false;
             }
 
             // search method requires fulltext index
-            if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search method requires fulltext index: ' . implode(",", array_keys($queries));
+            if (in_array(Query::TYPE_SEARCH, array_values($filtersByAttribute)) && $found['type'] !== Database::INDEX_FULLTEXT) {
+                $this->message = 'Search method requires fulltext index: ' . implode(",", array_keys($filtersByAttribute));
                 return false;
             }
+        }
+
+        // Check order attributes for exact index match
+        $validator = new OrderAttributes($this->attributes, $this->indexes, true);
+        if (count($orderAttributes) > 0 && !$validator->isValid($orderAttributes)) {
+            $this->message = $validator->getDescription();
+            return false;
         }
 
         return true;
@@ -202,7 +225,7 @@ class Queries extends Validator
      * 
      * @return array
      */
-    public static function byMethod(array $queries, int $defaultLimit = 25, int $defaultOffset = 0, string $defaultCursorDirection = Database::CURSOR_AFTER): array
+    public static function groupByType(array $queries, int $defaultLimit = 25, int $defaultOffset = 0, string $defaultCursorDirection = Database::CURSOR_AFTER): array
     {
         $filters = [];
         $limit = null;

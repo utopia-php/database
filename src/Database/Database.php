@@ -1276,7 +1276,7 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
-        $queriesByMethod = Queries::byMethod($queries);
+        $queriesByMethod = Queries::groupByType($queries);
         /** @var Query[] */ $filters = $queriesByMethod['filters'];
         /** @var int */ $limit = $queriesByMethod['limit'];
         /** @var int */ $offset = $queriesByMethod['offset'];

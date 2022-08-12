@@ -123,18 +123,12 @@ class Document extends ArrayObject
         return \array_unique($typePermissions);
     }
 
-    /**
-     * @return string|null
-     */
-    public function getCreatedAt(): ?string
+    public function getCreatedAt(): ?int
     {
         return $this->getAttribute('$createdAt');
     }
 
-    /**
-     * @return string|null
-     */
-    public function getUpdatedAt(): ?string
+    public function getUpdatedAt(): ?int
     {
         return $this->getAttribute('$updatedAt');
     }

@@ -20,7 +20,6 @@ class Database
     const VAR_INTEGER = 'integer';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
-    const VAR_DATETIME = 'datetime';
 
     // Relationships Types
     const VAR_DOCUMENT = 'document';
@@ -198,33 +197,6 @@ class Database
                 return $value;
             }
         );
-
-        self::addFilter(
-            'datetime',
-            /**
-             * @param string|null $value
-             * @return string|null
-             * @throws Exception
-             */
-            function (?string $value) {
-                if (is_null($value)) return null;
-                try {
-                    $value = new \DateTime($value);
-                    $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
-                    return DateTime::format($value);
-                } catch (\Throwable $th) {
-                    return $value;
-                }
-            },
-            /**
-             * @param string|null $value
-             * @return string|null
-             */
-            function (?string $value) {
-                return $value;
-            }
-        );
-
     }
 
     /**
@@ -560,7 +532,6 @@ class Database
                 break;
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
-            case self::VAR_DATETIME:
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
@@ -1162,8 +1133,7 @@ class Database
         $validator = new Authorization(self::PERMISSION_CREATE);
 
         $collection = $this->getCollection($collection);
-
-        $time = DateTime::now();
+        $time = time();
 
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getCreate());
@@ -1210,8 +1180,7 @@ class Database
             throw new Exception('Must define $id attribute');
         }
 
-        $time = DateTime::now();
-        $document->setAttribute('$updatedAt', $time);
+        $document->setAttribute('$updatedAt', time());
 
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);
@@ -1311,7 +1280,6 @@ class Database
      * @param string $cursorDirection
      *
      * @return Document[]
-     * @throws Exception
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], Document $cursor = null, string $cursorDirection = self::CURSOR_AFTER): array
     {
@@ -1322,8 +1290,6 @@ class Database
         }
 
         $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
-
-        $queries = self::convertQueries($collection, $queries);
 
         $results = $this->adapter->find($collection->getId(), $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
@@ -1363,19 +1329,12 @@ class Database
      * @param int $max
      *
      * @return int
-     * @throws Exception
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        $collection = $this->getCollection($collection);
+        $count = $this->adapter->count($collection, $queries, $max);
 
-        if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
-        }
-
-        $queries = self::convertQueries($collection, $queries);
-
-        return $this->adapter->count($collection->getId(), $queries, $max);
+        return $count;
     }
 
     /**
@@ -1389,18 +1348,12 @@ class Database
      * @param int $max
      *
      * @return int|float
-     * @throws Exception
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        $collection = $this->getCollection($collection);
+        $count = $this->adapter->sum($collection, $attribute, $queries, $max);
 
-        if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
-        }
-
-        $queries = self::convertQueries($collection, $queries);
-        return $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        return $count;
     }
 
     /**
@@ -1547,8 +1500,7 @@ class Database
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
-                    case self::VAR_DATETIME:
-                        break;
+
                     default:
                         # code...
                         break;
@@ -1664,35 +1616,4 @@ class Database
     {
         return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
     }
-
-    /**
-     * @param Document $collection
-     * @param Query[] $queries
-     * @return Query[]
-     * @throws Exception
-     */
-    public static function convertQueries(Document $collection, array $queries):array
-    {
-        $attributes = $collection->getAttribute('attributes', []);
-
-        foreach ($attributes as $v){
-            /* @var $v Document */
-            switch ($v->getAttribute('type')) {
-                case Database::VAR_DATETIME:
-                    foreach ($queries as $qk => $q){
-                        if($q->getAttribute() === $v->getId()){
-                            $arr = $q->getValues();
-                            foreach ($arr as $vk => $vv){
-                                $arr[$vk] = DateTime::setTimezone($vv);
-                            }
-                            $q->setValues($arr);
-                            $queries[$qk] = $q;
-                        }
-                    }
-                    break;
-            }
-        }
-        return $queries;
-    }
-
 }

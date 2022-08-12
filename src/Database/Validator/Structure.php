@@ -60,7 +60,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
+            'type' => Database::VAR_INTEGER,
             'size' => 0,
             'required' => false,
             'signed' => false,
@@ -69,7 +69,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
+            'type' => Database::VAR_INTEGER,
             'size' => 0,
             'required' => false,
             'signed' => false,
@@ -215,7 +215,6 @@ class Structure extends Validator
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
-
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
@@ -261,16 +260,13 @@ class Structure extends Validator
                     $validator = new Boolean();
                     break;
 
-                case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator;
-                    break;
-
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;
+                    break;
             }
 
-            /** Error message label, either 'format' or 'type' */
+            /** @var string $label Error messasage label, either 'format' or 'type' */
             $label = ($format) ? 'format' : 'type';
 
             if ($format) {

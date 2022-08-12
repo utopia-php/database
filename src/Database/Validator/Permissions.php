@@ -113,8 +113,8 @@ class Permissions extends Validator
             // Captures the permission type (e.g. "read", "update") and ensures a role is provided.
             $permissionString = "/^(?:{$allowedPermissions})\({$roleMatcher}\)$/";
 
-            // Inner permissions string capture. Same as $roleMatcher, but captures the permission and optionally the ID and dimension.
-            $permissionCapture = "/^(?<permission>{$allowedRoles})(?::(?<id>[a-z\d]+))?(?:\/(?<dimension>[a-z]+))?$/";
+            // Inner role string capture. Same as $roleMatcher, but captures the role and optionally the ID and dimension.
+            $roleCapture = "/^(?<role>{$allowedRoles})(?::(?<id>[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?<role>[a-zA-Z\d]+[a-zA-Z._\-]*))?$/";
 
             $matches = [];
             if (!\preg_match($permissionString, $permission, $matches)) {
@@ -125,21 +125,21 @@ class Permissions extends Validator
             $submatches = [];
             \array_shift($matches);
             foreach ($matches as $match) {
-                if (!\preg_match($permissionCapture, $match, $submatches)) {
+                if (!\preg_match($roleCapture, $match, $submatches)) {
                     $this->message = 'Must be of the form "role:id/dimension", got "' . $match . '". ID and dimension are optional for some types. Permission must be one of: ' . \implode(', ', $permissions) . '.';
                     return false;
                 }
 
-                $type = $submatches['permission'];
+                $role = $submatches['role'];
                 $id = $submatches['id'] ?? '';
                 $dimension = $submatches['dimension'] ?? '';
 
-                switch ($type) {
+                switch ($role) {
                     case 'any':
                     case 'guests':
                     case 'users':
                         if (!empty($id)) {
-                            $this->message = '"' . $type . '"' . ' permission can not have a value.';
+                            $this->message = '"' . $role . '"' . ' permission can not have a value.';
                             return false;
                         }
                         if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {

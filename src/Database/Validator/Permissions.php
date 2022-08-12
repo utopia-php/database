@@ -9,21 +9,10 @@ class Permissions extends Validator
 {
     protected string $message = 'Permissions Error';
 
-    protected array $methods = [
+    protected array $permissions = [
         ...Database::PERMISSIONS,
         // Validator allows aggregate permissions
         'write',
-    ];
-
-    protected array $permissions = [
-        'any',
-        'users',
-        'user',
-        'team',
-        'member',
-        'guests',
-        'status',
-        'role',
     ];
 
     protected array $legacyDimensions = [
@@ -115,22 +104,21 @@ class Permissions extends Validator
             //          - If the dimension should be from the known set and is not found, the entire permission parameter will be considered invalid.
             //        - If any invalid permission name is found, the entire permission string will be considered invalid.
 
+            $allowedRoles = \implode('|', Database::ROLES);
             $allowedPermissions = \implode('|', $this->permissions);
 
-            $allowedMethods = \implode('|', $this->methods);
+            // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role") where role name is matched against known roles.
+            $roleMatcher = "((?:{$allowedRoles})(?::(?:[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?:[a-zA-Z\d]+[a-zA-Z._\-]*))?)";
 
-            // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role") where permission name is matched against known permissions.
-            $permissionMatcher = "((?:{$allowedPermissions})(?::(?:[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?:[a-zA-Z\d]+[a-zA-Z._\-]*))?)";
+            // Captures the permission type (e.g. "read", "update") and ensures a role is provided.
+            $permissionString = "/^(?:{$allowedPermissions})\({$roleMatcher}\)$/";
 
-            // Captures the permissions type (e.g. "read", "update") and ensures at least 1 permission string is provided.
-            $permissionString = "/^(?:{$allowedMethods})\({$permissionMatcher}(?:,\s*{$permissionMatcher})*\)$/";
-
-            // Inner permissions string capture. Same as $permissionMatcher, but captures the permission and optionally the ID and dimension.
-            $permissionCapture = '/^(?<permission>' . \implode('|', $this->permissions) . ')(?::(?<id>[a-z\d]+))?(?:\/(?<dimension>[a-z]+))?$/';
+            // Inner permissions string capture. Same as $roleMatcher, but captures the permission and optionally the ID and dimension.
+            $permissionCapture = "/^(?<permission>{$allowedRoles})(?::(?<id>[a-z\d]+))?(?:\/(?<dimension>[a-z]+))?$/";
 
             $matches = [];
             if (!\preg_match($permissionString, $permission, $matches)) {
-                $this->message = 'Permissions must be of the form "method(permission:id?/dimension?)", got "' . $permission . '".';
+                $this->message = 'Must be of the form "permission(role:id/dimension)", got "' . $permission . '".';
                 return false;
             }
 
@@ -138,7 +126,7 @@ class Permissions extends Validator
             \array_shift($matches);
             foreach ($matches as $match) {
                 if (!\preg_match($permissionCapture, $match, $submatches)) {
-                    $this->message = 'Permissions must be of the form "permission:id/dimension", got "' . $match . '". ID and dimension are optional for some types. Permission must be one of: ' . \implode(', ', $permissions) . '.';
+                    $this->message = 'Must be of the form "role:id/dimension", got "' . $match . '". ID and dimension are optional for some types. Permission must be one of: ' . \implode(', ', $permissions) . '.';
                     return false;
                 }
 
@@ -159,6 +147,7 @@ class Permissions extends Validator
                             return false;
                         }
                         break;
+                    /** @noinspection PhpMissingBreakStatementInspection */
                     case 'user':
                         if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
                             $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);

@@ -229,12 +229,23 @@ function createSchema($database) {
 function addArticle($database, $faker) {
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
-        // Three random users out of 10,000 get write access
+        // Three random users out of 10,000 get mutate access
+
         '$permissions' => [
-            'read(' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####'), $faker->numerify('user####')]) . ')',
-            'create(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
-            'update(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
-            'delete(any,' . \join(', ',  [$faker->numerify('user####'), $faker->numerify('user####')]) . ')',
+            "read({$faker->numerify('user####')})",
+            "read({$faker->numerify('user####')})",
+            "read({$faker->numerify('user####')})",
+            "read({$faker->numerify('user####')})",
+            "read({$faker->numerify('user####')})",
+            "create({$faker->numerify('user####')})",
+            "create({$faker->numerify('user####')})",
+            "create({$faker->numerify('user####')})",
+            "update({$faker->numerify('user####')})",
+            "update({$faker->numerify('user####')})",
+            "update({$faker->numerify('user####')})",
+            "delete({$faker->numerify('user####')})",
+            "delete({$faker->numerify('user####')})",
+            "delete({$faker->numerify('user####')})",
         ],
         'author' => $faker->name(),
         'created' => $faker->unixTime(),

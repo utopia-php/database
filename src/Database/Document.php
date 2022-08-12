@@ -117,14 +117,7 @@ class Document extends ArrayObject
             if (!\str_starts_with($permission, $type)) {
                 continue;
             }
-
-            $permission = \str_replace([$type . '(', ')', ' '], '', $permission);
-            $permission = \explode(',', $permission);
-
-            \array_reduce($permission, function (array $carry, string $item) use (&$typePermissions) {
-                $typePermissions[] = $item;
-                return $carry;
-            }, []);
+            $typePermissions[] = \str_replace([$type . '(', ')', ' '], '', $permission);
         }
 
         return \array_unique($typePermissions);

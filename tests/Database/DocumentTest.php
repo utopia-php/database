@@ -38,10 +38,14 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$permissions' => [
-                'read(user:123, team:123)',
-                'create(any, user:creator)',
-                'update(any, user:updater)',
-                'delete(any, user:deleter)',
+                'read(user:123)',
+                'read(team:123)',
+                'create(any)',
+                'create(user:creator)',
+                'update(any)',
+                'update(user:updater)',
+                'delete(any)',
+                'delete(user:deleter)',
             ],
             'title' => 'This is a test.',
             'list' => [
@@ -115,10 +119,14 @@ class DocumentTest extends TestCase
     public function testGetPermissions()
     {
         $this->assertEquals([
-            'read(user:123, team:123)',
-            'create(any, user:creator)',
-            'update(any, user:updater)',
-            'delete(any, user:deleter)',
+            'read(user:123)',
+            'read(team:123)',
+            'create(any)',
+            'create(user:creator)',
+            'update(any)',
+            'update(user:updater)',
+            'delete(any)',
+            'delete(user:deleter)',
         ], $this->document->getPermissions());
     }
 
@@ -192,7 +200,8 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$permissions' => [
-                'read(user:123, team:123)',
+                'read(user:123)',
+                'read(team:123)',
                 'create(any)',
                 'update(any)',
                 'delete(any)',
@@ -235,7 +244,8 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$permissions' => [
-                'read(user:123, team:123)',
+                'read(user:123)',
+                'read(team:123)',
                 'create(any)',
                 'update(any)',
                 'delete(any)',
@@ -290,10 +300,14 @@ class DocumentTest extends TestCase
             '$id' => $this->id,
             '$collection' => $this->collection,
             '$permissions' => [
-                'read(user:123, team:123)',
-                'create(any, user:creator)',
-                'update(any, user:updater)',
-                'delete(any, user:deleter)',
+                'read(user:123)',
+                'read(team:123)',
+                'create(any)',
+                'create(user:creator)',
+                'update(any)',
+                'update(user:updater)',
+                'delete(any)',
+                'delete(user:deleter)',
             ],
             'title' => 'This is a test.',
             'list' => [

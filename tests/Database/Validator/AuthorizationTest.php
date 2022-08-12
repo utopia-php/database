@@ -24,7 +24,8 @@ class AuthorizationTest extends TestCase
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$permissions' => [
-                'read(user:123, team:123)',
+                'read(user:123)',
+                'read(team:123)',
                 'create(any)',
                 'update(any)',
                 'delete(any)',

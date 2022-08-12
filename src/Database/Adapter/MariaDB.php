@@ -450,8 +450,11 @@ class MariaDB extends Adapter
         foreach (Database::PERMISSIONS as $type) {
             $key = '_' . $type;
             if (!empty($document[$key] ?? '')) {
-                $permissions = \implode(',', \json_decode($document[$key]));
-                $document['$permissions'][] = "{$type}({$permissions})";
+                $permissions = \json_decode($document[$key]);
+                foreach ($permissions as $permission) {
+                    $document['$permissions'][] = "{$type}({$permission})";
+                }
+
             }
             unset($document[$key]);
         }
@@ -945,8 +948,10 @@ class MariaDB extends Adapter
             foreach (Database::PERMISSIONS as $type) {
                 $typeKey = '_' . $type;
                 if (!empty($results[$key][$typeKey] ?? '')) {
-                    $permissions = \implode(',', \json_decode($results[$key][$typeKey]));
-                    $results[$key]['$permissions'][] = "{$type}({$permissions})";
+                    $permissions = \json_decode($results[$key][$typeKey]);
+                    foreach ($permissions as $permission) {
+                        $results[$key]['$permissions'][] = "{$type}({$permission})";
+                    }
                 }
                 unset($results[$key][$typeKey]);
             }

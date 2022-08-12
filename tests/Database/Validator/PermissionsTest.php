@@ -137,15 +137,30 @@ class PermissionsTest extends TestCase
             '$collection' => uniqid(),
             '$permissions' => [
                 'read(users)',
-                'create(user:123abc, team:123abc)',
-                'update(user:123abc, team:123abc)',
+                'create(user:123abc)',
+                'create(team:123abc)',
+                'update(user:123abc)',
+                'update(team:123abc)',
                 'delete(user:123abc)',
             ],
         ]);
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['read(user:123abc, team:123abc)', 'create(user:123abc, team:123abc)', 'update(user:123abc, team:123abc)', 'delete(user:123abc)'];
+        $document['$permissions'] = [
+            'read(user:123abc)',
+            'read(team:123abc)',
+            'create(user:123abc)',
+            'create(team:123abc)',
+            'update(user:123abc)',
+            'update(team:123abc)',
+            'delete(user:123abc)'
+        ];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['read(any)', 'create(guests)', 'update(team:123abc/edit)', 'delete(team:123abc/edit)'];
+        $document['$permissions'] = [
+            'read(any)',
+            'create(guests)',
+            'update(team:123abc/edit)',
+            'delete(team:123abc/edit)'
+        ];
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
@@ -175,11 +190,11 @@ class PermissionsTest extends TestCase
         // Role prefix values unsupported without method
         $this->assertFalse($object->isValid(['role:all']));
 
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "role:all".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "role:all".', $object->getDescription());
         $this->assertFalse($object->isValid(['role:guest']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "role:guest".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "role:guest".', $object->getDescription());
         $this->assertFalse($object->isValid(['role:member']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "role:member".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "role:member".', $object->getDescription());
 
         // Role prefix values deprecated
         $this->assertTrue($object->isValid(['read(role:all)']));
@@ -191,45 +206,45 @@ class PermissionsTest extends TestCase
 
         // Only contains a single ':'
         $this->assertFalse($object->isValid(['user1234']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "user1234".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "user1234".', $object->getDescription());
         $this->assertFalse($object->isValid(['user::1234']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "user::1234".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "user::1234".', $object->getDescription());
         $this->assertFalse($object->isValid(['user:123:4']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "user:123:4".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "user:123:4".', $object->getDescription());
 
         // Split role into format {$type}:{$value}
         // Permission must have value
         $this->assertFalse($object->isValid(['read(member:)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(member:)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(member:)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(user:)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(user:)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(user:)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:)".', $object->getDescription());
 
         // Permission role:$value must be one of: all, guest, member
         $this->assertFalse($object->isValid(['read(anyy)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(anyy)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(anyy)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(gguest)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(gguest)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(gguest)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(memer:123abc)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(memer:123abc)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(memer:123abc)".', $object->getDescription());
 
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading special chars
         $this->assertFalse($object->isValid(['read(member:_1234)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(member:_1234)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(member:_1234)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(member:-1234)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(member:-1234)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(member:-1234)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(member:.1234)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(member:.1234)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(member:.1234)".', $object->getDescription());
 
         // No unsupported special characters
         $this->assertFalse($object->isValid(['create(member:12$4)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "create(member:12$4)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "create(member:12$4)".', $object->getDescription());
         $this->assertFalse($object->isValid(['create(user:12&4)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "create(user:12&4)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "create(user:12&4)".', $object->getDescription());
         $this->assertFalse($object->isValid(['create(member:ab(124)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "create(member:ab(124)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "create(member:ab(124)".', $object->getDescription());
 
         // Shorter than 36 chars
         $this->assertTrue($object->isValid(['read(user:aaaaaaaabbbbbbbbccccccccddddddddeeee)']));
@@ -238,29 +253,33 @@ class PermissionsTest extends TestCase
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertFalse($object->isValid(['update(memmber:1234)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "update(memmber:1234)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "update(memmber:1234)".', $object->getDescription());
         $this->assertFalse($object->isValid(['update(tteam:1234)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "update(tteam:1234)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "update(tteam:1234)".', $object->getDescription());
         $this->assertFalse($object->isValid(['update(userr:1234)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "update(userr:1234)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "update(userr:1234)".', $object->getDescription());
 
         // Team permission
         $this->assertFalse($object->isValid(['read(team:_abcd)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:_abcd)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:_abcd)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:abcd/)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:abcd/)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:abcd/)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:/abcd)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:/abcd)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:/abcd)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:abcd//efgh)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:abcd//efgh)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:abcd//efgh)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:abcd/e/fgh)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:abcd/e/fgh)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:abcd/e/fgh)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:ab&cd3/efgh)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:ab&cd3/efgh)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:ab&cd3/efgh)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:abcd/ef*gh)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:abcd/ef*gh)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:abcd/ef*gh)".', $object->getDescription());
         $this->assertFalse($object->isValid(['read(team:abc, team:abcd/ef*gh)']));
-        $this->assertEquals('Permissions must be of the form "method(permission:id?/dimension?)", got "read(team:abc, team:abcd/ef*gh)".', $object->getDescription());
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(team:abc, team:abcd/ef*gh)".', $object->getDescription());
+
+        // Only one role per permission
+        $this->assertFalse($object->isValid(['read(user:abcd, team:123)']));
+        $this->assertEquals('Must be of the form "permission(role:id/dimension)", got "read(user:abcd, team:123)".', $object->getDescription());
 
         // Permission-list length must be valid
         $object = new Permissions(100);

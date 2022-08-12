@@ -41,11 +41,23 @@ class Database
     const PERMISSION_READ = 'read';
     const PERMISSION_UPDATE = 'update';
     const PERMISSION_DELETE = 'delete';
+
     const PERMISSIONS = [
         self::PERMISSION_CREATE,
         self::PERMISSION_READ,
         self::PERMISSION_UPDATE,
         self::PERMISSION_DELETE,
+    ];
+
+    const ROLES = [
+        'any',
+        'users',
+        'user',
+        'team',
+        'member',
+        'guests',
+        'status',
+        'role',
     ];
 
     // Collections

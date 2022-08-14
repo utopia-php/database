@@ -175,11 +175,7 @@ abstract class Adapter
      * @param Document[] $indexes (optional)
      * @return bool
      */
-    abstract public function createCollection(
-        string $name,
-        array $attributes = [],
-        array $indexes = [],
-    ): bool;
+    abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
      * Delete Collection

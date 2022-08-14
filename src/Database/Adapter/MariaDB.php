@@ -122,16 +122,13 @@ class MariaDB extends Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param Document[] $attributes
+     * @param Document[] $indexes
      * @return bool
      * @throws Exception
+     * @throws PDOException
      */
-    public function createCollection(
-        string $name,
-        array $attributes = [],
-        array $indexes = [],
-    ): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();

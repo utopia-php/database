@@ -133,7 +133,7 @@ class Database
                 'signed' => true,
                 'array' => false,
                 'filters' => ['json'],
-            ]
+            ],
         ],
         'indexes' => [],
     ];
@@ -377,18 +377,13 @@ class Database
      * @param string $id
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * @param string[] $permissions (optional)
      *
      * @return Document
      */
-    public function createCollection(
-        string $id,
-        array $attributes = [],
-        array $indexes = [],
-    ): Document {
+    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document {
         $collection = $this->getCollection($id);
         if (!$collection->isEmpty() && $id !== self::METADATA){
-            throw new Duplicate('Collection ' . $id . ' exists!');
+            throw new Duplicate('Collection ' . $id . ' Exists!');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -407,7 +402,7 @@ class Database
             ],
             'name' => $id,
             'attributes' => $attributes,
-            'indexes' => $indexes
+            'indexes' => $indexes,
         ]);
 
         // Check index limits, if given
@@ -1117,7 +1112,7 @@ class Database
             $permitted = $collection->getId() === self::METADATA
                 || $validator->isValid($collection->getRead());
 
-            if (!$permitted) { // Check if user has read access to this document
+            if (!$permitted) { // Check if user has read access to this collection
                 return new Document();
             }
 
@@ -1130,7 +1125,7 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getRead());
 
-        if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
+        if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this collection
             return new Document();
         }
         if ($document->isEmpty()) {
@@ -1168,7 +1163,7 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getCreate());
 
-        if (!$permitted) { // Check if user has update access to this document
+        if (!$permitted) { // Check if user has update access to this collection
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1225,7 +1220,7 @@ class Database
         $permitted = $collection->getId() === self::METADATA
             || $validator->isValid($collection->getUpdate());
 
-        if (!$permitted) { // Check if user has update access to this document
+        if (!$permitted) { // Check if user has update access to this collection
             throw new AuthorizationException($validator->getDescription());
         }
 

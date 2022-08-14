@@ -118,11 +118,7 @@ class MongoDBAdapter extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function createCollection(
-        string $name,
-        array $attributes = [],
-        array $indexes = [],
-    ): bool
+    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
@@ -603,7 +599,7 @@ class MongoDBAdapter extends Adapter
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_permissions']['$in'] = [new Regex("read\(.*(?:{$roles}).*\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         return $this->client->count($name, $filters, $options);

@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
 
+use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
@@ -110,11 +111,12 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
      * @return bool
+     * @throws Exception
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
@@ -136,8 +138,8 @@ class MongoDBAdapter extends Adapter
                 ]
             ],
             [
-                'key' => ['_read' => $this->getOrder(Database::ORDER_DESC)],
-                'name' => '_read_permissions',
+                'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
+                'name' => '_permissions',
             ]
         ]);
 
@@ -593,9 +595,11 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        $roles = \implode('|', Authorization::getRoles());
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         return $this->client->count($name, $filters, $options);
@@ -621,9 +625,11 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        $roles = \implode('|', Authorization::getRoles());
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $filters['_permissions']['$in'] = [new Regex("read\(.*(?:{$roles}).*\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -676,7 +682,7 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Keys cannot begin with $ in MongoDB
-     * Convert $ prefix to _ on $id, $read, $write, and $collection
+     * Convert $ prefix to _ on $id, $permissions, and $collection
      *
      * @param string $from
      * @param string $to
@@ -688,17 +694,14 @@ class MongoDBAdapter extends Adapter
         $array = (array) $array;
 
 
-        if (array_key_exists($from . 'read', $array))
-            $array[$to . 'read'] = $array[$from . 'read'];
+        if (array_key_exists($from . 'permissions', $array))
+            $array[$to . 'permissions'] = $array[$from . 'permissions'];
 
         if (array_key_exists($from . 'createdAt', $array))
             $array[$to . 'createdAt'] = $array[$from . 'createdAt'];
 
         if (array_key_exists($from . 'updatedAt', $array))
             $array[$to . 'updatedAt'] = $array[$from . 'updatedAt'];
-
-        if (array_key_exists($from . 'write', $array))
-            $array[$to . 'write'] = $array[$from . 'write'];
 
         if (array_key_exists($from . 'collection', $array))
             $array[$to . 'collection'] = $array[$from . 'collection'];
@@ -717,8 +720,7 @@ class MongoDBAdapter extends Adapter
         }
 
         unset($array[$from . 'id']);
-        unset($array[$from . 'read']);
-        unset($array[$from . 'write']);
+        unset($array[$from . 'permissions']);
         unset($array[$from . 'collection']);
         unset($array[$from . 'createdAt']);
         unset($array[$from . 'updatedAt']);

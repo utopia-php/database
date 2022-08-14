@@ -37,8 +37,28 @@ class Database
     const ORDER_DESC = 'DESC';
 
     // Permissions
+    const PERMISSION_CREATE= 'create';
     const PERMISSION_READ = 'read';
-    const PERMISSION_WRITE = 'write';
+    const PERMISSION_UPDATE = 'update';
+    const PERMISSION_DELETE = 'delete';
+
+    const PERMISSIONS = [
+        self::PERMISSION_CREATE,
+        self::PERMISSION_READ,
+        self::PERMISSION_UPDATE,
+        self::PERMISSION_DELETE,
+    ];
+
+    const ROLES = [
+        'any',
+        'users',
+        'user',
+        'team',
+        'member',
+        'guests',
+        'status',
+        'role',
+    ];
 
     // Collections
     const METADATA = '_metadata';
@@ -76,7 +96,7 @@ class Database
     /**
      * Parent Collection
      * Defines the structure for both system and custom collections
-     * 
+     *
      * @var array
      */
     protected array $collection = [
@@ -285,10 +305,10 @@ class Database
 
     /**
      * Create Metadata collection.
-     * @return bool 
-     * @throws LimitException 
-     * @throws AuthorizationException 
-     * @throws StructureException 
+     * @return bool
+     * @throws LimitException
+     * @throws AuthorizationException
+     * @throws StructureException
      */
     public function createMetadata(): bool
     {
@@ -298,7 +318,7 @@ class Database
          */
         $attributes = array_map(function ($attribute) {
             return new Document([
-                '$id' => $attribute[0],
+                '$id' => ID::custom($attribute[0]),
                 'type' => $attribute[1],
                 'size' => $attribute[2],
                 'required' => $attribute[3],
@@ -359,10 +379,10 @@ class Database
      *
      * @return Document
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
         $collection = $this->getCollection($id);
-        if (!$collection->isEmpty() && $id !== self::METADATA) {
+        if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
 
@@ -373,9 +393,13 @@ class Database
         }
 
         $collection = new Document([
-            '$id' => $id,
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom($id),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
@@ -408,7 +432,7 @@ class Database
 
     /**
      * Get Collection
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -421,10 +445,10 @@ class Database
 
     /**
      * List Collections
-     * 
+     *
      * @param int $offset
      * @param int $limit
-     * 
+     *
      * @return array
      */
     public function listCollections($limit = 25, $offset = 0): array
@@ -443,9 +467,9 @@ class Database
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteCollection(string $id): bool
@@ -457,7 +481,7 @@ class Database
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
@@ -469,7 +493,7 @@ class Database
      * @param string $format optional validation format of attribute
      * @param string $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
-     * 
+     *
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
@@ -499,7 +523,7 @@ class Database
         }
 
         $collection->setAttribute('attributes', new Document([
-            '$id' => $id,
+            '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'size' => $size,
@@ -581,12 +605,12 @@ class Database
 
     /**
      * Update attribute metadata. Utility method for update attribute methods.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $key Metadata key to update
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
-     * 
+     *
      * @return Document
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
@@ -615,11 +639,11 @@ class Database
 
     /**
      * Update required status of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param bool $required
-     * 
+     *
      * @return void
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): void
@@ -631,11 +655,11 @@ class Database
 
     /**
      * Update format of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $format validation format of attribute
-     * 
+     *
      * @return void
      */
     public function updateAttributeFormat(string $collection, string $id, string $format): void
@@ -651,11 +675,11 @@ class Database
 
     /**
      * Update format options of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param array $formatOptions assoc array with custom options that can be passed for the format validation
-     * 
+     *
      * @return void
      */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): void
@@ -667,11 +691,11 @@ class Database
 
     /**
      * Update filters of attribute.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param array $filters
-     * 
+     *
      * @return void
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): void
@@ -683,11 +707,11 @@ class Database
 
     /**
      * Update default value of attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param array|bool|callable|int|float|object|resource|string|null $default
-     * 
+     *
      * @return void
      */
     public function updateAttributeDefault(string $collection, string $id, $default = null): void
@@ -728,16 +752,16 @@ class Database
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $signed
      * @param bool $array
-     * 
+     *
      * To update attribute key (ID), use renameAttribute instead.
-     * 
+     *
      * @return bool
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
@@ -832,10 +856,10 @@ class Database
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
@@ -1016,7 +1040,7 @@ class Database
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
         $collection->setAttribute('indexes', new Document([
-            '$id' => $id,
+            '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
@@ -1062,7 +1086,7 @@ class Database
 
     /**
      * Get Document
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1082,12 +1106,16 @@ class Database
         $document = null;
         $cache = null;
 
+        $validator = new Authorization(self::PERMISSION_READ);
+
         // TODO@kodumbeats Check if returned cache id matches request
         if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
-            $validator = new Authorization(self::PERMISSION_READ);
 
-            if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
+            $permitted = $collection->getId() === self::METADATA
+                || $validator->isValid($collection->getRead());
+
+            if (!$permitted) { // Check if user has read access to this collection
                 return new Document();
             }
 
@@ -1095,15 +1123,14 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id);
-
         $document->setAttribute('$collection', $collection->getId());
 
-        $validator = new Authorization(self::PERMISSION_READ);
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getRead());
 
-        if (!$validator->isValid($document->getRead()) && $collection->getId() !== self::METADATA) { // Check if user has read access to this document
+        if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this collection
             return new Document();
         }
-
         if ($document->isEmpty()) {
             return $document;
         }
@@ -1130,18 +1157,21 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $validator = new Authorization(self::PERMISSION_WRITE);
-
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-            throw new AuthorizationException($validator->getDescription());
-        }
+        $validator = new Authorization(self::PERMISSION_CREATE);
 
         $collection = $this->getCollection($collection);
 
         $time = DateTime::now();
 
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getCreate());
+
+        if (!$permitted) { // Check if user has update access to this collection
+            throw new AuthorizationException($validator->getDescription());
+        }
+
         $document
-            ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
+            ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
             ->setAttribute('$createdAt', $time)
             ->setAttribute('$updatedAt', $time);
@@ -1163,7 +1193,7 @@ class Database
 
     /**
      * Update Document
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1187,13 +1217,12 @@ class Database
         // $data['$id'] = $old->getId();
         // $data['$collection'] = $old->getCollection();
 
-        $validator = new Authorization('write');
+        $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        if (!$validator->isValid($old->getWrite())) { // Check if user has write access to this document
-            throw new AuthorizationException($validator->getDescription());
-        }
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getUpdate());
 
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+        if (!$permitted) { // Check if user has update access to this collection
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1214,8 +1243,8 @@ class Database
     }
 
     /**
-     * Delete Document 
-     * 
+     * Delete Document
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1225,22 +1254,25 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
+        $validator = new Authorization(self::PERMISSION_DELETE);
         $document = $this->getDocument($collection, $id);
+        $collection = $this->getCollection($collection);
 
-        $validator = new Authorization('write');
+        $permitted = $collection->getId() === self::METADATA
+            || $validator->isValid($collection->getDelete());
 
-        if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
+        if (!$permitted) { // Check if user has update access to this document
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
-        return $this->adapter->deleteDocument($collection, $id);
+        return $this->adapter->deleteDocument($collection->getId(), $id);
     }
 
     /**
      * Cleans the all the collection's documents from the cache
-     * 
+     *
      * @param string $collection
      *
      * @return bool
@@ -1252,7 +1284,7 @@ class Database
 
     /**
      * Cleans a specific document from cache
-     * 
+     *
      * @param string $collection
      * @param string $id
      *
@@ -1321,7 +1353,7 @@ class Database
      * @param array $orderTypes
      * @param Document|null $cursor
      * @param string $cursorDirection
-     * 
+     *
      * @return Document|bool
      */
     public function findOne(string $collection, array $queries = [])
@@ -1380,48 +1412,6 @@ class Database
         return $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
     }
 
-    // /**
-    //  * @param array $data
-    //  *
-    //  * @return Document|false
-    //  *
-    //  * @throws Exception
-    //  */
-    // public function overwriteDocument(array $data)
-    // {
-    //     if (!isset($data['$id'])) {
-    //         throw new Exception('Must define $id attribute');
-    //     }
-
-    //     $document = $this->getDocument($data['$collection'], $data['$id']); // TODO make sure user don\'t need read permission for write operations
-
-    //     $validator = new Authorization($document, 'write');
-
-    //     if (!$validator->isValid($document->getWrite())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription());
-    //     }
-
-    //     $new = new Document($data);
-
-    //     if (!$validator->isValid($new->getWrite())) { // Check if user has write access to this document
-    //         throw new AuthorizationException($validator->getDescription());
-    //     }
-
-    //     $new = $this->encode($new);
-
-    //     $validator = new Structure($this);
-
-    //     if (!$validator->isValid($new)) { // Make sure updated structure still apply collection rules (if any)
-    //         throw new StructureException($validator->getDescription());
-    //     }
-
-    //     $new = new Document($this->adapter->updateDocument($this->getCollection($new->getCollection()), $new->getId(), $new->getArrayCopy()));
-
-    //     $new = $this->decode($new);
-
-    //     return $new;
-    // }
-
     /**
      * Add Attribute Filter
      *
@@ -1441,10 +1431,10 @@ class Database
 
     /**
      * Encode Document
-     * 
+     *
      * @param Document $collection
      * @param Document $document
-     * 
+     *
      * @return Document
      */
     public function encode(Document $collection, Document $document): Document
@@ -1490,10 +1480,10 @@ class Database
 
     /**
      * Decode Document
-     * 
+     *
      * @param Document $collection
      * @param Document $document
-     * 
+     *
      * @return Document
      */
     public function decode(Document $collection, Document $document): Document
@@ -1523,10 +1513,10 @@ class Database
 
     /**
      * Casting
-     * 
+     *
      * @param Document $collection
      * @param Document $document
-     * 
+     *
      * @return Document
      */
     public function casting(Document $collection, Document $document): Document
@@ -1585,11 +1575,11 @@ class Database
      *
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the input format of the given attribute.
-     * 
+     *
      * @param string $name
      * @param mixed $value
      * @param Document $document
-     * 
+     *
      * @return mixed
      */
     protected function encodeAttribute(string $name, $value, Document $document)
@@ -1613,14 +1603,14 @@ class Database
 
     /**
      * Decode Attribute
-     * 
+     *
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
-     * 
+     *
      * @param string $name
      * @param mixed $value
      * @param Document $document
-     * 
+     *
      * @return mixed
      */
     protected function decodeAttribute(string $name, $value, Document $document)
@@ -1640,25 +1630,6 @@ class Database
         }
 
         return $value;
-    }
-
-    /**
-     * Get Unique ID
-     *
-     * @param int $padding extra random bytes to append to 13-char uniqid
-     *
-     * @return string
-     */
-    public function getId(int $padding = 7): string
-    {
-        $uniqid = \uniqid();
-
-        if ($padding > 0) {
-            $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
-            $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
-        }
-
-        return $uniqid;
     }
 
     /**

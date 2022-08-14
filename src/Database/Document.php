@@ -16,32 +16,28 @@ class Document extends ArrayObject
      *
      * Construct a new fields object
      *
+     * @param array $input
+     * @throws Exception
      * @see ArrayObject::__construct
      *
-     * @param array $input
-     * @param int    $flags
-     * @param string $iterator_class
      */
     public function __construct(array $input = [])
     {
-        if(isset($input['$read']) && !is_array($input['$read'])) {
-            throw new Exception('$read permission must be of type array');
-        }
-
-        if(isset($input['$write']) && !is_array($input['$write'])) {
-            throw new Exception('$write permission must be of type array');
+        if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
+            throw new Exception('$permissions must be of type array');
         }
 
         foreach ($input as $key => &$value) {
-            if (\is_array($value)) {
-                if ((isset($value['$id']) || isset($value['$collection']))) {
-                    $input[$key] = new self($value);
-                } else {
-                    foreach ($value as $childKey => $child) {
-                        if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
-                            $value[$childKey] = new self($child);
-                        }
-                    }
+            if (!\is_array($value)) {
+                continue;
+            }
+            if ((isset($value['$id']) || isset($value['$collection']))) {
+                $input[$key] = new self($value);
+                continue;
+            }
+            foreach ($value as $childKey => $child) {
+                if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
+                    $value[$childKey] = new self($child);
                 }
             }
         }
@@ -76,17 +72,55 @@ class Document extends ArrayObject
     /**
      * @return array
      */
-    public function getRead(): array
+    public function getPermissions(): array
     {
-        return array_unique($this->getAttribute('$read', []));
+        return \array_unique($this->getAttribute('$permissions', []));
     }
 
     /**
      * @return array
      */
+    public function getRead(): array
+    {
+        return $this->getPermissionsByType(Database::PERMISSION_READ);
+    }
+
+    public function getCreate(): array
+    {
+        return $this->getPermissionsByType(Database::PERMISSION_CREATE);
+    }
+
+    public function getUpdate(): array
+    {
+        return $this->getPermissionsByType(Database::PERMISSION_UPDATE);
+    }
+
+    public function getDelete(): array
+    {
+        return $this->getPermissionsByType(Database::PERMISSION_DELETE);
+    }
+
     public function getWrite(): array
     {
-        return array_unique($this->getAttribute('$write', []));
+        return \array_unique(\array_intersect(
+            $this->getCreate(),
+            $this->getUpdate(),
+            $this->getDelete()
+        ));
+    }
+
+    public function getPermissionsByType(string $type): array
+    {
+        $typePermissions = [];
+
+        foreach ($this->getPermissions() as $permission) {
+            if (!\str_starts_with($permission, $type)) {
+                continue;
+            }
+            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
+        }
+
+        return \array_unique($typePermissions);
     }
 
     /**
@@ -107,7 +141,7 @@ class Document extends ArrayObject
 
     /**
      * Get Document Attributes
-     * 
+     *
      * @return array
      */
     public function getAttributes(): array
@@ -115,12 +149,11 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if(array_key_exists($attribute, [
+            if (\array_key_exists($attribute, [
                 '$id' => true,
                 '$internalId' => true,
                 '$collection' => true,
-                '$read' => true,
-                '$write' => [],
+                '$permissions' => [Permission::read(Role::any())],
                 '$createdAt' => true,
                 '$updatedAt' => true,
             ])) {
@@ -139,13 +172,13 @@ class Document extends ArrayObject
      * Method for getting a specific fields attribute. If $name is not found $default value will be returned.
      *
      * @param string $name
-     * @param mixed  $default
+     * @param mixed $default
      *
      * @return mixed
      */
     public function getAttribute(string $name, $default = null)
     {
-        if(isset($this[$name])) {
+        if (isset($this[$name])) {
             return $this[$name];
         }
 
@@ -158,7 +191,7 @@ class Document extends ArrayObject
      * Method for setting a specific field attribute
      *
      * @param string $key
-     * @param mixed  $value
+     * @param mixed $value
      * @param string $type
      *
      * @return self
@@ -214,16 +247,16 @@ class Document extends ArrayObject
         $subject = $this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
-        if(is_array($subject)) {
-            foreach($subject as $i => $value) {
-                if(isset($value[$key]) && $value[$key] === $find) {
+        if (is_array($subject)) {
+            foreach ($subject as $i => $value) {
+                if (isset($value[$key]) && $value[$key] === $find) {
                     return $value;
                 }
             }
             return false;
         }
 
-        if(isset($subject[$key]) && $subject[$key] === $find) {
+        if (isset($subject[$key]) && $subject[$key] === $find) {
             return $subject;
         }
         return false;
@@ -246,9 +279,9 @@ class Document extends ArrayObject
         $subject = &$this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
-        if(is_array($subject)) {
-            foreach($subject as $i => &$value) {
-                if(isset($value[$key]) && $value[$key] === $find) {
+        if (is_array($subject)) {
+            foreach ($subject as $i => &$value) {
+                if (isset($value[$key]) && $value[$key] === $find) {
                     $value = $replace;
                     return true;
                 }
@@ -256,7 +289,7 @@ class Document extends ArrayObject
             return false;
         }
 
-        if(isset($subject[$key]) && $subject[$key] === $find) {
+        if (isset($subject[$key]) && $subject[$key] === $find) {
             $subject[$key] = $replace;
             return true;
         }
@@ -279,9 +312,9 @@ class Document extends ArrayObject
         $subject = &$this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
-        if(is_array($subject)) {
-            foreach($subject as $i => &$value) {
-                if(isset($value[$key]) && $value[$key] === $find) {
+        if (is_array($subject)) {
+            foreach ($subject as $i => &$value) {
+                if (isset($value[$key]) && $value[$key] === $find) {
                     unset($subject[$i]);
                     return true;
                 }
@@ -289,7 +322,7 @@ class Document extends ArrayObject
             return false;
         }
 
-        if(isset($subject[$key]) && $subject[$key] === $find) {
+        if (isset($subject[$key]) && $subject[$key] === $find) {
             unset($subject[$key]);
             return true;
         }

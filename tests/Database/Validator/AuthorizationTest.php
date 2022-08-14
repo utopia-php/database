@@ -3,6 +3,8 @@
 namespace Utopia\Tests\Validator;
 
 use Utopia\Database\Document;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use PHPUnit\Framework\TestCase;
 
@@ -24,11 +26,11 @@ class AuthorizationTest extends TestCase
             '$id' => uniqid(),
             '$collection' => uniqid(),
             '$permissions' => [
-                'read(user:123)',
-                'read(team:123)',
-                'create(any)',
-                'update(any)',
-                'delete(any)',
+                Permission::read(Role::user('123')),
+                Permission::read(Role::team('123')),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
         ]);
         $object = new Authorization('read');

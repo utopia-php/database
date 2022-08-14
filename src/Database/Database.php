@@ -400,10 +400,10 @@ class Database
         $collection = new Document([
             '$id' => $id,
             '$permissions' => [
-                'read(any)',
-                'create(any)',
-                'update(any)',
-                'delete(any)',
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'name' => $id,
             'attributes' => $attributes,

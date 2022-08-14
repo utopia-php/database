@@ -61,6 +61,11 @@ class Role
         return new Role('guests');
     }
 
+    public static function status(string $status): Role
+    {
+        return new Role('status', $status);
+    }
+
     public function toString(): string
     {
         $str = $this->role;

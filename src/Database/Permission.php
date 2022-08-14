@@ -16,7 +16,7 @@ class Permission
         $this->role = new Role($role, $identifier, $dimension);
     }
 
-    public static function fromString(string $permission): Permission
+    public static function parse(string $permission): Permission
     {
         $parts = \explode('("', $permission);
         $permission = $parts[0];
@@ -46,38 +46,62 @@ class Permission
 
     /**
      * @param Role $role
-     * @return Permission
+     * @return string
      */
-    public static function read(Role $role): Permission
+    public static function read(Role $role): string
     {
-        return new Permission('read', $role->getRole(), $role->getIdentifier(), $role->getDimension());
+        $permission =  new Permission(
+            'read',
+            $role->getRole(),
+            $role->getIdentifier(),
+            $role->getDimension()
+        );
+        return $permission->toString();
     }
 
     /**
      * @param Role $role
-     * @return Permission
+     * @return string
      */
-    public static function create(Role $role): Permission
+    public static function create(Role $role): string
     {
-        return new Permission('create', $role->getRole(), $role->getIdentifier(), $role->getDimension());
+        $permission =  new Permission(
+            'create',
+            $role->getRole(),
+            $role->getIdentifier(),
+            $role->getDimension()
+        );
+        return $permission->toString();
     }
 
     /**
      * @param Role $role
-     * @return Permission
+     * @return string
      */
-    public static function update(Role $role): Permission
+    public static function update(Role $role): string
     {
-        return new Permission('update', $role->getRole(), $role->getIdentifier(), $role->getDimension());
+        $permission =  new Permission(
+            'update',
+            $role->getRole(),
+            $role->getIdentifier(),
+            $role->getDimension()
+        );
+        return $permission->toString();
     }
 
     /**
      * @param Role $role
-     * @return Permission
+     * @return string
      */
-    public static function delete(Role $role): Permission
+    public static function delete(Role $role): string
     {
-        return new Permission('delete', $role->getRole(), $role->getIdentifier(), $role->getDimension());
+        $permission =  new Permission(
+            'delete',
+            $role->getRole(),
+            $role->getIdentifier(),
+            $role->getDimension()
+        );
+        return $permission->toString();
     }
 
     /**

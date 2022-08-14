@@ -157,11 +157,11 @@ class Permissions extends Validator
                     case 'team':
                         $key = new Key();
                         if (empty($id)) {
-                            $this->message = 'ID must not be empty.';
+                            $this->message = 'Identifier must not be empty.';
                             return false;
                         }
                         if (!$key->isValid($id)) {
-                            $this->message = 'ID must be a valid key: ' . $key->getDescription();
+                            $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
                             return false;
                         }
                         break;

@@ -494,13 +494,13 @@ class MongoDBAdapter extends Adapter
             // Allow after pagination without any order
             if (!empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+                $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
                 ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
                 );
 
                 $filters = array_merge($filters, [
                     '_id' => [
-                        $this->getQueryOperator($orderOperator) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
+                        $this->getQueryOperator($orderMethod) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                     ]
                 ]);
             }
@@ -520,26 +520,26 @@ class MongoDBAdapter extends Adapter
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
-            $orderOperatorInternalId = Query::TYPE_GREATER;
+            $orderMethodInternalId = Query::TYPE_GREATER;
             $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
-            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
             $filters = array_merge($filters, [
                 '$or' => [
                     [
                         $attribute => [
-                            $this->getQueryOperator($orderOperator) => $cursor[$attribute]
+                            $this->getQueryOperator($orderMethod) => $cursor[$attribute]
                         ]
                     ], [
                         $attribute => $cursor[$attribute],
                         '_id' => [
-                            $this->getQueryOperator($orderOperatorInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
+                            $this->getQueryOperator($orderMethodInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                         ]
 
                     ]
@@ -742,7 +742,7 @@ class MongoDBAdapter extends Adapter
                 $query->setAttribute('_uid');
             }
             $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getOperator());
+            $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
@@ -764,13 +764,13 @@ class MongoDBAdapter extends Adapter
     /**
      * Get Query Operator
      * 
-     * @param string $operator
+     * @param string $method
      * 
      * @return string
      */
-    protected function getQueryOperator(string $operator): string
+    protected function getQueryOperator(string $method): string
     {
-        switch ($operator) {
+        switch ($method) {
             case Query::TYPE_EQUAL:
                 return '$eq';
                 break;
@@ -804,7 +804,7 @@ class MongoDBAdapter extends Adapter
                 break;
 
             default:
-                throw new Exception('Unknown Operator:' . $operator);
+                throw new Exception('Unknown method:' . $method);
                 break;
         }
     }

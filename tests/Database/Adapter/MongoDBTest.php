@@ -50,7 +50,7 @@ class MongoDBTest extends Base
     }
 
     /**
-     * @return Adapter
+     * @return Database
      */
     static function getDatabase(): Database
     {
@@ -113,7 +113,9 @@ class MongoDBTest extends Base
             'empty' => [],
         ]));
 
-        $documents = static::getDatabase()->find('documents', [ new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']) ]);
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*test+alias@email-provider.com')
+        ]);
 
         $this->assertEquals(1, count($documents));
 
@@ -245,7 +247,7 @@ class MongoDBTest extends Base
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
 
-        $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $count = static::getDatabase()->count('movies', [new Query(Query::TYPE_EQUAL, 'year', [2019]),]);
         $this->assertEquals(2, $count);
 
         Authorization::unsetRole('userx');
@@ -267,8 +269,8 @@ class MongoDBTest extends Base
          */
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
-            new Query('year', Query::TYPE_EQUAL, [2025]),
+            new Query(Query::TYPE_EQUAL, 'director', ['TBD', 'Joe Johnston']),
+            new Query(Query::TYPE_EQUAL, 'year', [2025]),
         ]);
         $this->assertEquals(1, $count);
         Authorization::reset();
@@ -309,6 +311,6 @@ class MongoDBTest extends Base
     static function getReservedKeywords(): array
     {
         // Mongo does not have concept of reserverd words. We put something here just to run the rests for this adapter too
-        return [ 'mogno' ];
+        return ['mogno'];
     }
 }

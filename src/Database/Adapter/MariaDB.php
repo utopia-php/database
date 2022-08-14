@@ -152,7 +152,7 @@ class MariaDB extends Adapter
             $indexAttributes = $index->getAttribute('attributes');
             foreach ($indexAttributes as $nested => $attribute) {
                 $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                $indexLength = (empty($indexLength)) ? '' : '('.(int)$indexLength.')';
+                $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$key] ?? '';
                 $indexAttribute = $this->filter($attribute);
 
@@ -776,6 +776,7 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
+     * 
      * @return Document[]
      * @throws Exception 
      * @throws PDOException 
@@ -795,8 +796,8 @@ class MariaDB extends Adapter
         }, $orderAttributes);
 
         $hasIdAttribute = false;
-        foreach($orderAttributes as $i => $attribute) {
-            if($attribute === '_uid') {
+        foreach ($orderAttributes as $i => $attribute) {
+            if ($attribute === '_uid') {
                 $hasIdAttribute = true;
             }
 
@@ -805,21 +806,21 @@ class MariaDB extends Adapter
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
-                $orderOperatorInternalId = Query::TYPE_GREATER; // To preserve natural order
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderOperator)} :cursor 
+                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
                             table_main.{$attribute} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
+                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } else if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -832,20 +833,20 @@ class MariaDB extends Adapter
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
             ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderOperator)} {$cursor['$internalId']} )";
+            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
-        if(!$hasIdAttribute) {
+        if (!$hasIdAttribute) {
             if (empty($orderAttributes) && !empty($orderTypes)) {
                 $order = $orderTypes[0] ?? Database::ORDER_ASC;
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
-    
+
                 $orders[] = 'table_main._id ' . $this->filter($order);
             } else {
                 $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
@@ -862,7 +863,7 @@ class MariaDB extends Adapter
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -888,7 +889,7 @@ class MariaDB extends Adapter
         ");
 
         foreach ($queries as $i => $query) {
-            if ($query->getOperator() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
@@ -968,7 +969,7 @@ class MariaDB extends Adapter
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -991,7 +992,7 @@ class MariaDB extends Adapter
         ");
 
         foreach ($queries as $i => $query) {
-            if ($query->getOperator() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
@@ -1037,7 +1038,7 @@ class MariaDB extends Adapter
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getOperator(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1058,7 +1059,7 @@ class MariaDB extends Adapter
         ");
 
         foreach ($queries as $i => $query) {
-            if ($query->getOperator() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
@@ -1370,15 +1371,15 @@ class MariaDB extends Adapter
      * Get SQL Conditions
      *
      * @param string $attribute
-     * @param string $operator
+     * @param string $method
      * @param string $placeholder
      * @param mixed $value
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(string $attribute, string $operator, string $placeholder, $value): string
+    protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
     {
-        switch ($operator) {
+        switch ($method) {
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1393,20 +1394,21 @@ class MariaDB extends Adapter
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             default:
-                return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                break;
         }
     }
 
     /**
      * Get SQL Operator
      *
-     * @param string $operator
+     * @param string $method
      * @return string
      * @throws Exception
      */
-    protected function getSQLOperator(string $operator): string
+    protected function getSQLOperator(string $method): string
     {
-        switch ($operator) {
+        switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
 
@@ -1426,7 +1428,8 @@ class MariaDB extends Adapter
                 return '>=';
 
             default:
-                throw new Exception('Unknown Operator:' . $operator);
+                throw new Exception('Unknown method:' . $method);
+                break;
         }
     }
 
@@ -1486,7 +1489,7 @@ class MariaDB extends Adapter
                 break;
         }
 
-        return "CREATE {$type} `{$id}` ON `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` ( ". implode(', ', $attributes) ." )";
+        return "CREATE {$type} `{$id}` ON `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . " )";
     }
 
     /**
@@ -1582,7 +1585,7 @@ class MariaDB extends Adapter
     /**
      * Returns default PDO configuration
      */
-    public static function getPdoAttributes():array
+    public static function getPdoAttributes(): array
     {
         return [
             PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
@@ -1593,6 +1596,4 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
-
-
 }

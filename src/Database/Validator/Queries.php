@@ -43,7 +43,7 @@ class Queries extends Validator
      * @param Document[] $indexes available for strict query matching
      * @param bool $strict
      */
-    public function __construct($validator, $attributes = [], $indexes = [], $strict = true)
+    public function __construct(QueryValidator $validator, array $attributes, array $indexes, bool $strict = true)
     {
         $this->validator = $validator;
         $this->attributes = $attributes;
@@ -94,12 +94,13 @@ class Queries extends Validator
      * 
      * Otherwise, returns true.
      * 
-     * @param mixed $value as array of Query objects
+     * @param Query[] $value as array of Query objects
      * @return bool
      */
     public function isValid($value): bool
     {
         foreach ($value as $query) {
+
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
                 return false;
@@ -194,12 +195,16 @@ class Queries extends Validator
      *
      * @return bool
      */
-    protected function arrayMatch($indexes, $queries): bool
+    protected function arrayMatch(array $indexes, array $queries): bool
     {
         // Check the count of indexes first for performance
-        if (count($indexes) !== count($queries)) {
+        if (count($queries) !== count($indexes)) {
             return false;
         }
+
+        // Sort them for comparison, the order is not important here anymore.
+        sort($indexes, SORT_STRING);
+        sort($queries, SORT_STRING);
 
         // Only matching arrays will have equal diffs in both directions
         if (array_diff_assoc($indexes, $queries) !== array_diff_assoc($queries, $indexes)) {

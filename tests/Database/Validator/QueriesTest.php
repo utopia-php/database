@@ -22,7 +22,7 @@ class QueriesTest extends TestCase
     protected $queries = [];
 
     /**
-     * @var QueryValidator
+     * @var Query
      */
     protected $queryValidator = null;
 
@@ -133,6 +133,7 @@ class QueriesTest extends TestCase
                 'DESC'
             ],
         ]);
+
         $index3 = new Document([
             '$id' => 'testindex3',
             'type' => 'fulltext',
@@ -141,6 +142,7 @@ class QueriesTest extends TestCase
             ],
             'orders' => []
         ]);
+
         $index4 = new Document([
             '$id' => 'testindex4',
             'type' => 'key',
@@ -165,6 +167,7 @@ class QueriesTest extends TestCase
         $this->assertEquals(true, $validator->isValid($this->queries), $validator->getDescription());
 
         $this->queries[] = DatabaseQuery::parse('lessThan("price", 6.50)');
+        $this->queries[] = DatabaseQuery::parse('greaterThanEqual("price", 5.50)');
         $this->assertEquals(true, $validator->isValid($this->queries));
 
         $queries = [DatabaseQuery::orderDesc('')];
@@ -174,7 +177,7 @@ class QueriesTest extends TestCase
 
         $this->queries[] = DatabaseQuery::parse('greaterThan("rating", 4)');
 
-        $this->assertEquals(false, $validator->isValid($this->queries));
+        $this->assertFalse($validator->isValid($this->queries));
         $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
 
         // test for queued index
@@ -193,6 +196,101 @@ class QueriesTest extends TestCase
         $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
     }
 
+    public function testLooseOrderQueries()
+    {
+        $validator = new Queries(
+            $this->queryValidator, 
+            [
+                new Document([
+                    '$id' => 'title',
+                    'key' => 'title',
+                    'type' => Database::VAR_STRING,
+                    'size' => 256,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'rating',
+                    'key' => 'rating',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 5,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'price',
+                    'key' => 'price',
+                    'type' => Database::VAR_FLOAT,
+                    'size' => 5,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            [
+                new Document([
+                    '$id' => 'testindex5',
+                    'type' => 'key',
+                    'attributes' => [
+                        'title',
+                        'price',
+                        'rating'
+                    ],
+                    'orders' => []
+                ])
+            ], 
+            true,
+        );
+
+        // Test for SUCCESS
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
+            DatabaseQuery::parse('lessThanEqual("title", "string")'),
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)')
+        ]));
+
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
+            DatabaseQuery::parse('lessThanEqual("title", "string")'),
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)')
+        ]));
+
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
+            DatabaseQuery::parse('lessThanEqual("title", "string")')
+        ]));
+
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("title", "string")'),
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)')
+        ]));
+
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("title", "string")'),
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)')
+        ]));
+
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
+            DatabaseQuery::parse('lessThanEqual("title", "string")'),
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)')
+        ]));
+
+        $this->assertTrue($validator->isValid([
+            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
+            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
+            DatabaseQuery::parse('lessThanEqual("title", "string")')
+        ]));
+    }
+
     public function testIsStrict()
     {
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
@@ -202,5 +300,6 @@ class QueriesTest extends TestCase
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes'], false);
 
         $this->assertEquals(false, $validator->isStrict());
+
     }
 }

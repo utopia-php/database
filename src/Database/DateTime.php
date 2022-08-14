@@ -6,7 +6,8 @@ use Exception;
 
 class DateTime
 {
-    protected static string $format = 'Y-m-d H:i:s.v';
+    protected static string $formatDb = 'Y-m-d H:i:s.v';
+    protected static string $formatTz = 'Y-m-dTH:i:s.vP';
 
     private function __construct()
     {
@@ -47,7 +48,7 @@ class DateTime
      */
     public static function format(\DateTime $date): string
     {
-        return $date->format(self::$format);
+        return $date->format(self::$formatDb);
     }
 
     /**
@@ -71,6 +72,23 @@ class DateTime
         $value = new \DateTime($datetime);
         $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
         return DateTime::format($value);
+    }
+
+    /**
+     * @param string|null $dbFormat
+     * @return string|null
+     */
+    public static function formatTz(?string $dbFormat): ?string
+    {
+        if (is_null($dbFormat)) return null;
+
+        try {
+            $value = new \DateTime($dbFormat);
+            return $value->format(self::$formatTz);
+        } catch (\Throwable $th) {
+            return $dbFormat;
+        }
+
     }
 
 

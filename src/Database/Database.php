@@ -221,7 +221,7 @@ class Database
              * @return string|null
              */
             function (?string $value) {
-                return $value;
+                return DateTime::formatTz($value);
             }
         );
     }
@@ -261,12 +261,11 @@ class Database
     /**
      * Set database to use for current scope
      *
-     * @param string $database
+     * @param string $name
      * @param bool $reset
      *
-     * @throws Exception
-     *
      * @return bool
+     * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {

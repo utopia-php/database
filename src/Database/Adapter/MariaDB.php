@@ -950,7 +950,7 @@ class MariaDB extends Adapter
                 if (!empty($results[$key][$typeKey] ?? '')) {
                     $permissions = \json_decode($results[$key][$typeKey]);
                     foreach ($permissions as $permission) {
-                        $results[$key]['$permissions'][] = "{$type}({$permission})";
+                        $results[$key]['$permissions'][] = "{$type}(\"{$permission}\")";
                     }
                 }
                 unset($results[$key][$typeKey]);

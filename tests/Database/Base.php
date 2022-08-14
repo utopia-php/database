@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -13,6 +14,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
+use Utopia\Database\Exception\Structure as StructureException;
 
 abstract class Base extends TestCase
 {
@@ -1568,23 +1570,23 @@ abstract class Base extends TestCase
                 ],
                 [
                     '$id' => 'passwordUpdate',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => [],
+                    'filters' => ['datetime'],
                 ],
                 [
                     '$id' => 'registration',
-                    'type' => Database::VAR_INTEGER,
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => [],
+                    'filters' => ['datetime'],
                 ],
                 [
                     '$id' => 'emailVerification',
@@ -1690,8 +1692,8 @@ abstract class Base extends TestCase
             'emailVerification' => false,
             'status' => 1,
             'password' => 'randomhash',
-            'passwordUpdate' => 1234,
-            'registration' => 1234,
+            'passwordUpdate' => '2000-06-12 14:12:55',
+            'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
             'prefs' => new \stdClass,
@@ -1723,8 +1725,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals('{}', $result->getAttribute('prefs'));
@@ -1747,8 +1749,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals([], $result->getAttribute('prefs'));
@@ -2504,29 +2506,6 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @depends testCreatedAtUpdatedAt
-     */
-    public function testCreatedAtUpdatedAtAssert()
-    {
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-
-        $this->assertIsInt($document->getCreatedAt());
-        $this->assertIsInt($document->getUpdatedAt());
-        $this->assertGreaterThan(1650000000, $document->getCreatedAt());
-        $this->assertGreaterThan(1650000000, $document->getUpdatedAt());
-        sleep(1);
-        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
-
-        $this->assertEquals(123, $document->setAttribute('$createdAt', 123)->getCreatedAt());
-        $document = static::getDatabase()->updateDocument('created_at', 'uid123', $document);
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertEquals(123, $document->getCreatedAt());
-
-    }
-
-    /**
      * @depends testUpdateAttributeDefault
      * @depends testUpdateAttributeFormat
      */
@@ -2551,8 +2530,66 @@ abstract class Base extends TestCase
         $this->assertEquals('500', $doc->getAttribute('price'));
     }
 
-    public function testReservedKeywords()
+    /**
+     * @depends testCreatedAtUpdatedAt
+     */
+    public function testCreatedAtUpdatedAtAssert()
     {
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertEquals(true, !$document->isEmpty());
+        sleep(1);
+        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createCollection('created_at');
+
+    }
+
+    public function testCreateDatetime()
+    {
+        static::getDatabase()->createCollection('datetime');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
+
+        $doc = static::getDatabase()->createDocument('datetime', new Document([
+            '$id' => 'id1234',
+            '$permissions' => [
+                'read(any)',
+                'create(any)',
+                'update(any)',
+                'delete(any)',
+            ],
+            'date' => DateTime::now(),
+        ]));
+
+        $document = static::getDatabase()->getDocument('datetime', 'id1234');
+        $this->assertEquals(NULL, $document->getAttribute('date2'));
+        $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
+        $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
+
+        $documents = static::getDatabase()->find('datetime', [
+            new Query('date', Query::TYPE_GREATER, ['1975-12-06 10:00:00+01:00']),
+            new Query('date', Query::TYPE_LESSER, ['2030-12-06 10:00:00-01:00']),
+        ]);
+
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {// todo: fix in mongo
+            $this->assertEquals(1, count($documents));
+        }
+
+        $this->expectException(StructureException::class);
+        static::getDatabase()->createDocument('datetime', new Document([
+            '$permissions' => [
+                'create(any)',
+                'update(any)',
+                'delete(any)',
+            ],
+            'date' => "1975-12-06 00:00:61"
+        ]));
+    }
+
+    public function testReservedKeywords() {
         $keywords = $this->getReservedKeywords();
         $database = static::getDatabase();
 

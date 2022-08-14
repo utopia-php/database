@@ -174,8 +174,8 @@ class MariaDB extends Adapter
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_uid` CHAR(255) NOT NULL,
-                        `_createdAt` int unsigned DEFAULT NULL,
-                        `_updatedAt` int unsigned DEFAULT NULL,
+                        `_createdAt` datetime(3) DEFAULT NULL,
+                        `_updatedAt` datetime(3) DEFAULT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
@@ -442,8 +442,8 @@ class MariaDB extends Adapter
 
         $document['$id'] = $document['_uid'];
         $document['$internalId'] = $document['_id'];
-        $document['$createdAt'] = (int)$document['_createdAt'];
-        $document['$updatedAt'] = (int)$document['_updatedAt'];
+        $document['$createdAt'] = $document['_createdAt'];
+        $document['$updatedAt'] = $document['_updatedAt'];
         $document['$permissions'] = [];
 
         /** Decompose permissions JSON into a string array per type */
@@ -941,8 +941,8 @@ class MariaDB extends Adapter
         foreach ($results as $key => $value) {
             $results[$key]['$id'] = $value['_uid'];
             $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$createdAt'] = (int)$value['_createdAt'];
-            $results[$key]['$updatedAt'] = (int)$value['_updatedAt'];
+            $results[$key]['$createdAt'] = $value['_createdAt'];
+            $results[$key]['$updatedAt'] = $value['_updatedAt'];
             $results[$key]['$permissions'] = [];
 
             foreach (Database::PERMISSIONS as $type) {
@@ -1299,6 +1299,9 @@ class MariaDB extends Adapter
                     $total += 255;
                     break;
 
+                case Database::VAR_DATETIME:
+                    $total += 19; // 2022-06-26 14:46:24
+                    break;
                 default:
                     throw new Exception('Unknown Type');
                     break;
@@ -1385,6 +1388,9 @@ class MariaDB extends Adapter
             case Database::VAR_DOCUMENT:
                 return 'CHAR(255)';
 
+            case Database::VAR_DATETIME:
+                return 'DATETIME(3)';
+                break;
             default:
                 throw new Exception('Unknown Type');
         }
@@ -1608,4 +1614,21 @@ class MariaDB extends Adapter
     {
         return $this->pdo;
     }
+
+    /**
+     * Returns default PDO configuration
+     */
+    public static function getPdoAttributes():array
+    {
+        return [
+            PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
+            PDO::ATTR_PERSISTENT => true, // Create a persistent connection
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on srrors
+            PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
+            PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
+        ];
+    }
+
+
 }

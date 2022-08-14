@@ -79,6 +79,16 @@ class QueryValidatorTest extends TestCase
             'array' => true,
             'filters' => [],
         ],
+        [
+            '$id' => 'birthDay',
+            'key' => 'birthDay',
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'required' => false,
+            'signed' => false,
+            'array' => false,
+            'filters' => ['datetime'],
+        ],
     ];
 
     public function setUp(): void
@@ -103,6 +113,8 @@ class QueryValidatorTest extends TestCase
         $this->assertEquals(true, $validator->isValid(Query::parse('rating.greater(4)')));
         $this->assertEquals(true, $validator->isValid(Query::parse('price.lesserEqual(6.50)')));
         $this->assertEquals(true, $validator->isValid(Query::parse('tags.contains("action")')));
+        $this->assertEquals(true, $validator->isValid(Query::parse('birthDay.greater("1960-01-01 10:10:10")')));
+
     }
 
     public function testInvalidOperator()
@@ -143,5 +155,12 @@ class QueryValidatorTest extends TestCase
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Query operator only supported on array attributes: contains', $validator->getDescription());
+    }
+
+    public function testQueryDate()
+    {
+        $validator = new QueryValidator($this->schema);
+        $response = $validator->isValid(Query::parse('birthDay.greater("1960-01-01 10:10:10")'));
+        $this->assertEquals(true, $response);
     }
 }

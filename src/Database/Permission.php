@@ -17,6 +17,49 @@ class Permission
     }
 
     /**
+     * Create a permission string from this Permission instance
+     *
+     * @return string
+     */
+    public function toString(): string
+    {
+        return $this->permission . '("' . $this->role->toString() . '")';
+    }
+
+    /**
+     *
+     * @return string
+     */
+    public function getPermission(): string
+    {
+        return $this->permission;
+    }
+
+    /**
+     * @return string
+     */
+    public function getRole(): string
+    {
+        return $this->role->getRole();
+    }
+
+    /**
+     * @return string
+     */
+    public function getIdentifier(): string
+    {
+        return $this->role->getIdentifier();
+    }
+
+    /**
+     * @return string
+     */
+    public function getDimension(): string
+    {
+        return $this->role->getDimension();
+    }
+
+    /**
      * Parse a permission string into a Permission object
      *
      * @param string $permission
@@ -116,49 +159,6 @@ class Permission
             $role->getDimension()
         );
         return $permission->toString();
-    }
-
-    /**
-     * Create a permission string from this Permission instance
-     *
-     * @return string
-     */
-    public function toString(): string
-    {
-        return $this->permission . '("' . $this->role->toString() . '")';
-    }
-
-    /**
-     *
-     * @return string
-     */
-    public function getPermission(): string
-    {
-        return $this->permission;
-    }
-
-    /**
-     * @return string
-     */
-    public function getRole(): string
-    {
-        return $this->role->getRole();
-    }
-
-    /**
-     * @return string
-     */
-    public function getIdentifier(): string
-    {
-        return $this->role->getIdentifier();
-    }
-
-    /**
-     * @return string
-     */
-    public function getDimension(): string
-    {
-        return $this->role->getDimension();
     }
 }
 

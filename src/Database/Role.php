@@ -13,6 +13,47 @@ class Role
     }
 
     /**
+     * Create a role string from this Role instance
+     *
+     * @return string
+     */
+    public function toString(): string
+    {
+        $str = $this->role;
+        if ($this->identifier) {
+            $str .= ':' . $this->identifier;
+        }
+        if ($this->dimension) {
+            $str .= '/' . $this->dimension;
+        }
+        return $str;
+    }
+
+    /**
+     * @return string
+     */
+    public function getRole(): string
+    {
+        return $this->role;
+    }
+
+    /**
+     * @return string
+     */
+    public function getIdentifier(): string
+    {
+        return $this->identifier;
+    }
+
+    /**
+     * @return string
+     */
+    public function getDimension(): string
+    {
+        return $this->dimension;
+    }
+
+    /**
      * Parse a role string into a Role object
      *
      * @param string $role
@@ -104,47 +145,5 @@ class Role
     public static function status(string $status): Role
     {
         return new Role('status', $status);
-    }
-
-    /**
-     * Create a role string from this Role instance
-     *
-     * @param string $role
-     * @return Role
-     */
-    public function toString(): string
-    {
-        $str = $this->role;
-        if ($this->identifier) {
-            $str .= ':' . $this->identifier;
-        }
-        if ($this->dimension) {
-            $str .= '/' . $this->dimension;
-        }
-        return $str;
-    }
-
-    /**
-     * @return string
-     */
-    public function getRole(): string
-    {
-        return $this->role;
-    }
-
-    /**
-     * @return string
-     */
-    public function getIdentifier(): string
-    {
-        return $this->identifier;
-    }
-
-    /**
-     * @return string
-     */
-    public function getDimension(): string
-    {
-        return $this->dimension;
     }
 }

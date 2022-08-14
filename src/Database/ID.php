@@ -7,10 +7,19 @@ class ID
 
     /**
      * Create a new unique ID
+     *
+     * @throws \Exception
      */
-    public static function unique(): string
+    public static function unique(int $padding = 7): string
     {
-        return uniqid();
+        $uniqid = \uniqid();
+
+        if ($padding > 0) {
+            $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
+            $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
+        }
+
+        return $uniqid;
     }
 
     /**

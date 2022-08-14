@@ -1167,7 +1167,7 @@ class Database
         }
 
         $document
-            ->setAttribute('$id', empty($document->getId()) ? $this->getId() : $document->getId())
+            ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
             ->setAttribute('$createdAt', $time)
             ->setAttribute('$updatedAt', $time)
@@ -1615,25 +1615,6 @@ class Database
         }
 
         return $value;
-    }
-
-    /**
-     * Get Unique ID
-     *
-     * @param int $padding extra random bytes to append to 13-char uniqid
-     *
-     * @return string
-     */
-    public function getId(int $padding = 7): string
-    {
-        $uniqid = \uniqid();
-
-        if ($padding > 0) {
-            $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
-            $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
-        }
-
-        return $uniqid;
     }
 
     /**

@@ -2248,13 +2248,13 @@ abstract class Base extends TestCase
 
     public function testGetId()
     {
-        $this->assertEquals(20, strlen($this->getDatabase()->getId()));
-        $this->assertEquals(13, strlen($this->getDatabase()->getId(0)));
-        $this->assertEquals(13, strlen($this->getDatabase()->getId(-1)));
-        $this->assertEquals(23, strlen($this->getDatabase()->getId(10)));
+        $this->assertEquals(20, strlen(ID::unique()));
+        $this->assertEquals(13, strlen(ID::unique(0)));
+        $this->assertEquals(13, strlen(ID::unique(-1)));
+        $this->assertEquals(23, strlen(ID::unique(10)));
 
         // ensure two sequential calls to getId do not give the same result
-        $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
+        $this->assertNotEquals(ID::unique(10), ID::unique(10));
     }
 
     public function testRenameIndex()

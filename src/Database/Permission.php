@@ -16,6 +16,12 @@ class Permission
         $this->role = new Role($role, $identifier, $dimension);
     }
 
+    /**
+     * Parse a permission string into a Permission object
+     *
+     * @param string $permission
+     * @return Permission
+     */
     public static function parse(string $permission): Permission
     {
         $parts = \explode('("', $permission);
@@ -45,6 +51,8 @@ class Permission
     }
 
     /**
+     * Create a read permission string from the given Role
+     *
      * @param Role $role
      * @return string
      */
@@ -60,6 +68,8 @@ class Permission
     }
 
     /**
+     * Create a create permission string from the given Role
+     *
      * @param Role $role
      * @return string
      */
@@ -75,6 +85,8 @@ class Permission
     }
 
     /**
+     * Create an update permission string from the given Role
+     *
      * @param Role $role
      * @return string
      */
@@ -90,6 +102,8 @@ class Permission
     }
 
     /**
+     * Create a delete permission string from the given Role
+     *
      * @param Role $role
      * @return string
      */
@@ -105,6 +119,8 @@ class Permission
     }
 
     /**
+     * Create a permission string from this Permission instance
+     *
      * @return string
      */
     public function toString(): string
@@ -113,6 +129,7 @@ class Permission
     }
 
     /**
+     *
      * @return string
      */
     public function getPermission(): string

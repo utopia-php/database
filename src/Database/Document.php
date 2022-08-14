@@ -117,7 +117,7 @@ class Document extends ArrayObject
             if (!\str_starts_with($permission, $type)) {
                 continue;
             }
-            $typePermissions[] = \str_replace([$type . '(', ')', ' '], '', $permission);
+            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
         }
 
         return \array_unique($typePermissions);
@@ -153,7 +153,7 @@ class Document extends ArrayObject
                 '$id' => true,
                 '$internalId' => true,
                 '$collection' => true,
-                '$permissions' => ['read(any)'],
+                '$permissions' => [Permission::read(Role::any())],
                 '$createdAt' => true,
                 '$updatedAt' => true,
             ])) {

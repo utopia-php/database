@@ -85,7 +85,7 @@ class Permission
      */
     public function toString(): string
     {
-        return $this->permission . '(' . $this->role->toString() . ')';
+        return $this->permission . '("' . $this->role->toString() . '")';
     }
 
     /**

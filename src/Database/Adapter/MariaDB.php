@@ -452,7 +452,7 @@ class MariaDB extends Adapter
             if (!empty($document[$key] ?? '')) {
                 $permissions = \json_decode($document[$key]);
                 foreach ($permissions as $permission) {
-                    $document['$permissions'][] = "{$type}({$permission})";
+                    $document['$permissions'][] = "{$type}(\"{$permission}\")";
                 }
 
             }
@@ -520,6 +520,7 @@ class MariaDB extends Adapter
         $permissions = [];
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
+                $permission = \str_replace('"', '', $permission);
                 $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
             }
         }

@@ -18,9 +18,9 @@ class Permission
 
     public static function fromString(string $permission): Permission
     {
-        $parts = \explode('(', $permission);
+        $parts = \explode('("', $permission);
         $permission = $parts[0];
-        $fullRole = \str_replace(')', '', $parts[1]);
+        $fullRole = \str_replace('")', '', $parts[1]);
         $parts = \explode(':', $fullRole);
 
         if (\count($parts) === 1) {

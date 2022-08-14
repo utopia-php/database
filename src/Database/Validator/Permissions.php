@@ -108,17 +108,17 @@ class Permissions extends Validator
             $allowedPermissions = \implode('|', $this->permissions);
 
             // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role") where role name is matched against known roles.
-            $roleMatcher = "((?:{$allowedRoles})(?::(?:[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?:[a-zA-Z\d]+[a-zA-Z._\-]*))?)";
+            $roleMatcher = "(\"(?:{$allowedRoles})(?::(?:[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?:[a-zA-Z\d]+[a-zA-Z._\-]*))?\")";
 
             // Captures the permission type (e.g. "read", "update") and ensures a role is provided.
             $permissionString = "/^(?:{$allowedPermissions})\({$roleMatcher}\)$/";
 
             // Inner role string capture. Same as $roleMatcher, but captures the role and optionally the ID and dimension.
-            $roleCapture = "/^(?<role>{$allowedRoles})(?::(?<id>[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?<dimension>[a-zA-Z\d]+[a-zA-Z._\-]*))?$/";
+            $roleCapture = "/^\"(?<role>{$allowedRoles})(?::(?<id>[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?<dimension>[a-zA-Z\d]+[a-zA-Z._\-]*))?\"$/";
 
             $matches = [];
             if (!\preg_match($permissionString, $permission, $matches)) {
-                $this->message = 'Must be of the form "permission(role:id/dimension)", got "' . $permission . '".';
+                $this->message = 'Must be of the form "permission("role:id/dimension")", got "' . $permission . '".';
                 return false;
             }
 

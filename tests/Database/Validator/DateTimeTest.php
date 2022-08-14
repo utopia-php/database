@@ -44,6 +44,7 @@ class DateTimeTest extends TestCase
         $this->assertEquals(true, DateTime::isValid("2022-12-04 11:31:52.680+02:00"));
         $this->assertEquals('UTC', date_default_timezone_get());
         $this->assertEquals("2022-12-04 09:31:52.680", DateTime::setTimezone("2022-12-04 11:31:52.680+02:00"));
+        $this->assertEquals("2022-12-04T09:31:52.680+00:00", DateTime::formatTz("2022-12-04 09:31:52.680"));
 
         /**
          * Test for Failure

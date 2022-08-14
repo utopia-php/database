@@ -7,7 +7,7 @@ use Exception;
 class DateTime
 {
     protected static string $formatDb = 'Y-m-d H:i:s.v';
-    protected static string $formatTz = 'Y-m-dTH:i:s.vP';
+    protected static string $formatTz = 'Y-m-d\TH:i:s.vP';
 
     private function __construct()
     {

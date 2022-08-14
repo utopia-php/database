@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 
@@ -37,17 +38,17 @@ class DocumentTest extends TestCase
         $this->collection = uniqid();
 
         $this->document = new Document([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
             '$permissions' => [
-                Permission::read(Role::user('123')),
-                Permission::read(Role::team('123')),
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user('creator')),
+                Permission::create(Role::user(ID::custom('creator'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user('updater')),
+                Permission::update(Role::user(ID::custom('updater'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user('deleter')),
+                Permission::delete(Role::user(ID::custom('deleter'))),
             ],
             'title' => 'This is a test.',
             'list' => [
@@ -121,14 +122,14 @@ class DocumentTest extends TestCase
     public function testGetPermissions()
     {
         $this->assertEquals([
-            Permission::read(Role::user('123')),
-            Permission::read(Role::team('123')),
+            Permission::read(Role::user(ID::custom('123'))),
+            Permission::read(Role::team(ID::custom('123'))),
             Permission::create(Role::any()),
-            Permission::create(Role::user('creator')),
+            Permission::create(Role::user(ID::custom('creator'))),
             Permission::update(Role::any()),
-            Permission::update(Role::user('updater')),
+            Permission::update(Role::user(ID::custom('updater'))),
             Permission::delete(Role::any()),
-            Permission::delete(Role::user('deleter')),
+            Permission::delete(Role::user(ID::custom('deleter'))),
         ], $this->document->getPermissions());
     }
 
@@ -199,11 +200,11 @@ class DocumentTest extends TestCase
     public function testFindAndReplace()
     {
         $document = new Document([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
             '$permissions' => [
-                Permission::read(Role::user('123')),
-                Permission::read(Role::team('123')),
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
                 Permission::create(Role::any()),
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
@@ -243,11 +244,11 @@ class DocumentTest extends TestCase
     public function testFindAndRemove()
     {
         $document = new Document([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
             '$permissions' => [
-                Permission::read(Role::user('123')),
-                Permission::read(Role::team('123')),
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
                 Permission::create(Role::any()),
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
@@ -299,17 +300,17 @@ class DocumentTest extends TestCase
     public function testGetArrayCopy()
     {
         $this->assertEquals([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
             '$permissions' => [
-                Permission::read(Role::user('123')),
-                Permission::read(Role::team('123')),
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user('creator')),
+                Permission::create(Role::user(ID::custom('creator'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user('updater')),
+                Permission::update(Role::user(ID::custom('updater'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user('deleter')),
+                Permission::delete(Role::user(ID::custom('deleter'))),
             ],
             'title' => 'This is a test.',
             'list' => [

@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
@@ -70,7 +71,7 @@ abstract class Base extends TestCase
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
 
         $document = static::getDatabase()->createDocument('created_at', new Document([
-            '$id' => 'uid123',
+            '$id' => ID::custom('uid123'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -304,7 +305,7 @@ abstract class Base extends TestCase
     {
         $attributes = [
             new Document([
-                '$id' => 'attribute1',
+                '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -313,7 +314,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute2',
+                '$id' => ID::custom('attribute2'),
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
                 'required' => false,
@@ -322,7 +323,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute3',
+                '$id' => ID::custom('attribute3'),
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -334,21 +335,21 @@ abstract class Base extends TestCase
 
         $indexes = [
             new Document([
-                '$id' => 'index1',
+                '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index2',
+                '$id' => ID::custom('index2'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute2'],
                 'lengths' => [],
                 'orders' => ['DESC'],
             ]),
             new Document([
-                '$id' => 'index3',
+                '$id' => ID::custom('index3'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute3', 'attribute2'],
                 'lengths' => [],
@@ -384,7 +385,7 @@ abstract class Base extends TestCase
         // Test collection with dash (+attribute +index)
         $collection2 = static::getDatabase()->createCollection('with-dash', [
             new Document([
-                '$id' => 'attribute-one',
+                '$id' => ID::custom('attribute-one'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -394,7 +395,7 @@ abstract class Base extends TestCase
             ]),
         ], [
             new Document([
-                '$id' => 'index-one',
+                '$id' => ID::custom('index-one'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute-one'],
                 'lengths' => [256],
@@ -426,7 +427,7 @@ abstract class Base extends TestCase
 
         $attributes = [
             new Document([
-                '$id' => 'attribute1',
+                '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -435,7 +436,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute-2',
+                '$id' => ID::custom('attribute-2'),
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
                 'required' => false,
@@ -444,7 +445,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute_3',
+                '$id' => ID::custom('attribute_3'),
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -453,7 +454,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute.4',
+                '$id' => ID::custom('attribute.4'),
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -465,28 +466,28 @@ abstract class Base extends TestCase
 
         $indexes = [
             new Document([
-                '$id' => 'index1',
+                '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index-2',
+                '$id' => ID::custom('index-2'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute-2'],
                 'lengths' => [],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index_3',
+                '$id' => ID::custom('index_3'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute_3'],
                 'lengths' => [],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index.4',
+                '$id' => ID::custom('index.4'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute.4'],
                 'lengths' => [],
@@ -542,17 +543,17 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::read(Role::user('1')),
-                Permission::read(Role::user('2')),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
                 Permission::create(Role::any()),
-                Permission::create(Role::user('1x')),
-                Permission::create(Role::user('2x')),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
                 Permission::update(Role::any()),
-                Permission::update(Role::user('1x')),
-                Permission::update(Role::user('2x')),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
                 Permission::delete(Role::any()),
-                Permission::delete(Role::user('1x')),
-                Permission::delete(Role::user('2x')),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
             'integer' => 5,
@@ -824,7 +825,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$id' => 'frozen',
+            '$id' => ID::custom('frozen'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user('1')),
@@ -1526,12 +1527,12 @@ abstract class Base extends TestCase
     public function testEncodeDecode()
     {
         $collection = new Document([
-            '$collection' => Database::METADATA,
-            '$id' => 'users',
+            '$collection' => ID::custom(Database::METADATA),
+            '$id' => ID::custom('users'),
             'name' => 'Users',
             'attributes' => [
                 [
-                    '$id' => 'name',
+                    '$id' => ID::custom('name'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 256,
@@ -1541,7 +1542,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'email',
+                    '$id' => ID::custom('email'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 1024,
@@ -1551,7 +1552,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'status',
+                    '$id' => ID::custom('status'),
                     'type' => Database::VAR_INTEGER,
                     'format' => '',
                     'size' => 0,
@@ -1561,7 +1562,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'password',
+                    '$id' => ID::custom('password'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1571,7 +1572,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'passwordUpdate',
+                    '$id' => ID::custom('passwordUpdate'),
                     'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
@@ -1581,7 +1582,7 @@ abstract class Base extends TestCase
                     'filters' => ['datetime'],
                 ],
                 [
-                    '$id' => 'registration',
+                    '$id' => ID::custom('registration'),
                     'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
@@ -1591,7 +1592,7 @@ abstract class Base extends TestCase
                     'filters' => ['datetime'],
                 ],
                 [
-                    '$id' => 'emailVerification',
+                    '$id' => ID::custom('emailVerification'),
                     'type' => Database::VAR_BOOLEAN,
                     'format' => '',
                     'size' => 0,
@@ -1601,7 +1602,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'reset',
+                    '$id' => ID::custom('reset'),
                     'type' => Database::VAR_BOOLEAN,
                     'format' => '',
                     'size' => 0,
@@ -1611,7 +1612,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'prefs',
+                    '$id' => ID::custom('prefs'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1621,7 +1622,7 @@ abstract class Base extends TestCase
                     'filters' => ['json']
                 ],
                 [
-                    '$id' => 'sessions',
+                    '$id' => ID::custom('sessions'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1631,7 +1632,7 @@ abstract class Base extends TestCase
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => 'tokens',
+                    '$id' => ID::custom('tokens'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1641,7 +1642,7 @@ abstract class Base extends TestCase
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => 'memberships',
+                    '$id' => ID::custom('memberships'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1651,7 +1652,7 @@ abstract class Base extends TestCase
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => 'roles',
+                    '$id' => ID::custom('roles'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 128,
@@ -1661,7 +1662,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'tags',
+                    '$id' => ID::custom('tags'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 128,
@@ -1673,7 +1674,7 @@ abstract class Base extends TestCase
             ],
             'indexes' => [
                 [
-                    '$id' => '_key_email',
+                    '$id' => ID::custom('_key_email'),
                     'type' => Database::INDEX_UNIQUE,
                     'attributes' => ['email'],
                     'lengths' => [1024],
@@ -1683,7 +1684,7 @@ abstract class Base extends TestCase
         ]);
 
         $document = new Document([
-            '$id' => '608fdbe51361a',
+            '$id' => ID::custom('608fdbe51361a'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::user('608fdbe51361a')),
@@ -1720,7 +1721,7 @@ abstract class Base extends TestCase
         $this->assertContains('read("any")', $result->getAttribute('$permissions'));
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
-        $this->assertContains(Permission::create(Role::user('608fdbe51361a')), $result->getPermissions());
+        $this->assertContains(Permission::create(Role::user(ID::custom('608fdbe51361a'))), $result->getPermissions());
         $this->assertContains('user:608fdbe51361a', $result->getCreate());
         $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
@@ -1901,7 +1902,7 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->updateDocument('documents', $document->getId(), new Document([
-            '$id' => $document->getId(),
+            '$id' => ID::custom($document->getId()),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -1926,7 +1927,7 @@ abstract class Base extends TestCase
             $attributes = [];
             for ($i = 0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test{$i}",
+                    '$id' => ID::custom("test{$i}"),
                     'type' => Database::VAR_INTEGER,
                     'size' => 0,
                     'required' => false,
@@ -1956,7 +1957,7 @@ abstract class Base extends TestCase
 
             // create same attribute in testExceptionAttributeLimit
             $attribute = new Document([
-                '$id' => 'breaking',
+                '$id' => ID::custom('breaking'),
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
                 'required' => true,
@@ -2010,7 +2011,7 @@ abstract class Base extends TestCase
             // Strings
             for ($i = 0; $i < $stringCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_string{$i}",
+                    '$id' => ID::custom("test_string{$i}"),
                     'type' => Database::VAR_STRING,
                     'size' => $stringSize,
                     'required' => false,
@@ -2024,7 +2025,7 @@ abstract class Base extends TestCase
             // Integers
             for ($i = 0; $i < $intCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_int{$i}",
+                    '$id' => ID::custom("test_int{$i}"),
                     'type' => Database::VAR_INTEGER,
                     'size' => 0,
                     'required' => false,
@@ -2038,7 +2039,7 @@ abstract class Base extends TestCase
             // Floats
             for ($i = 0; $i < $floatCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_float{$i}",
+                    '$id' => ID::custom("test_float{$i}"),
                     'type' => Database::VAR_FLOAT,
                     'size' => 0,
                     'required' => false,
@@ -2052,7 +2053,7 @@ abstract class Base extends TestCase
             // Booleans
             for ($i = 0; $i < $boolCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_bool{$i}",
+                    '$id' => ID::custom("test_bool{$i}"),
                     'type' => Database::VAR_BOOLEAN,
                     'size' => 0,
                     'required' => false,
@@ -2084,7 +2085,7 @@ abstract class Base extends TestCase
 
             // create same attribute in testExceptionWidthLimit
             $attribute = new Document([
-                '$id' => 'breaking',
+                '$id' => ID::custom('breaking'),
                 'type' => Database::VAR_STRING,
                 'size' => 100,
                 'required' => true,
@@ -2471,7 +2472,7 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            '$id' => 'LiliPriced',
+            '$id' => ID::custom('LiliPriced'),
             'name' => 'Lily Priced',
             'inStock' => 50,
             'cartModel' => '{}',
@@ -2556,7 +2557,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
 
         $doc = static::getDatabase()->createDocument('datetime', new Document([
-            '$id' => 'id1234',
+            '$id' => ID::custom('id1234'),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2598,7 +2599,7 @@ abstract class Base extends TestCase
         // Collection name tests
         $attributes = [
             new Document([
-                '$id' => 'attribute1',
+                '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -2610,7 +2611,7 @@ abstract class Base extends TestCase
 
         $indexes = [
             new Document([
-                '$id' => 'index1',
+                '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
@@ -2629,7 +2630,7 @@ abstract class Base extends TestCase
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ],
-                '$id' => 'helloWorld',
+                '$id' => ID::custom('helloWorld'),
                 'attribute1' => 'Hello World',
             ]));
             $this->assertEquals('helloWorld', $document->getId());

@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
+use Utopia\Database\ID;
 use Utopia\Database\Validator\QueryValidator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
@@ -113,7 +114,7 @@ class QueriesTest extends TestCase
         // Object property declaration cannot initialize a Document object
         // Add Document[] $indexes separately
         $index1 = new Document([
-            '$id' => 'testindex',
+            '$id' => ID::custom('testindex'),
             'type' => 'key',
             'attributes' => [
                 'title',
@@ -126,7 +127,7 @@ class QueriesTest extends TestCase
         ]);
 
         $index2 = new Document([
-            '$id' => 'testindex2',
+            '$id' => ID::custom('testindex2'),
             'type' => 'key',
             'attributes' => [
                 'title',
@@ -139,7 +140,7 @@ class QueriesTest extends TestCase
             ],
         ]);
         $index3 = new Document([
-            '$id' => 'testindex3',
+            '$id' => ID::custom('testindex3'),
             'type' => 'fulltext',
             'attributes' => [
                 'title'

@@ -150,7 +150,7 @@ class Document extends ArrayObject
 
         foreach ($this as $attribute => $value) {
             if (\array_key_exists($attribute, [
-                '$id' => true,
+                '$id' => ID::custom(true),
                 '$internalId' => true,
                 '$collection' => true,
                 '$permissions' => [Permission::read(Role::any())],

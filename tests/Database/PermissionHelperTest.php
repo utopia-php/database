@@ -3,6 +3,7 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 
@@ -186,10 +187,10 @@ class PermissionHelperTest extends TestCase
         $permission = Permission::read(Role::users());
         $this->assertEquals('read("users")', $permission);
 
-        $permission = Permission::read(Role::user('123'));
+        $permission = Permission::read(Role::user(ID::custom('123')));
         $this->assertEquals('read("user:123")', $permission);
 
-        $permission = Permission::read(Role::team('123', 'admin'));
+        $permission = Permission::read(Role::team(ID::custom('123'), 'admin'));
         $this->assertEquals('read("team:123/admin")', $permission);
 
         $permission = Permission::read(Role::guests());
@@ -201,10 +202,10 @@ class PermissionHelperTest extends TestCase
         $permission = Permission::create(Role::users());
         $this->assertEquals('create("users")', $permission);
 
-        $permission = Permission::create(Role::user('123'));
+        $permission = Permission::create(Role::user(ID::custom('123')));
         $this->assertEquals('create("user:123")', $permission);
 
-        $permission = Permission::create(Role::team('123', 'admin'));
+        $permission = Permission::create(Role::team(ID::custom('123'), 'admin'));
         $this->assertEquals('create("team:123/admin")', $permission);
 
         $permission = Permission::create(Role::guests());
@@ -216,10 +217,10 @@ class PermissionHelperTest extends TestCase
         $permission = Permission::update(Role::users());
         $this->assertEquals('update("users")', $permission);
 
-        $permission = Permission::update(Role::user('123'));
+        $permission = Permission::update(Role::user(ID::custom('123')));
         $this->assertEquals('update("user:123")', $permission);
 
-        $permission = Permission::update(Role::team('123', 'admin'));
+        $permission = Permission::update(Role::team(ID::custom('123'), 'admin'));
         $this->assertEquals('update("team:123/admin")', $permission);
 
         $permission = Permission::update(Role::guests());
@@ -231,10 +232,10 @@ class PermissionHelperTest extends TestCase
         $permission = Permission::delete(Role::users());
         $this->assertEquals('delete("users")', $permission);
 
-        $permission = Permission::delete(Role::user('123'));
+        $permission = Permission::delete(Role::user(ID::custom('123')));
         $this->assertEquals('delete("user:123")', $permission);
 
-        $permission = Permission::delete(Role::team('123', 'admin'));
+        $permission = Permission::delete(Role::team(ID::custom('123'), 'admin'));
         $this->assertEquals('delete("team:123/admin")', $permission);
 
         $permission = Permission::delete(Role::guests());

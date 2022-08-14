@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -360,7 +361,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
+            '$id' => ID::custom('_uid'),
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $attribute
@@ -807,7 +808,7 @@ class MariaDB extends Adapter
         $orders = [];
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => '_uid',
+            '$id' => ID::custom('_uid'),
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -873,7 +874,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
+                '$id' => ID::custom('_uid'),
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
@@ -988,7 +989,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
+                '$id' => ID::custom('_uid'),
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
@@ -1057,7 +1058,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
+                '$id' => ID::custom('_uid'),
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()

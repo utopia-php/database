@@ -5,7 +5,6 @@ namespace Utopia\Database;
 use Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -319,7 +318,7 @@ class Database
          */
         $attributes = array_map(function ($attribute) {
             return new Document([
-                '$id' => $attribute[0],
+                '$id' => ID::custom($attribute[0]),
                 'type' => $attribute[1],
                 'size' => $attribute[2],
                 'required' => $attribute[3],
@@ -393,7 +392,7 @@ class Database
         }
 
         $collection = new Document([
-            '$id' => $id,
+            '$id' => ID::custom($id),
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -520,7 +519,7 @@ class Database
         }
 
         $collection->setAttribute('attributes', new Document([
-            '$id' => $id,
+            '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'size' => $size,
@@ -1037,7 +1036,7 @@ class Database
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
         $collection->setAttribute('indexes', new Document([
-            '$id' => $id,
+            '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,

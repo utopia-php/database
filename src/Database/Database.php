@@ -440,38 +440,7 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        $collection = $this->getDocument(self::METADATA, $id);
-//
-//        //$attributes = $collection->getAttribute('attributes', []);
-//
-//        $attr = new Document([
-//                '$id' => ID::custom('$createdAt'),
-//                'type' => Database::VAR_DATETIME,
-//                'format' => '',
-//                'size' => 0,
-//                'signed' => false,
-//                'required' => false,
-//                'default' => null,
-//                'array' => false,
-//                'filters' => ['datetime']]
-//        );
-//
-//       // $collection->setAttribute('attributes', $attr , Document::SET_TYPE_APPEND);
-//
-//        $attr = new Document([
-//                '$id' => ID::custom('$updatedAt'),
-//                'type' => Database::VAR_DATETIME,
-//                'format' => '',
-//                'size' => 0,
-//                'signed' => false,
-//                'required' => false,
-//                'default' => null,
-//                'array' => false,
-//                'filters' => ['datetime']]
-//        );
-//
-//       // $collection->setAttribute('attributes', $attr , Document::SET_TYPE_APPEND);
-        return $collection;
+        return $this->getDocument(self::METADATA, $id);
     }
 
     /**
@@ -481,8 +450,9 @@ class Database
      * @param int $limit
      *
      * @return array
+     * @throws Exception
      */
-    public function listCollections($limit = 25, $offset = 0): array
+    public function listCollections(int $limit = 25, int $offset = 0): array
     {
         Authorization::disable();
 
@@ -1462,14 +1432,13 @@ class Database
 
 
     /**
-     * @param Document $collection
      * @return array Document
      * @throws Exception
      */
-    public function getAttributes(Document $collection): array
+    public function getInternalAttributes(): array
     {
-        $attributes = $collection->getAttribute('attributes', []);
-        $attributes[] = new Document([
+        return [
+            new Document([
                 '$id' => ID::custom('$createdAt'),
                 'type' => Database::VAR_DATETIME,
                 'format' => '',
@@ -1478,10 +1447,8 @@ class Database
                 'required' => false,
                 'default' => null,
                 'array' => false,
-                'filters' => ['datetime']]
-        );
-
-        $attributes[] = new Document([
+                'filters' => ['datetime']]),
+            new Document([
                 '$id' => ID::custom('$updatedAt'),
                 'type' => Database::VAR_DATETIME,
                 'format' => '',
@@ -1491,9 +1458,8 @@ class Database
                 'default' => null,
                 'array' => false,
                 'filters' => ['datetime']]
-        );
-
-        return $attributes;
+            )
+        ];
     }
 
     /**
@@ -1507,7 +1473,8 @@ class Database
      */
     public function encode(Document $collection, Document $document): Document
     {
-        $attributes = $this->getAttributes($collection);
+        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1552,10 +1519,12 @@ class Database
      * @param Document $document
      *
      * @return Document
+     * @throws Throwable
      */
     public function decode(Document $collection, Document $document): Document
     {
-        $attributes = $this->getAttributes($collection);
+        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;

@@ -261,7 +261,7 @@ class Database
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                     return DateTime::format($value);
-                } catch (Throwable $th) {
+                } catch (\Throwable $th) {
                     return $value;
                 }
             },
@@ -1548,7 +1548,7 @@ class Database
      * @param Document $document
      *
      * @return Document
-     * @throws Throwable
+     * @throws Throwable|Exception
      */
     public function decode(Document $collection, Document $document): Document
     {
@@ -1645,6 +1645,7 @@ class Database
      * @param Document $document
      *
      * @return mixed
+     * @throws Throwable
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {
@@ -1652,14 +1653,10 @@ class Database
             throw new Exception('Filter not found');
         }
 
-        try {
-            if (array_key_exists($name, $this->instanceFilters)) {
-                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
-            } else {
-                $value = self::$filters[$name]['encode']($value, $document, $this);
-            }
-        } catch (Throwable $th) {
-            throw $th;
+        if (array_key_exists($name, $this->instanceFilters)) {
+            $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
+        } else {
+            $value = self::$filters[$name]['encode']($value, $document, $this);
         }
 
         return $value;
@@ -1689,7 +1686,7 @@ class Database
             } else {
                 $value = self::$filters[$name]['decode']($value, $document, $this);
             }
-        } catch (Throwable $th) {
+        } catch (\Throwable $th) {
             throw $th;
         }
 

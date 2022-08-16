@@ -95,6 +95,54 @@ class Database
     ];
 
     /**
+     * List of Internal Ids
+     * @var array
+     */
+
+    protected array $attributes = [
+        [
+            '$id' => '$id',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$collection',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$createdAt',
+            'type' => Database::VAR_DATETIME,
+            'format' => '',
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime']
+        ],
+        [
+            '$id' => '$updatedAt',
+            'type' => Database::VAR_DATETIME,
+            'format' => '',
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime']
+        ]
+    ];
+
+    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
@@ -1430,36 +1478,17 @@ class Database
         ];
     }
 
-
     /**
      * @return array Document
      * @throws Exception
      */
     public function getInternalAttributes(): array
     {
-        return [
-            new Document([
-                '$id' => ID::custom('$createdAt'),
-                'type' => Database::VAR_DATETIME,
-                'format' => '',
-                'size' => 0,
-                'signed' => false,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => ['datetime']]),
-            new Document([
-                '$id' => ID::custom('$updatedAt'),
-                'type' => Database::VAR_DATETIME,
-                'format' => '',
-                'size' => 0,
-                'signed' => false,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => ['datetime']]
-            )
-        ];
+        $attributes = [];
+        foreach ($this->attributes as $internal){
+            $attributes[] = new Document($internal);
+        }
+        return $attributes;
     }
 
     /**

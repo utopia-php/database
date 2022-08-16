@@ -9,12 +9,12 @@ class Permissions extends Validator
 {
     protected string $message = 'Permissions Error';
 
-    protected static array $defaultPermissions = [
+    protected static array $defaults = [
         ...Database::PERMISSIONS,
         'write',
     ];
 
-    protected array $allowedPermissions;
+    protected array $allowed;
 
     protected array $legacyDimensions = [
         'all',
@@ -33,15 +33,15 @@ class Permissions extends Validator
      * Permissions constructor.
      *
      * @param int $length maximum amount of permissions. 0 means unlimited.
-     * @param array $allowedPermissions
+     * @param array $allowed allowed permissions. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowedPermissions = [])
+    public function __construct(int $length = 0, array $allowed = [])
     {
         $this->length = $length;
-        if (empty($allowedPermissions)) {
-            $this->allowedPermissions = self::$defaultPermissions;
+        if (empty($allowed)) {
+            $this->allowed = self::$defaults;
         } else {
-            $this->allowedPermissions = $allowedPermissions;
+            $this->allowed = $allowed;
         }
     }
 
@@ -112,7 +112,7 @@ class Permissions extends Validator
             //        - If any invalid permission name is found, the entire permission string will be considered invalid.
 
             $allowedRoles = \implode('|', Database::ROLES);
-            $allowedPermissions = \implode('|', $this->allowedPermissions);
+            $allowedPermissions = \implode('|', $this->allowed);
 
             // Inner permission string matcher (e.g. "user:123abc", "team:123abc/role") where role name is matched against known roles.
             $roleMatcher = "(\"(?:{$allowedRoles})(?::(?:[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?:[a-zA-Z\d]+[a-zA-Z._\-]*))?\")";

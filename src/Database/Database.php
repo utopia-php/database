@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
@@ -212,7 +213,7 @@ class Database
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                     return DateTime::format($value);
-                } catch (\Throwable $th) {
+                } catch (Throwable $th) {
                     return $value;
                 }
             },
@@ -432,14 +433,45 @@ class Database
     /**
      * Get Collection
      *
-     * @param string $collection
      * @param string $id
      *
      * @return Document
+     * @throws Exception
      */
     public function getCollection(string $id): Document
     {
-        return $this->getDocument(self::METADATA, $id);
+        $collection = $this->getDocument(self::METADATA, $id);
+//
+//        //$attributes = $collection->getAttribute('attributes', []);
+//
+//        $attr = new Document([
+//                '$id' => ID::custom('$createdAt'),
+//                'type' => Database::VAR_DATETIME,
+//                'format' => '',
+//                'size' => 0,
+//                'signed' => false,
+//                'required' => false,
+//                'default' => null,
+//                'array' => false,
+//                'filters' => ['datetime']]
+//        );
+//
+//       // $collection->setAttribute('attributes', $attr , Document::SET_TYPE_APPEND);
+//
+//        $attr = new Document([
+//                '$id' => ID::custom('$updatedAt'),
+//                'type' => Database::VAR_DATETIME,
+//                'format' => '',
+//                'size' => 0,
+//                'signed' => false,
+//                'required' => false,
+//                'default' => null,
+//                'array' => false,
+//                'filters' => ['datetime']]
+//        );
+//
+//       // $collection->setAttribute('attributes', $attr , Document::SET_TYPE_APPEND);
+        return $collection;
     }
 
     /**
@@ -1428,6 +1460,42 @@ class Database
         ];
     }
 
+
+    /**
+     * @param Document $collection
+     * @return array Document
+     * @throws Exception
+     */
+    public function getAttributes(Document $collection): array
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+        $attributes[] = new Document([
+                '$id' => ID::custom('$createdAt'),
+                'type' => Database::VAR_DATETIME,
+                'format' => '',
+                'size' => 0,
+                'signed' => false,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => ['datetime']]
+        );
+
+        $attributes[] = new Document([
+                '$id' => ID::custom('$updatedAt'),
+                'type' => Database::VAR_DATETIME,
+                'format' => '',
+                'size' => 0,
+                'signed' => false,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => ['datetime']]
+        );
+
+        return $attributes;
+    }
+
     /**
      * Encode Document
      *
@@ -1435,11 +1503,11 @@ class Database
      * @param Document $document
      *
      * @return Document
+     * @throws Exception|Throwable
      */
     public function encode(Document $collection, Document $document): Document
     {
-        $attributes = $collection->getAttribute('attributes', []);
-
+        $attributes = $this->getAttributes($collection);
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1487,8 +1555,7 @@ class Database
      */
     public function decode(Document $collection, Document $document): Document
     {
-        $attributes = $collection->getAttribute('attributes', []);
-
+        $attributes = $this->getAttributes($collection);
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1593,7 +1660,7 @@ class Database
             } else {
                 $value = self::$filters[$name]['encode']($value, $document, $this);
             }
-        } catch (\Throwable $th) {
+        } catch (Throwable $th) {
             throw $th;
         }
 
@@ -1624,7 +1691,7 @@ class Database
             } else {
                 $value = self::$filters[$name]['decode']($value, $document, $this);
             }
-        } catch (\Throwable $th) {
+        } catch (Throwable $th) {
             throw $th;
         }
 

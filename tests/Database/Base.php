@@ -2102,7 +2102,6 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
-
         $this->assertEquals(true, $document->isEmpty());
 
         Authorization::setRole('any');
@@ -2621,7 +2620,6 @@ abstract class Base extends TestCase
         $this->assertTrue($attribute);
 
         $colors = $database->getCollection('colors');
-
         $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
         $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
         $this->assertCount(2, $colors->getAttribute('attributes'));

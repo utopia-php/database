@@ -40,6 +40,8 @@ class Permissions extends Validator
         $this->length = $length;
         if (empty($allowedPermissions)) {
             $this->allowedPermissions = self::$defaultPermissions;
+        } else {
+            $this->allowedPermissions = $allowedPermissions;
         }
     }
 

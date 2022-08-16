@@ -2755,7 +2755,6 @@ abstract class Base extends TestCase
         $database->updateAttributeFilters('flowers', 'cartModel', ['json']);
 
         $doc = $database->getDocument('flowers', $doc->getId());
-
         $this->assertIsArray($doc->getAttribute('cartModel'));
         $this->assertCount(2, $doc->getAttribute('cartModel'));
         $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);
@@ -2871,6 +2870,13 @@ abstract class Base extends TestCase
             ],
             'date' => DateTime::now(),
         ]));
+
+        $this->assertEquals(29, strlen($doc->getCreatedAt()));
+        $this->assertEquals(29, strlen($doc->getUpdatedAt()));
+        $this->assertEquals('+00:00', substr($doc->getCreatedAt(), -6));
+        $this->assertEquals('+00:00', substr($doc->getUpdatedAt(), -6));
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getCreatedAt());
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
         $this->assertEquals(NULL, $document->getAttribute('date2'));

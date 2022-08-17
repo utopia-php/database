@@ -98,7 +98,6 @@ class Database
      * List of Internal Ids
      * @var array
      */
-
     protected array $attributes = [
         [
             '$id' => '$id',

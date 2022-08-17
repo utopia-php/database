@@ -94,26 +94,37 @@ class Queries extends Validator
      * 
      * Otherwise, returns true.
      * 
-     * @param Query[] $value as array of Query objects
+     * @param mixed $value
      * @return bool
      */
     public function isValid($value): bool
     {
+        $queries = [];
         foreach ($value as $query) {
+            if (!$query instanceof Query){
+                try {
+                    $query = Query::parse($query);
+                } catch (\Throwable $th) {
+                    $this->message = 'Invalid query: ${query}';
+                    return false;
+                }
+            }
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
                 return false;
             }
+
+            $queries[] = $query;
         }
 
         if (!$this->strict) {
             return true;
         }
 
-        $queriesByMethod = self::groupByType($value);
-        /** @var Query[] */ $filters = $queriesByMethod['filters'];
-        /** @var string[] */ $orderAttributes = $queriesByMethod['orderAttributes'];
+        $grouped = Query::groupByType($queries);
+        /** @var Query[] */ $filters = $grouped['filters'];
+        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
 
         // Check filter queries for exact index match
         if (count($filters) > 0) {
@@ -212,87 +223,5 @@ class Queries extends Validator
         }
 
         return true;
-    }
-
-    /**
-     * Iterates through $queries and returns an array with:
-     * - filters: array of filter queries
-     * - limit: int
-     * - offset: int
-     * - orderAttributes: array of attribute keys
-     * - orderTypes: array of Database::ORDER_ASC or Database::ORDER_DESC
-     * - cursor: Document
-     * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
-     * 
-     * @param Query[] $queries
-     * @param int $defaultLimit
-     * @param int $defaultOffset
-     * @param string $defaultCursorDirection
-     * 
-     * @return array
-     */
-    public static function groupByType(array $queries): array
-    {
-        $filters = [];
-        $limit = null;
-        $offset = null;
-        $orderAttributes = [];
-        $orderTypes = [];
-        $cursor = null;
-        $cursorDirection = null;
-        foreach ($queries as $query) {
-            if (!$query instanceof Query) continue;
-
-            $method = $query->getMethod();
-            $attribute = $query->getAttribute();
-            $values = $query->getValues();
-            switch ($method) {
-                case Query::TYPE_ORDERASC:
-                case Query::TYPE_ORDERDESC:
-                    if (!empty($attribute)) {
-                        $orderAttributes[] = $attribute;
-                    }
-
-                    $orderTypes[] = $method === Query::TYPE_ORDERASC ? Database::ORDER_ASC : Database::ORDER_DESC;
-                    break;
-
-                case Query::TYPE_LIMIT:
-                    // keep the 1st limit encountered and ignore the rest
-                    if ($limit !== null) break;
-
-                    $limit = $values[0] ?? $limit;
-                    break;
-
-                case Query::TYPE_OFFSET:
-                    // keep the 1st offset encountered and ignore the rest
-                    if ($offset !== null) break;
-
-                    $offset = $values[0] ?? $limit;
-                    break;
-
-                case Query::TYPE_CURSORAFTER:
-                case Query::TYPE_CURSORBEFORE:
-                    // keep the 1st cursor encountered and ignore the rest
-                    if ($cursor !== null) break;
-
-                    $cursor = $values[0] ?? $limit;
-                    $cursorDirection = $method === Query::TYPE_CURSORAFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
-                    break;
-
-                default:
-                    $filters[] = $query;
-                    break;
-            }
-        }
-
-        return [
-            'filters' => $filters,
-            'limit' => $limit,
-            'offset' => $offset,
-            'orderAttributes' => $orderAttributes,
-            'orderTypes' => $orderTypes,
-            'cursor' => $cursor,
-            'cursorDirection' => $cursorDirection,
-        ];
     }
 }

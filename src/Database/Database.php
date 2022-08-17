@@ -1356,14 +1356,14 @@ class Database
     {
         $collection = $this->getCollection($collection);
 
-        $queriesByMethod = Queries::groupByType($queries);
-        /** @var Query[] */ $filters = $queriesByMethod['filters'];
-        /** @var int */ $limit = $queriesByMethod['limit'];
-        /** @var int */ $offset = $queriesByMethod['offset'];
-        /** @var string[] */ $orderAttributes = $queriesByMethod['orderAttributes'];
-        /** @var string[] */ $orderTypes = $queriesByMethod['orderTypes'];
-        /** @var Document */ $cursor = $queriesByMethod['cursor'];
-        /** @var string */ $cursorDirection = $queriesByMethod['cursorDirection'];
+        $grouped = Query::groupByType($queries);
+        /** @var Query[] */ $filters = $grouped['filters'];
+        /** @var int */ $limit = $grouped['limit'];
+        /** @var int */ $offset = $grouped['offset'];
+        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
+        /** @var string[] */ $orderTypes = $grouped['orderTypes'];
+        /** @var Document */ $cursor = $grouped['cursor'];
+        /** @var string */ $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new Exception("cursor Document must be from the same Collection.");

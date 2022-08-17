@@ -2,6 +2,8 @@
 
 namespace Utopia\Database;
 
+use Exception;
+
 class Query
 {
     // Filter methods
@@ -537,5 +539,128 @@ class Query
     public static function cursorBefore(Document $value): self
     {
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
+    }
+
+    /**
+     * Filters $queries for $types
+     * 
+     * @param Query[] $queries
+     * @param string[] ...$types
+     * 
+     * @return Query[]
+     */
+    public static function getByType(array $queries, string ...$types): array
+    {
+        $filtered = [];
+        foreach ($queries as $query) {
+            if (in_array($query->getMethod(), $types, true)) {
+                $filtered[] = $query;
+            }
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Iterates through $queries and returns an array with:
+     * - filters: array of filter queries
+     * - limit: int
+     * - offset: int
+     * - orderAttributes: array of attribute keys
+     * - orderTypes: array of Database::ORDER_ASC or Database::ORDER_DESC
+     * - cursor: Document
+     * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
+     * 
+     * @param array $queries
+     * @param int $defaultLimit
+     * @param int $defaultOffset
+     * @param string $defaultCursorDirection
+     * 
+     * @return array
+     */
+    public static function groupByType(array $queries): array
+    {
+        $filters = [];
+        $limit = null;
+        $offset = null;
+        $orderAttributes = [];
+        $orderTypes = [];
+        $cursor = null;
+        $cursorDirection = null;
+        foreach ($queries as $query) {
+            if (!$query instanceof Query) continue;
+
+            $method = $query->getMethod();
+            $attribute = $query->getAttribute();
+            $values = $query->getValues();
+            switch ($method) {
+                case Query::TYPE_ORDERASC:
+                case Query::TYPE_ORDERDESC:
+                    if (!empty($attribute)) {
+                        $orderAttributes[] = $attribute;
+                    }
+
+                    $orderTypes[] = $method === Query::TYPE_ORDERASC ? Database::ORDER_ASC : Database::ORDER_DESC;
+                    break;
+
+                case Query::TYPE_LIMIT:
+                    // keep the 1st limit encountered and ignore the rest
+                    if ($limit !== null) break;
+
+                    $limit = $values[0] ?? $limit;
+                    break;
+
+                case Query::TYPE_OFFSET:
+                    // keep the 1st offset encountered and ignore the rest
+                    if ($offset !== null) break;
+
+                    $offset = $values[0] ?? $limit;
+                    break;
+
+                case Query::TYPE_CURSORAFTER:
+                case Query::TYPE_CURSORBEFORE:
+                    // keep the 1st cursor encountered and ignore the rest
+                    if ($cursor !== null) break;
+
+                    $cursor = $values[0] ?? $limit;
+                    $cursorDirection = $method === Query::TYPE_CURSORAFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
+                    break;
+
+                default:
+                    $filters[] = $query;
+                    break;
+            }
+        }
+
+        return [
+            'filters' => $filters,
+            'limit' => $limit,
+            'offset' => $offset,
+            'orderAttributes' => $orderAttributes,
+            'orderTypes' => $orderTypes,
+            'cursor' => $cursor,
+            'cursorDirection' => $cursorDirection,
+        ];
+    }
+
+    /**
+     * Iterate over $queries attempting to parse each
+     * 
+     * @param string[] $queries
+     * 
+     * @return Query[]
+     */
+    public static function parseQueries(array $queries) : array
+    {
+        $parsed = [];
+        foreach ($queries as $query) {
+            try {
+                $parsed[] = Query::parse($query);
+            } catch (\Throwable $th) {
+                throw new Exception("Invalid query: ${query}", previous: $th);
+            }
+        }
+
+        return $parsed;
     }
 }

@@ -2061,8 +2061,8 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
-        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12T13:12:55.000+00:00', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals([], $result->getAttribute('prefs'));
@@ -2102,7 +2102,6 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
-
         $this->assertEquals(true, $document->isEmpty());
 
         Authorization::setRole('any');
@@ -2621,7 +2620,6 @@ abstract class Base extends TestCase
         $this->assertTrue($attribute);
 
         $colors = $database->getCollection('colors');
-
         $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
         $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
         $this->assertCount(2, $colors->getAttribute('attributes'));
@@ -2757,7 +2755,6 @@ abstract class Base extends TestCase
         $database->updateAttributeFilters('flowers', 'cartModel', ['json']);
 
         $doc = $database->getDocument('flowers', $doc->getId());
-
         $this->assertIsArray($doc->getAttribute('cartModel'));
         $this->assertCount(2, $doc->getAttribute('cartModel'));
         $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);
@@ -2873,6 +2870,13 @@ abstract class Base extends TestCase
             ],
             'date' => DateTime::now(),
         ]));
+
+        $this->assertEquals(29, strlen($doc->getCreatedAt()));
+        $this->assertEquals(29, strlen($doc->getUpdatedAt()));
+        $this->assertEquals('+00:00', substr($doc->getCreatedAt(), -6));
+        $this->assertEquals('+00:00', substr($doc->getUpdatedAt(), -6));
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getCreatedAt());
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
         $this->assertEquals(NULL, $document->getAttribute('date2'));

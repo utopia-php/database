@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
@@ -91,6 +92,53 @@ class Database
         self::VAR_INTEGER => true,
         self::VAR_FLOAT => true,
         self::VAR_BOOLEAN => true,
+    ];
+
+    /**
+     * List of Internal Ids
+     * @var array
+     */
+    protected array $attributes = [
+        [
+            '$id' => '$id',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$collection',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$createdAt',
+            'type' => Database::VAR_DATETIME,
+            'format' => '',
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime']
+        ],
+        [
+            '$id' => '$updatedAt',
+            'type' => Database::VAR_DATETIME,
+            'format' => '',
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime']
+        ]
     ];
 
     /**
@@ -221,7 +269,7 @@ class Database
              * @return string|null
              */
             function (?string $value) {
-                return $value;
+                return DateTime::formatTz($value);
             }
         );
     }
@@ -261,12 +309,11 @@ class Database
     /**
      * Set database to use for current scope
      *
-     * @param string $database
+     * @param string $name
      * @param bool $reset
      *
-     * @throws Exception
-     *
      * @return bool
+     * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
@@ -433,10 +480,10 @@ class Database
     /**
      * Get Collection
      *
-     * @param string $collection
      * @param string $id
      *
      * @return Document
+     * @throws Exception
      */
     public function getCollection(string $id): Document
     {
@@ -450,8 +497,9 @@ class Database
      * @param int $limit
      *
      * @return array
+     * @throws Exception
      */
-    public function listCollections($limit = 25, $offset = 0): array
+    public function listCollections(int $limit = 25, int $offset = 0): array
     {
         Authorization::disable();
 
@@ -1430,17 +1478,31 @@ class Database
     }
 
     /**
+     * @return array Document
+     * @throws Exception
+     */
+    public function getInternalAttributes(): array
+    {
+        $attributes = [];
+        foreach ($this->attributes as $internal){
+            $attributes[] = new Document($internal);
+        }
+        return $attributes;
+    }
+
+    /**
      * Encode Document
      *
      * @param Document $collection
      * @param Document $document
      *
      * @return Document
+     * @throws Exception|Throwable
      */
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1485,11 +1547,12 @@ class Database
      * @param Document $document
      *
      * @return Document
+     * @throws Throwable|Exception
      */
     public function decode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1581,6 +1644,7 @@ class Database
      * @param Document $document
      *
      * @return mixed
+     * @throws Throwable
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {

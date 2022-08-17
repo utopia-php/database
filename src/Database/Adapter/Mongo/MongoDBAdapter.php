@@ -710,9 +710,7 @@ class MongoDBAdapter extends Adapter
         } else if ($from === '$' && array_key_exists($from . 'id', $array)) { // convert document to internal ID
             $array[$to . 'uid'] = $array[$from . 'id'];
 
-            if (array_key_exists($from . 'internalId', $array)) {
-                $array[$to . 'id'] = new \MongoDB\BSON\ObjectId($array[$from . 'internalId']);
-                
+            if (array_key_exists($from . 'internalId', $array)) {                
                 unset($array[$from . 'internalId']); // remove unnecessary internal ID
             }
         }

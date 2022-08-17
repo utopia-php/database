@@ -1653,10 +1653,14 @@ class Database
             throw new Exception('Filter not found');
         }
 
-        if (array_key_exists($name, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
-        } else {
-            $value = self::$filters[$name]['encode']($value, $document, $this);
+        try {
+            if (array_key_exists($name, $this->instanceFilters)) {
+                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
+            } else {
+                $value = self::$filters[$name]['encode']($value, $document, $this);
+            }
+        } catch (\Throwable $th) {
+            throw $th;
         }
 
         return $value;

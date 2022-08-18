@@ -4,7 +4,6 @@ namespace Utopia\Tests\Validator;
 
 use Utopia\Database\ID;
 use Utopia\Database\Validator\Query;
-use Utopia\Database\Validator\QueryValidator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -101,8 +100,8 @@ class QueriesTest extends TestCase
 
         $this->queryValidator = new Query($this->collection['attributes']);
 
-        $query1 = DatabaseQuery::parse('notEqual("title", ["Iron Man", "Ant Man"])');
-        $query2 = DatabaseQuery::parse('equal("description", "Best movie ever")');
+        $query1 = 'notEqual("title", ["Iron Man", "Ant Man"])';
+        $query2 = 'equal("description", "Best movie ever")';
 
         array_push($this->queries, $query1, $query2);
 
@@ -168,8 +167,8 @@ class QueriesTest extends TestCase
 
         $this->assertEquals(true, $validator->isValid($this->queries), $validator->getDescription());
 
-        $this->queries[] = DatabaseQuery::parse('lessThan("price", 6.50)');
-        $this->queries[] = DatabaseQuery::parse('greaterThanEqual("price", 5.50)');
+        $this->queries[] = 'lessThan("price", 6.50)';
+        $this->queries[] = 'greaterThanEqual("price", 5.50)';
         $this->assertEquals(true, $validator->isValid($this->queries));
 
         $queries = [DatabaseQuery::orderDesc('')];
@@ -177,14 +176,14 @@ class QueriesTest extends TestCase
 
         // test for FAILURE
 
-        $this->queries[] = DatabaseQuery::parse('greaterThan("rating", 4)');
+        $this->queries[] = 'greaterThan("rating", 4)';
 
         $this->assertFalse($validator->isValid($this->queries));
         $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
 
         // test for queued index
-        $query1 = DatabaseQuery::parse('lessThan("price", 6.50)');
-        $query2 = DatabaseQuery::parse('notEqual("title", ["Iron Man", "Ant Man"])');
+        $query1 = 'lessThan("price", 6.50)';
+        $query2 = 'notEqual("title", ["Iron Man", "Ant Man"])';
 
         $this->queries = [$query1, $query2];
         $this->assertEquals(false, $validator->isValid($this->queries));
@@ -192,7 +191,7 @@ class QueriesTest extends TestCase
 
         // test fulltext
 
-        $query3 = DatabaseQuery::parse('search("description", "iron")');
+        $query3 = 'search("description", "iron")';
         $this->queries = [$query3];
         $this->assertEquals(false, $validator->isValid($this->queries));
         $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
@@ -251,45 +250,45 @@ class QueriesTest extends TestCase
 
         // Test for SUCCESS
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
-            DatabaseQuery::parse('lessThanEqual("title", "string")'),
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)')
+            'lessThanEqual("price", 6.50)',
+            'lessThanEqual("title", "string")',
+            'lessThanEqual("rating", 2002)',
         ]));
 
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
-            DatabaseQuery::parse('lessThanEqual("title", "string")'),
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)')
+            'lessThanEqual("price", 6.50)',
+            'lessThanEqual("title", "string")',
+            'lessThanEqual("rating", 2002)',
         ]));
 
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
-            DatabaseQuery::parse('lessThanEqual("title", "string")')
+            'lessThanEqual("price", 6.50)',
+            'lessThanEqual("rating", 2002)',
+            'lessThanEqual("title", "string")',
         ]));
 
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("title", "string")'),
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)')
+            'lessThanEqual("title", "string")',
+            'lessThanEqual("price", 6.50)',
+            'lessThanEqual("rating", 2002)',
         ]));
 
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("title", "string")'),
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)')
+            'lessThanEqual("title", "string")',
+            'lessThanEqual("rating", 2002)',
+            'lessThanEqual("price", 6.50)',
         ]));
 
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
-            DatabaseQuery::parse('lessThanEqual("title", "string")'),
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)')
+            'lessThanEqual("rating", 2002)',
+            'lessThanEqual("title", "string")',
+            'lessThanEqual("price", 6.50)',
         ]));
 
         $this->assertTrue($validator->isValid([
-            DatabaseQuery::parse('lessThanEqual("rating", 2002)'),
-            DatabaseQuery::parse('lessThanEqual("price", 6.50)'),
-            DatabaseQuery::parse('lessThanEqual("title", "string")')
+            'lessThanEqual("rating", 2002)',
+            'lessThanEqual("price", 6.50)',
+            'lessThanEqual("title", "string")',
         ]));
     }
 

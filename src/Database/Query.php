@@ -264,7 +264,7 @@ class Query
             static::appendSymbol($isStringStack, $char, $i, $filter, $currentParam);
         }
 
-        if (!empty($currentParam)) {
+        if (strlen($currentParam)) {
             $params[] = $currentParam;
             $currentParam = "";
         }

@@ -232,6 +232,11 @@ class QueryTest extends TestCase
         $this->assertCount(0, $query->getValues());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals(null, $query->getValue());
+
+        $query = Query::parse('equal("count", 0)');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("count", $query->getAttribute());
+        $this->assertEquals(0, $query->getValue());
     }
 
     /*

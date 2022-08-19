@@ -836,11 +836,11 @@ class MariaDB extends Adapter
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
+                        table_main.{$attribute} {$this->getSQLOperator($orderMethod, false)} :cursor 
                         OR (
                             table_main.{$attribute} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            table_main._id {$this->getSQLOperator($orderMethodInternalId, false)} {$cursor['$internalId']}
                         )
                     )";
             } else if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -856,7 +856,7 @@ class MariaDB extends Adapter
             $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
             ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
+            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod, false)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1423,7 +1423,7 @@ class MariaDB extends Adapter
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             default:
-                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                return $attribute . ' ' . $this->getSQLOperator($method, $value === null) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
                 break;
         }
     }
@@ -1432,17 +1432,18 @@ class MariaDB extends Adapter
      * Get SQL Operator
      *
      * @param string $method
+     * @param bool $isNull
      * @return string
      * @throws Exception
      */
-    protected function getSQLOperator(string $method): string
+    protected function getSQLOperator(string $method, bool $isNull): string
     {
         switch ($method) {
             case Query::TYPE_EQUAL:
-                return '=';
+                return $isNull ? 'IS' : '=';
 
             case Query::TYPE_NOTEQUAL:
-                return '!=';
+                return $isNull ? 'IS NOT' : '!=';
 
             case Query::TYPE_LESSER:
                 return '<';

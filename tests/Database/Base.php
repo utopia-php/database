@@ -616,6 +616,44 @@ abstract class Base extends TestCase
         $this->assertNull($document->getAttribute('bigint'));
         $this->assertNull($document->getAttribute('float'));
         $this->assertNull($document->getAttribute('boolean'));
+
+        $document = static::getDatabase()->createDocument('documents_nulls', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
+            'string' => 'not null'
+        ]));
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertEquals('not null', $document->getAttribute('string'));
+        $this->assertNull($document->getAttribute('integer'));
+        $this->assertNull($document->getAttribute('bigint'));
+        $this->assertNull($document->getAttribute('float'));
+        $this->assertNull($document->getAttribute('boolean'));
+
+        $documents = static::getDatabase()->find("documents_nulls", [
+            Query::equal("string", [ null ])
+        ]);
+
+        $this->assertCount(1, $documents);
+
+        $documents = static::getDatabase()->find("documents_nulls", [
+            Query::notEqual("string", null)
+        ]);
+
+        $this->assertCount(1, $documents);
+
         return $document;
     }
 

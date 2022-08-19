@@ -169,11 +169,10 @@ abstract class Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * 
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
@@ -318,7 +317,7 @@ abstract class Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param array $cursor Array copy of document used for before/after pagination
+     * @param array $cursor
      * @param string $cursorDirection
      *
      * @return Document[]
@@ -459,11 +458,11 @@ abstract class Adapter
      * @throws Exception
      * @return string
      */
-    public function filter(string $value):string
+    public function filter(string $value): string
     {
         $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
-        if(\is_null($value)) {
+        if (\is_null($value)) {
             throw new Exception('Failed to filter key');
         }
 

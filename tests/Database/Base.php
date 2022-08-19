@@ -5,19 +5,24 @@ namespace Utopia\Tests;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\ID;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
+use Utopia\Database\Exception\Structure as StructureException;
 
 abstract class Base extends TestCase
 {
     /**
-     * @return Adapter
+     * @return Database
      */
     abstract static protected function getDatabase(): Database;
 
@@ -39,7 +44,7 @@ abstract class Base extends TestCase
 
     public function setUp(): void
     {
-        Authorization::setRole('role:all');
+        Authorization::setRole('any');
     }
 
     public function tearDown(): void
@@ -66,16 +71,19 @@ abstract class Base extends TestCase
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
 
         $document = static::getDatabase()->createDocument('created_at', new Document([
-            '$id' => 'uid123',
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom('uid123'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
         ]));
 
         if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) { //todo: implement in mongo + postgres
             $this->assertNotEmpty($document->getInternalId());
             $this->assertNotNull($document->getInternalId());
         }
-
     }
 
     /**
@@ -109,9 +117,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('attributes');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16383+1, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535+1, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215+1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16383 + 1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'bigint', Database::VAR_INTEGER, 8, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
@@ -206,7 +214,7 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @depends testCreateDeleteAttribute
+     * @depends      testCreateDeleteAttribute
      * @dataProvider invalidDefaultValues
      * @expectedException Exception
      */
@@ -238,13 +246,13 @@ abstract class Base extends TestCase
 
     /**
      * Ensure the collection is removed after use
-     * 
+     *
      * @depends testIndexCaseInsensitivity
      */
     public function testCleanupAttributeTests()
     {
         static::getDatabase()->deleteCollection('attributes');
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -274,7 +282,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
-        
+
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
 
@@ -296,7 +304,7 @@ abstract class Base extends TestCase
     {
         $attributes = [
             new Document([
-                '$id' => 'attribute1',
+                '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -305,7 +313,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute2',
+                '$id' => ID::custom('attribute2'),
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
                 'required' => false,
@@ -314,7 +322,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute3',
+                '$id' => ID::custom('attribute3'),
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -326,21 +334,21 @@ abstract class Base extends TestCase
 
         $indexes = [
             new Document([
-                '$id' => 'index1',
+                '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index2',
+                '$id' => ID::custom('index2'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute2'],
                 'lengths' => [],
                 'orders' => ['DESC'],
             ]),
             new Document([
-                '$id' => 'index3',
+                '$id' => ID::custom('index3'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute3', 'attribute2'],
                 'lengths' => [],
@@ -376,7 +384,7 @@ abstract class Base extends TestCase
         // Test collection with dash (+attribute +index)
         $collection2 = static::getDatabase()->createCollection('with-dash', [
             new Document([
-                '$id' => 'attribute-one',
+                '$id' => ID::custom('attribute-one'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -386,7 +394,7 @@ abstract class Base extends TestCase
             ]),
         ], [
             new Document([
-                '$id' => 'index-one',
+                '$id' => ID::custom('index-one'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute-one'],
                 'lengths' => [256],
@@ -418,7 +426,7 @@ abstract class Base extends TestCase
 
         $attributes = [
             new Document([
-                '$id' => 'attribute1',
+                '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -427,7 +435,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute-2',
+                '$id' => ID::custom('attribute-2'),
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
                 'required' => false,
@@ -436,7 +444,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute_3',
+                '$id' => ID::custom('attribute_3'),
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -445,7 +453,7 @@ abstract class Base extends TestCase
                 'filters' => [],
             ]),
             new Document([
-                '$id' => 'attribute.4',
+                '$id' => ID::custom('attribute.4'),
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -457,28 +465,28 @@ abstract class Base extends TestCase
 
         $indexes = [
             new Document([
-                '$id' => 'index1',
+                '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index-2',
+                '$id' => ID::custom('index-2'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute-2'],
                 'lengths' => [],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index_3',
+                '$id' => ID::custom('index_3'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute_3'],
                 'lengths' => [],
                 'orders' => ['ASC'],
             ]),
             new Document([
-                '$id' => 'index.4',
+                '$id' => ID::custom('index.4'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute.4'],
                 'lengths' => [],
@@ -532,8 +540,20 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -574,8 +594,20 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents_nulls', 'boolean', Database::VAR_BOOLEAN, 0, false));
 
         $document = static::getDatabase()->createDocument('documents_nulls', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -598,8 +630,12 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'colors', Database::VAR_STRING, 32, false, ['red', 'green', 'blue'], true, true));
 
         $document = static::getDatabase()->createDocument('defaults', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -650,8 +686,12 @@ abstract class Base extends TestCase
     {
         static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => '*test+alias@email-provider.com',
             'integer' => 0,
             'bigint' => 8589934592, // 2^33
@@ -665,7 +705,7 @@ abstract class Base extends TestCase
          * Allow reserved keywords for search
          */
         $documents = static::getDatabase()->find('documents', [
-            new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']),
+            Query::search('string', '*test+alias@email-provider.com'),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -684,8 +724,7 @@ abstract class Base extends TestCase
             ->setAttribute('float', 5.56)
             ->setAttribute('boolean', false)
             ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
-            ->setAttribute('with-dash', 'Works')
-        ;
+            ->setAttribute('with-dash', 'Works');
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
@@ -702,32 +741,35 @@ abstract class Base extends TestCase
         $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
         $this->assertEquals('Works', $new->getAttribute('with-dash'));
 
-        $oldRead = $document->getRead();
-        $oldWrite = $document->getWrite();
+        $oldPermissions = $document->getPermissions();
 
         $new
-            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
-            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
-        ;
-
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
-
-        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
-
-        $this->assertContains('role:guest', $new->getRead());
-        $this->assertContains('role:guest', $new->getWrite());
-
-        $new
-            ->setAttribute('$read', $oldRead)
-            ->setAttribute('$write', $oldWrite)
-        ;
+            ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::update(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::delete(Role::guests()), Document::SET_TYPE_APPEND);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertNotContains('role:guest', $new->getRead());
-        $this->assertNotContains('role:guest', $new->getWrite());
+        $this->assertContains('guests', $new->getRead());
+        $this->assertContains('guests', $new->getWrite());
+        $this->assertContains('guests', $new->getCreate());
+        $this->assertContains('guests', $new->getUpdate());
+        $this->assertContains('guests', $new->getDelete());
+
+        $new->setAttribute('$permissions', $oldPermissions);
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertNotContains('guests', $new->getRead());
+        $this->assertNotContains('guests', $new->getWrite());
+        $this->assertNotContains('guests', $new->getCreate());
+        $this->assertNotContains('guests', $new->getUpdate());
+        $this->assertNotContains('guests', $new->getDelete());
 
         return $document;
     }
@@ -740,18 +782,17 @@ abstract class Base extends TestCase
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
         $new
-            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
-            ->setAttribute('$read', 'role:guest', Document::SET_TYPE_APPEND)
-            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
-            ->setAttribute('$write', 'role:guest', Document::SET_TYPE_APPEND)
-        ;
+            ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-        $this->assertContains('role:guest', $new->getRead());
-        $this->assertContains('role:guest', $new->getWrite());
+        $this->assertContains('guests', $new->getRead());
+        $this->assertContains('guests', $new->getCreate());
 
         return $document;
     }
@@ -783,9 +824,21 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$id' => 'frozen',
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$id' => ID::custom('frozen'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
@@ -795,8 +848,20 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Frozen II',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2019,
@@ -806,8 +871,20 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Captain America: The First Avenger',
             'director' => 'Joe Johnston',
             'year' => 2011,
@@ -817,8 +894,20 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Captain Marvel',
             'director' => 'Anna Boden & Ryan Fleck',
             'year' => 2019,
@@ -828,8 +917,20 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Work in Progress',
             'director' => 'TBD',
             'year' => 2025,
@@ -839,8 +940,18 @@ abstract class Base extends TestCase
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['userx'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::user('x')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Work in Progress 2',
             'director' => 'TBD',
             'year' => 2026,
@@ -858,8 +969,8 @@ abstract class Base extends TestCase
         $this->assertEquals(5, count($documents));
         $this->assertNotEmpty($documents[0]->getId());
         $this->assertEquals('movies', $documents[0]->getCollection());
-        $this->assertEquals(['role:all', 'user1', 'user2'], $documents[0]->getRead());
-        $this->assertEquals(['role:all', 'user1x', 'user2x'], $documents[0]->getWrite());
+        $this->assertEquals(['any', 'user:1', 'user:2'], $documents[0]->getRead());
+        $this->assertEquals(['any', 'user:1x', 'user:2x'], $documents[0]->getWrite());
         $this->assertEquals('Frozen', $documents[0]->getAttribute('name'));
         $this->assertEquals('Chris Buck & Jennifer Lee', $documents[0]->getAttribute('director'));
         $this->assertIsString($documents[0]->getAttribute('director'));
@@ -874,34 +985,50 @@ abstract class Base extends TestCase
 
         // Alphabetical order
         $sortedDocuments = $movieDocuments;
-        \usort($sortedDocuments, function($doc1, $doc2) {
+        \usort($sortedDocuments, function ($doc1, $doc2) {
             return strcmp($doc1['$id'], $doc2['$id']);
         });
 
         $firstDocumentId = $sortedDocuments[0]->getId();
         $lastDocumentId = $sortedDocuments[\count($sortedDocuments) - 1]->getId();
 
-         /**
+        /**
          * Check $id: Notice, this orders ID names alphabetically, not by internal numeric ID
          */
-        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('$id'),
+        ]);
         $this->assertEquals($lastDocumentId, $documents[0]->getId());
-        $documents = static::getDatabase()->find('movies', [], 25, 0, ['$id'], [Database::ORDER_ASC]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderAsc('$id'),
+        ]);
         $this->assertEquals($firstDocumentId, $documents[0]->getId());
 
         /**
          * Check internal numeric ID sorting
          */
-        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc(''),
+        ]);
         $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
-        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_ASC]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderAsc(''),
+        ]);
         $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
 
 
         /**
          * Check Permissions
          */
-        Authorization::setRole('userx');
+        Authorization::setRole('user:x');
 
         $documents = static::getDatabase()->find('movies');
 
@@ -911,7 +1038,7 @@ abstract class Base extends TestCase
          * Check an Integer condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('year', Query::TYPE_EQUAL, [2019]),
+            Query::equal('year', [2019]),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -922,7 +1049,7 @@ abstract class Base extends TestCase
          * Boolean condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('active', Query::TYPE_EQUAL, [true]),
+            Query::equal('active', [true]),
         ]);
 
         $this->assertEquals(4, count($documents));
@@ -931,28 +1058,40 @@ abstract class Base extends TestCase
          * String condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD']),
+            Query::equal('director', ['TBD']),
         ]);
 
         $this->assertEquals(2, count($documents));
 
         /**
+         * Not Equal query
+         */
+        $documents = static::getDatabase()->find('movies', [
+            Query::notEqual('director', 'TBD'),
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertTrue($document['director'] !== 'TBD');
+        }
+
+        /**
          * Float condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('price', Query::TYPE_LESSER, [26.00]),
-            new Query('price', Query::TYPE_GREATER, [25.98]),
+            Query::lessThan('price', 26.00),
+            Query::greaterThan('price', 25.98),
         ]);
 
         // TODO@kodumbeats hacky way to pass mariadb tests
-        // Remove when $operator="contains" is supported
-        if (static::getAdapterName() === "mongodb")
-        {
+        // Remove when query method contains() is supported
+        if (static::getAdapterName() === "mongodb") {
             /**
              * Array contains condition
              */
             $documents = static::getDatabase()->find('movies', [
-                new Query('generes', Query::TYPE_CONTAINS, ['comics']),
+                Query::contains('generes', ['comics'])
             ]);
 
             $this->assertEquals(2, count($documents));
@@ -961,7 +1100,7 @@ abstract class Base extends TestCase
              * Array contains OR condition
              */
             $documents = static::getDatabase()->find('movies', [
-                new Query('generes', Query::TYPE_CONTAINS, ['comics', 'kids']),
+                Query::contains('generes', ['comics', 'kids']),
             ]);
 
             $this->assertEquals(4, count($documents));
@@ -974,7 +1113,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $success);
 
         $documents = static::getDatabase()->find('movies', [
-            new Query('name', Query::TYPE_SEARCH, ['captain']),
+            Query::search('name', 'captain'),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -985,7 +1124,7 @@ abstract class Base extends TestCase
         // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
         if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
             $documents = static::getDatabase()->find('movies', [
-                new Query('name', Query::TYPE_SEARCH, ['cap']),
+                Query::search('name', 'cap'),
             ]);
 
             $this->assertEquals(2, count($documents));
@@ -995,8 +1134,8 @@ abstract class Base extends TestCase
          * Multiple conditions
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD']),
-            new Query('year', Query::TYPE_EQUAL, [2026]),
+            Query::equal('director', ['TBD']),
+            Query::equal('year', [2026]),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -1005,7 +1144,7 @@ abstract class Base extends TestCase
          * Multiple conditions and OR values
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('name', Query::TYPE_EQUAL, ['Frozen II', 'Captain Marvel']),
+            Query::equal('name', ['Frozen II', 'Captain Marvel']),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1016,7 +1155,7 @@ abstract class Base extends TestCase
          * $id condition
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('$id', Query::TYPE_EQUAL, ['frozen']),
+            Query::equal('$id', ['frozen']),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -1025,7 +1164,12 @@ abstract class Base extends TestCase
         /**
          * ORDER BY
          */
-        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('name')
+        ]);
 
         $this->assertEquals(6, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
@@ -1038,8 +1182,15 @@ abstract class Base extends TestCase
         /**
          * ORDER BY natural
          */
-        $base = array_reverse(static::getDatabase()->find('movies', [], 25, 0));
-        $documents = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+        $base = array_reverse(static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+        ]));
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc(''),
+        ]);
 
         $this->assertEquals(6, count($documents));
         $this->assertEquals($base[0]['name'], $documents[0]['name']);
@@ -1052,7 +1203,12 @@ abstract class Base extends TestCase
         /**
          * ORDER BY - Multiple attributes
          */
-        $documents = static::getDatabase()->find('movies', [], 25, 0, ['price', 'name'], [Database::ORDER_DESC, Database::ORDER_DESC]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderDesc('name')
+        ]);
 
         $this->assertEquals(6, count($documents));
         $this->assertEquals('Frozen II', $documents[0]['name']);
@@ -1065,237 +1221,488 @@ abstract class Base extends TestCase
         /**
          * ORDER BY - After
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, [], []);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[1]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorAfter($movies[1])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[3]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorAfter($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[4]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorAfter($movies[4])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[5]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorAfter($movies[5])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY - Before
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, [], []);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[5], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorBefore($movies[5])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[3], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorBefore($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
         $this->assertEquals($movies[2]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[2], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorBefore($movies[2])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[1], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorBefore($movies[1])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [], $movies[0], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorBefore($movies[0])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY - After by natural order
          */
-        $movies = array_reverse(static::getDatabase()->find('movies', [], 25, 0, [], []));
+        $movies = array_reverse(static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+        ]));
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[1]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorAfter($movies[1])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[3]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorAfter($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[4]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorAfter($movies[4])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[5]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorAfter($movies[5])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY - Before by natural order
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, [], [Database::ORDER_DESC]);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc(''),
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[5], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorBefore($movies[5])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[3], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorBefore($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
         $this->assertEquals($movies[2]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[2], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorBefore($movies[2])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[1], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorBefore($movies[1])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, [], [Database::ORDER_DESC], $movies[0], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc(''),
+            Query::cursorBefore($movies[0])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY - Single Attribute After
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, ['year'], [Database::ORDER_DESC]);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('year')
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[1]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorAfter($movies[1])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[3]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorAfter($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[4]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorAfter($movies[4])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[5]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorAfter($movies[5])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY - Single Attribute Before
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, ['year'], [Database::ORDER_DESC]);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('year')
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[5], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorBefore($movies[5])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[3], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorBefore($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
         $this->assertEquals($movies[2]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[2], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorBefore($movies[2])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[1], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorBefore($movies[1])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['year'], [Database::ORDER_DESC], $movies[0], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('year'),
+            Query::cursorBefore($movies[0])
+        ]);
         $this->assertEmpty(count($documents));
 
 
         /**
          * ORDER BY - Multiple Attribute After
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC]);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year')
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[1]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorAfter($movies[1])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[3]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorAfter($movies[3])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
         $this->assertEquals($movies[5]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[4]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorAfter($movies[4])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[5]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorAfter($movies[5])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY - Multiple Attribute Before
          */
-        $movies = static::getDatabase()->find('movies', [], 25, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC]);
+        $movies = static::getDatabase()->find('movies', [
+            Query::limit(25),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year')
+        ]);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[5], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorBefore($movies[5])
+        ]);
 
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
         $this->assertEquals($movies[4]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[4], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorBefore($movies[4])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[2], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorBefore($movies[2])
+        ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
         $this->assertEquals($movies[1]['name'], $documents[1]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[1], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorBefore($movies[1])
+        ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
 
-        $documents = static::getDatabase()->find('movies', [], 2, 0, ['price', 'year'], [Database::ORDER_DESC, Database::ORDER_ASC], $movies[0], Database::CURSOR_BEFORE);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::orderAsc('year'),
+            Query::cursorBefore($movies[0])
+        ]);
         $this->assertEmpty(count($documents));
 
         /**
          * ORDER BY + CURSOR
          */
-        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['price'], [Database::ORDER_DESC]);
-        $documents = static::getDatabase()->find('movies', [], 1, 0, ['price'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
-        
+        $documentsTest = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('price'),
+        ]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(1),
+            Query::offset(0),
+            Query::orderDesc('price'),
+            Query::cursorAfter($documentsTest[0])
+        ]);
+
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
          * ORDER BY ID + CURSOR
          */
-        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$id'], [Database::ORDER_DESC]);
-        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$id'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
-        
+        $documentsTest = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('$id'),
+        ]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(1),
+            Query::offset(0),
+            Query::orderDesc('$id'),
+            Query::cursorAfter($documentsTest[0])
+        ]);
+
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
          * ORDER BY CREATE DATE + CURSOR
          */
-        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$createdAt'], [Database::ORDER_DESC]);
-        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$createdAt'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
-        
+        $documentsTest = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('$createdAt'),
+        ]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(1),
+            Query::offset(0),
+            Query::orderDesc('$createdAt'),
+            Query::cursorAfter($documentsTest[0])
+        ]);
+
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
          * ORDER BY UPDATE DATE + CURSOR
          */
-        $documentsTest = static::getDatabase()->find('movies', [], 2, 0, ['$updatedAt'], [Database::ORDER_DESC]);
-        $documents = static::getDatabase()->find('movies', [], 1, 0, ['$updatedAt'], [Database::ORDER_DESC], $documentsTest[0], Database::CURSOR_AFTER);
-        
+        $documentsTest = static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::orderDesc('$updatedAt'),
+        ]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(1),
+            Query::offset(0),
+            Query::orderDesc('$updatedAt'),
+            Query::cursorAfter($documentsTest[0])
+        ]);
+
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
          * Limit
          */
-        $documents = static::getDatabase()->find('movies', [], 4, 0, ['name']);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(4),
+            Query::offset(0),
+            Query::orderAsc('name')
+        ]);
 
         $this->assertEquals(4, count($documents));
         $this->assertEquals('Captain America: The First Avenger', $documents[0]['name']);
@@ -1306,7 +1713,11 @@ abstract class Base extends TestCase
         /**
          * Limit + Offset
          */
-        $documents = static::getDatabase()->find('movies', [], 4, 2, ['name']);
+        $documents = static::getDatabase()->find('movies', [
+            Query::limit(4),
+            Query::offset(2),
+            Query::orderAsc('name')
+        ]);
 
         $this->assertEquals(4, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
@@ -1318,8 +1729,8 @@ abstract class Base extends TestCase
          * Test that OR queries are handled correctly
          */
         $documents = static::getDatabase()->find('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
-            new Query('year', Query::TYPE_EQUAL, [2025]),
+            Query::equal('director', ['TBD', 'Joe Johnston']),
+            Query::equal('year', [2025]),
         ]);
         $this->assertEquals(1, count($documents));
 
@@ -1332,7 +1743,11 @@ abstract class Base extends TestCase
         ]);
 
         $this->expectException(Exception::class);
-        static::getDatabase()->find('movies', [], 2, 0, [], [], $document);
+        static::getDatabase()->find('movies', [
+            Query::limit(2),
+            Query::offset(0),
+            Query::cursorAfter($document)
+        ]);
     }
 
     /**
@@ -1340,10 +1755,15 @@ abstract class Base extends TestCase
      */
     public function testFindOne()
     {
-        $document = static::getDatabase()->findOne('movies', [], 2, ['name']);
+        $document = static::getDatabase()->findOne('movies', [
+            Query::offset(2),
+            Query::orderAsc('name')
+        ], 2, ['name']);
         $this->assertEquals('Frozen', $document['name']);
 
-        $document = static::getDatabase()->findOne('movies', [], 10);
+        $document = static::getDatabase()->findOne('movies', [
+            Query::offset(10)
+        ]);
         $this->assertEquals(false, $document);
     }
 
@@ -1354,19 +1774,18 @@ abstract class Base extends TestCase
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
-        
-        $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $count = static::getDatabase()->count('movies', [Query::equal('year', [2019]),]);
         $this->assertEquals(2, $count);
-        
-        Authorization::unsetRole('userx');
+
+        Authorization::unsetRole('user:x');
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
-        
+
         Authorization::disable();
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         Authorization::reset();
-        
+
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [], 3);
         $this->assertEquals(3, $count);
@@ -1377,8 +1796,8 @@ abstract class Base extends TestCase
          */
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
-            new Query('year', Query::TYPE_EQUAL, [2025]),
+            Query::equal('director', ['TBD', 'Joe Johnston']),
+            Query::equal('year', [2025]),
         ]);
         $this->assertEquals(1, $count);
         Authorization::reset();
@@ -1389,39 +1808,40 @@ abstract class Base extends TestCase
      */
     public function testSum()
     {
-        Authorization::setRole('userx');
-        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(2019+2019, $sum);
+        Authorization::setRole('user:x');
+        $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
+        $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
-        $this->assertEquals(2013+2019+2011+2019+2025+2026, $sum);
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        
-        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019])], 1);
+        $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025 + 2026, $sum);
+        $sum = static::getDatabase()->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+        $sum = static::getDatabase()->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+
+        $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019])], 1);
         $this->assertEquals(2019, $sum);
 
+        Authorization::unsetRole('user:x');
         Authorization::unsetRole('userx');
-        $sum = static::getDatabase()->sum('movies', 'year', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(2019+2019, $sum);
+        $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
+        $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
-        $this->assertEquals(2013+2019+2011+2019+2025, $sum);
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
-        $sum = static::getDatabase()->sum('movies', 'price', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
-        $this->assertEquals(round(39.50+25.99, 2), round($sum, 2));
+        $this->assertEquals(2013 + 2019 + 2011 + 2019 + 2025, $sum);
+        $sum = static::getDatabase()->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
+        $sum = static::getDatabase()->sum('movies', 'price', [Query::equal('year', [2019]),]);
+        $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
     public function testEncodeDecode()
     {
         $collection = new Document([
-            '$collection' => Database::METADATA,
-            '$id' => 'users',
+            '$collection' => ID::custom(Database::METADATA),
+            '$id' => ID::custom('users'),
             'name' => 'Users',
             'attributes' => [
                 [
-                    '$id' => 'name',
+                    '$id' => ID::custom('name'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 256,
@@ -1431,7 +1851,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'email',
+                    '$id' => ID::custom('email'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 1024,
@@ -1441,7 +1861,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'status',
+                    '$id' => ID::custom('status'),
                     'type' => Database::VAR_INTEGER,
                     'format' => '',
                     'size' => 0,
@@ -1451,7 +1871,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'password',
+                    '$id' => ID::custom('password'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1461,27 +1881,27 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'passwordUpdate',
-                    'type' => Database::VAR_INTEGER,
+                    '$id' => ID::custom('passwordUpdate'),
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => [],
+                    'filters' => ['datetime'],
                 ],
                 [
-                    '$id' => 'registration',
-                    'type' => Database::VAR_INTEGER,
+                    '$id' => ID::custom('registration'),
+                    'type' => Database::VAR_DATETIME,
                     'format' => '',
                     'size' => 0,
                     'signed' => true,
                     'required' => false,
                     'array' => false,
-                    'filters' => [],
+                    'filters' => ['datetime'],
                 ],
                 [
-                    '$id' => 'emailVerification',
+                    '$id' => ID::custom('emailVerification'),
                     'type' => Database::VAR_BOOLEAN,
                     'format' => '',
                     'size' => 0,
@@ -1491,7 +1911,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'reset',
+                    '$id' => ID::custom('reset'),
                     'type' => Database::VAR_BOOLEAN,
                     'format' => '',
                     'size' => 0,
@@ -1501,7 +1921,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'prefs',
+                    '$id' => ID::custom('prefs'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1511,7 +1931,7 @@ abstract class Base extends TestCase
                     'filters' => ['json']
                 ],
                 [
-                    '$id' => 'sessions',
+                    '$id' => ID::custom('sessions'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1521,7 +1941,7 @@ abstract class Base extends TestCase
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => 'tokens',
+                    '$id' => ID::custom('tokens'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1531,7 +1951,7 @@ abstract class Base extends TestCase
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => 'memberships',
+                    '$id' => ID::custom('memberships'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 16384,
@@ -1541,7 +1961,7 @@ abstract class Base extends TestCase
                     'filters' => ['json'],
                 ],
                 [
-                    '$id' => 'roles',
+                    '$id' => ID::custom('roles'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 128,
@@ -1551,7 +1971,7 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ],
                 [
-                    '$id' => 'tags',
+                    '$id' => ID::custom('tags'),
                     'type' => Database::VAR_STRING,
                     'format' => '',
                     'size' => 128,
@@ -1563,7 +1983,7 @@ abstract class Base extends TestCase
             ],
             'indexes' => [
                 [
-                    '$id' => '_key_email',
+                    '$id' => ID::custom('_key_email'),
                     'type' => Database::INDEX_UNIQUE,
                     'attributes' => ['email'],
                     'lengths' => [1024],
@@ -1573,15 +1993,19 @@ abstract class Base extends TestCase
         ]);
 
         $document = new Document([
-            '$id' => '608fdbe51361a',
-            '$read' => ['role:all'],
-            '$write' => ['user:608fdbe51361a'],
+            '$id' => ID::custom('608fdbe51361a'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::user('608fdbe51361a')),
+                Permission::update(Role::user('608fdbe51361a')),
+                Permission::delete(Role::user('608fdbe51361a')),
+            ],
             'email' => 'test@example.com',
             'emailVerification' => false,
             'status' => 1,
             'password' => 'randomhash',
-            'passwordUpdate' => 1234,
-            'registration' => 1234,
+            'passwordUpdate' => '2000-06-12 14:12:55',
+            'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
             'prefs' => new \stdClass,
@@ -1603,41 +2027,49 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->encode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertEquals(['role:all'], $result->getAttribute('$read'));
-        $this->assertEquals(['user:608fdbe51361a'], $result->getAttribute('$write'));
+        $this->assertContains('read("any")', $result->getAttribute('$permissions'));
+        $this->assertContains('read("any")', $result->getPermissions());
+        $this->assertContains('any', $result->getRead());
+        $this->assertContains(Permission::create(Role::user(ID::custom('608fdbe51361a'))), $result->getPermissions());
+        $this->assertContains('user:608fdbe51361a', $result->getCreate());
+        $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12 14:12:55.000', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12 13:12:55.000', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals('{}', $result->getAttribute('prefs'));
         $this->assertEquals('[]', $result->getAttribute('sessions'));
         $this->assertEquals('[]', $result->getAttribute('tokens'));
         $this->assertEquals('[]', $result->getAttribute('memberships'));
-        $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
-        $this->assertEquals(['{"$id":"1","label":"x"}','{"$id":"2","label":"y"}','{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
+        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
+        $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
 
         $result = static::getDatabase()->decode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertEquals(['role:all'], $result->getAttribute('$read'));
-        $this->assertEquals(['user:608fdbe51361a'], $result->getAttribute('$write'));
+        $this->assertContains('read("any")', $result->getAttribute('$permissions'));
+        $this->assertContains('read("any")', $result->getPermissions());
+        $this->assertContains('any', $result->getRead());
+        $this->assertContains(Permission::create(Role::user('608fdbe51361a')), $result->getPermissions());
+        $this->assertContains('user:608fdbe51361a', $result->getCreate());
+        $this->assertContains('user:608fdbe51361a', $result->getWrite());
         $this->assertEquals('test@example.com', $result->getAttribute('email'));
         $this->assertEquals(false, $result->getAttribute('emailVerification'));
         $this->assertEquals(1, $result->getAttribute('status'));
         $this->assertEquals('randomhash', $result->getAttribute('password'));
-        $this->assertEquals(1234, $result->getAttribute('passwordUpdate'));
-        $this->assertEquals(1234, $result->getAttribute('registration'));
+        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $result->getAttribute('passwordUpdate'));
+        $this->assertEquals('1975-06-12T13:12:55.000+00:00', $result->getAttribute('registration'));
         $this->assertEquals(false, $result->getAttribute('reset'));
         $this->assertEquals('My Name', $result->getAttribute('name'));
         $this->assertEquals([], $result->getAttribute('prefs'));
         $this->assertEquals([], $result->getAttribute('sessions'));
         $this->assertEquals([], $result->getAttribute('tokens'));
         $this->assertEquals([], $result->getAttribute('memberships'));
-        $this->assertEquals(['admin','developer','tester',], $result->getAttribute('roles'));
+        $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
         $this->assertEquals([
             new Document(['$id' => '1', 'label' => 'x']),
             new Document(['$id' => '2', 'label' => 'y']),
@@ -1651,8 +2083,12 @@ abstract class Base extends TestCase
     public function testReadPermissionsSuccess(Document $document)
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -1666,31 +2102,33 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
-
         $this->assertEquals(true, $document->isEmpty());
-        
-        Authorization::setRole('role:all');
+
+        Authorization::setRole('any');
 
         return $document;
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testReadPermissionsFailure(Document $document)
+    public function testReadPermissionsFailure()
     {
         $this->expectException(ExceptionAuthorization::class);
 
+        Authorization::cleanRoles();
+
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['user1'],
-            '$write' => ['user1'],
+            '$permissions' => [
+                Permission::read(Role::user('1')),
+                Permission::create(Role::user('1')),
+                Permission::update(Role::user('1')),
+                Permission::delete(Role::user('1')),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
-        ]));           
+        ]));
 
         return $document;
     }
@@ -1701,8 +2139,12 @@ abstract class Base extends TestCase
     public function testWritePermissionsSuccess(Document $document)
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -1726,8 +2168,12 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -1747,8 +2193,12 @@ abstract class Base extends TestCase
         $this->expectException(ExceptionAuthorization::class);
 
         $document = static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -1760,9 +2210,13 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
 
         $document = static::getDatabase()->updateDocument('documents', $document->getId(), new Document([
-            '$id' => $document->getId(),
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom($document->getId()),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -1779,9 +2233,9 @@ abstract class Base extends TestCase
         if ($this->getDatabase()->getAttributeLimit() > 0) {
             // load the collection up to the limit
             $attributes = [];
-            for ($i=0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
+            for ($i = 0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test{$i}",
+                    '$id' => ID::custom("test{$i}"),
                     'type' => Database::VAR_INTEGER,
                     'size' => 0,
                     'required' => false,
@@ -1795,10 +2249,10 @@ abstract class Base extends TestCase
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
-        } 
+        }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -1811,14 +2265,14 @@ abstract class Base extends TestCase
 
             // create same attribute in testExceptionAttributeLimit
             $attribute = new Document([
-                    '$id' => 'breaking',
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 0,
-                    'required' => true,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
+                '$id' => ID::custom('breaking'),
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
             ]);
 
             $this->expectException(LimitException::class);
@@ -1826,8 +2280,7 @@ abstract class Base extends TestCase
         }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
-
+        $this->assertEquals(1, 1);
     }
 
     /**
@@ -1863,9 +2316,9 @@ abstract class Base extends TestCase
 
             // Load the collection up to the limit
             // Strings
-            for ($i=0; $i < $stringCount; $i++) {
+            for ($i = 0; $i < $stringCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_string{$i}",
+                    '$id' => ID::custom("test_string{$i}"),
                     'type' => Database::VAR_STRING,
                     'size' => $stringSize,
                     'required' => false,
@@ -1877,9 +2330,9 @@ abstract class Base extends TestCase
             }
 
             // Integers
-            for ($i=0; $i < $intCount; $i++) {
+            for ($i = 0; $i < $intCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_int{$i}",
+                    '$id' => ID::custom("test_int{$i}"),
                     'type' => Database::VAR_INTEGER,
                     'size' => 0,
                     'required' => false,
@@ -1891,9 +2344,9 @@ abstract class Base extends TestCase
             }
 
             // Floats
-            for ($i=0; $i < $floatCount; $i++) {
+            for ($i = 0; $i < $floatCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_float{$i}",
+                    '$id' => ID::custom("test_float{$i}"),
                     'type' => Database::VAR_FLOAT,
                     'size' => 0,
                     'required' => false,
@@ -1905,9 +2358,9 @@ abstract class Base extends TestCase
             }
 
             // Booleans
-            for ($i=0; $i < $boolCount; $i++) {
+            for ($i = 0; $i < $boolCount; $i++) {
                 $attributes[] = new Document([
-                    '$id' => "test_bool{$i}",
+                    '$id' => ID::custom("test_bool{$i}"),
                     'type' => Database::VAR_BOOLEAN,
                     'size' => 0,
                     'required' => false,
@@ -1922,15 +2375,15 @@ abstract class Base extends TestCase
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
-        } 
+        }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     /**
      * @dataProvider rowWidthExceedsMaximum
-     * @depends testExceptionWidthLimit
+     * @depends      testExceptionWidthLimit
      */
     public function testCheckAttributeWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
@@ -1939,14 +2392,14 @@ abstract class Base extends TestCase
 
             // create same attribute in testExceptionWidthLimit
             $attribute = new Document([
-                    '$id' => 'breaking',
-                    'type' => Database::VAR_STRING,
-                    'size' => 100,
-                    'required' => true,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
+                '$id' => ID::custom('breaking'),
+                'type' => Database::VAR_STRING,
+                'size' => 100,
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
             ]);
 
             $this->expectException(LimitException::class);
@@ -1954,7 +2407,7 @@ abstract class Base extends TestCase
         }
 
         // Default assertion for other adapters
-        $this->assertEquals(1,1);
+        $this->assertEquals(1, 1);
     }
 
     public function testExceptionIndexLimit()
@@ -1962,13 +2415,13 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('indexLimit');
 
         // add unique attributes for indexing
-        for ($i=0; $i < 64; $i++) {
+        for ($i = 0; $i < 64; $i++) {
             $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
         // Testing for indexLimit
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i=0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
+        for ($i = 0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
@@ -2001,7 +2454,7 @@ abstract class Base extends TestCase
 
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
-        
+
         return $document;
     }
 
@@ -2015,8 +2468,20 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
@@ -2033,8 +2498,20 @@ abstract class Base extends TestCase
     {
         // create document then update to conflict with index
         $document = static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('1')),
+                Permission::read(Role::user('2')),
+                Permission::create(Role::any()),
+                Permission::create(Role::user('1x')),
+                Permission::create(Role::user('2x')),
+                Permission::update(Role::any()),
+                Permission::update(Role::user('1x')),
+                Permission::update(Role::user('2x')),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user('1x')),
+                Permission::delete(Role::user('2x')),
+            ],
             'name' => 'Frozen 5',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
@@ -2045,7 +2522,7 @@ abstract class Base extends TestCase
 
         $this->expectException(DuplicateException::class);
 
-        static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name',  'Frozen'));
+        static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
     }
 
     public function testGetAttributeLimit()
@@ -2064,13 +2541,13 @@ abstract class Base extends TestCase
 
     public function testGetId()
     {
-        $this->assertEquals(20, strlen($this->getDatabase()->getId()));
-        $this->assertEquals(13, strlen($this->getDatabase()->getId(0)));
-        $this->assertEquals(13, strlen($this->getDatabase()->getId(-1)));
-        $this->assertEquals(23, strlen($this->getDatabase()->getId(10)));
+        $this->assertEquals(20, strlen(ID::unique()));
+        $this->assertEquals(13, strlen(ID::unique(0)));
+        $this->assertEquals(13, strlen(ID::unique(-1)));
+        $this->assertEquals(23, strlen(ID::unique(10)));
 
         // ensure two sequential calls to getId do not give the same result
-        $this->assertNotEquals($this->getDatabase()->getId(10), $this->getDatabase()->getId(10));
+        $this->assertNotEquals(ID::unique(10), ID::unique(10));
     }
 
     public function testRenameIndex()
@@ -2128,8 +2605,12 @@ abstract class Base extends TestCase
         $database->createIndex('colors', 'index1', Database::INDEX_KEY, ['name'], [128], [Database::ORDER_ASC]);
 
         $database->createDocument('colors', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'black',
             'hex' => '#000000'
         ]));
@@ -2139,7 +2620,6 @@ abstract class Base extends TestCase
         $this->assertTrue($attribute);
 
         $colors = $database->getCollection('colors');
-
         $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
         $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
         $this->assertCount(2, $colors->getAttribute('attributes'));
@@ -2186,15 +2666,23 @@ abstract class Base extends TestCase
         $database->createAttribute('flowers', 'inStock', Database::VAR_INTEGER, 0, false);
 
         $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'Violet',
             'inStock' => 51
         ]));
 
         $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'Lily'
         ]));
 
@@ -2203,8 +2691,12 @@ abstract class Base extends TestCase
         $database->updateAttributeDefault('flowers', 'inStock', 100);
 
         $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'Iris'
         ]));
 
@@ -2217,16 +2709,21 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateAttributeDefault
      */
-    public function testUpdateAttributeRequired() {
+    public function testUpdateAttributeRequired()
+    {
         $database = static::getDatabase();
 
         $database->updateAttributeRequired('flowers', 'inStock', true);
 
         $this->expectExceptionMessage('Invalid document structure: Missing required attribute "inStock"');
-    
+
         $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'Lily With Missing Stocks'
         ]));
     }
@@ -2234,14 +2731,19 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateAttributeDefault
      */
-    public function testUpdateAttributeFilter() {
+    public function testUpdateAttributeFilter()
+    {
         $database = static::getDatabase();
 
         $database->createAttribute('flowers', 'cartModel', Database::VAR_STRING, 2000, false);
 
         $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'Lily With CartData',
             'inStock' => 50,
             'cartModel' => '{"color":"string","size":"number"}'
@@ -2253,7 +2755,6 @@ abstract class Base extends TestCase
         $database->updateAttributeFilters('flowers', 'cartModel', ['json']);
 
         $doc = $database->getDocument('flowers', $doc->getId());
-
         $this->assertIsArray($doc->getAttribute('cartModel'));
         $this->assertCount(2, $doc->getAttribute('cartModel'));
         $this->assertEquals('string', $doc->getAttribute('cartModel')['color']);
@@ -2263,15 +2764,20 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateAttributeDefault
      */
-    public function testUpdateAttributeFormat() {
+    public function testUpdateAttributeFormat()
+    {
         $database = static::getDatabase();
 
         $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
 
         $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
-            '$id' => 'LiliPriced',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            '$id' => ID::custom('LiliPriced'),
             'name' => 'Lily Priced',
             'inStock' => 50,
             'cartModel' => '{}',
@@ -2281,7 +2787,7 @@ abstract class Base extends TestCase
         $this->assertIsNumeric($doc->getAttribute('price'));
         $this->assertEquals(500, $doc->getAttribute('price'));
 
-        Structure::addFormat('priceRange', function($attribute) {
+        Structure::addFormat('priceRange', function ($attribute) {
             $min = $attribute['formatOptions']['min'];
             $max = $attribute['formatOptions']['max'];
 
@@ -2292,10 +2798,14 @@ abstract class Base extends TestCase
         $database->updateAttributeFormatOptions('flowers', 'price', ['min' => 1, 'max' => 10000]);
 
         $this->expectExceptionMessage('Invalid document structure: Attribute "price" has invalid format. Value must be a valid range between 1 and 10,000');
-    
+
         $doc = $database->createDocument('flowers', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'name' => 'Lily Overpriced',
             'inStock' => 50,
             'cartModel' => '{}',
@@ -2304,33 +2814,11 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @depends testCreatedAtUpdatedAt
-     */
-    public function testCreatedAtUpdatedAtAssert()
-    {
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-
-        $this->assertIsInt($document->getCreatedAt());
-        $this->assertIsInt($document->getUpdatedAt());
-        $this->assertGreaterThan(1650000000, $document->getCreatedAt());
-        $this->assertGreaterThan(1650000000, $document->getUpdatedAt());
-        sleep(1);
-        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
-
-        $this->assertEquals(123, $document->setAttribute('$createdAt', 123)->getCreatedAt());
-        $document = static::getDatabase()->updateDocument('created_at', 'uid123', $document);
-        $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        $this->assertEquals(123, $document->getCreatedAt());
-
-    }
-
-    /**
      * @depends testUpdateAttributeDefault
      * @depends testUpdateAttributeFormat
      */
-    public function testUpdateAttributeStructure() {
+    public function testUpdateAttributeStructure()
+    {
         // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
 
         $database = static::getDatabase();
@@ -2350,14 +2838,80 @@ abstract class Base extends TestCase
         $this->assertEquals('500', $doc->getAttribute('price'));
     }
 
-    public function testReservedKeywords() {
+    /**
+     * @depends testCreatedAtUpdatedAt
+     */
+    public function testCreatedAtUpdatedAtAssert()
+    {
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertEquals(true, !$document->isEmpty());
+        sleep(1);
+        static::getDatabase()->updateDocument('created_at', 'uid123', $document);
+        $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createCollection('created_at');
+    }
+
+    public function testCreateDatetime()
+    {
+        static::getDatabase()->createCollection('datetime');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
+
+        $doc = static::getDatabase()->createDocument('datetime', new Document([
+            '$id' => ID::custom('id1234'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'date' => DateTime::now(),
+        ]));
+
+        $this->assertEquals(29, strlen($doc->getCreatedAt()));
+        $this->assertEquals(29, strlen($doc->getUpdatedAt()));
+        $this->assertEquals('+00:00', substr($doc->getCreatedAt(), -6));
+        $this->assertEquals('+00:00', substr($doc->getUpdatedAt(), -6));
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getCreatedAt());
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
+
+        $document = static::getDatabase()->getDocument('datetime', 'id1234');
+        $this->assertEquals(NULL, $document->getAttribute('date2'));
+        $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
+        $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
+
+        $documents = static::getDatabase()->find('datetime', [
+            Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),
+            Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
+        ]);
+
+        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) { // todo: fix in mongo
+            $this->assertEquals(1, count($documents));
+        }
+
+        $this->expectException(StructureException::class);
+        static::getDatabase()->createDocument('datetime', new Document([
+            '$permissions' => [
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'date' => "1975-12-06 00:00:61"
+        ]));
+    }
+
+    public function testReservedKeywords()
+    {
         $keywords = $this->getReservedKeywords();
         $database = static::getDatabase();
 
         // Collection name tests
         $attributes = [
             new Document([
-                '$id' => 'attribute1',
+                '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
                 'size' => 256,
                 'required' => false,
@@ -2369,7 +2923,7 @@ abstract class Base extends TestCase
 
         $indexes = [
             new Document([
-                '$id' => 'index1',
+                '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
@@ -2382,9 +2936,13 @@ abstract class Base extends TestCase
             $this->assertEquals($keyword, $collection->getId());
 
             $document = $database->createDocument($keyword, new Document([
-                '$read' => ['role:all'],
-                '$write' => ['role:all'],
-                '$id' => 'helloWorld',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                '$id' => ID::custom('helloWorld'),
                 'attribute1' => 'Hello World',
             ]));
             $this->assertEquals('helloWorld', $document->getId());
@@ -2413,8 +2971,12 @@ abstract class Base extends TestCase
             $this->assertEquals(true, $attribute);
 
             $document = new Document([
-                '$read' => ['role:all'],
-                '$write' => ['role:all'],
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
                 '$id' => 'reservedKeyDocument'
             ]);
             $document->setAttribute($keyword, 'Reserved:' . $keyword);
@@ -2432,11 +2994,13 @@ abstract class Base extends TestCase
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
             $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
 
-            $documents = $database->find($collectionName, [ new Query($keyword, Query::TYPE_EQUAL, ["Reserved:${keyword}"]) ]);
+            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:${keyword}"])]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
-            $documents = $database->find($collectionName, orderAttributes: [$keyword], orderTypes: ['DESC']);
+            $documents = $database->find($collectionName, [
+                Query::orderDesc($keyword)
+            ]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 

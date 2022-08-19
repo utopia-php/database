@@ -12,7 +12,10 @@ use Utopia\Database\Adapter\Mongo\MongoClient;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
 
+use Utopia\Database\ID;
+use Utopia\Database\Permission;
 use Utopia\Database\Query;
+use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 use Utopia\Tests\Base;
@@ -50,7 +53,7 @@ class MongoDBTest extends Base
     }
 
     /**
-     * @return Adapter
+     * @return Database
      */
     static function getDatabase(): Database
     {
@@ -102,8 +105,12 @@ class MongoDBTest extends Base
     {
         static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         static::getDatabase()->createDocument('documents', new Document([
-            '$read' => ['role:all'],
-            '$write' => ['role:all'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'string' => '*test+alias@email-provider.com',
             'integer' => 0,
             'bigint' => 8589934592, // 2^33
@@ -113,7 +120,9 @@ class MongoDBTest extends Base
             'empty' => [],
         ]));
 
-        $documents = static::getDatabase()->find('documents', [ new Query('string', Query::TYPE_SEARCH, ['*test+alias@email-provider.com']) ]);
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*test+alias@email-provider.com')
+        ]);
 
         $this->assertEquals(1, count($documents));
 
@@ -135,9 +144,21 @@ class MongoDBTest extends Base
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$id' => 'frozen',
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$id' => ID::custom('frozen'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'name' => 'Frozen',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2013,
@@ -147,8 +168,20 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'name' => 'Frozen II',
             'director' => 'Chris Buck & Jennifer Lee',
             'year' => 2019,
@@ -158,8 +191,20 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'name' => 'Captain America: The First Avenger',
             'director' => 'Joe Johnston',
             'year' => 2011,
@@ -169,8 +214,20 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'name' => 'Captain Marvel',
             'director' => 'Anna Boden & Ryan Fleck',
             'year' => 2019,
@@ -180,8 +237,20 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['role:all', 'user1', 'user2'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'name' => 'Work in Progress',
             'director' => 'TBD',
             'year' => 2025,
@@ -191,8 +260,18 @@ class MongoDBTest extends Base
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
-            '$read' => ['userx'],
-            '$write' => ['role:all', 'user1x', 'user2x'],
+            '$permissions' => [
+                Permission::read(Role::user(ID::custom('x'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
             'name' => 'Work in Progress 2',
             'director' => 'TBD',
             'year' => 2026,
@@ -245,7 +324,7 @@ class MongoDBTest extends Base
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
 
-        $count = static::getDatabase()->count('movies', [new Query('year', Query::TYPE_EQUAL, [2019]),]);
+        $count = static::getDatabase()->count('movies', [new Query(Query::TYPE_EQUAL, 'year', [2019]),]);
         $this->assertEquals(2, $count);
 
         Authorization::unsetRole('userx');
@@ -267,8 +346,8 @@ class MongoDBTest extends Base
          */
         Authorization::disable();
         $count = static::getDatabase()->count('movies', [
-            new Query('director', Query::TYPE_EQUAL, ['TBD', 'Joe Johnston']),
-            new Query('year', Query::TYPE_EQUAL, [2025]),
+            new Query(Query::TYPE_EQUAL, 'director', ['TBD', 'Joe Johnston']),
+            new Query(Query::TYPE_EQUAL, 'year', [2025]),
         ]);
         $this->assertEquals(1, $count);
         Authorization::reset();
@@ -309,6 +388,6 @@ class MongoDBTest extends Base
     static function getReservedKeywords(): array
     {
         // Mongo does not have concept of reserverd words. We put something here just to run the rests for this adapter too
-        return [ 'mogno' ];
+        return ['mogno'];
     }
 }

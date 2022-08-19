@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
 
+use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
@@ -110,11 +111,12 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
      * @return bool
+     * @throws Exception
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
@@ -136,8 +138,8 @@ class MongoDBAdapter extends Adapter
                 ]
             ],
             [
-                'key' => ['_read' => $this->getOrder(Database::ORDER_DESC)],
-                'name' => '_read_permissions',
+                'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
+                'name' => '_permissions',
             ]
         ]);
 
@@ -494,13 +496,13 @@ class MongoDBAdapter extends Adapter
             // Allow after pagination without any order
             if (!empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+                $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
                 ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
                 );
 
                 $filters = array_merge($filters, [
                     '_id' => [
-                        $this->getQueryOperator($orderOperator) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
+                        $this->getQueryOperator($orderMethod) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                     ]
                 ]);
             }
@@ -520,26 +522,26 @@ class MongoDBAdapter extends Adapter
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
-            $orderOperatorInternalId = Query::TYPE_GREATER;
+            $orderMethodInternalId = Query::TYPE_GREATER;
             $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
-            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
             $filters = array_merge($filters, [
                 '$or' => [
                     [
                         $attribute => [
-                            $this->getQueryOperator($orderOperator) => $cursor[$attribute]
+                            $this->getQueryOperator($orderMethod) => $cursor[$attribute]
                         ]
                     ], [
                         $attribute => $cursor[$attribute],
                         '_id' => [
-                            $this->getQueryOperator($orderOperatorInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
+                            $this->getQueryOperator($orderMethodInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                         ]
 
                     ]
@@ -593,9 +595,11 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        $roles = \implode('|', Authorization::getRoles());
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         return $this->client->count($name, $filters, $options);
@@ -621,9 +625,11 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        $roles = \implode('|', Authorization::getRoles());
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $filters['_permissions']['$in'] = [new Regex("read\(.*(?:{$roles}).*\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -676,7 +682,7 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Keys cannot begin with $ in MongoDB
-     * Convert $ prefix to _ on $id, $read, $write, and $collection
+     * Convert $ prefix to _ on $id, $permissions, and $collection
      *
      * @param string $from
      * @param string $to
@@ -688,17 +694,14 @@ class MongoDBAdapter extends Adapter
         $array = (array) $array;
 
 
-        if (array_key_exists($from . 'read', $array))
-            $array[$to . 'read'] = $array[$from . 'read'];
+        if (array_key_exists($from . 'permissions', $array))
+            $array[$to . 'permissions'] = $array[$from . 'permissions'];
 
         if (array_key_exists($from . 'createdAt', $array))
             $array[$to . 'createdAt'] = $array[$from . 'createdAt'];
 
         if (array_key_exists($from . 'updatedAt', $array))
             $array[$to . 'updatedAt'] = $array[$from . 'updatedAt'];
-
-        if (array_key_exists($from . 'write', $array))
-            $array[$to . 'write'] = $array[$from . 'write'];
 
         if (array_key_exists($from . 'collection', $array))
             $array[$to . 'collection'] = $array[$from . 'collection'];
@@ -717,8 +720,7 @@ class MongoDBAdapter extends Adapter
         }
 
         unset($array[$from . 'id']);
-        unset($array[$from . 'read']);
-        unset($array[$from . 'write']);
+        unset($array[$from . 'permissions']);
         unset($array[$from . 'collection']);
         unset($array[$from . 'createdAt']);
         unset($array[$from . 'updatedAt']);
@@ -742,7 +744,7 @@ class MongoDBAdapter extends Adapter
                 $query->setAttribute('_uid');
             }
             $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getOperator());
+            $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
             // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
@@ -764,13 +766,13 @@ class MongoDBAdapter extends Adapter
     /**
      * Get Query Operator
      * 
-     * @param string $operator
+     * @param string $method
      * 
      * @return string
      */
-    protected function getQueryOperator(string $operator): string
+    protected function getQueryOperator(string $method): string
     {
-        switch ($operator) {
+        switch ($method) {
             case Query::TYPE_EQUAL:
                 return '$eq';
                 break;
@@ -804,7 +806,7 @@ class MongoDBAdapter extends Adapter
                 break;
 
             default:
-                throw new Exception('Unknown Operator:' . $operator);
+                throw new Exception('Unknown method:' . $method);
                 break;
         }
     }

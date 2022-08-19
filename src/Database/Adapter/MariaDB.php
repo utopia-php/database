@@ -836,11 +836,11 @@ class MariaDB extends Adapter
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderMethod, false)} :cursor 
+                        table_main.{$attribute} {$this->getSQLOperator($orderMethod, $cursor === null)} :cursor 
                         OR (
                             table_main.{$attribute} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId, false)} {$cursor['$internalId']}
+                            table_main._id {$this->getSQLOperator($orderMethodInternalId, $cursor === null)} {$cursor['$internalId']}
                         )
                     )";
             } else if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -856,7 +856,7 @@ class MariaDB extends Adapter
             $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
             ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod, false)} {$cursor['$internalId']} )";
+            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod, $cursor === null)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)

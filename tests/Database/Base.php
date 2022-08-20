@@ -1771,8 +1771,8 @@ abstract class Base extends TestCase
             "{'NormalStringInSingleQuotesAndBraces'}",
             "SingleQuote'InMiddle",
             'DoubleQuote"InMiddle',
-            'Slash/InMiddle','
-            Backslash\InMiddle',
+            'Slash/InMiddle',
+            'Backslash\InMiddle',
             'Colon:InMiddle',
             '"quoted":"colon"'
         ];
@@ -1793,7 +1793,6 @@ abstract class Base extends TestCase
          * Check Basic
          */
         $documents = static::getDatabase()->find($collection);
-        $movieDocuments = $documents;
 
         $this->assertEquals(count($values), count($documents));
         $this->assertNotEmpty($documents[0]->getId());
@@ -1803,7 +1802,9 @@ abstract class Base extends TestCase
         $this->assertEquals(['any'], $documents[0]->getDelete());
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
-        
+        /**
+         * Check `equals` query 
+         */
         foreach ($values as $value) {
             $documents = static::getDatabase()->find($collection, [
                 Query::limit(25),

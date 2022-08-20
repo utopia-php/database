@@ -1751,6 +1751,71 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testUpdateDocument
+     */
+    public function testFindEdgeCases(Document $document)
+    {
+        $collection = 'edgeCases';
+
+        static::getDatabase()->createCollection($collection);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'value', Database::VAR_STRING, 256, true));
+
+        $values = [
+            'NormalString',
+            '{"type":"json","somekey":"someval"}',
+            '{NormalStringInBraces}',
+            '"NormalStringInDoubleQuotes"',
+            '{"NormalStringInDoubleQuotesAndBraces"}',
+            "'NormalStringInSingleQuotes'",
+            "{'NormalStringInSingleQuotesAndBraces'}",
+            "SingleQuote'InMiddle",
+            'DoubleQuote"InMiddle',
+            'Slash/InMiddle','
+            Backslash\InMiddle',
+            'Colon:InMiddle',
+            '"quoted":"colon"'
+        ];
+
+        foreach ($values as $value) {
+            static::getDatabase()->createDocument($collection, new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ],
+                'value' => $value
+            ]));
+        }
+
+        /**
+         * Check Basic
+         */
+        $documents = static::getDatabase()->find($collection);
+        $movieDocuments = $documents;
+
+        $this->assertEquals(count($values), count($documents));
+        $this->assertNotEmpty($documents[0]->getId());
+        $this->assertEquals($collection, $documents[0]->getCollection());
+        $this->assertEquals(['any'], $documents[0]->getRead());
+        $this->assertEquals(['any'], $documents[0]->getUpdate());
+        $this->assertEquals(['any'], $documents[0]->getDelete());
+        $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
+
+        
+        foreach ($values as $value) {
+            $documents = static::getDatabase()->find($collection, [
+                Query::limit(25),
+                Query::equal('value', [$value])
+            ]);
+    
+            $this->assertEquals(1, count($documents));
+            $this->assertEquals($value, $documents[0]->getAttribute('value'));
+        }
+    }
+
+    /**
      * @depends testFind
      */
     public function testFindOne()

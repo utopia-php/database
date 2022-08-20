@@ -237,6 +237,71 @@ class QueryTest extends TestCase
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("count", $query->getAttribute());
         $this->assertEquals(0, $query->getValue());
+
+        $query = Query::parse('equal("value", "NormalString")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals("NormalString", $query->getValue());
+
+        $query = Query::parse('equal("value", "{"type":"json","somekey":"someval"}")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('{"type":"json","somekey":"someval"}', $query->getValue());
+        
+        $query = Query::parse('equal("value", "{ NormalStringInBraces }")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('{ NormalStringInBraces }', $query->getValue());
+
+        $query = Query::parse('equal("value", ""NormalStringInDoubleQuotes"")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('"NormalStringInDoubleQuotes"', $query->getValue());
+
+        $query = Query::parse('equal("value", "{"NormalStringInDoubleQuotesAndBraces"}")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('{"NormalStringInDoubleQuotesAndBraces"}', $query->getValue());
+
+        $query = Query::parse('equal("value", "\'NormalStringInSingleQuotes\'")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('\'NormalStringInSingleQuotes\'', $query->getValue());
+
+        $query = Query::parse('equal("value", "{\'NormalStringInSingleQuotesAndBraces\'}")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('{\'NormalStringInSingleQuotesAndBraces\'}', $query->getValue());
+
+        $query = Query::parse('equal("value", "SingleQuote\'InMiddle")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('SingleQuote\'InMiddle', $query->getValue());
+
+        $query = Query::parse('equal("value", "DoubleQuote"InMiddle")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('DoubleQuote"InMiddle', $query->getValue());
+        
+        $query = Query::parse('equal("value", "Slash/InMiddle")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('Slash/InMiddle', $query->getValue());
+
+        $query = Query::parse('equal("value", "Backslash\InMiddle")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('Backslash\InMiddle', $query->getValue());
+
+        $query = Query::parse('equal("value", "Colon:InMiddle")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('Colon:InMiddle', $query->getValue());
+
+        $query = Query::parse('equal("value", ""quoted":"colon"")');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("value", $query->getAttribute());
+        $this->assertEquals('"quoted":"colon"', $query->getValue());
     }
 
     /*

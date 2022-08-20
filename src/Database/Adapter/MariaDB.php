@@ -912,6 +912,7 @@ class MariaDB extends Adapter
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
+                var_dump($query);
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }

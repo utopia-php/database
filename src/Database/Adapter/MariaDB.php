@@ -177,7 +177,7 @@ class MariaDB extends Adapter
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
-                        UNIQUE KEY `_index1` (`_uid`),
+                        UNIQUE KEY `_uid` (`_uid`),
                         KEY `_created_at` (`_createdAt`),
                         KEY `_updated_at` (`_updatedAt`)
                     )")
@@ -191,7 +191,7 @@ class MariaDB extends Adapter
                         `_document` VARCHAR(255) NOT NULL,
                         PRIMARY KEY (`_id`),
                         UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_index2` (`_permission`)
+                        INDEX `_permission` (`_permission`)
                     )")
                 ->execute();
         } catch (\Exception $th) {

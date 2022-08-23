@@ -108,7 +108,7 @@ class Permission
      * @param array $allowed
      * @return array
      */
-    public static function aggregate(array $permissions, array $allowed): array
+    public static function aggregate(array $permissions, array $allowed = Database::PERMISSIONS): array
     {
         foreach ($permissions as $i => $permission) {
             $permission = Permission::parse($permission);

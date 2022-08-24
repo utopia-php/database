@@ -1161,7 +1161,6 @@ class Database
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA
-                && !$validator->isValid($collection->getRead())
                 && !$validator->isValid($document->getRead())) {
                 return new Document();
             }
@@ -1177,7 +1176,6 @@ class Database
         }
 
         if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($collection->getRead())
             && !$validator->isValid($document->getRead())) {
             return new Document();
         }
@@ -1204,16 +1202,9 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $validator = new Authorization(self::PERMISSION_CREATE);
-
         $collection = $this->getCollection($collection);
 
         $time = DateTime::now();
-
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($collection->getCreate())) {
-            throw new AuthorizationException($validator->getDescription());
-        }
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
@@ -1261,7 +1252,6 @@ class Database
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
         if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($collection->getUpdate())
             && !$validator->isValid($old->getUpdate())) {
             throw new AuthorizationException($validator->getDescription());
         }
@@ -1299,7 +1289,6 @@ class Database
         $collection = $this->getCollection($collection);
 
         if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($collection->getDelete())
             && !$validator->isValid($document->getDelete())) {
             throw new AuthorizationException($validator->getDescription());
         }

@@ -104,12 +104,15 @@ class Permission
     /**
      * Map aggregate permissions into the set of individual permissions they represent.
      *
-     * @param array $permissions
+     * @param ?array $permissions
      * @param array $allowed
      * @return array
      */
-    public static function aggregate(array $permissions, array $allowed = Database::PERMISSIONS): array
+    public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
     {
+        if (\is_null($permissions)) {
+            return null;
+        }
         foreach ($permissions as $i => $permission) {
             $permission = Permission::parse($permission);
             foreach (self::$aggregates as $type => $subTypes) {

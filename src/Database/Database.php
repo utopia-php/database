@@ -1160,10 +1160,9 @@ class Database
         if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
 
-            $permitted = $collection->getId() === self::METADATA
-                || $validator->isValid($collection->getRead());
-
-            if (!$permitted) { // Check if user has read access to this collection
+            if ($collection->getId() !== self::METADATA
+                && !$validator->isValid($collection->getRead())
+                && !$validator->isValid($document->getRead())) {
                 return new Document();
             }
 
@@ -1173,14 +1172,14 @@ class Database
         $document = $this->adapter->getDocument($collection->getId(), $id);
         $document->setAttribute('$collection', $collection->getId());
 
-        $permitted = $collection->getId() === self::METADATA
-            || $validator->isValid($collection->getRead());
-
-        if (!$permitted && $collection->getId() !== self::METADATA) { // Check if user has read access to this collection
-            return new Document();
-        }
         if ($document->isEmpty()) {
             return $document;
+        }
+
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($collection->getRead())
+            && !$validator->isValid($document->getRead())) {
+            return new Document();
         }
 
         $document = $this->casting($collection, $document);
@@ -1211,10 +1210,8 @@ class Database
 
         $time = DateTime::now();
 
-        $permitted = $collection->getId() === self::METADATA
-            || $validator->isValid($collection->getCreate());
-
-        if (!$permitted) { // Check if user has update access to this collection
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($collection->getCreate())) {
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1261,16 +1258,11 @@ class Database
         $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
         $collection = $this->getCollection($collection);
 
-        // Make sure reserved keys stay constant
-        // $data['$id'] = $old->getId();
-        // $data['$collection'] = $old->getCollection();
-
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $permitted = $collection->getId() === self::METADATA
-            || $validator->isValid($collection->getUpdate());
-
-        if (!$permitted) { // Check if user has update access to this collection
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($collection->getUpdate())
+            && !$validator->isValid($old->getUpdate())) {
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1306,10 +1298,9 @@ class Database
         $document = $this->getDocument($collection, $id);
         $collection = $this->getCollection($collection);
 
-        $permitted = $collection->getId() === self::METADATA
-            || $validator->isValid($collection->getDelete());
-
-        if (!$permitted) { // Check if user has update access to this document
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($collection->getDelete())
+            && !$validator->isValid($document->getDelete())) {
             throw new AuthorizationException($validator->getDescription());
         }
 

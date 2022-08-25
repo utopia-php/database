@@ -2111,10 +2111,6 @@ abstract class Base extends TestCase
 
     public function testReadPermissionsFailure()
     {
-        $this->expectException(ExceptionAuthorization::class);
-
-        Authorization::cleanRoles();
-
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::user('1')),
@@ -2129,6 +2125,14 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
+
+        Authorization::cleanRoles();
+
+        $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
+
+        $this->assertEquals(true, $document->isEmpty());
+
+        Authorization::setRole('any');
 
         return $document;
     }
@@ -2154,33 +2158,6 @@ abstract class Base extends TestCase
         ]));
 
         $this->assertEquals(false, $document->isEmpty());
-
-        return $document;
-    }
-
-    /**
-     * @depends testCreateDocument
-     */
-    public function testWritePermissionsFailure(Document $document)
-    {
-        $this->expectException(ExceptionAuthorization::class);
-
-        Authorization::cleanRoles();
-
-        $document = static::getDatabase()->createDocument('documents', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-        ]));
 
         return $document;
     }

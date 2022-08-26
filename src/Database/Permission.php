@@ -113,27 +113,28 @@ class Permission
         if (\is_null($permissions)) {
             return null;
         }
+        $mutated = [];
         foreach ($permissions as $i => $permission) {
             $permission = Permission::parse($permission);
             foreach (self::$aggregates as $type => $subTypes) {
                 if ($permission->getPermission() != $type) {
+                    $mutated[] = $permission->toString();
                     continue;
                 }
                 foreach ($subTypes as $subType) {
                     if (!\in_array($subType, $allowed)) {
                         continue;
                     }
-                    $permissions[] = (new Permission(
+                    $mutated[] = (new Permission(
                         $subType,
                         $permission->getRole(),
                         $permission->getIdentifier(),
                         $permission->getDimension()
                     ))->toString();
                 }
-                unset($permissions[$i]);
             }
         }
-        return $permissions;
+        return $mutated;
     }
 
     /**

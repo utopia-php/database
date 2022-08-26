@@ -2082,6 +2082,9 @@ abstract class Base extends TestCase
      */
     public function testReadPermissionsSuccess(Document $document)
     {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2104,13 +2107,16 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument($document->getCollection(), $document->getId());
         $this->assertEquals(true, $document->isEmpty());
 
-        Authorization::setRole('any');
+        Authorization::setRole(Role::any()->toString());
 
         return $document;
     }
 
     public function testReadPermissionsFailure()
     {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::user('1')),
@@ -2132,7 +2138,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $document->isEmpty());
 
-        Authorization::setRole('any');
+        Authorization::setRole(Role::any()->toString());
 
         return $document;
     }
@@ -2142,6 +2148,8 @@ abstract class Base extends TestCase
      */
     public function testWritePermissionsSuccess(Document $document)
     {
+        Authorization::cleanRoles();
+
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -2159,6 +2167,8 @@ abstract class Base extends TestCase
 
         $this->assertEquals(false, $document->isEmpty());
 
+        Authorization::setRole(Role::any()->toString());
+
         return $document;
     }
 
@@ -2168,6 +2178,9 @@ abstract class Base extends TestCase
     public function testWritePermissionsUpdateFailure(Document $document)
     {
         $this->expectException(ExceptionAuthorization::class);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [

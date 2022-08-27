@@ -6,6 +6,14 @@ class Permission
 {
     private Role $role;
 
+    private static $aggregates = [
+        'write' => [
+            Database::PERMISSION_CREATE,
+            Database::PERMISSION_UPDATE,
+            Database::PERMISSION_DELETE,
+        ]
+    ];
+
     public function __construct(
         private string $permission,
         string $role,
@@ -94,6 +102,42 @@ class Permission
     }
 
     /**
+     * Map aggregate permissions into the set of individual permissions they represent.
+     *
+     * @param ?array $permissions
+     * @param array $allowed
+     * @return array
+     */
+    public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
+    {
+        if (\is_null($permissions)) {
+            return null;
+        }
+        $mutated = [];
+        foreach ($permissions as $i => $permission) {
+            $permission = Permission::parse($permission);
+            foreach (self::$aggregates as $type => $subTypes) {
+                if ($permission->getPermission() != $type) {
+                    $mutated[] = $permission->toString();
+                    continue;
+                }
+                foreach ($subTypes as $subType) {
+                    if (!\in_array($subType, $allowed)) {
+                        continue;
+                    }
+                    $mutated[] = (new Permission(
+                        $subType,
+                        $permission->getRole(),
+                        $permission->getIdentifier(),
+                        $permission->getDimension()
+                    ))->toString();
+                }
+            }
+        }
+        return $mutated;
+    }
+
+    /**
      * Create a read permission string from the given Role
      *
      * @param Role $role
@@ -101,7 +145,7 @@ class Permission
      */
     public static function read(Role $role): string
     {
-        $permission =  new Permission(
+        $permission = new Permission(
             'read',
             $role->getRole(),
             $role->getIdentifier(),
@@ -118,7 +162,7 @@ class Permission
      */
     public static function create(Role $role): string
     {
-        $permission =  new Permission(
+        $permission = new Permission(
             'create',
             $role->getRole(),
             $role->getIdentifier(),
@@ -135,7 +179,7 @@ class Permission
      */
     public static function update(Role $role): string
     {
-        $permission =  new Permission(
+        $permission = new Permission(
             'update',
             $role->getRole(),
             $role->getIdentifier(),
@@ -152,7 +196,7 @@ class Permission
      */
     public static function delete(Role $role): string
     {
-        $permission =  new Permission(
+        $permission = new Permission(
             'delete',
             $role->getRole(),
             $role->getIdentifier(),

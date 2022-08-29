@@ -3003,4 +3003,57 @@ abstract class Base extends TestCase
 
         // TODO: Index name tests
     }
+
+    public function testFloatAttribute()
+    {
+        $float = 4.0123456789;
+        $nextFloat = $float + 0.0000000001;
+        $previousFloat = $float - 0.0000000001;
+
+        static::getDatabase()->createCollection('floatPrecision');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('floatPrecision', 'num', Database::VAR_FLOAT, 0, true));
+
+        $document = static::getDatabase()->createDocument('floatPrecision', new Document([
+            '$id' => ID::custom('id1234'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'num' => $float
+        ]));
+
+        $this->assertEquals($float, $document->getAttribute('num'));
+
+        $document = static::getDatabase()->getDocument('floatPrecision', 'id1234');
+        $this->assertEquals($float, $document->getAttribute('num'));
+
+        $documents = static::getDatabase()->find('floatPrecision', [
+            Query::greaterThanEqual('num', $float),
+            Query::lessThanEqual('num', $float),
+        ]);
+        $this->assertEquals(1, count($documents));
+
+        $documents = static::getDatabase()->find('floatPrecision', [
+            Query::greaterThan('num', $float),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('floatPrecision', [
+            Query::lessThan('num', $float),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('floatPrecision', [
+            Query::lessThan('num', $nextFloat),
+        ]);
+        $this->assertEquals(1, count($documents));
+
+        $documents = static::getDatabase()->find('floatPrecision', [
+            Query::greaterThan('num', $previousFloat),
+        ]);
+        $this->assertEquals(1, count($documents));
+    }
 }

@@ -1631,4 +1631,14 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
+    /**
+     * Returns Database Processes
+     */
+    public function getProcessList(): array
+    {
+        $stmt = $this->getPDO()->prepare("show full processlist");
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
 }

@@ -468,4 +468,11 @@ abstract class Adapter
 
         return $value;
     }
+
+    /**
+     * Returns Database Processes
+     *
+     * @return array
+     */
+    abstract public function getProcessList(): array;
 }

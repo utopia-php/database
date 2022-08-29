@@ -1728,4 +1728,14 @@ class Database
         }
         return $queries;
     }
+
+    /**
+     * Get Database process list
+     * @return array
+     * @throws Exception
+     */
+    public function getProcessList(): array
+    {
+        return $this->adapter->getProcessList();
+    }
 }

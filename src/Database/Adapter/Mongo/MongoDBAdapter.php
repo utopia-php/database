@@ -1050,4 +1050,10 @@ class MongoDBAdapter extends Adapter
 
         return $new_array;
     }
+
+    public function getProcessList(): array
+    {
+        // TODO: Implement getProcessList() method.
+        return [];
+    }
 }

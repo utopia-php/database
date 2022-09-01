@@ -72,6 +72,40 @@ class Query
     }
 
     /**
+     * Create a query string from this Query instance
+     * This method is the opposide of 'parse' method.
+     *
+     * @return string
+     */
+    public function toString(): string
+    {
+        $method = static::getMethodFromAlias($this->getMethod());
+        $values = $this->getValues();
+        $attribute = $this->getAttribute();
+
+        switch ($method) {
+            case self::TYPE_EQUAL:
+            case self::TYPE_NOTEQUAL:
+            case self::TYPE_LESSER:
+            case self::TYPE_LESSEREQUAL:
+            case self::TYPE_GREATER:
+            case self::TYPE_GREATEREQUAL:
+            case self::TYPE_CONTAINS:
+            case self::TYPE_SEARCH:
+                $values = \array_map(fn($value) => static::toStringValue($value), $values);
+                return $method . '("' . $attribute . '", [' . \implode(",", $values) . '])';
+            case self::TYPE_ORDERASC:
+            case self::TYPE_ORDERDESC:
+            case self::TYPE_CURSORAFTER:
+            case self::TYPE_CURSORBEFORE:
+                return $method . '("' . $attribute . '")';
+            case self::TYPE_LIMIT:
+            case self::TYPE_OFFSET:
+                return $method . '(' . $values[0] . ')';
+        }
+    }
+
+    /**
      * Sets Method.
      * @param string $method
      * @return self
@@ -401,6 +435,34 @@ class Query
         } else if (\str_starts_with($value, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($value, static::CHAR_SINGLE_QUOTE)) { // String param
             $value = \substr($value, 1, -1); // Remove '' or ""
             return $value;
+        }
+
+        // Unknown format
+        return $value;
+    }
+
+    /**
+     * Convert value into properly stringified version.
+     * This method is opposide of 'parseValue' method
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    protected static function toStringValue(mixed $value): string
+    {
+        if ($value === false) { // Boolean value
+            return 'false';
+        } else if ($value === true) {
+            return 'true';
+        } else if ($value === null) { // Null value
+            return 'null';
+        } else if (\is_numeric($value)) { // Numeric value
+            // Cast to number
+            return $value . '';
+        } else if (\is_string($value)) { // String param
+            $value = \str_replace('"', '\\"', $value);
+
+            return '"' . $value . '"';
         }
 
         // Unknown format

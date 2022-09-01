@@ -342,4 +342,30 @@ class QueryTest extends TestCase
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));
     }
+
+
+    public function testToString(): void
+    {
+        $queries = [
+            'equal("title", ["Iron Man"])',
+            'equal("title", ["Iron Man"])',
+            'equal("title", ["Iro\'n Man"])',
+            'equal("title", ["Iro\"n Man"])',
+            'lessThan("year", [2001])',
+            'equal("published", [true])',
+            'equal("published", [false])',
+            'equal("actors", [" Johnny Depp "," Brad Pitt","Al Pacino "])',
+            'equal("actors", ["Brad Pitt","Johnny Depp"])',
+            'contains("writers", ["Tim O\'Reilly"])',
+            'greaterThan("score", [8.5])',
+            'notEqual("director", ["null"])',
+            'notEqual("director", [null])',
+            'equal("attr", [1])',
+        ];
+
+        foreach ($queries as $query) {
+            $queryInstance = Query::parse($query);
+            $this->assertEquals($query, $queryInstance->toString());
+        }
+    }
 }

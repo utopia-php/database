@@ -836,11 +836,11 @@ class MariaDB extends Adapter
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderMethod, $cursor === null)} :cursor 
+                        table_main.{$attribute} {$this->getSQLOperator($orderMethod, value: $cursor)} :cursor 
                         OR (
                             table_main.{$attribute} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId, $cursor === null)} {$cursor['$internalId']}
+                            table_main._id {$this->getSQLOperator($orderMethodInternalId, value: $cursor)} {$cursor['$internalId']}
                         )
                     )";
             } else if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -856,7 +856,7 @@ class MariaDB extends Adapter
             $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
             ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod, $cursor === null)} {$cursor['$internalId']} )";
+            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod, value: $cursor)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1423,7 +1423,7 @@ class MariaDB extends Adapter
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             default:
-                return $attribute . ' ' . $this->getSQLOperator($method, $value === null) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                return $attribute . ' ' . $this->getSQLOperator($method, $value) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
                 break;
         }
     }
@@ -1432,12 +1432,14 @@ class MariaDB extends Adapter
      * Get SQL Operator
      *
      * @param string $method
-     * @param bool $isNull
+     * @param mixed $value
      * @return string
      * @throws Exception
      */
-    protected function getSQLOperator(string $method, bool $isNull): string
+    protected function getSQLOperator(string $method, mixed $value): string
     {
+        $isNull = $value === null;
+
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return $isNull ? 'IS' : '=';

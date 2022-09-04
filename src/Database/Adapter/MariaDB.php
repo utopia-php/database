@@ -174,6 +174,7 @@ class MariaDB extends Adapter
                         `_uid` CHAR(255) NOT NULL,
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
+                        `_permissions` MEDIUMTEXT DEFAULT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
@@ -461,6 +462,7 @@ class MariaDB extends Adapter
         unset($document['_uid']);
         unset($document['_createdAt']);
         unset($document['_updatedAt']);
+        unset($document['_permissions']);
 
         return new Document($document);
     }
@@ -480,6 +482,8 @@ class MariaDB extends Adapter
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_permissions'] = json_encode($document->getPermissions());
+
         $name = $this->filter($collection);
         $columns = '';
 
@@ -575,7 +579,7 @@ class MariaDB extends Adapter
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-
+        $attributes['_permissions'] = json_encode($document->getPermissions());
         $name = $this->filter($collection);
         $columns = '';
 

@@ -1379,7 +1379,7 @@ class Database
      * @return bool|Document
      * @throws Exception
      */
-    public function findOne(string $collection, array $queries = []): ?Document
+    public function findOne(string $collection, array $queries = []): bool|Document
     {
         $results = $this->find($collection, \array_merge([Query::limit(1)], $queries));
         return \reset($results);

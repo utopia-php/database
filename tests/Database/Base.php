@@ -1852,6 +1852,11 @@ abstract class Base extends TestCase
         $this->assertEquals(6, $count);
         Authorization::reset();
 
+        Authorization::disable();
+        $count = static::getDatabase()->count('movies', [], 3);
+        $this->assertEquals(3, $count);
+        Authorization::reset();
+
         /**
          * Test that OR queries are handled correctly
          */

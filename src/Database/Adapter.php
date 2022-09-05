@@ -345,7 +345,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = []): int;
+    abstract public function count(string $collection, array $queries = [], int $max = 0): int;
 
     /**
      * Get max STRING limit

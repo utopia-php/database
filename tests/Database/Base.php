@@ -775,7 +775,6 @@ abstract class Base extends TestCase
 
         $a->setAttribute('$permissions', Permission::read(Role::user('a')), Document::SET_TYPE_APPEND);
         $b->setAttribute('$permissions', Permission::read(Role::user('b')), Document::SET_TYPE_APPEND);
-        $c->setAttribute('$permissions', Permission::read(Role::user('c')), Document::SET_TYPE_APPEND);
 
         Coroutine\run(function() use ($a, $b, $c) {
             Coroutine::join([
@@ -788,7 +787,6 @@ abstract class Base extends TestCase
 
         $this->assertContains('user:a', $new->getRead());
         $this->assertContains('user:b', $new->getRead());
-        $this->assertContains('user:c', $new->getRead());
 
         /**
          * Reset permissions for dependent tests.

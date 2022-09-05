@@ -638,8 +638,14 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $this->assertNotEmpty(true, $document->getId());
+        $document2 = static::getDatabase()->getDocument('defaults', $document->getId());
+        $this->assertCount(4, $document2->getPermissions());
+        $this->assertEquals('read("any")', $document2->getPermissions()[0]);
+        $this->assertEquals('create("any")', $document2->getPermissions()[1]);
+        $this->assertEquals('update("any")', $document2->getPermissions()[2]);
+        $this->assertEquals('delete("any")', $document2->getPermissions()[3]);
 
+        $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('default', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));

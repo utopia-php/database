@@ -1515,33 +1515,6 @@ class MariaDB extends Adapter
                 )";
     }
 
-
-//    /**
-//     * Get SQL query to aggregate permissions as JSON array
-//     *
-//     * @param string $collection
-//     * @return string
-//     * @throws Exception
-//     */
-//    protected function getSQLPermissionsQuery(string $collection): string
-//    {
-//        $permissions = '';
-//        foreach (Database::PERMISSIONS as $i => $type) {
-//            $permissions .= "(
-//                    SELECT JSON_ARRAYAGG(DISTINCT _permission)
-//                    FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
-//                    WHERE
-//                        _document = table_main._uid
-//                        AND _type = {$this->getPDO()->quote($type)}
-//                ) as _{$type}";
-//
-//            if ($i !== \array_key_last(Database::PERMISSIONS)) {
-//                $permissions .= ",\n";
-//            }
-//        }
-//        return $permissions;
-//    }
-
     /**
      * Get PDO Type
      *

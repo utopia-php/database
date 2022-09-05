@@ -4,6 +4,7 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Swoole\Coroutine;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -765,6 +766,33 @@ abstract class Base extends TestCase
         $this->assertContains('guests', $new->getUpdate());
         $this->assertContains('guests', $new->getDelete());
 
+        /**
+         * Test integrity of the _permissions column.
+         */
+        $a = new Document($new->getArrayCopy());
+        $b = new Document($new->getArrayCopy());
+        $c = new Document($new->getArrayCopy());
+
+        $a->setAttribute('$permissions', Permission::read(Role::user('a')), Document::SET_TYPE_APPEND);
+        $b->setAttribute('$permissions', Permission::read(Role::user('b')), Document::SET_TYPE_APPEND);
+        $c->setAttribute('$permissions', Permission::read(Role::user('c')), Document::SET_TYPE_APPEND);
+
+        Coroutine\run(function() use ($a, $b, $c) {
+            Coroutine::join([
+                go(fn () => $this->getDatabase()->updateDocument($a->getCollection(), $a->getId(), $a)),
+                go(fn () => $this->getDatabase()->updateDocument($b->getCollection(), $b->getId(), $b)),
+                go(fn () => $this->getDatabase()->updateDocument($c->getCollection(), $c->getId(), $c)),
+            ]);
+        });
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('user:a', $new->getRead());
+        $this->assertContains('user:b', $new->getRead());
+        $this->assertContains('user:c', $new->getRead());
+
+        /**
+         * Reset permissions for dependent tests.
+         */
         $new->setAttribute('$permissions', $oldPermissions);
 
         $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);

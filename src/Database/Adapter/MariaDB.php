@@ -580,6 +580,7 @@ class MariaDB extends Adapter
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
         $name = $this->filter($collection);
         $columns = '';
 

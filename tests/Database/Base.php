@@ -1824,7 +1824,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->findOne('movies', [
             Query::offset(2),
             Query::orderAsc('name')
-        ], 2, ['name']);
+        ]);
         $this->assertEquals('Frozen', $document['name']);
 
         $document = static::getDatabase()->findOne('movies', [

@@ -1840,7 +1840,7 @@ abstract class Base extends TestCase
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
-        $count = static::getDatabase()->count('movies', [Query::equal('year', [2019]),]);
+        $count = static::getDatabase()->count('movies', [Query::equal('year', [2019])]);
         $this->assertEquals(2, $count);
 
         Authorization::unsetRole('user:x');
@@ -1850,11 +1850,6 @@ abstract class Base extends TestCase
         Authorization::disable();
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
-        Authorization::reset();
-
-        Authorization::disable();
-        $count = static::getDatabase()->count('movies', [], 3);
-        $this->assertEquals(3, $count);
         Authorization::reset();
 
         /**

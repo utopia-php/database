@@ -1397,7 +1397,6 @@ class Database
      *
      * @param string $collection
      * @param Query[] $queries
-     * @param int $max
      *
      * @return int
      * @throws Exception

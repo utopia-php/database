@@ -106,7 +106,7 @@ class Permission
      *
      * @param ?array $permissions
      * @param array $allowed
-     * @return array
+     * @return ?array
      */
     public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
     {

@@ -126,6 +126,18 @@ class PermissionHelperTest extends TestCase
         $this->assertEquals('guests', $permission->getRole());
         $this->assertEmpty($permission->getIdentifier());
         $this->assertEmpty($permission->getDimension());
+
+        $permission = Permission::parse('read("users/verified")');
+        $this->assertEquals('read', $permission->getPermission());
+        $this->assertEquals('users', $permission->getRole());
+        $this->assertEmpty($permission->getIdentifier());
+        $this->assertEquals('verified', $permission->getDimension());
+
+        $permission = Permission::parse('read("users/unverified")');
+        $this->assertEquals('read', $permission->getPermission());
+        $this->assertEquals('users', $permission->getRole());
+        $this->assertEmpty($permission->getIdentifier());
+        $this->assertEquals('unverified', $permission->getDimension());
     }
 
     public function testInputFromParameters()

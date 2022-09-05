@@ -58,50 +58,66 @@ class Role
      *
      * @param string $role
      * @return Role
+     * @throws \Exception
      */
     public static function parse(string $role): Role
     {
         $parts = \explode(':', $role);
-
-        if (\count($parts) === 1) {
-            return new Role($role);
-        }
+        $hasIdentifier = \count($parts) > 1;
+        $hasDimension = \str_contains($role, '/');
         $role = $parts[0];
-        $fullIdentifier = $parts[1];
-        $parts = \explode('/', $fullIdentifier);
 
-        if (\count($parts) === 1) {
-            return new Role($role, $fullIdentifier);
+        if (!$hasIdentifier && !$hasDimension) {
+            return new  Role($role);
         }
-        $identifier = $parts[0];
-        $dimension = $parts[1];
 
-        return new Role(
-            $role,
-            $identifier,
-            $dimension,
-        );
+        if ($hasIdentifier && !$hasDimension) {
+            return new Role($role, $parts[1]);
+        }
+
+        if (!$hasIdentifier && $hasDimension) {
+            $parts = \explode('/', $role);
+            if (\count($parts) !== 2) {
+                throw new \Exception('Only one dimension can be provided.');
+            }
+            if (empty($parts[1])) {
+                throw new \Exception('Dimension must not be empty.');
+            }
+            return new Role($parts[0], '', $parts[1]);
+        }
+
+        // Has both identifier and dimension
+        $parts = \explode('/', $parts[1]);
+        if (\count($parts) !== 2) {
+            throw new \Exception('Only one dimension can be provided.');
+        }
+        if (empty($parts[1])) {
+            throw new \Exception('Dimension must not be empty.');
+        }
+        return new Role($role, $parts[0], $parts[1]);
     }
 
     /**
      * Create a user role from the given ID
      *
      * @param string $identifier
+     * @param string $status
      * @return Role
      */
-    public static function user(string $identifier): Role
+    public static function user(string $identifier, string $status = ''): Role
     {
-        return new Role('user', $identifier);
+        return new Role('user', $identifier, $status);
     }
 
     /**
      * Create a users role
      *
+     * @param string $status
      * @return Role
      */
-    public static function users(): Role
+    public static function users(string $status = ''): Role
     {
-        return new Role('users');
+        return new Role('users', '', $status);
     }
 
     /**
@@ -134,16 +150,5 @@ class Role
     public static function guests(): Role
     {
         return new Role('guests');
-    }
-
-    /**
-     * Create a status role from the given status
-     *
-     * @param string $status
-     * @return Role
-     */
-    public static function status(string $status): Role
-    {
-        return new Role('status', $status);
     }
 }

@@ -72,33 +72,52 @@ class Permission
      *
      * @param string $permission
      * @return Permission
+     * @throws \Exception
      */
     public static function parse(string $permission): Permission
     {
         $parts = \explode('("', $permission);
+
+        if (\count($parts) !== 2) {
+            throw new \Exception('Invalid permission string format: "' . $permission . '".');
+        }
+
         $permission = $parts[0];
         $fullRole = \str_replace('")', '', $parts[1]);
         $parts = \explode(':', $fullRole);
-
-        if (\count($parts) === 1) {
-            return new Permission($permission, $fullRole);
-        }
         $role = $parts[0];
-        $fullIdentifier = $parts[1];
-        $parts = \explode('/', $fullIdentifier);
 
-        if (\count($parts) === 1) {
-            return new Permission($permission, $role, $fullIdentifier);
+        $hasIdentifier = \count($parts) > 1;
+        $hasDimension = \str_contains($fullRole, '/');
+
+        if (!$hasIdentifier && !$hasDimension) {
+            return new Permission($permission, $role);
         }
-        $identifier = $parts[0];
-        $dimension = $parts[1];
 
-        return new Permission(
-            $permission,
-            $role,
-            $identifier,
-            $dimension,
-        );
+        if ($hasIdentifier && !$hasDimension) {
+            return new Permission($permission, $role, $parts[1]);
+        }
+
+        if (!$hasIdentifier && $hasDimension) {
+            $parts = \explode('/', $fullRole);
+            if (\count($parts) !== 2) {
+                throw new \Exception('Only one dimension can be provided.');
+            }
+            if (empty($parts[1])) {
+                throw new \Exception('Dimension must not be empty.');
+            }
+            return new Permission($permission, $parts[0], '', $parts[1]);
+        }
+
+        // Has both identifier and dimension
+        $parts = \explode('/', $parts[1]);
+        if (\count($parts) !== 2) {
+            throw new \Exception('Only one dimension can be provided.');
+        }
+        if (empty($parts[1])) {
+            throw new \Exception('Dimension must not be empty.');
+        }
+        return new Permission($permission, $role, $parts[0], $parts[1]);
     }
 
     /**

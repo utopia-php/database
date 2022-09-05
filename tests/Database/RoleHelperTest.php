@@ -41,7 +41,15 @@ class RoleHelperTest extends TestCase
         $this->assertEquals('123', $role->getIdentifier());
         $this->assertEquals('456', $role->getDimension());
 
+        $role = Role::parse('user:123/verified');
+        $this->assertEquals('user', $role->getRole());
+        $this->assertEquals('123', $role->getIdentifier());
+        $this->assertEquals('verified', $role->getDimension());
 
+        $role = Role::parse('users/verified');
+        $this->assertEquals('users', $role->getRole());
+        $this->assertEmpty($role->getIdentifier());
+        $this->assertEquals('verified', $role->getDimension());
     }
 
     public function testInputFromParameters()

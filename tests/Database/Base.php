@@ -774,7 +774,12 @@ abstract class Base extends TestCase
         $c = new Document($new->getArrayCopy());
 
         $a->setAttribute('$permissions', Permission::read(Role::user('a')), Document::SET_TYPE_APPEND);
+        $b->setAttribute('$permissions', Permission::read(Role::user('a')), Document::SET_TYPE_APPEND);
         $b->setAttribute('$permissions', Permission::read(Role::user('b')), Document::SET_TYPE_APPEND);
+
+        $this->assertContains('user:a', $a->getRead());
+        $this->assertContains('user:a', $b->getRead());
+        $this->assertContains('user:b', $b->getRead());
 
         Coroutine\run(function() use ($a, $b, $c) {
             Coroutine::join([

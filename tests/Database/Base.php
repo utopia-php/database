@@ -4,6 +4,8 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Swoole\Coroutine;
+use Swoole\Runtime;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -24,7 +26,7 @@ abstract class Base extends TestCase
     /**
      * @return Database
      */
-    abstract static protected function getDatabase(): Database;
+    abstract static protected function getDatabase(bool $fresh = false): Database;
 
     /**
      * @return string
@@ -186,9 +188,26 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'as5dasdasdas-', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
+    }
 
-        // Using this collection to test invalid default values
-        // static::getDatabase()->deleteCollection('attributes');
+    public function testMetadataIntegrity()
+    {
+        static::getDatabase()->createCollection('metadata_integrity');
+
+        Coroutine\run(
+            fn () => Coroutine::join([
+                go(fn () => $this->assertEquals(true, static::getDatabase(true)->createAttribute('metadata_integrity', 'a', Database::VAR_STRING, 128, true))),
+                go(fn () => $this->assertEquals(true, static::getDatabase(true)->createAttribute('metadata_integrity', 'b', Database::VAR_STRING, 128, true))),
+                go(fn () => $this->assertEquals(true, static::getDatabase(true)->createAttribute('metadata_integrity', 'c', Database::VAR_STRING, 128, true))),
+                go(fn () => $this->assertEquals(true, static::getDatabase(true)->createAttribute('metadata_integrity', 'd', Database::VAR_STRING, 128, true))),
+                go(fn () => $this->assertEquals(true, static::getDatabase(true)->createAttribute('metadata_integrity', 'e', Database::VAR_STRING, 128, true))),
+                go(fn () => $this->assertEquals(true, static::getDatabase(true)->createAttribute('metadata_integrity', 'f', Database::VAR_STRING, 128, true))),
+            ])
+        );
+
+        $collection = static::getDatabase()->getCollection('metadata_integrity');
+
+        $this->assertCount(6, $collection->getAttribute('attributes'));
     }
 
     /**
@@ -1810,7 +1829,7 @@ abstract class Base extends TestCase
                 Query::limit(25),
                 Query::equal('value', [$value])
             ]);
-    
+
             $this->assertEquals(1, count($documents));
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }

@@ -17,6 +17,7 @@ class MySQLTest extends Base
      * @var Database
      */
     static $database = null;
+    static $id = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -52,10 +53,14 @@ class MySQLTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    static function getDatabase(bool $fresh = false): Database
     {
-        if(!is_null(self::$database)) {
+        if(!$fresh && !is_null(self::$database)) {
             return self::$database;
+        }
+
+        if(is_null(self::$id)) {
+            self::$id = uniqid();
         }
 
         $dbHost = 'mysql';
@@ -73,7 +78,11 @@ class MySQLTest extends Base
 
         $database = new Database(new MySQL($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setNamespace('myapp_'.self::$id);
+
+        if ($fresh) {
+            return $database;
+        }
 
         return self::$database = $database;
     }

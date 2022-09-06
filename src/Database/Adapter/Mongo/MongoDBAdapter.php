@@ -693,7 +693,6 @@ class MongoDBAdapter extends Adapter
     {
         $array = (array) $array;
 
-
         if (array_key_exists($from . 'permissions', $array))
             $array[$to . 'permissions'] = $array[$from . 'permissions'];
 

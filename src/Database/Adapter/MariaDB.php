@@ -926,6 +926,7 @@ class MariaDB extends Adapter
             $results[$key]['$internalId'] = $value['_id'];
             $results[$key]['$createdAt'] = $value['_createdAt'];
             $results[$key]['$updatedAt'] = $value['_updatedAt'];
+            if(empty($value['_permissions']))$value['_permissions'] = '[]';
             $results[$key]['$permissions'] = json_decode($value['_permissions'], true);
 
             unset($results[$key]['_uid']);

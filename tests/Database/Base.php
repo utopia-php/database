@@ -142,9 +142,10 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, false, 1));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, false, 1.5));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, false, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'datetime_default', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00'));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(16, $collection->getAttribute('attributes'));
+        $this->assertCount(17, $collection->getAttribute('attributes'));
 
         // Delete
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
@@ -157,7 +158,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(8, $collection->getAttribute('attributes'));
+        $this->assertCount(9, $collection->getAttribute('attributes'));
 
         // Delete Array
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_list'));
@@ -166,13 +167,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_list'));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(4, $collection->getAttribute('attributes'));
+        $this->assertCount(5, $collection->getAttribute('attributes'));
 
         // Delete default
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_default'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer_default'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float_default'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_default'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'datetime_default'));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(0, $collection->getAttribute('attributes'));
@@ -628,6 +630,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'float', Database::VAR_FLOAT, 0, false, 1.5));
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'boolean', Database::VAR_BOOLEAN, 0, false, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'colors', Database::VAR_STRING, 32, false, ['red', 'green', 'blue'], true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'datetime', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00'));
 
         $document = static::getDatabase()->createDocument('defaults', new Document([
             '$permissions' => [
@@ -651,6 +654,7 @@ abstract class Base extends TestCase
         $this->assertEquals('red', $document->getAttribute('colors')[0]);
         $this->assertEquals('green', $document->getAttribute('colors')[1]);
         $this->assertEquals('blue', $document->getAttribute('colors')[2]);
+        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $document->getAttribute('datetime'));
 
         // cleanup collection
         static::getDatabase()->deleteCollection('defaults');

@@ -573,6 +573,10 @@ class Database
             }
         }
 
+        if($type === self::VAR_DATETIME && !\array_key_exists('datetime', $filters)) {
+            $filters[] = 'datetime';
+        }
+
         $collection->setAttribute('attributes', new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -635,7 +639,7 @@ class Database
                 case self::VAR_INTEGER:
                 case self::VAR_FLOAT:
                 case self::VAR_BOOLEAN:
-                    if ($type !== \gettype($default)) {
+                    if ($type !== \gettype($default) && $type !== self::VAR_DATETIME) {
                         throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
                     }
                     break;
@@ -785,7 +789,7 @@ class Database
                 case self::VAR_INTEGER:
                 case self::VAR_FLOAT:
                 case self::VAR_BOOLEAN:
-                    if ($attribute->getAttribute('type') !== \gettype($default)) {
+                        if ($attribute->getAttribute('type') !== \gettype($default) && $attribute->getAttribute('type') !== self::VAR_DATETIME) {
                         throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
                     }
                     break;

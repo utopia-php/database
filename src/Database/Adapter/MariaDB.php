@@ -779,10 +779,10 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     * 
+     *
      * @return Document[]
-     * @throws Exception 
-     * @throws PDOException 
+     * @throws Exception
+     * @throws PDOException
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
@@ -925,7 +925,7 @@ class MariaDB extends Adapter
             $results[$key]['$internalId'] = $value['_id'];
             $results[$key]['$createdAt'] = $value['_createdAt'];
             $results[$key]['$updatedAt'] = $value['_updatedAt'];
-            $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
 
             unset($results[$key]['_uid']);
             unset($results[$key]['_id']);

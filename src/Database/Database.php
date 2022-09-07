@@ -388,65 +388,84 @@ class Database
                 '$id' => ID::custom('collectionId'),
                 'type' => Database::VAR_STRING,
                 'size' => 50,
-                'required' => true
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('collectionInternalId'),
                 'type' => Database::VAR_STRING,
                 'size' => 50,
-                'required' => true
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('name'),
                 'type' => Database::VAR_STRING,
                 'size' => 255,
-                'required' => true
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('type'),
-                'type' => Database::VAR_BOOLEAN,
+                'type' => Database::VAR_STRING,
                 'size' => 255,
-                'required' => true
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('format'),
-                'type' => Database::VAR_BOOLEAN,
+                'type' => Database::VAR_STRING,
                 'size' => 255,
-                'required' => false
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('required'),
                 'type' => Database::VAR_BOOLEAN,
-                'size' => 255,
-                'required' => false
+                'size' => 0,
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('size'),
-                'type' => Database::VAR_DATETIME,
-                'size' => 255,
-                'required' => false
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('signed'),
                 'type' => Database::VAR_BOOLEAN,
-                'required' => false
+                'size' => 0,
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('default'),
-                'type' => Database::VAR_BOOLEAN,
+                'type' => Database::VAR_STRING,
                 'size' => 255,
-                'required' => false
+                'required' => false,
+                'default' => null,
             ]),
             new Document([
                 '$id' => ID::custom('array'),
                 'type' => Database::VAR_BOOLEAN,
-                'required' => false
+                'size' => 0,
+                'required' => false,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
             ]),
             new Document([
                 '$id' => ID::custom('filters'),
-                'type' => Database::VAR_BOOLEAN,
-                'required' => false
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
             ])
+
         ]);
 
         return true;
@@ -545,10 +564,28 @@ class Database
             }
         }
 
+        $c = $this->createDocument(self::METADATA, $collection);
 
-        $att =
+        foreach ($attributes as $attribute){
+            $x2 = new Document([
+                'name' => $attribute->getId(),
+                'type' => $attribute->getAttribute('type'),
+                'collectionId' => $collection->getId(),
+                'collectionInternalId' => $collection->getInternalId(),
+                'default' => $attribute->getAttribute('default'),
+                'filters' => $attribute->getAttribute('filters'),
+                'array' => $attribute->getAttribute('array'),
+                'signed' => $attribute->getAttribute('signed'),
+                'size' => $attribute->getAttribute('size'),
+                'required' => $attribute->getAttribute('required'),
+                'format' => $attribute->getAttribute('format'),
+            ]);
 
-        return $this->createDocument(self::METADATA, $collection);
+            $this->createDocument(self::METADATA_ATTRIBUTE, $x2);
+        }
+
+        return $c;
+
     }
 
     /**
@@ -1277,7 +1314,6 @@ class Database
     public function createDocument(string $collection, Document $document): Document
     {
         $collection = $this->getCollection($collection);
-
         $time = DateTime::now();
 
         $document

@@ -1379,15 +1379,10 @@ class Database
     /**
      * @param string $collection
      * @param array $queries
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param Document|null $cursor
-     * @param string $cursorDirection
-     *
-     * @return Document|bool
+     * @return bool|Document
+     * @throws Exception
      */
-    public function findOne(string $collection, array $queries = [])
+    public function findOne(string $collection, array $queries = []): bool|Document
     {
         $results = $this->find($collection, \array_merge([Query::limit(1)], $queries));
         return \reset($results);

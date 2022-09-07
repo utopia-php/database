@@ -52,7 +52,7 @@ class Structure extends Validator
         [
             '$id' => '$permissions',
             'type' => Database::VAR_STRING,
-            'size' => 512,
+            'size' => 67000, // medium text
             'required' => false,
             'signed' => true,
             'array' => true,
@@ -81,12 +81,12 @@ class Structure extends Validator
     /**
      * @var array
      */
-    static protected $formats = [];
+    static protected array $formats = [];
 
     /**
      * @var string
      */
-    protected $message = 'General Error';
+    protected string $message = 'General Error';
 
     /**
      * Structure constructor.
@@ -99,9 +99,7 @@ class Structure extends Validator
 
     /**
      * Remove a Validator
-     * 
-     * @param string $name
-     * 
+     *
      * @return array
      */
     static public function getFormats(): array

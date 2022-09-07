@@ -376,6 +376,7 @@ class MongoDBAdapter extends Adapter
         $record =  $this->replaceChars('$', '_',$document);
 
         $result = $this->client->insert($name, $this->remove_null_keys($record));
+        
         $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
@@ -730,14 +731,6 @@ class MongoDBAdapter extends Adapter
             }
         
         }
-
-        if($to === '$') {
-            if(array_key_exists('$internalId', $result))
-                var_dump("#### internalId: " . $result['$internalId']);
-            else
-                var_dump($result);
-        }
-            
 
         return $result;
     }

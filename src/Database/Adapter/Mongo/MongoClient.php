@@ -58,6 +58,8 @@ class MongoClient
      */
     public function connect(): MongoClient
     {
+        if($this->client->isConnected()) return $this; 
+        
         $this->client->connect($this->options->host, $this->options->port);
         [$payload, $db] = $this->auth->start();
 
@@ -304,7 +306,15 @@ class MongoClient
      */
     public function createIndexes(string $collection, array $indexes, array $options = []): bool
     {
-
+          foreach ($indexes as $key => $index) {
+            if (\array_key_exists('unique', $index) && $index['unique'] == true) {
+                /**
+                 * TODO: Unique Indexes are now sparse indexes, which results into incomplete indexes.
+                 */
+                $indexes[$key] = \array_merge($index, ['sparse' => true]);
+            }
+        }
+        
         $qry = array_merge(
             [
                 'createIndexes' => $collection,
@@ -348,13 +358,15 @@ class MongoClient
      * @param array $documents
      * @param array $options
      *
-     * @return Document
+     * @return array
      */
-    public function insert(string $collection, array $documents, array $options = []): Document
+    public function insert(string $collection, array $documents, array $options = []): array
     {
         $docObj = new \stdClass();
 
         foreach ($documents as $key => $value) {
+            if(\is_null($value)) continue;
+            
             $docObj->{$key} = $value;
         }
 
@@ -363,7 +375,26 @@ class MongoClient
             'documents' => [$docObj],
         ], $options));
 
-        return new Document($this->toArray($docObj));
+        
+        return $this->last_inserted_document($collection);
+    }
+
+    /**
+     * Retreive the last inserted document.
+     *
+     * @param string $collection
+     *
+     * @return array
+     */
+
+    public function last_inserted_document(string $collection): array
+    {
+        $result = $this->find($collection, [], [
+            'sort' => ['_id' => -1],
+            'limit' => 1
+        ])->cursor->firstBatch[0];
+
+        return $this->toArray($result);
     }
 
     /**
@@ -380,13 +411,20 @@ class MongoClient
     public function update(string $collection, array $where = [], array $updates = [], array $options = []): MongoClient
     {
 
+        $clean_updates = [];
+
+        foreach($updates as $k => $v) {
+            if(\is_null($v)) continue;
+            $clean_updates[$k] = $v;
+        }
+
         $this->query(
             array_merge([
                 MongoCommand::UPDATE => $collection,
                 'updates' => [
                     [
                         'q' => $this->toObject($where),
-                        'u' => $this->toObject($updates),
+                        'u' => $this->toObject($clean_updates),
                         'multi' => false,
                         'upsert' => false
                     ]
@@ -411,6 +449,14 @@ class MongoClient
 
     public function upsert(string $collection, array $where = [], array $updates = [], array $options = []): MongoClient
     {
+        $clean_updates = [];
+
+        foreach($updates as $k => $v) {
+            if(\is_null($v)) continue;
+            $clean_updates[$k] = $v;
+        }
+
+
         $this->query(
             array_merge(
                 [
@@ -418,7 +464,7 @@ class MongoClient
                     'updates' => [
                         [
                             'q' => ['_uid' => $where['_uid']],
-                            'u' => ['$set' => $updates],
+                            'u' => ['$set' => $clean_updates],
                         ]
                     ],
                 ],
@@ -559,14 +605,7 @@ class MongoClient
         $obj = new \stdClass();
 
         foreach ($dict as $k => $v) {
-            $key = $k == 'id' ? '_id' : $k;
-            $val = $v;
-
-            if ($k == '_id') {
-                $val = new \MongoDB\BSON\ObjectId($val);
-            }
-
-            $obj->{$key} = $val;
+            $obj->{$k} = $v;
         }
 
         return $obj;
@@ -579,8 +618,10 @@ class MongoClient
      *
      * @return array
      */
-    public function toArray(\stdClass|array|string $obj): array
+    public function toArray(\stdClass|array|string|null $obj): array|null
     {
+        if(\is_null($obj)) return null;
+
         if (is_object($obj) || is_array($obj)) {
             $ret = (array) $obj;
             foreach ($ret as $item) {

@@ -7,7 +7,6 @@ use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -66,6 +65,8 @@ class Database
 
     // Collections
     const METADATA = '_metadata';
+    const METADATA_INDEX = '_index';
+    const METADATA_ATTRIBUTE = '_attribute';
 
     // Cursor
     const CURSOR_BEFORE = 'before';
@@ -359,12 +360,13 @@ class Database
      * @throws LimitException
      * @throws AuthorizationException
      * @throws StructureException
+     * @throws DuplicateException
+     * @throws Exception
      */
     public function createMetadata(): bool
     {
         /**
          * Create array of attribute documents
-         * @var Document[] $attributes
          */
         $attributes = array_map(function ($attribute) {
             return new Document([
@@ -379,7 +381,73 @@ class Database
             ['indexes', self::VAR_STRING, 1000000, false],
         ]);
 
-        $this->createCollection(self::METADATA, $attributes);
+        $metadataCollection = $this->createCollection(self::METADATA, $attributes);
+
+        $this->createCollection(self::METADATA_ATTRIBUTE, [
+            new Document([
+                '$id' => ID::custom('collectionId'),
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => true
+            ]),
+            new Document([
+                '$id' => ID::custom('collectionInternalId'),
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => true
+            ]),
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => true
+            ]),
+            new Document([
+                '$id' => ID::custom('type'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 255,
+                'required' => true
+            ]),
+            new Document([
+                '$id' => ID::custom('format'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 255,
+                'required' => false
+            ]),
+            new Document([
+                '$id' => ID::custom('required'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 255,
+                'required' => false
+            ]),
+            new Document([
+                '$id' => ID::custom('size'),
+                'type' => Database::VAR_DATETIME,
+                'size' => 255,
+                'required' => false
+            ]),
+            new Document([
+                '$id' => ID::custom('signed'),
+                'type' => Database::VAR_BOOLEAN,
+                'required' => false
+            ]),
+            new Document([
+                '$id' => ID::custom('default'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 255,
+                'required' => false
+            ]),
+            new Document([
+                '$id' => ID::custom('array'),
+                'type' => Database::VAR_BOOLEAN,
+                'required' => false
+            ]),
+            new Document([
+                '$id' => ID::custom('filters'),
+                'type' => Database::VAR_BOOLEAN,
+                'required' => false
+            ])
+        ]);
 
         return true;
     }
@@ -476,6 +544,9 @@ class Database
                 throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
             }
         }
+
+
+        $att =
 
         return $this->createDocument(self::METADATA, $collection);
     }

@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\ID;
 use Utopia\Database\Permission;
@@ -229,7 +230,7 @@ class PermissionsTest extends TestCase
         // Split role into format {$type}:{$value}
         // Permission must have value
         $this->assertFalse($object->isValid(['read("member:")']));
-        $this->assertEquals('Role "member" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "member" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("user:")']));
         $this->assertEquals('Role "user" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("team:")']));
@@ -237,11 +238,11 @@ class PermissionsTest extends TestCase
 
         // Permission role:$value must be one of: all, guest, member
         $this->assertFalse($object->isValid(['read("anyy")']));
-        $this->assertEquals('Role "anyy" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "anyy" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("gguest")']));
-        $this->assertEquals('Role "gguest" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "gguest" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("memer:123abc")']));
-        $this->assertEquals('Role "memer" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "memer" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
 
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading special chars
@@ -267,11 +268,11 @@ class PermissionsTest extends TestCase
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertFalse($object->isValid(['update("memmber:1234")']));
-        $this->assertEquals('Role "memmber" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "memmber" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("tteam:1234")']));
-        $this->assertEquals('Role "tteam" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "tteam" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("userr:1234")']));
-        $this->assertEquals('Role "userr" is not allowed.', $object->getDescription());
+        $this->assertEquals('Role "userr" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
 
         // Team permission
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));

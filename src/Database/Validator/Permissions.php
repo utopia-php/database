@@ -10,11 +10,6 @@ class Permissions extends Validator
 {
     protected string $message = 'Permissions Error';
 
-    protected static array $defaults = [
-        ...Database::PERMISSIONS,
-        'write',
-    ];
-
     protected array $allowed;
 
     protected array $statusDimensions = [
@@ -30,14 +25,10 @@ class Permissions extends Validator
      * @param int $length maximum amount of permissions. 0 means unlimited.
      * @param array $allowed allowed permissions. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowed = [])
+    public function __construct(int $length = 0, array $allowed = [...Database::PERMISSIONS, Database::PERMISSION_WRITE])
     {
         $this->length = $length;
-        if (empty($allowed)) {
-            $this->allowed = self::$defaults;
-        } else {
-            $this->allowed = $allowed;
-        }
+        $this->allowed = $allowed;
     }
 
     /**

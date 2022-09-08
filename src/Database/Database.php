@@ -53,15 +53,19 @@ class Database
         self::PERMISSION_DELETE,
     ];
 
+    // Roles
+    const ROLE_ANY = 'any';
+    const ROLE_GUESTS = 'guests';
+    const ROLE_USERS = 'users';
+    const ROLE_USER = 'user';
+    const ROLE_TEAM = 'team';
+
     const ROLES = [
-        'any',
-        'users',
-        'user',
-        'team',
-        'member',
-        'guests',
-        'status',
-        'role',
+        self::ROLE_ANY,
+        self::ROLE_GUESTS,
+        self::ROLE_USERS,
+        self::ROLE_USER,
+        self::ROLE_TEAM,
     ];
 
     // Collections

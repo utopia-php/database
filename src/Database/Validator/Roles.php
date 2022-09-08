@@ -11,6 +11,7 @@ class Roles extends Validator
     protected string $message = 'Roles Error';
 
     protected array $statusDimensions = [
+    protected array $allowed;
         'verified',
         'unverified',
     ];
@@ -21,10 +22,12 @@ class Roles extends Validator
      * Roles constructor.
      *
      * @param int $length maximum amount of role. 0 means unlimited.
+     * @param array $allowed allowed roles. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowed = null)
+    public function __construct(int $length = 0, array $allowed = Database::ROLES)
     {
         $this->length = $length;
+        $this->allowed = $allowed;
     }
 
     /**

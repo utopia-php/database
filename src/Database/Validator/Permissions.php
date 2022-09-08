@@ -12,7 +12,7 @@ class Permissions extends Validator
 
     protected array $allowed;
 
-    protected array $statusDimensions = [
+    protected array $userDimensions = [
         'verified',
         'unverified',
     ];
@@ -58,6 +58,7 @@ class Permissions extends Validator
             $this->message = 'Permissions must be an array of strings.';
             return false;
         }
+
         if ($this->length && \count($permissions) > $this->length) {
             $this->message = 'You can only provide up to ' . $this->length . ' permissions.';
             return false;
@@ -101,27 +102,45 @@ class Permissions extends Validator
             $role = $permission->getRole();
             $identifier = $permission->getIdentifier();
             $dimension = $permission->getDimension();
+            $key = new Key();
 
             switch ($role) {
-                case 'users':
-                    if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
-                        return false;
-                    }
-                case 'guests':
-                case 'any':
+                case Database::ROLE_USERS:
                     if (!empty($identifier)) {
                         $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
                         return false;
                     }
-                    break;
-                case 'user':
-                    if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
+                    if (!empty($dimension) && !\in_array($dimension, $this->userDimensions)) {
+                        $this->message = 'Users dimension "' . $dimension . '" is not allowed. Must be one of: ' . \implode(', ', $this->userDimensions);
                         return false;
                     }
-                case 'team':
-                    $key = new Key();
+                    break;
+                case Database::ROLE_GUESTS:
+                case Database::ROLE_ANY:
+                    if (!empty($identifier)) {
+                        $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
+                        return false;
+                    }
+                    if (!empty($dimension)) {
+                        $this->message = 'Role "' . $role . '"' . ' can not have a dimension value.';
+                        return false;
+                    }
+                    break;
+                case Database::ROLE_USER:
+                    if (empty($identifier)) {
+                        $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
+                        return false;
+                    }
+                    if (!$key->isValid($identifier)) {
+                        $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
+                        return false;
+                    }
+                    if (!empty($dimension) && !\in_array($dimension, $this->userDimensions)) {
+                        $this->message = 'User dimension "' . $dimension . '" is not allowed. Must be one of: ' . \implode(', ', $this->userDimensions);
+                        return false;
+                    }
+                    break;
+                case Database::ROLE_TEAM:
                     if (empty($identifier)) {
                         $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
                         return false;
@@ -136,7 +155,7 @@ class Permissions extends Validator
                     }
                     break;
                 default:
-                    $this->message = 'Role "' . $role . '" is not allowed.';
+                    $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
                     return false;
             }
         }

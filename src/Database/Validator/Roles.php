@@ -10,8 +10,9 @@ class Roles extends Validator
 {
     protected string $message = 'Roles Error';
 
-    protected array $statusDimensions = [
     protected array $allowed;
+
+    protected array $userDimensions = [
         'verified',
         'unverified',
     ];
@@ -57,6 +58,7 @@ class Roles extends Validator
             $this->message = 'Roles must be an array of strings.';
             return false;
         }
+
         if ($this->length && \count($roles) > $this->length) {
             $this->message = 'You can only provide up to ' . $this->length . ' roles.';
             return false;
@@ -76,31 +78,41 @@ class Roles extends Validator
                 return false;
             }
 
-            $role = Role::parse($role);
+            try {
+                $role = Role::parse($role);
+            } catch (\Exception $e) {
+                $this->message = $e->getMessage();
+                return false;
+            }
+
             $roleName = $role->getRole();
             $identifier = $role->getIdentifier();
             $dimension = $role->getDimension();
+            $key = new Key();
 
             switch ($role->getRole()) {
-                case 'users':
-                    if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
-                        return false;
-                    }
-                case 'guests':
-                case 'any':
+                case Database::ROLE_USERS:
                     if (!empty($identifier)) {
                         $this->message = '"' . $roleName . '"' . ' permission can not have an ID value.';
                         return false;
                     }
-                    break;
-                case 'user':
-                    if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
+                    if (!empty($dimension) && !\in_array($dimension, $this->userDimensions)) {
+                        $this->message = 'Users dimension must be one of: ' . \implode(', ', $this->userDimensions);
                         return false;
                     }
-                case 'team':
-                    $key = new Key();
+                    break;
+                case Database::ROLE_GUESTS:
+                case Database::ROLE_ANY:
+                    if (!empty($identifier)) {
+                        $this->message = '"' . $roleName . '"' . ' permission can not have an ID value.';
+                        return false;
+                    }
+                    if (!empty($dimension)) {
+                        $this->message = 'Role "' . $roleName . '"' . ' can not have a dimension value.';
+                        return false;
+                    }
+                    break;
+                case Database::ROLE_USER:
                     if (empty($identifier)) {
                         $this->message = '"' . $roleName . '"' . ' permission must have an ID value.';
                         return false;
@@ -109,9 +121,27 @@ class Roles extends Validator
                         $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
                         return false;
                     }
+                    if (!empty($dimension) && !\in_array($dimension, $this->userDimensions)) {
+                        $this->message = 'User dimension must be one of: ' . \implode(', ', $this->userDimensions);
+                        return false;
+                    }
+                    break;
+                case Database::ROLE_TEAM:
+                    if (empty($identifier)) {
+                        $this->message = '"' . $roleName . '"' . ' permission must have an ID value.';
+                        return false;
+                    }
+                    if (!$key->isValid($identifier)) {
+                        $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
+                        return false;
+                    }
+                    if (!empty($dimension) && !$key->isValid($dimension)) {
+                        $this->message = 'Dimension must be a valid key: ' . $key->getDescription();
+                        return false;
+                    }
                     break;
                 default:
-                    $this->message = 'Role "' . $roleName . '" is not allowed.';
+                    $this->message = 'Role "' . $roleName . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
                     return false;
             }
         }

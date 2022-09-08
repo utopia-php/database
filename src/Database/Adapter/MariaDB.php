@@ -174,6 +174,7 @@ class MariaDB extends Adapter
                         `_uid` CHAR(255) NOT NULL,
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
+                        `_permissions` MEDIUMTEXT DEFAULT NULL,
                         " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
@@ -418,15 +419,10 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        $permissions = $this->getSQLPermissionsQuery($name);
-
         $stmt = $this->getPDO()->prepare("
-            SELECT 
-                table_main.*,
-                {$permissions}
-            FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-            WHERE _uid = :_uid
-            LIMIT 1;
+            SELECT * 
+            FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` 
+            WHERE _uid = :_uid;
         ");
 
         $stmt->bindValue(':_uid', $id);
@@ -442,25 +438,13 @@ class MariaDB extends Adapter
         $document['$internalId'] = $document['_id'];
         $document['$createdAt'] = $document['_createdAt'];
         $document['$updatedAt'] = $document['_updatedAt'];
-        $document['$permissions'] = [];
-
-        /** Decompose permissions JSON into a string array per type */
-        foreach (Database::PERMISSIONS as $type) {
-            $key = '_' . $type;
-            if (!empty($document[$key] ?? '')) {
-                $permissions = \json_decode($document[$key]);
-                foreach ($permissions as $permission) {
-                    $document['$permissions'][] = "{$type}(\"{$permission}\")";
-                }
-
-            }
-            unset($document[$key]);
-        }
+        $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
 
         unset($document['_id']);
         unset($document['_uid']);
         unset($document['_createdAt']);
         unset($document['_updatedAt']);
+        unset($document['_permissions']);
 
         return new Document($document);
     }
@@ -480,6 +464,8 @@ class MariaDB extends Adapter
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_permissions'] = json_encode($document->getPermissions());
+
         $name = $this->filter($collection);
         $columns = '';
 
@@ -545,11 +531,9 @@ class MariaDB extends Adapter
                 case 1062:
                 case 23000:
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                    break;
 
                 default:
                     throw $e;
-                    break;
             }
         }
 
@@ -575,6 +559,7 @@ class MariaDB extends Adapter
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_permissions'] = json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -733,11 +718,9 @@ class MariaDB extends Adapter
                     case 1062:
                     case 23000:
                         throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                        break;
 
                     default:
                         throw $e;
-                        break;
                 }
             }
         }
@@ -796,16 +779,16 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     * 
+     *
      * @return Document[]
-     * @throws Exception 
-     * @throws PDOException 
+     * @throws Exception
+     * @throws PDOException
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
+        $where = [];
         $orders = [];
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
@@ -895,19 +878,18 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $permissions = $this->getSQLPermissionsQuery($name);
+        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT
-                table_main.*,
-                {$permissions}
-            FROM 
-                `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-            WHERE " . implode(' AND ', $where) . "
-            GROUP BY table_main._uid
+        $sql = "
+            SELECT table_main.*
+            FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` as table_main
+            " . $sqlWhere . "
+            GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
-        ");
+        ";
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
@@ -943,23 +925,13 @@ class MariaDB extends Adapter
             $results[$key]['$internalId'] = $value['_id'];
             $results[$key]['$createdAt'] = $value['_createdAt'];
             $results[$key]['$updatedAt'] = $value['_updatedAt'];
-            $results[$key]['$permissions'] = [];
-
-            foreach (Database::PERMISSIONS as $type) {
-                $typeKey = '_' . $type;
-                if (!empty($results[$key][$typeKey] ?? '')) {
-                    $permissions = \json_decode($results[$key][$typeKey]);
-                    foreach ($permissions as $permission) {
-                        $results[$key]['$permissions'][] = "{$type}(\"{$permission}\")";
-                    }
-                }
-                unset($results[$key][$typeKey]);
-            }
+            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
 
             unset($results[$key]['_uid']);
             unset($results[$key]['_id']);
             unset($results[$key]['_createdAt']);
             unset($results[$key]['_updatedAt']);
+            unset($results[$key]['_permissions']);
 
             $results[$key] = new Document($results[$key]);
         }
@@ -985,7 +957,7 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
+        $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $i => $query) {
@@ -1009,16 +981,17 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT COUNT(1) as sum
+        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sql = "SELECT COUNT(1) as sum
             FROM
                 (
                     SELECT 1
                     FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-                    WHERE " . implode(' AND ', $where) . "
+                    " . $sqlWhere . "
                     {$limit}
                 ) table_count
-        ");
+        ";
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
@@ -1054,7 +1027,7 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
+        $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $i => $query) {
@@ -1077,12 +1050,14 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
+        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+
         $stmt = $this->getPDO()->prepare("
             SELECT SUM({$attribute}) as sum
             FROM (
                 SELECT {$attribute}
                 FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$name}` table_main
-                WHERE " . implode(' AND ', $where) . "
+                 " . $sqlWhere . "
                 {$limit}
             ) table_count
         ");
@@ -1532,43 +1507,12 @@ class MariaDB extends Adapter
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-
-        return "table_main._uid IN 
-                (
-                    SELECT * FROM 
-                    (
-                        SELECT _document
-                        FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
-                        WHERE _permission IN (" . implode(', ', $roles) . ")
-                        AND _type = 'read'
-                    ) as subquery
-                )";
-    }
-
-    /**
-     * Get SQL query to aggregate permissions as JSON array
-     *
-     * @param string $collection
-     * @return string 
-     * @throws Exception 
-     */
-    protected function getSQLPermissionsQuery(string $collection): string
-    {
-        $permissions = '';
-        foreach (Database::PERMISSIONS as $i => $type) {
-            $permissions .= "(
-                    SELECT JSON_ARRAYAGG(DISTINCT _permission)
+        return "table_main._uid IN (
+                    SELECT distinct(_document)
                     FROM `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$collection}_perms`
-                    WHERE
-                        _document = table_main._uid
-                        AND _type = {$this->getPDO()->quote($type)}
-                ) as _{$type}";
-
-            if ($i !== \array_key_last(Database::PERMISSIONS)) {
-                $permissions .= ",\n";
-            }
-        }
-        return $permissions;
+                    WHERE _permission IN (" . implode(', ', $roles) . ")
+                    AND _type = 'read'
+                )";
     }
 
     /**
@@ -1581,30 +1525,21 @@ class MariaDB extends Adapter
     protected function getPDOType(mixed $value): int
     {
         switch (gettype($value)) {
+            case 'double':
             case 'string':
                 return PDO::PARAM_STR;
-                break;
-
-            case 'boolean':
-                return PDO::PARAM_INT;
-                break;
-
-                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
-            case 'double':
-                return PDO::PARAM_STR;
-                break;
 
             case 'integer':
+            case 'boolean':
                 return PDO::PARAM_INT;
-                break;
+
+                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
 
             case 'NULL':
                 return PDO::PARAM_NULL;
-                break;
 
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
-                break;
         }
     }
 

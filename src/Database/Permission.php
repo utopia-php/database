@@ -125,7 +125,7 @@ class Permission
      *
      * @param ?array $permissions
      * @param array $allowed
-     * @return array
+     * @return ?array
      */
     public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
     {
@@ -217,6 +217,23 @@ class Permission
     {
         $permission = new Permission(
             'delete',
+            $role->getRole(),
+            $role->getIdentifier(),
+            $role->getDimension()
+        );
+        return $permission->toString();
+    }
+
+    /**
+     * Create a write permission string from the given Role
+     *
+     * @param Role $role
+     * @return string
+     */
+    public static function write(Role $role): string
+    {
+        $permission = new Permission(
+            'write',
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()

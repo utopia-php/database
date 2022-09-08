@@ -66,7 +66,7 @@ class Database
     // Collections
     const METADATA = '_metadata';
     const METADATA_INDEX = '_index';
-    const METADATA_ATTRIBUTE = '_attribute';
+    const METADATA_ATTRIBUTE = '_metadata_attribute';
 
     // Cursor
     const CURSOR_BEFORE = 'before';
@@ -162,7 +162,7 @@ class Database
                 'type' => self::VAR_STRING,
                 'size' => 256,
                 'required' => true,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
                 'filters' => [],
             ],
@@ -170,11 +170,11 @@ class Database
                 '$id' => 'attributes',
                 'key' => 'attributes',
                 'type' => self::VAR_STRING,
-                'size' => 1000000,
+                'size' => 1,
                 'required' => false,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
-                'filters' => ['json'],
+                'filters' => ['subQueryAttributes'],
             ],
             [
                 '$id' => 'indexes',
@@ -182,13 +182,118 @@ class Database
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
                 'required' => false,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
                 'filters' => ['json'],
             ],
         ],
         'indexes' => [],
     ];
+
+
+
+    /**
+     * Parent Collection
+     * Defines the structure for both system and custom collections
+     *
+     * @var array
+     */
+    protected array $collection_123 = [
+        '$id' => self::METADATA_ATTRIBUTE,
+        '$collection' => self::METADATA_ATTRIBUTE,
+        'name' => 'collections_123',
+        'attributes' => [
+            [
+                '$id' => 'collectionId',
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'collectionInternalId',
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'type',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'format',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'required',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'size',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'signed',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'default',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ],
+            [
+                '$id' => 'array',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ],
+            [
+                '$id' => 'filters',
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ]
+        ],
+        'indexes' => [],
+    ];
+
+
+
+
+
+
+
 
     /**
      * @var array
@@ -276,6 +381,20 @@ class Database
                 return DateTime::formatTz($value);
             }
         );
+
+        self::addFilter(
+            'subQueryAttributes',
+            function (mixed $value) {
+                return null;
+            },
+            function (mixed $value, Document $document, Database $database) {
+                return Authorization::skip(fn () => $database->find('_attribute', [
+                    Query::equal('collectionInternalId', [$document->getInternalId()]),
+                    Query::limit(9999),
+                ]));
+            }
+        );
+
     }
 
     /**
@@ -381,7 +500,8 @@ class Database
             ['indexes', self::VAR_STRING, 1000000, false],
         ]);
 
-        $metadataCollection = $this->createCollection(self::METADATA, $attributes);
+        $this->createCollection(self::METADATA, $attributes);
+
 
         $this->createCollection(self::METADATA_ATTRIBUTE, [
             new Document([
@@ -469,6 +589,7 @@ class Database
         ]);
 
         return true;
+
     }
 
     /**
@@ -529,6 +650,10 @@ class Database
             return new Document($this->collection);
         }
 
+        if ($id === self::METADATA_ATTRIBUTE) {
+            return new Document($this->collection_123);
+        }
+
         $collection = new Document([
             '$id' => ID::custom($id),
             '$permissions' => [
@@ -538,7 +663,7 @@ class Database
                 Permission::delete(Role::any()),
             ],
             'name' => $id,
-            'attributes' => $attributes,
+            //'attributes' => $attributes,
             'indexes' => $indexes,
         ]);
 
@@ -564,8 +689,6 @@ class Database
             }
         }
 
-        $c = $this->createDocument(self::METADATA, $collection);
-
         foreach ($attributes as $attribute){
             $x2 = new Document([
                 'name' => $attribute->getId(),
@@ -582,9 +705,11 @@ class Database
             ]);
 
             $this->createDocument(self::METADATA_ATTRIBUTE, $x2);
+            $collection->setAttribute('attributes', $x2, Document::SET_TYPE_APPEND);
         }
 
-        return $c;
+
+        return $this->createDocument(self::METADATA, $collection);
 
     }
 
@@ -598,7 +723,9 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        return $this->getDocument(self::METADATA, $id);
+        $doc = $this->getDocument(self::METADATA, $id);
+        $doc->setAttribute('attributes', []);
+        return $doc;
     }
 
     /**

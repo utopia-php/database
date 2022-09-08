@@ -2726,8 +2726,10 @@ abstract class Base extends TestCase
         $flowers = $database->createCollection('flowers');
         $database->createAttribute('flowers', 'name', Database::VAR_STRING, 128, true);
         $database->createAttribute('flowers', 'inStock', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('flowers', 'date', Database::VAR_STRING, 128, false);
 
         $database->createDocument('flowers', new Document([
+            '$id' => 'flowerWithDate',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2735,7 +2737,8 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Violet',
-            'inStock' => 51
+            'inStock' => 51,
+            'date' => '2000-06-12 14:12:55.000'
         ]));
 
         $doc = $database->createDocument('flowers', new Document([
@@ -2890,6 +2893,7 @@ abstract class Base extends TestCase
         $this->assertEquals(500, $doc->getAttribute('price'));
 
         $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
+        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
 
         // Delete cache to force read from database with new schema
         $database->deleteCachedDocument('flowers', 'LiliPriced');
@@ -2898,6 +2902,11 @@ abstract class Base extends TestCase
 
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
+
+        // String to Datetime
+        $database->deleteCachedDocument('flowers', 'flowerWithDate');
+        $doc = $database->getDocument('flowers', 'flowerWithDate');
+        $this->assertEquals('2000-06-12 14:12:55.000', $doc->getAttribute('date'));
     }
 
     /**

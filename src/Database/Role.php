@@ -136,6 +136,11 @@ class Role
         return new Role('guests');
     }
 
+    public static function member(string $identifier): Role
+    {
+        return new Role('member', $identifier);
+    }
+
     /**
      * Create a status role from the given status
      *

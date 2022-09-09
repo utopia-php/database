@@ -3,7 +3,7 @@
 namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
-
+use phpDocumentor\Reflection\DocBlock\Tags\Var_;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
@@ -347,8 +347,8 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $result = $this->client->find($name, ['_uid' => $id])->cursor->firstBatch ?? [];
-
+        $result = $this->client->find($name, ['_uid' => $id], ['limit' => 1])->cursor->firstBatch;
+        
         if (empty($result)) {
             return new Document([]);
         }
@@ -400,11 +400,7 @@ class MongoDBAdapter extends Adapter
             $this->replaceChars('$', '_', $document->getArrayCopy()),
         );
 
-        $current = $this->remove_null_keys($this->getDocument($collection, $document->getId()));
-        $docCopy = $this->remove_null_keys($document);
-        $merged = $this->remove_null_keys(\array_merge($docCopy, $current));
-
-        return new Document($merged);
+        return $document;
     }
 
     /**
@@ -474,6 +470,11 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $filters = $this->buildFilters($queries);
+
+        if(Authorization::$status) {
+            $filters['_read']['$in'] = Authorization::getRoles();
+        }
+
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
 
         // orders

@@ -69,7 +69,6 @@ abstract class Base extends TestCase
     public function testCreatedAtUpdatedAt()
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
-
         $document = static::getDatabase()->createDocument('created_at', new Document([
             '$id' => ID::custom('uid123'),
             '$permissions' => [

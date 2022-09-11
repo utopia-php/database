@@ -170,7 +170,7 @@ class Database
                 '$id' => 'attributes',
                 'key' => 'attributes',
                 'type' => self::VAR_STRING,
-                'size' => 1,
+                'size' => 1000000,
                 'required' => false,
                 'signed' => false,
                 'array' => false,
@@ -291,10 +291,6 @@ class Database
 
 
 
-
-
-
-
     /**
      * @var array
      */
@@ -384,14 +380,20 @@ class Database
 
         self::addFilter(
             'subQueryAttributes',
-            function (mixed $value) {
-                return null;
+            function (mixed $value, Document $document, Database $database) {
+//                var_dump('ENCODE subQueryAttributes encode');
+//                var_dump($value);
+//                var_dump('subQueryAttributessubQueryAttributessubQueryAttributessubQueryAttributes');
+                //return null;
             },
             function (mixed $value, Document $document, Database $database) {
-                return Authorization::skip(fn () => $database->find('_attribute', [
-                    Query::equal('collectionInternalId', [$document->getInternalId()]),
-                    Query::limit(9999),
-                ]));
+
+                var_dump('DECODE  subQueryAttributes encode');
+
+//                return Authorization::skip(fn () => $database->find('_attribute', [
+//                    Query::equal('collectionInternalId', [$document->getInternalId()]),
+//                    Query::limit(9999),
+//                ]));
             }
         );
 
@@ -639,7 +641,10 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
+        var_dump("createCollection = " . $id);
         $collection = $this->getCollection($id);
+        var_dump("getCollection = ", $collection);
+
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
@@ -663,7 +668,7 @@ class Database
                 Permission::delete(Role::any()),
             ],
             'name' => $id,
-            //'attributes' => $attributes,
+            'attributes' => [],
             'indexes' => $indexes,
         ]);
 
@@ -689,27 +694,44 @@ class Database
             }
         }
 
+        $collection2 = $this->createDocument(self::METADATA, $collection);
+
+        var_dump("--------------------- insert attributes ---------- ");
+        var_dump($attributes);
+
         foreach ($attributes as $attribute){
             $x2 = new Document([
-                'name' => $attribute->getId(),
-                'type' => $attribute->getAttribute('type'),
-                'collectionId' => $collection->getId(),
-                'collectionInternalId' => $collection->getInternalId(),
-                'default' => $attribute->getAttribute('default'),
-                'filters' => $attribute->getAttribute('filters'),
-                'array' => $attribute->getAttribute('array'),
-                'signed' => $attribute->getAttribute('signed'),
-                'size' => $attribute->getAttribute('size'),
-                'required' => $attribute->getAttribute('required'),
-                'format' => $attribute->getAttribute('format'),
+
+//                'collectionId' => $collection2->getId(),
+//                'collectionInternalId' => $collection2->getInternalId(),
+
+//                'name' => $attribute->getId(),
+//                'type' => $attribute->getAttribute('type'),
+//                'default' => $attribute->getAttribute('default'),
+//                'filters' => $attribute->getAttribute('filters'),
+//                'array' => $attribute->getAttribute('array'),
+//                'signed' => $attribute->getAttribute('signed'),
+//                'size' => $attribute->getAttribute('size'),
+//                'required' => $attribute->getAttribute('required'),
+//                'format' => $attribute->getAttribute('format'),
+
+                'name' => "dsdsdsd",
+                'type' => "string",
+                'default' => null,
+                'filters' => "filters",
+                'array' => false,
+                'signed' => false,
+                'size' => 0,
+                'required' => false,
+                'format' => ""
+
             ]);
 
             $this->createDocument(self::METADATA_ATTRIBUTE, $x2);
-            $collection->setAttribute('attributes', $x2, Document::SET_TYPE_APPEND);
+
         }
 
-
-        return $this->createDocument(self::METADATA, $collection);
+        return $collection2;
 
     }
 
@@ -724,7 +746,7 @@ class Database
     public function getCollection(string $id): Document
     {
         $doc = $this->getDocument(self::METADATA, $id);
-        $doc->setAttribute('attributes', []);
+        //$doc->setAttribute('attributes', []);
         return $doc;
     }
 
@@ -1384,6 +1406,10 @@ class Database
             return new Document($this->collection);
         }
 
+//        if ($collection === self::METADATA && $id === self::METADATA_ATTRIBUTE) {
+//            return new Document($this->collection_123);
+//        }
+
         if (empty($collection)) {
             throw new Exception('test exception: ' . $collection . ':' . $id);
         }
@@ -1452,7 +1478,6 @@ class Database
         $document = $this->encode($collection, $document);
 
         $validator = new Structure($collection);
-
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
         }

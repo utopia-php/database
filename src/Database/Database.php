@@ -381,19 +381,26 @@ class Database
         self::addFilter(
             'subQueryAttributes',
             function (mixed $value, Document $document, Database $database) {
-//                var_dump('ENCODE subQueryAttributes encode');
-//                var_dump($value);
-//                var_dump('subQueryAttributessubQueryAttributessubQueryAttributessubQueryAttributes');
-                //return null;
+                var_dump("--------------start encode--------------");
+                var_dump("--------------end encode--------------");
+                return null;
             },
             function (mixed $value, Document $document, Database $database) {
 
-                var_dump('DECODE  subQueryAttributes encode');
+                var_dump("--------------start decode--------------");
 
-//                return Authorization::skip(fn () => $database->find('_attribute', [
-//                    Query::equal('collectionInternalId', [$document->getInternalId()]),
-//                    Query::limit(9999),
-//                ]));
+                if($document->getId() == '_metadata_attribute'){
+                    return null;
+                }
+
+                var_dump($document);
+                var_dump("--------------end decode--------------");
+
+                return Authorization::skip(fn () => $database->find(self::METADATA_ATTRIBUTE, [
+                    Query::equal('collectionInternalId', [$document->getInternalId()]),
+                    Query::limit(9999),
+                ]));
+
             }
         );
 
@@ -504,7 +511,6 @@ class Database
 
         $this->createCollection(self::METADATA, $attributes);
 
-
         $this->createCollection(self::METADATA_ATTRIBUTE, [
             new Document([
                 '$id' => ID::custom('collectionId'),
@@ -521,7 +527,7 @@ class Database
                 'default' => null,
             ]),
             new Document([
-                '$id' => ID::custom('name'),
+                '$id' => ID::custom('key'),
                 'type' => Database::VAR_STRING,
                 'size' => 255,
                 'required' => false,
@@ -529,13 +535,6 @@ class Database
             ]),
             new Document([
                 '$id' => ID::custom('type'),
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'default' => null,
-            ]),
-            new Document([
-                '$id' => ID::custom('format'),
                 'type' => Database::VAR_STRING,
                 'size' => 255,
                 'required' => false,
@@ -586,7 +585,25 @@ class Database
                 'array' => false,
                 'default' => null,
                 'filters' => ['json']
-            ])
+            ]),
+            new Document([
+                '$id' => ID::custom('format'),
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ]),
+             new Document([
+                 '$id' => ID::custom('formatOptions'),
+                 'type' => Database::VAR_STRING,
+                 'required' => false,
+                 'size' => 1000000,
+                 'array' => false,
+                 'default' => null,
+                 'filters' => ['json']
+             ])
 
         ]);
 
@@ -643,8 +660,7 @@ class Database
     {
         var_dump("createCollection = " . $id);
         $collection = $this->getCollection($id);
-        var_dump("getCollection = ", $collection);
-
+        var_dump($collection);
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
@@ -655,9 +671,9 @@ class Database
             return new Document($this->collection);
         }
 
-        if ($id === self::METADATA_ATTRIBUTE) {
-            return new Document($this->collection_123);
-        }
+//        if ($id === self::METADATA_ATTRIBUTE) {
+//            $collection = new Document($this->collection_123);
+//        }
 
         $collection = new Document([
             '$id' => ID::custom($id),
@@ -671,6 +687,7 @@ class Database
             'attributes' => [],
             'indexes' => $indexes,
         ]);
+
 
         // Check index limits, if given
         if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
@@ -694,44 +711,40 @@ class Database
             }
         }
 
-        $collection2 = $this->createDocument(self::METADATA, $collection);
+        $collection = $this->createDocument(self::METADATA, $collection);
 
         var_dump("--------------------- insert attributes ---------- ");
+        var_dump($collection);
         var_dump($attributes);
 
         foreach ($attributes as $attribute){
-            $x2 = new Document([
+            $att = new Document([
+                    'collectionId' => $collection->getId(),
+                    'collectionInternalId' => $collection->getInternalId(),
+                    'key' => $attribute->getId(),
+                    'type' => $attribute->getAttribute('type'),
+                    'size' => $attribute->getAttribute('size'),
+                    'required' => $attribute->getAttribute('required'),
+                    'default' => $attribute->getAttribute('default'),
+                    'signed' => $attribute->getAttribute('signed'),
+                    'array' => $attribute->getAttribute('array'),
+                    'format' => $attribute->getAttribute('format'),
+                    'formatOptions' => $attribute->getAttribute('formatOptions'),
+                    'filters' => $attribute->getAttribute('filters'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                ]);
 
-//                'collectionId' => $collection2->getId(),
-//                'collectionInternalId' => $collection2->getInternalId(),
-
-//                'name' => $attribute->getId(),
-//                'type' => $attribute->getAttribute('type'),
-//                'default' => $attribute->getAttribute('default'),
-//                'filters' => $attribute->getAttribute('filters'),
-//                'array' => $attribute->getAttribute('array'),
-//                'signed' => $attribute->getAttribute('signed'),
-//                'size' => $attribute->getAttribute('size'),
-//                'required' => $attribute->getAttribute('required'),
-//                'format' => $attribute->getAttribute('format'),
-
-                'name' => "dsdsdsd",
-                'type' => "string",
-                'default' => null,
-                'filters' => "filters",
-                'array' => false,
-                'signed' => false,
-                'size' => 0,
-                'required' => false,
-                'format' => ""
-
-            ]);
-
-            $this->createDocument(self::METADATA_ATTRIBUTE, $x2);
+            $att = $this->createDocument(self::METADATA_ATTRIBUTE, $att);
+            $collection->setAttribute('attributes', $att, Document::SET_TYPE_APPEND);
 
         }
 
-        return $collection2;
+        return $collection;
 
     }
 
@@ -745,9 +758,8 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        $doc = $this->getDocument(self::METADATA, $id);
-        //$doc->setAttribute('attributes', []);
-        return $doc;
+        var_dump("----------- getCollection = ". $id);
+        return $this->getDocument(self::METADATA, $id);;
     }
 
     /**
@@ -812,44 +824,46 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+            // todo:: important look on Appwrite if this is used!!!!!! $attribute->getId() change to $attribute->getAttribute('key')
+            if (\strtolower($attribute->getAttribute('key')) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
         }
 
-        if (
-            $this->adapter->getAttributeLimit() > 0 &&
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
+//        if ($this->adapter->getAttributeLimit() > 0
+//            && $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit())
+//        {
+//            throw new LimitException('Column limit reached. Cannot create new attribute.');
+//        }
 
         if ($format) {
             if (!Structure::hasFormat($format, $type)) {
                 throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
             }
         }
+//
+//        $collection->setAttribute('attributes', new Document([
+//            'collectionId' => $collection->getId(),
+//            'collectionInternalId' => $collection->getInternalId(),
+//            '$id' => ID::custom($id),
+//            'key' => $id,
+//            'type' => $type,
+//            'size' => $size,
+//            'required' => $required,
+//            'default' => $default,
+//            'signed' => $signed,
+//            'array' => $array,
+//            'format' => $format,
+//            'formatOptions' => $formatOptions,
+//            'filters' => $filters,
+//        ]), Document::SET_TYPE_APPEND);
 
-        $collection->setAttribute('attributes', new Document([
-            '$id' => ID::custom($id),
-            'key' => $id,
-            'type' => $type,
-            'size' => $size,
-            'required' => $required,
-            'default' => $default,
-            'signed' => $signed,
-            'array' => $array,
-            'format' => $format,
-            'formatOptions' => $formatOptions,
-            'filters' => $filters,
-        ]), Document::SET_TYPE_APPEND);
-
-        if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
+//        if (
+//            $this->adapter->getRowLimit() > 0 &&
+//            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+//        ) {
+//            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+//        }
 
         switch ($type) {
             case self::VAR_STRING:
@@ -870,7 +884,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
 
         // only execute when $default is given
@@ -898,15 +911,40 @@ class Database
                     break;
                 default:
                     throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
             }
         }
 
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
+        $d = new Document([
+            'collectionId' => $collection->getId(),
+            'collectionInternalId' => $collection->getInternalId(),
+            'key' => $id,
+            'type' => $type,
+            'size' => $size,
+            'required' => $required,
+            'default' => $default,
+            'signed' => $signed,
+            'array' => $array,
+            'format' => $format,
+            'formatOptions' => $formatOptions,
+            'filters' => $filters,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $this->createDocument(self::METADATA_ATTRIBUTE, $d);
+        // what cache to delete??????????????
+        $this->deleteCachedCollection(self::METADATA);
+        $this->deleteCachedCollection($collection->getId());
+
+//        if ($collection->getId() !== self::METADATA) {
+//            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+//        }
 
         return $attribute;
     }
@@ -1169,23 +1207,26 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws AuthorizationException
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        var_dump("-------- deleteAttribute collection " . $collection . ' id = ' . $id);
+
         $collection = $this->getCollection($collection);
-
         $attributes = $collection->getAttribute('attributes', []);
-
-        foreach ($attributes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $id) {
-                unset($attributes[$key]);
+        foreach ($attributes as $value) {
+            if (
+                $value['key'] === $id
+                && $value['collectionId'] === $collection->getId()
+                && $collection->getId() !== self::METADATA
+            ) {
+                $this->deleteDocument(self::METADATA_ATTRIBUTE, $value['$id']);
+                // what cache to delete??????????????
+                $this->deleteCachedCollection(self::METADATA);
+                $this->deleteCachedCollection($collection->getId());
+                break;
             }
-        }
-
-        $collection->setAttribute('attributes', $attributes);
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
         return $this->adapter->deleteAttribute($collection->getId(), $id);
@@ -1402,6 +1443,9 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
+
+        var_dump("----------------- getDocument --- $collection = " . $collection . " id = " . $id);
+
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
         }
@@ -1479,7 +1523,7 @@ class Database
 
         $validator = new Structure($collection);
         if (!$validator->isValid($document)) {
-            throw new StructureException($validator->getDescription());
+           // throw new StructureException($validator->getDescription());
         }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);

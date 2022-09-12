@@ -361,6 +361,10 @@ abstract class Base extends TestCase
         $this->assertEquals('withSchema', $collection->getId());
 
         $this->assertIsArray($collection->getAttribute('attributes'));
+
+        var_dump("365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365365");
+        var_dump($collection->getAttribute('attributes'));
+
         $this->assertCount(3, $collection->getAttribute('attributes'));
         $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
         $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);

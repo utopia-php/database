@@ -560,13 +560,10 @@ class Database
             }
         }
 
-        /** Append required filters for the attribute's type  */
+        /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
-        
-        foreach($requiredFilters as $value){
-            if(!in_array($value, $filters, true)){
-                array_push($filters, $value);
-            }
+        if (!empty(array_diff($requiredFilters, $filters))) {
+            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
         if (

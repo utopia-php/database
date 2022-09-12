@@ -2963,6 +2963,15 @@ abstract class Base extends TestCase
         ]));
     }
 
+    public function testCreateDateTimeAttributeFailure()
+    {
+        static::getDatabase()->createCollection('datetime_fail');
+
+        /** Test for FAILURE */
+        $this->expectException(Exception::class);
+        static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
+    }
+
     public function testReservedKeywords()
     {
         $keywords = $this->getReservedKeywords();

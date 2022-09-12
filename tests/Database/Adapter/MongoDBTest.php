@@ -7,11 +7,9 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Adapter\Mongo\MongoClient;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
-
 use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
@@ -370,7 +368,7 @@ class MongoDBTest extends Base
 
     /**
      * Ensure the collection is removed after use
-     * 
+     *
      * @depends testIndexCaseInsensitivity
      */
     public function testCleanupAttributeTests()

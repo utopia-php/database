@@ -41,8 +41,8 @@ class MySQLTest extends Base
     }
 
     /**
-     * 
-     * @return int 
+     *
+     * @return int
      */
     static function getUsedIndexes(): int
     {

@@ -560,6 +560,15 @@ class Database
             }
         }
 
+        /** Append required filters for the attribute's type  */
+        $requiredFilters = $this->getRequiredFilters($type);
+        
+        foreach($requiredFilters as $value){
+            if(!in_array($value, $filters, true)){
+                array_push($filters, $value);
+            }
+        }
+
         if (
             $this->adapter->getAttributeLimit() > 0 &&
             $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
@@ -632,6 +641,28 @@ class Database
         }
 
         return $attribute;
+    }
+
+    /**
+     * Get the list of required filters for each data type
+     *
+     * @param string $type Type of the attribute
+     *
+     * @return array
+     */
+    protected function getRequiredFilters(string $type): array 
+    {
+        switch ($type) {
+            case self::VAR_STRING:
+            case self::VAR_INTEGER:
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+                return [];
+            case self::VAR_DATETIME:
+                return ['datetime'];
+            default:
+                return [];
+        }
     }
 
     /**

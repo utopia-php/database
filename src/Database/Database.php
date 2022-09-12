@@ -573,10 +573,6 @@ class Database
             }
         }
 
-        if($type === self::VAR_DATETIME && !\array_key_exists('datetime', $filters)) {
-            $filters[] = 'datetime';
-        }
-
         $collection->setAttribute('attributes', new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -625,28 +621,8 @@ class Database
             if ($required === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
-            switch (\gettype($default)) {
-                    // first enforce typed array for each value in $default
-                case 'array':
-                    foreach ($default as $value) {
-                        if ($type !== \gettype($value)) {
-                            throw new Exception('Default value contents do not match given type ' . $type);
-                        }
-                    }
-                    break;
-                    // then enforce for primitive types
-                case self::VAR_STRING:
-                case self::VAR_INTEGER:
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                    if ($type !== \gettype($default) && $type !== self::VAR_DATETIME) {
-                        throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
-                    }
-                    break;
-                default:
-                    throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
-            }
+
+            $this->validateDefaultTypes($type, $default);
         }
 
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
@@ -656,6 +632,51 @@ class Database
         }
 
         return $attribute;
+    }
+
+    /**
+     * Function to validate if the default value of an attribute matches its attribute type
+     *
+     * @param string $type Type of the attribute
+     * @param mixed $default Default value of the attribute
+     *
+     * @throws Exception
+     * @return void
+     */
+    protected function validateDefaultTypes(string $type, mixed $default): void
+    {
+        $defaultType = \gettype($default);
+
+        if ($defaultType === 'NULL') {
+            // Disable null. No validation required
+            return;
+        }
+
+        if ($defaultType === 'array') {
+            foreach ($default as $value) {
+                $this->validateDefaultTypes($type, $value);
+            }
+            return;
+        }
+
+        switch ($type) {
+            case self::VAR_STRING:
+            case self::VAR_INTEGER:
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+                if ($type !== $defaultType) {
+                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            case self::VAR_DATETIME:
+                if ($defaultType !== self::VAR_STRING) {
+                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            default:
+                throw new Exception('Unknown attribute type: ' . $type);
+                break;
+        }
     }
 
     /**
@@ -775,31 +796,8 @@ class Database
             if ($attribute->getAttribute('required') === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
-            switch (\gettype($default)) {
-                    // first enforce typed array for each value in $default
-                case 'array':
-                    foreach ($default as $value) {
-                        if ($attribute->getAttribute('type') !== \gettype($value)) {
-                            throw new Exception('Default value contents do not match given type ' . $attribute->getAttribute('type'));
-                        }
-                    }
-                    break;
-                    // then enforce for primitive types
-                case self::VAR_STRING:
-                case self::VAR_INTEGER:
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                        if ($attribute->getAttribute('type') !== \gettype($default) && $attribute->getAttribute('type') !== self::VAR_DATETIME) {
-                        throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
-                    }
-                    break;
-                case 'NULL':
-                    // Disable null. No validation required
-                    break;
-                default:
-                    throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
-            }
+
+            $this->validateDefaultTypes($attribute->getAttribute('type'), $default);
 
             $attribute->setAttribute('default', $default);
         });

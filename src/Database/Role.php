@@ -58,50 +58,75 @@ class Role
      *
      * @param string $role
      * @return Role
+     * @throws \Exception
      */
     public static function parse(string $role): Role
     {
-        $parts = \explode(':', $role);
+        $roleParts = \explode(':', $role);
+        $hasIdentifier = \count($roleParts) > 1;
+        $hasDimension = \str_contains($role, '/');
+        $role = $roleParts[0];
 
-        if (\count($parts) === 1) {
+        if (!$hasIdentifier && !$hasDimension) {
             return new Role($role);
         }
-        $role = $parts[0];
-        $fullIdentifier = $parts[1];
-        $parts = \explode('/', $fullIdentifier);
 
-        if (\count($parts) === 1) {
-            return new Role($role, $fullIdentifier);
+        if ($hasIdentifier && !$hasDimension) {
+            $identifier = $roleParts[1];
+            return new Role($role, $identifier);
         }
-        $identifier = $parts[0];
-        $dimension = $parts[1];
 
-        return new Role(
-            $role,
-            $identifier,
-            $dimension,
-        );
+        if (!$hasIdentifier && $hasDimension) {
+            $dimensionParts = \explode('/', $role);
+            if (\count($dimensionParts) !== 2) {
+                throw new \Exception('Only one dimension can be provided.');
+            }
+
+            $role = $dimensionParts[0];
+            $dimension = $dimensionParts[1];
+
+            if (empty($dimension)) {
+                throw new \Exception('Dimension must not be empty.');
+            }
+            return new Role($role, '', $dimension);
+        }
+
+        // Has both identifier and dimension
+        $dimensionParts = \explode('/', $roleParts[1]);
+        if (\count($dimensionParts) !== 2) {
+            throw new \Exception('Only one dimension can be provided.');
+        }
+
+        $identifier = $dimensionParts[0];
+        $dimension = $dimensionParts[1];
+
+        if (empty($dimension)) {
+            throw new \Exception('Dimension must not be empty.');
+        }
+        return new Role($role, $identifier, $dimension);
     }
 
     /**
      * Create a user role from the given ID
      *
      * @param string $identifier
+     * @param string $status
      * @return Role
      */
-    public static function user(string $identifier): Role
+    public static function user(string $identifier, string $status = ''): Role
     {
-        return new Role('user', $identifier);
+        return new Role('user', $identifier, $status);
     }
 
     /**
      * Create a users role
      *
+     * @param string $status
      * @return Role
      */
-    public static function users(): Role
+    public static function users(string $status = ''): Role
     {
-        return new Role('users');
+        return new Role('users', '', $status);
     }
 
     /**
@@ -141,14 +166,4 @@ class Role
         return new Role('member', $identifier);
     }
 
-    /**
-     * Create a status role from the given status
-     *
-     * @param string $status
-     * @return Role
-     */
-    public static function status(string $status): Role
-    {
-        return new Role('status', $status);
-    }
 }

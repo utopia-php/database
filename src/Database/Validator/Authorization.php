@@ -11,8 +11,7 @@ class Authorization extends Validator
      * @var array
      */
     static $roles = [
-        'any' => true,
-        'role:all' => true,
+        'any' => true
     ];
 
     /**

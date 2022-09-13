@@ -59,6 +59,7 @@ class Database
     const ROLE_USERS = 'users';
     const ROLE_USER = 'user';
     const ROLE_TEAM = 'team';
+    const ROLE_MEMBER = 'member';
 
     const ROLES = [
         self::ROLE_ANY,
@@ -66,6 +67,7 @@ class Database
         self::ROLE_USERS,
         self::ROLE_USER,
         self::ROLE_TEAM,
+        self::ROLE_MEMBER,
     ];
 
     // Collections

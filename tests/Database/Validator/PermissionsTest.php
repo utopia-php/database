@@ -221,11 +221,11 @@ class PermissionsTest extends TestCase
 
         // Only contains a single ':'
         $this->assertFalse($object->isValid(['user1234']));
-        $this->assertEquals('Invalid permission string format: "user1234".', $object->getDescription());
+        $this->assertEquals('Permission "user1234" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
         $this->assertFalse($object->isValid(['user::1234']));
-        $this->assertEquals('Invalid permission string format: "user::1234".', $object->getDescription());
+        $this->assertEquals('Permission "user::1234" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
         $this->assertFalse($object->isValid(['user:123:4']));
-        $this->assertEquals('Invalid permission string format: "user:123:4".', $object->getDescription());
+        $this->assertEquals('Permission "user:123:4" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
 
         // Split role into format {$type}:{$value}
         // Permission must have value

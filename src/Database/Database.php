@@ -1843,7 +1843,7 @@ class Database
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
 
-           // $attribute['filters'] = $attribute['filters'] === '[]' ? [] : $attribute['filters'];
+           // if($attribute['filters'] === '[]')$attribute['filters'] = [];
 
             $filters = $attribute['filters'] ?? [];
 

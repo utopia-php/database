@@ -1250,7 +1250,7 @@ class Database
         $time = DateTime::now();
         $document->setAttribute('$updatedAt', $time);
 
-        $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
+        $old = Authorization::skip(fn() => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
         $collection = $this->getCollection($collection);
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -1289,7 +1289,8 @@ class Database
     public function deleteDocument(string $collection, string $id): bool
     {
         $validator = new Authorization(self::PERMISSION_DELETE);
-        $document = $this->getDocument($collection, $id);
+
+        $document = Authorization::skip(fn() => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
         $collection = $this->getCollection($collection);
 
         if ($collection->getId() !== self::METADATA

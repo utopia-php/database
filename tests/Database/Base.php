@@ -19,6 +19,7 @@ use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
 
+
 abstract class Base extends TestCase
 {
     /**
@@ -3083,5 +3084,82 @@ abstract class Base extends TestCase
         }
 
         // TODO: Index name tests
+    }
+
+    public function testWritePermissions()
+    {
+        // Skip for mongo, permissions seem to have bug there
+        if (!(in_array(static::getAdapterName(), ['mysql', 'mariadb']))) {
+            $this->assertTrue(true);
+            return;
+        }
+
+        $database = static::getDatabase();
+
+        $database->createCollection('animals');
+
+        $database->createAttribute('animals', 'type', Database::VAR_STRING, 128, true);
+
+        $dog = $database->createDocument('animals', new Document([
+            '$id' => 'dog',
+            '$permissions' => [
+                Permission::delete(Role::any()),
+            ],
+            'type' => 'Dog'
+        ]));
+
+        $cat = $database->createDocument('animals', new Document([
+            '$id' => 'cat',
+            '$permissions' => [
+                Permission::update(Role::any()),
+            ],
+            'type' => 'Cat'
+        ]));
+
+        // No read permissions:
+
+        $docs = $database->find('animals');
+        $this->assertCount(0, $docs);
+
+        $doc = $database->getDocument('animals', 'dog');
+        $this->assertTrue($doc->isEmpty());
+
+        $doc = $database->getDocument('animals', 'cat');
+        $this->assertTrue($doc->isEmpty());
+
+        // Cannot delete with update permission:
+        $didFail = false;
+
+        try {
+            $database->deleteDocument('animals', 'cat');
+        } catch(ExceptionAuthorization) {
+            $didFail = true;
+        }
+
+        $this->assertTrue($didFail);
+
+        // Cannot update with delete permission:
+        $didFail = false;
+
+        try {
+            $newDog = $dog->setAttribute('type', 'newDog');
+            $database->updateDocument('animals', 'dog', $newDog);
+        } catch(ExceptionAuthorization) {
+            $didFail = true;
+        }
+
+        $this->assertTrue($didFail);
+
+        // Can delete:
+        $database->deleteDocument('animals', 'dog');
+
+        // Can update:
+        $newCat = $cat->setAttribute('type', 'newCat');
+        $database->updateDocument('animals', 'cat', $newCat);
+
+        $docs = Authorization::skip(fn() => $database->find('animals'));
+        $this->assertCount(1, $docs);
+        $this->assertEquals('cat', $docs[0]['$id']);
+        $this->assertEquals('newCat', $docs[0]['type']);
     }
 }

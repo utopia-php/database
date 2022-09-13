@@ -123,59 +123,75 @@ class Roles extends Validator
     {
         $key = new Key();
 
-        switch ($role) {
-            case Database::ROLE_USERS:
-                if (!empty($identifier)) {
-                    $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
-                    return false;
-                }
-                if (!empty($dimension) && !\in_array($dimension, Database::USER_DIMENSIONS)) {
-                    $this->message = 'Users dimension must be one of: ' . \implode(', ', Database::USER_DIMENSIONS);
-                    return false;
-                }
-                break;
-            case Database::ROLE_GUESTS:
-            case Database::ROLE_ANY:
-                if (!empty($identifier)) {
-                    $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
-                    return false;
-                }
-                if (!empty($dimension)) {
-                    $this->message = 'Role "' . $role . '"' . ' can not have a dimension value.';
-                    return false;
-                }
-                break;
-            case Database::ROLE_USER:
-                if (empty($identifier)) {
-                    $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
-                    return false;
-                }
-                if (!$key->isValid($identifier)) {
-                    $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
-                    return false;
-                }
-                if (!empty($dimension) && !\in_array($dimension, Database::USER_DIMENSIONS)) {
-                    $this->message = 'User dimension must be one of: ' . \implode(', ', Database::USER_DIMENSIONS);
-                    return false;
-                }
-                break;
-            case Database::ROLE_TEAM:
-                if (empty($identifier)) {
-                    $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
-                    return false;
-                }
-                if (!$key->isValid($identifier)) {
-                    $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
-                    return false;
-                }
-                if (!empty($dimension) && !$key->isValid($dimension)) {
-                    $this->message = 'Dimension must be a valid key: ' . $key->getDescription();
-                    return false;
-                }
-                break;
-            default:
-                $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
+        $config = Database::ROLE_CONFIGURATION[$role] ?? null;
+
+        if (empty($config)) {
+            $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
+            return false;
+        }
+
+        if (!isset($config['identifier'])) {
+            $this->message = 'Role "' . $role . '" missing identifier configuration.';
+            return false;
+        }
+
+        if (!isset($config['dimension'])) {
+            $this->message = 'Role "' . $role . '" missing dimension configuration.';
+            return false;
+        }
+
+        // Process identifier configuration
+        $allowed = $config['identifier']['allowed'] ?? false;
+        $required = $config['identifier']['required'] ?? false;
+
+        // Not allowed and has an identifier
+        if (!$allowed && !empty($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
+            return false;
+        }
+
+        // Required and has no identifier
+        if ($allowed && $required && empty($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
+            return false;
+        }
+
+        // Allowed and has an invalid identifier
+        if ($allowed
+            && !empty($identifier)
+            && !$key->isValid($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
+            return false;
+        }
+
+        // Process dimension configuration
+        $allowed = $config['dimension']['allowed'] ?? false;
+        $required = $config['dimension']['required'] ?? false;
+        $options = $config['dimension']['options'] ?? [$dimension];
+
+        // Not allowed and has a dimension
+        if (!$allowed && !empty($dimension)) {
+            $this->message = 'Role "' . $role . '"' . ' can not have a dimension value.';
+            return false;
+        }
+
+        // Required and has no dimension
+        if ($allowed && $required && empty($dimension)) {
+            $this->message = 'Role "' . $role . '"' . ' must have a dimension value.';
+            return false;
+        }
+
+        if ($allowed && !empty($dimension)) {
+            // Allowed and dimension is not an allowed option
+            if (!\in_array($dimension, $options)) {
+                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid. Must be one of: ' . \implode(', ', $options) . '.';
                 return false;
+            }
+            // Allowed and dimension is not a valid key
+            if (!$key->isValid($dimension)) {
+                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid: ' . $key->getDescription();
+                return false;
+            }
         }
 
         return true;

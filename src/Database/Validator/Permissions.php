@@ -75,14 +75,14 @@ class Permissions extends Roles
                 return false;
             }
 
-            $allowed = false;
+            $isAllowed = false;
             foreach ($this->allowed as $allowed) {
                 if (\str_starts_with($permission, $allowed)) {
-                    $allowed = true;
+                    $isAllowed = true;
                     break;
                 }
             }
-            if (!$allowed) {
+            if (!$isAllowed) {
                 $this->message = 'Permission "' . $permission . '" is not allowed. Must be one of: ' . \implode(', ', $this->allowed) . '.';
                 return false;
             }

@@ -62,39 +62,48 @@ class Role
      */
     public static function parse(string $role): Role
     {
-        $parts = \explode(':', $role);
-        $hasIdentifier = \count($parts) > 1;
+        $roleParts = \explode(':', $role);
+        $hasIdentifier = \count($roleParts) > 1;
         $hasDimension = \str_contains($role, '/');
-        $role = $parts[0];
+        $role = $roleParts[0];
 
         if (!$hasIdentifier && !$hasDimension) {
-            return new  Role($role);
+            return new Role($role);
         }
 
         if ($hasIdentifier && !$hasDimension) {
-            return new Role($role, $parts[1]);
+            $identifier = $roleParts[1];
+            return new Role($role, $identifier);
         }
 
         if (!$hasIdentifier && $hasDimension) {
-            $parts = \explode('/', $role);
-            if (\count($parts) !== 2) {
+            $dimensionParts = \explode('/', $role);
+            if (\count($dimensionParts) !== 2) {
                 throw new \Exception('Only one dimension can be provided.');
             }
-            if (empty($parts[1])) {
+
+            $role = $dimensionParts[0];
+            $dimension = $dimensionParts[1];
+
+            if (empty($dimension)) {
                 throw new \Exception('Dimension must not be empty.');
             }
-            return new Role($parts[0], '', $parts[1]);
+            return new Role($role, '', $dimension);
         }
 
         // Has both identifier and dimension
-        $parts = \explode('/', $parts[1]);
-        if (\count($parts) !== 2) {
+        $dimensionParts = \explode('/', $roleParts[1]);
+        if (\count($dimensionParts) !== 2) {
             throw new \Exception('Only one dimension can be provided.');
         }
-        if (empty($parts[1])) {
+
+        $identifier = $dimensionParts[0];
+        $dimension = $dimensionParts[1];
+
+        if (empty($dimension)) {
             throw new \Exception('Dimension must not be empty.');
         }
-        return new Role($role, $parts[0], $parts[1]);
+        return new Role($role, $identifier, $dimension);
     }
 
     /**

@@ -70,6 +70,71 @@ class Database
         self::ROLE_MEMBER,
     ];
 
+    const ROLE_CONFIGURATION = [
+        Database::ROLE_ANY => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        Database::ROLE_GUESTS => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        Database::ROLE_USERS => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+                'options' => Database::USER_DIMENSIONS
+            ],
+        ],
+        Database::ROLE_USER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+                'options' => Database::USER_DIMENSIONS
+            ],
+        ],
+        Database::ROLE_TEAM => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+            ],
+        ],
+        Database::ROLE_MEMBER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+    ];
+
     // Dimensions
     const DIMENSION_VERIFIED = 'verified';
     const DIMENSION_UNVERIFIED = 'unverified';

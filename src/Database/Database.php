@@ -839,6 +839,7 @@ class Database
                         break;
                     case self::VAR_FLOAT:
                     case self::VAR_BOOLEAN:
+                    case self::VAR_DATETIME:
                         break;
                     default:
                         throw new Exception('Unknown attribute type: ' . $type);

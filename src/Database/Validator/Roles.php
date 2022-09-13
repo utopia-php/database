@@ -73,6 +73,18 @@ class Roles extends Validator
                 return false;
             }
 
+            $isAllowed = false;
+            foreach ($this->allowed as $allowed) {
+                if (\str_starts_with($role, $allowed)) {
+                    $isAllowed = true;
+                    break;
+                }
+            }
+            if (!$isAllowed) {
+                $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', $this->allowed) . '.';
+                return false;
+            }
+
             try {
                 $role = Role::parse($role);
             } catch (\Exception $e) {

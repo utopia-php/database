@@ -70,6 +70,15 @@ class Database
         self::ROLE_MEMBER,
     ];
 
+    // Dimensions
+    const DIMENSION_VERIFIED = 'verified';
+    const DIMENSION_UNVERIFIED = 'unverified';
+
+    const USER_DIMENSIONS = [
+        self::DIMENSION_VERIFIED,
+        self::DIMENSION_UNVERIFIED,
+    ];
+
     // Collections
     const METADATA = '_metadata';
 

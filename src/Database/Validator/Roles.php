@@ -12,11 +12,6 @@ class Roles extends Validator
 
     protected array $allowed;
 
-    protected array $userDimensions = [
-        'verified',
-        'unverified',
-    ];
-
     protected int $length;
 
     /**

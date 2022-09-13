@@ -83,61 +83,9 @@ class Roles extends Validator
             $roleName = $role->getRole();
             $identifier = $role->getIdentifier();
             $dimension = $role->getDimension();
-            $key = new Key();
 
-            switch ($role->getRole()) {
-                case Database::ROLE_USERS:
-                    if (!empty($identifier)) {
-                        $this->message = '"' . $roleName . '"' . ' permission can not have an ID value.';
-                        return false;
-                    }
-                    if (!empty($dimension) && !\in_array($dimension, $this->userDimensions)) {
-                        $this->message = 'Users dimension must be one of: ' . \implode(', ', $this->userDimensions);
-                        return false;
-                    }
-                    break;
-                case Database::ROLE_GUESTS:
-                case Database::ROLE_ANY:
-                    if (!empty($identifier)) {
-                        $this->message = '"' . $roleName . '"' . ' permission can not have an ID value.';
-                        return false;
-                    }
-                    if (!empty($dimension)) {
-                        $this->message = 'Role "' . $roleName . '"' . ' can not have a dimension value.';
-                        return false;
-                    }
-                    break;
-                case Database::ROLE_USER:
-                    if (empty($identifier)) {
-                        $this->message = '"' . $roleName . '"' . ' permission must have an ID value.';
-                        return false;
-                    }
-                    if (!$key->isValid($identifier)) {
-                        $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
-                        return false;
-                    }
-                    if (!empty($dimension) && !\in_array($dimension, $this->userDimensions)) {
-                        $this->message = 'User dimension must be one of: ' . \implode(', ', $this->userDimensions);
-                        return false;
-                    }
-                    break;
-                case Database::ROLE_TEAM:
-                    if (empty($identifier)) {
-                        $this->message = '"' . $roleName . '"' . ' permission must have an ID value.';
-                        return false;
-                    }
-                    if (!$key->isValid($identifier)) {
-                        $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
-                        return false;
-                    }
-                    if (!empty($dimension) && !$key->isValid($dimension)) {
-                        $this->message = 'Dimension must be a valid key: ' . $key->getDescription();
-                        return false;
-                    }
-                    break;
-                default:
-                    $this->message = 'Role "' . $roleName . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
-                    return false;
+            if (!$this->isValidRole($roleName, $identifier, $dimension)) {
+                return false;
             }
         }
         return true;
@@ -165,5 +113,71 @@ class Roles extends Validator
     public function getType(): string
     {
         return self::TYPE_ARRAY;
+    }
+
+    protected function isValidRole(
+        string $role,
+        string $identifier,
+        string $dimension
+    ): bool
+    {
+        $key = new Key();
+
+        switch ($role) {
+            case Database::ROLE_USERS:
+                if (!empty($identifier)) {
+                    $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
+                    return false;
+                }
+                if (!empty($dimension) && !\in_array($dimension, Database::USER_DIMENSIONS)) {
+                    $this->message = 'Users dimension must be one of: ' . \implode(', ', Database::USER_DIMENSIONS);
+                    return false;
+                }
+                break;
+            case Database::ROLE_GUESTS:
+            case Database::ROLE_ANY:
+                if (!empty($identifier)) {
+                    $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
+                    return false;
+                }
+                if (!empty($dimension)) {
+                    $this->message = 'Role "' . $role . '"' . ' can not have a dimension value.';
+                    return false;
+                }
+                break;
+            case Database::ROLE_USER:
+                if (empty($identifier)) {
+                    $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
+                    return false;
+                }
+                if (!$key->isValid($identifier)) {
+                    $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
+                    return false;
+                }
+                if (!empty($dimension) && !\in_array($dimension, Database::USER_DIMENSIONS)) {
+                    $this->message = 'User dimension must be one of: ' . \implode(', ', Database::USER_DIMENSIONS);
+                    return false;
+                }
+                break;
+            case Database::ROLE_TEAM:
+                if (empty($identifier)) {
+                    $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
+                    return false;
+                }
+                if (!$key->isValid($identifier)) {
+                    $this->message = 'Identifier must be a valid key: ' . $key->getDescription();
+                    return false;
+                }
+                if (!empty($dimension) && !$key->isValid($dimension)) {
+                    $this->message = 'Dimension must be a valid key: ' . $key->getDescription();
+                    return false;
+                }
+                break;
+            default:
+                $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
+                return false;
+        }
+
+        return true;
     }
 }

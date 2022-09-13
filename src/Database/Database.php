@@ -560,6 +560,12 @@ class Database
             }
         }
 
+        /** Ensure required filters for the attribute are passed */
+        $requiredFilters = $this->getRequiredFilters($type);
+        if (!empty(array_diff($requiredFilters, $filters))) {
+            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        }
+
         if (
             $this->adapter->getAttributeLimit() > 0 &&
             $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
@@ -621,28 +627,8 @@ class Database
             if ($required === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
-            switch (\gettype($default)) {
-                    // first enforce typed array for each value in $default
-                case 'array':
-                    foreach ($default as $value) {
-                        if ($type !== \gettype($value)) {
-                            throw new Exception('Default value contents do not match given type ' . $type);
-                        }
-                    }
-                    break;
-                    // then enforce for primitive types
-                case self::VAR_STRING:
-                case self::VAR_INTEGER:
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                    if ($type !== \gettype($default)) {
-                        throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
-                    }
-                    break;
-                default:
-                    throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
-            }
+
+            $this->validateDefaultTypes($type, $default);
         }
 
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
@@ -652,6 +638,73 @@ class Database
         }
 
         return $attribute;
+    }
+
+    /**
+     * Get the list of required filters for each data type
+     *
+     * @param string $type Type of the attribute
+     *
+     * @return array
+     */
+    protected function getRequiredFilters(string $type): array 
+    {
+        switch ($type) {
+            case self::VAR_STRING:
+            case self::VAR_INTEGER:
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+                return [];
+            case self::VAR_DATETIME:
+                return ['datetime'];
+            default:
+                return [];
+        }
+    }
+
+    /**
+     * Function to validate if the default value of an attribute matches its attribute type
+     *
+     * @param string $type Type of the attribute
+     * @param mixed $default Default value of the attribute
+     *
+     * @throws Exception
+     * @return void
+     */
+    protected function validateDefaultTypes(string $type, mixed $default): void
+    {
+        $defaultType = \gettype($default);
+
+        if ($defaultType === 'NULL') {
+            // Disable null. No validation required
+            return;
+        }
+
+        if ($defaultType === 'array') {
+            foreach ($default as $value) {
+                $this->validateDefaultTypes($type, $value);
+            }
+            return;
+        }
+
+        switch ($type) {
+            case self::VAR_STRING:
+            case self::VAR_INTEGER:
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+                if ($type !== $defaultType) {
+                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            case self::VAR_DATETIME:
+                if ($defaultType !== self::VAR_STRING) {
+                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            default:
+                throw new Exception('Unknown attribute type: ' . $type);
+                break;
+        }
     }
 
     /**
@@ -771,31 +824,8 @@ class Database
             if ($attribute->getAttribute('required') === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
-            switch (\gettype($default)) {
-                    // first enforce typed array for each value in $default
-                case 'array':
-                    foreach ($default as $value) {
-                        if ($attribute->getAttribute('type') !== \gettype($value)) {
-                            throw new Exception('Default value contents do not match given type ' . $attribute->getAttribute('type'));
-                        }
-                    }
-                    break;
-                    // then enforce for primitive types
-                case self::VAR_STRING:
-                case self::VAR_INTEGER:
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                    if ($attribute->getAttribute('type') !== \gettype($default)) {
-                        throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
-                    }
-                    break;
-                case 'NULL':
-                    // Disable null. No validation required
-                    break;
-                default:
-                    throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
-            }
+
+            $this->validateDefaultTypes($attribute->getAttribute('type'), $default);
 
             $attribute->setAttribute('default', $default);
         });

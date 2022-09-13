@@ -366,11 +366,11 @@ abstract class Base extends TestCase
         var_dump($collection->getAttribute('attributes'));
 
         $this->assertCount(3, $collection->getAttribute('attributes'));
-        $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['key']);
         $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
-        $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
+        $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['key']);
         $this->assertEquals(Database::VAR_INTEGER, $collection->getAttribute('attributes')[1]['type']);
-        $this->assertEquals('attribute3', $collection->getAttribute('attributes')[2]['$id']);
+        $this->assertEquals('attribute3', $collection->getAttribute('attributes')[2]['key']);
         $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
 
         $this->assertIsArray($collection->getAttribute('indexes'));
@@ -409,7 +409,7 @@ abstract class Base extends TestCase
         $this->assertEquals('with-dash', $collection2->getId());
         $this->assertIsArray($collection2->getAttribute('attributes'));
         $this->assertCount(1, $collection2->getAttribute('attributes'));
-        $this->assertEquals('attribute-one', $collection2->getAttribute('attributes')[0]['$id']);
+        $this->assertEquals('attribute-one', $collection2->getAttribute('attributes')[0]['key']);
         $this->assertEquals(Database::VAR_STRING, $collection2->getAttribute('attributes')[0]['type']);
         $this->assertIsArray($collection2->getAttribute('indexes'));
         $this->assertCount(1, $collection2->getAttribute('indexes'));
@@ -505,13 +505,13 @@ abstract class Base extends TestCase
 
             $this->assertIsArray($collection->getAttribute('attributes'));
             $this->assertCount(4, $collection->getAttribute('attributes'));
-            $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
+            $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['key']);
             $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
-            $this->assertEquals('attribute-2', $collection->getAttribute('attributes')[1]['$id']);
+            $this->assertEquals('attribute-2', $collection->getAttribute('attributes')[1]['key']);
             $this->assertEquals(Database::VAR_INTEGER, $collection->getAttribute('attributes')[1]['type']);
-            $this->assertEquals('attribute_3', $collection->getAttribute('attributes')[2]['$id']);
+            $this->assertEquals('attribute_3', $collection->getAttribute('attributes')[2]['key']);
             $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
-            $this->assertEquals('attribute.4', $collection->getAttribute('attributes')[3]['$id']);
+            $this->assertEquals('attribute.4', $collection->getAttribute('attributes')[3]['key']);
             $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[3]['type']);
 
             $this->assertIsArray($collection->getAttribute('indexes'));

@@ -390,7 +390,7 @@ class Database
                 var_dump("--------------start decode--------------");
 
                 if($document->getId() == '_metadata_attribute'){
-                    return null;
+                    return [];
                 }
 
                 var_dump($document);
@@ -1842,9 +1842,18 @@ class Database
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
-            $filters = $attribute['filters'] ?? [];
-            $value = $document->getAttribute($key, null);
 
+           // $attribute['filters'] = $attribute['filters'] === '[]' ? [] : $attribute['filters'];
+
+            $filters = $attribute['filters'] ?? [];
+
+            var_dump("filters = ");
+            var_dump($attribute);
+            var_dump("collection = " . $collection->getId());
+            var_dump($filters);
+            var_dump("end filters ");
+
+            $value = $document->getAttribute($key);
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 

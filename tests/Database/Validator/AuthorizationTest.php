@@ -94,4 +94,27 @@ class AuthorizationTest extends TestCase
         $this->assertEquals($object->isValid($document->getRead()), false);
         $this->assertEquals(Authorization::skip(function() use ($object, $document) {return $object->isValid($document->getRead());}), true);
     }
+
+    public function testNestedSkips()
+    {
+        $this->assertEquals(true, Authorization::$status);
+
+        Authorization::skip(function() {
+            $this->assertEquals(false, Authorization::$status);
+
+            Authorization::skip(function() {
+                $this->assertEquals(false, Authorization::$status);
+
+                Authorization::skip(function() {
+                    $this->assertEquals(false, Authorization::$status);
+                });
+
+                $this->assertEquals(false, Authorization::$status);
+            });
+
+            $this->assertEquals(false, Authorization::$status);
+        });
+
+        $this->assertEquals(true, Authorization::$status);
+    }
 }

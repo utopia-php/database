@@ -389,7 +389,11 @@ class Database
 
                 var_dump("--------------start decode--------------");
 
-                if($document->getId() == '_metadata_attribute'){
+                if($document->getId() == self::METADATA_ATTRIBUTE){
+                    return [];
+                }
+
+                if($document->getId() == self::METADATA){
                     return [];
                 }
 
@@ -1443,7 +1447,6 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
-
         var_dump("----------------- getDocument --- $collection = " . $collection . " id = " . $id);
 
         if ($collection === self::METADATA && $id === self::METADATA) {
@@ -1864,6 +1867,7 @@ class Database
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);
+
         }
 
         return $document;

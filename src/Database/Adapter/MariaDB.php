@@ -123,50 +123,15 @@ class MariaDB extends Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes
-     * @param Document[] $indexes
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+    public function createCollection(string $name): bool
     {
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
-
-        foreach ($attributes as $key => $attribute) {
-            $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
-
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'LONGTEXT';
-            }
-
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
-        }
-
-        foreach ($indexes as $key => $index) {
-            $indexId = $this->filter($index->getId());
-            $indexType = $index->getAttribute('type');
-
-            $indexAttributes = $index->getAttribute('attributes');
-            foreach ($indexAttributes as $nested => $attribute) {
-                $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
-                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
-                $indexAttribute = $this->filter($attribute);
-
-                if ($indexType === Database::INDEX_FULLTEXT) {
-                    $indexOrder = '';
-                }
-
-                $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
-            }
-
-            $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
-        }
-
         try {
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
@@ -175,9 +140,7 @@ class MariaDB extends Adapter
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributes) . "
                         PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexes) . "
                         UNIQUE KEY `_index1` (`_uid`),
                         KEY `_created_at` (`_createdAt`),
                         KEY `_updated_at` (`_updatedAt`)

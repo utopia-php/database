@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
+use function PHPUnit\Framework\throwException;
 
 class Database
 {
@@ -459,7 +460,8 @@ class Database
             ['indexes', self::VAR_STRING, 1000000, false],
         ]);
 
-        $this->createCollection(self::METADATA, $attributes);
+        $this->createCollection(self::METADATA);
+        $this->createCollectionAttributes(self::METADATA, $attributes);
 
         return true;
     }
@@ -516,7 +518,7 @@ class Database
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
+        $this->adapter->createCollection($id);
 
         if ($id === self::METADATA) {
             return new Document($this->collection);
@@ -531,33 +533,83 @@ class Database
                 Permission::delete(Role::any()),
             ],
             'name' => $id,
-            'attributes' => $attributes,
-            'indexes' => $indexes,
+            'attributes' => [],
+            'indexes' => [],
         ]);
 
-        // Check index limits, if given
-        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit of ' . $this->adapter->getIndexLimit() . ' exceeded. Cannot create collection.');
+        $this->createDocument(self::METADATA, $collection);
+
+        $this->createCollectionAttributes($id, $attributes);
+        $this->createCollectionIndexes($id, $indexes);
+
+        $collection->setAttribute('attributes', $attributes);
+        $collection->setAttribute('indexes', $indexes);
+
+        return $this->updateDocument(self::METADATA, $id, $collection);
+    }
+
+
+    /**
+     * Create Collection Attributes
+     *
+     * @param string $collection
+     * @param Document[] $attributes
+     *
+     * @return bool
+     */
+    public function createCollectionAttributes(string $collection, array $attributes = []): bool
+    {
+        try {
+
+        foreach ($attributes as $attribute){
+                self::createAttribute(
+                    $collection,
+                    $attribute->getId(),
+                    $attribute->getAttribute('type'),
+                    $attribute->getAttribute('size') ?? 0,
+                    $attribute->getAttribute('required'),
+                    $attribute->getAttribute('default'),
+                    $attribute->getAttribute('signed') ?? true, // why default is true?
+                    $attribute->getAttribute('array') ?? false,
+                    $attribute->getAttribute('format'),
+                    $attribute->getAttribute('formatOptions')?? [],
+                    $attribute->getAttribute('filters') ?? []
+                );
         }
 
-        // check attribute limits, if given
-        if ($attributes) {
-            if (
-                $this->adapter->getAttributeLimit() > 0 &&
-                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
-            ) {
-                throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
-            }
+        } catch (Throwable $e){
+            throw $e;
+        }
+        return true;
+    }
 
-            if (
-                $this->adapter->getRowLimit() > 0 &&
-                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit()
-            ) {
-                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+    /**
+     * Create Collection Attributes
+     *
+     * @param string $collection
+     * @param Document[] $indexes
+     *
+     * @return bool
+     * @throws Exception
+     */
+    public function createCollectionIndexes(string $collection, array $indexes = []): bool
+    {
+        try {
+            foreach ($indexes as $index){
+                self::createIndex(
+                    $collection,
+                    $index->getId(),
+                    $index->getAttribute('type'),
+                    $index->getAttribute('attributes'),
+                    $index->getAttribute('lengths'),
+                    $index->getAttribute('orders'),
+                );
             }
+        } catch (Throwable $e){
+            throw $e;
         }
 
-        return $this->createDocument(self::METADATA, $collection);
+        return true;
     }
 
     /**
@@ -629,14 +681,22 @@ class Database
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
+        if(empty($collection)){
+            throw new Exception('CreateAttribute error empty collection');
+        }
+
+        if(empty($id)){
+            throw new Exception('CreateAttribute error empty id');
+        }
+
         $collection = $this->getCollection($collection);
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists');
+            if (\strtolower($attribute->getId()) === \strtolower($id) && $collection->getId() != '_metadata') {
+                throw new DuplicateException('Attribute already exists:' . $attribute->getId());
             }
         }
 
@@ -699,7 +759,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
 
         // only execute when $default is given
@@ -1333,7 +1392,6 @@ class Database
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
         }
-
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         $document = $this->decode($collection, $document);

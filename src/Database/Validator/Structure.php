@@ -8,7 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
-use Utopia\Validator\Datetime;
+use Utopia\Validator\DatetimeValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
@@ -261,7 +261,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new Datetime;
+                    $validator = new DatetimeValidator();
                     break;
 
                 default:

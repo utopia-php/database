@@ -4,7 +4,7 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
 
-class DatetimeValidator extends Validator
+class Datetime extends Validator
 {
     /**
      * @var string

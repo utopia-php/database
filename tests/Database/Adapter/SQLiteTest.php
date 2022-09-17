@@ -6,7 +6,6 @@ use PDO;
 use Redis;
 use Utopia\Cache\Cache;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\MySQL;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Tests\Base;
@@ -66,7 +65,7 @@ class SQLiteTest extends Base
 
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MySQL($pdo), $cache);
+        $database = new Database(new SQLite($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 

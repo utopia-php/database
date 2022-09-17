@@ -1841,7 +1841,7 @@ class MariaDB extends Adapter
     /**
      * Returns default PDO configuration
      */
-    public static function getPdoAttributes(): array
+    public static function getPDOAttributes(): array
     {
         return [
             PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.

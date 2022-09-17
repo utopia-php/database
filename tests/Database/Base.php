@@ -51,6 +51,14 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete()
     {
+        $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
+        if(!$schemaSupport) {
+            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+            $this->assertEquals(false, $schemaSupport); // Dummy assertion to skip test
+            return;
+        }
+
         if (!static::getDatabase()->exists($this->testDatabase)) {
             $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         }
@@ -1688,6 +1696,10 @@ abstract class Base extends TestCase
             Query::cursorAfter($documentsTest[0])
         ]);
 
+        var_dump($documentsTest);
+        var_dump('*****');
+        var_dump($documents);
+
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
@@ -2985,7 +2997,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
     }
 
-    public function testReservedKeywords()
+    public function testKeywords()
     {
         $database = static::getDatabase();
         $keywords = $database->getKeywords();

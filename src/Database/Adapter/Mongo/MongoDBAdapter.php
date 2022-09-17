@@ -876,6 +876,16 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
+     * Is schemas supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemas(): bool
+    {
+        return true;
+    }
+
+    /**
      * Is index supported?
      *
      * @return bool

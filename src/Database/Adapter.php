@@ -376,6 +376,12 @@ abstract class Adapter
     abstract public function getLimitForIndexes(): int;
 
     /**
+     * Is schemas supported?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForSchemas(): bool;
+    /**
      * Is index supported?
      * 
      * @return bool

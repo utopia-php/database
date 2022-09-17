@@ -829,7 +829,7 @@ class SQLite extends MySQL
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -851,8 +851,13 @@ class SQLite extends MySQL
             {$order}
             LIMIT :offset, :limit;
         ";
-
-        $stmt = $this->getPDO()->prepare($sql);
+try {
+    $stmt = $this->getPDO()->prepare($sql);
+    //code...
+} catch (\Throwable $th) {
+    var_dump($sql);
+    //throw $th;
+}
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
@@ -933,7 +938,7 @@ class SQLite extends MySQL
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -1003,7 +1008,7 @@ class SQLite extends MySQL
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.' . $query->getAttribute(), $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1130,6 +1135,16 @@ class SQLite extends MySQL
     }
 
     /**
+     * Is schemas supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemas(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is fulltext index supported?
      *
      * @return bool
@@ -1198,72 +1213,6 @@ class SQLite extends MySQL
                 break;
             default:
                 throw new Exception('Unknown Type');
-        }
-    }
-
-    /**
-     * Get SQL Conditions
-     *
-     * @param string $attribute
-     * @param string $method
-     * @param string $placeholder
-     * @param mixed $value
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
-    {
-        switch ($method) {
-            case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $value));
-
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = "'{$value}*'";
-
-                return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
-
-            default:
-                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                break;
-        }
-    }
-
-    /**
-     * Get SQL Operator
-     *
-     * @param string $method
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLOperator(string $method): string
-    {
-        switch ($method) {
-            case Query::TYPE_EQUAL:
-                return '=';
-
-            case Query::TYPE_NOTEQUAL:
-                return '!=';
-
-            case Query::TYPE_LESSER:
-                return '<';
-
-            case Query::TYPE_LESSEREQUAL:
-                return '<=';
-
-            case Query::TYPE_GREATER:
-                return '>';
-
-            case Query::TYPE_GREATEREQUAL:
-                return '>=';
-
-            default:
-                throw new Exception('Unknown method:' . $method);
-                break;
         }
     }
 

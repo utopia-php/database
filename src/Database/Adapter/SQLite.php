@@ -273,16 +273,25 @@ class SQLite extends MySQL
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $index = $collectionDocument->find('key', $old, 'indexes'); /** @var Document $index */
+        $indexs = json_decode($collectionDocument['indexes'], true);
+        $index = null;
 
-        if ($this->deleteIndex($collection, $old)
+        foreach($indexs as $node) {
+            if($node['key'] === $old) {
+                $index = $node;
+                break;
+            }
+        }
+
+        if ($index && $this->deleteIndex($collection, $old)
             && $this->createIndex(
                 $collection,
                 $new,
-                $index->getAttribute('type'),
-                $index->getAttribute('attributes', []),
-                $index->getAttribute('legnths', []),
-                $index->getAttribute('orders', []))) {
+                $index['type'],
+                $index['attributes'],
+                $index['lengths'],
+                $index['orders'],
+            )) {
             return true;
         }
 

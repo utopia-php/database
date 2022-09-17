@@ -1043,11 +1043,13 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
+        $this->adapter->renameIndex($collection->getId(), $old, $new);
+
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
-        return $this->adapter->renameIndex($collection->getId(), $old, $new);
+        return true;
     }
 
     /**

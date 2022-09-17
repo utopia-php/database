@@ -1034,7 +1034,7 @@ class MongoDBAdapter extends Adapter
      * @param mixed $list
      * @return array
      */
-    function flattenArray(mixed $list): array
+    protected function flattenArray(mixed $list): array
     {
         if (!is_array($list)) {
             // make sure the input is an array
@@ -1048,5 +1048,18 @@ class MongoDBAdapter extends Adapter
         }
 
         return $new_array;
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     * 
+     * Mongo does not have concept of reserverd words.
+     *  We put something here just to run the rests for this adapter too
+     * 
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return ['mongodb'];
     }
 }

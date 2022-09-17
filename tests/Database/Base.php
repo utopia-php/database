@@ -37,12 +37,6 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterRowLimit(): int;
 
-
-    /**
-     * @return string[]
-     */
-    abstract static protected function getReservedKeywords(): array;
-
     public function setUp(): void
     {
         Authorization::setRole('any');
@@ -2990,8 +2984,8 @@ abstract class Base extends TestCase
 
     public function testReservedKeywords()
     {
-        $keywords = $this->getReservedKeywords();
         $database = static::getDatabase();
+        $keywords = $database->getKeywords();
 
         // Collection name tests
         $attributes = [

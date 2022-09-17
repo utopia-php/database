@@ -1809,6 +1809,16 @@ class Database
     }
 
     /**
+     * Get list of keywords that cannot be used
+     * 
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return $this->adapter->getKeywords();
+    }
+
+    /**
      * @param Document $collection
      * @param Query[] $queries
      * @return Query[]

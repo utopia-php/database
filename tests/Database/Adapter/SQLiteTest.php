@@ -57,7 +57,7 @@ class SQLiteTest extends Base
             return self::$database;
         }
 
-        $pdo = new PDO("sqlite:".__DIR__."/database.sql");
+        $pdo = new PDO("sqlite:".__DIR__."/database.sql", null, null, SQLite::getPdoAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
@@ -70,17 +70,5 @@ class SQLiteTest extends Base
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;
-    }
-
-    /**
-     * Return keywords reserved by database backend
-     * Refference: https://mariadb.com/kb/en/reserved-words/
-     *
-     * @return string[]
-     */
-    static function getReservedKeywords(): array
-    {
-        // Same as MariaDB
-        return MariaDBTest::getReservedKeywords();
     }
 }

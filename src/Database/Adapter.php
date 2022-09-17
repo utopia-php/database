@@ -446,6 +446,13 @@ abstract class Adapter
     abstract public function getIndexLimit(): int;
 
     /**
+     * Get list of keywords that cannot be used
+     * 
+     * @return string[]
+     */
+    abstract public function getKeywords(): array;
+
+    /**
      * Does the adapter handle casting?
      * 
      * @return bool

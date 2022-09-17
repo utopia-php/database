@@ -1728,6 +1728,16 @@ class Database
     }
 
     /**
+     * Get Database Adapter
+     * 
+     * @return Adapter
+     */
+    public function getAdapter(): Adapter
+    {
+        return $this->adapter;
+    }
+
+    /**
      * @param Document $collection
      * @param Query[] $queries
      * @return Query[]

@@ -25,6 +25,7 @@ use Utopia\Database\Validator\Authorization;
  * 7. no index length support?
  * 8. DELETE doesn't support ORDER BY or LIMIT
  * 9. MODIFY COLUMN is not supported
+ * 10. Can't rename an index directly
  */
 class SQLite extends MySQL
 {
@@ -269,12 +270,23 @@ class SQLite extends MySQL
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
+        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
+        $index = $collectionDocument->find('key', $old, 'indexes'); /** @var Document $index */
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getNamespace()}_{$collection}` RENAME INDEX `{$old}` TO `{$new}`;")
-            ->execute();
+        if ($this->deleteIndex($collection, $old)
+            && $this->createIndex(
+                $collection,
+                $new,
+                $index->getAttribute('type'),
+                $index->getAttribute('attributes', []),
+                $index->getAttribute('legnths', []),
+                $index->getAttribute('orders', []))) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -1129,16 +1141,6 @@ class SQLite extends MySQL
     }
 
     /**
-     * Returns the index type for read permissions
-     *
-     * @return string
-     */
-    protected function getIndexTypeForReadPermission(): string
-    {
-        return Database::INDEX_FULLTEXT;
-    }
-
-    /**
      * Get SQL Type
      *
      * @param string $type
@@ -1273,9 +1275,6 @@ class SQLite extends MySQL
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
 
-            case Database::INDEX_FULLTEXT:
-                return 'FULLTEXT INDEX';
-
             default:
                 throw new Exception('Unknown Index Type:' . $type);
         }
@@ -1307,10 +1306,6 @@ class SQLite extends MySQL
 
                 break;
 
-            case Database::INDEX_FULLTEXT:
-                $type = 'FULLTEXT INDEX';
-                break;
-
             default:
                 throw new Exception('Unknown Index Type:' . $type);
                 break;
@@ -1328,10 +1323,6 @@ class SQLite extends MySQL
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';
             $order = $orders[$key] ?? '';
             $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
 
             $attributes[$key] = "`{$attribute}`{$postfix} {$order}";
         }

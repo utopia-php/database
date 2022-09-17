@@ -7,7 +7,6 @@ use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -145,7 +144,7 @@ class Database
     ];
 
     // Collections
-    const METADATA = '_metadata';
+    const METADATA = 'metadata';
 
     // Cursor
     const CURSOR_BEFORE = 'before';

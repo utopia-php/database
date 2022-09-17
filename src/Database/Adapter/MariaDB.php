@@ -1086,7 +1086,7 @@ class MariaDB extends Adapter
      *
      * @return int
      */
-    public function getStringLimit(): int
+    public function getLimitForString(): int
     {
         return 4294967295;
     }
@@ -1096,9 +1096,32 @@ class MariaDB extends Adapter
      *
      * @return int
      */
-    public function getIntLimit(): int
+    public function getLimitForInt(): int
     {
         return 4294967295;
+    }
+
+    /**
+     * Get maximum column limit.
+     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     * Can be inherited by MySQL since we utilize the InnoDB engine
+     *
+     * @return int
+     */
+    public function getLimitForAttributes(): int
+    {
+        return 1017;
+    }
+
+    /**
+     * Get maximum index limit.
+     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
+     *
+     * @return int
+     */
+    public function getLimitForIndexes(): int
+    {
+        return 64;
     }
 
     /**
@@ -1144,17 +1167,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Get maximum index limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     *
-     * @return int
-     */
-    public function getIndexLimit(): int
-    {
-        return 64;
-    }
-
-    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1166,18 +1178,6 @@ class MariaDB extends Adapter
 
         // +1 ==> virtual columns count as total, so add as buffer
         return $attributes + static::getNumberOfDefaultAttributes() + 1;
-    }
-
-    /**
-     * Get maximum column limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     * Can be inherited by MySQL since we utilize the InnoDB engine
-     *
-     * @return int
-     */
-    public function getAttributeLimit(): int
-    {
-        return 1017;
     }
 
     /**

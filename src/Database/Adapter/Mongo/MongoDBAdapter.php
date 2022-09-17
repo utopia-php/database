@@ -837,7 +837,7 @@ class MongoDBAdapter extends Adapter
      *
      * @return int
      */
-    public function getStringLimit(): int
+    public function getLimitForString(): int
     {
         return 2147483647;
     }
@@ -847,10 +847,32 @@ class MongoDBAdapter extends Adapter
      *
      * @return int
      */
-    public function getIntLimit(): int
+    public function getLimitForInt(): int
     {
         // Mongo does not handle integers directly, so using MariaDB limit for now
         return 4294967295;
+    }
+
+    /**
+     * Get maximum column limit.
+     * Returns 0 to indicate no limit
+     *
+     * @return int
+     */
+    public function getLimitForAttributes(): int
+    {
+        return 0;
+    }
+
+    /**
+     * Get maximum index limit.
+     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
+     *
+     * @return int
+     */
+    public function getLimitForIndexes(): int
+    {
+        return 64;
     }
 
     /**
@@ -897,17 +919,6 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * Get maximum index limit.
-     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
-     *
-     * @return int
-     */
-    public function getIndexLimit(): int
-    {
-        return 64;
-    }
-
-    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -918,17 +929,6 @@ class MongoDBAdapter extends Adapter
         $attributes = \count($collection->getAttribute('attributes') ?? []);
 
         return $attributes + static::getNumberOfDefaultAttributes();
-    }
-
-    /**
-     * Get maximum column limit.
-     * Returns 0 to indicate no limit
-     *
-     * @return int
-     */
-    public function getAttributeLimit(): int
-    {
-        return 0;
     }
 
     /**

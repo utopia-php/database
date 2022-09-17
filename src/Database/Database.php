@@ -535,17 +535,17 @@ class Database
         ]);
 
         // Check index limits, if given
-        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit of ' . $this->adapter->getIndexLimit() . ' exceeded. Cannot create collection.');
+        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getLimitForIndexes()) {
+            throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
 
         // check attribute limits, if given
         if ($attributes) {
             if (
-                $this->adapter->getAttributeLimit() > 0 &&
-                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
+                $this->adapter->getLimitForAttributes() > 0 &&
+                $this->adapter->getAttributeCount($collection) > $this->adapter->getLimitForAttributes()
             ) {
-                throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
             }
 
             if (
@@ -646,8 +646,8 @@ class Database
         }
 
         if (
-            $this->adapter->getAttributeLimit() > 0 &&
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getAttributeCount($collection) >= $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
@@ -681,13 +681,13 @@ class Database
 
         switch ($type) {
             case self::VAR_STRING:
-                if ($size > $this->adapter->getStringLimit()) {
-                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
+                if ($size > $this->adapter->getLimitForString()) {
+                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
 
             case self::VAR_INTEGER:
-                $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
+                $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
                     throw new Exception('Max size allowed for int is: ' . number_format($limit));
                 }
@@ -935,13 +935,13 @@ class Database
 
                 switch ($type) {
                     case self::VAR_STRING:
-                        if ($size > $this->adapter->getStringLimit()) {
-                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
+                        if ($size > $this->adapter->getLimitForString()) {
+                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                         }
                         break;
 
                     case self::VAR_INTEGER:
-                        $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
+                        $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                         if ($size > $limit) {
                             throw new Exception('Max size allowed for int is: ' . number_format($limit));
                         }
@@ -997,8 +997,8 @@ class Database
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
         if (
-            $this->adapter->getAttributeLimit() > 0 &&
-            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getAttributeCount($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
             return false;
@@ -1170,7 +1170,7 @@ class Database
             }
         }
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -1791,11 +1791,11 @@ class Database
      *
      * @return int
      */
-    public function getAttributeLimit()
+    public function getLimitForAttributes()
     {
         // If negative, return 0
         // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getAttributeLimit() - $this->adapter->getNumberOfDefaultAttributes() - 1, 0);
+        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getNumberOfDefaultAttributes() - 1, 0);
     }
 
     /**
@@ -1803,9 +1803,9 @@ class Database
      *
      * @return int
      */
-    public function getIndexLimit()
+    public function getLimitForIndexes()
     {
-        return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
+        return $this->adapter->getLimitForIndexes() - $this->adapter->getNumberOfDefaultIndexes();
     }
 
     /**

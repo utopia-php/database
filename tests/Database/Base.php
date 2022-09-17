@@ -2291,10 +2291,10 @@ abstract class Base extends TestCase
 
     public function testExceptionAttributeLimit()
     {
-        if ($this->getDatabase()->getAttributeLimit() > 0) {
+        if ($this->getDatabase()->getLimitForAttributes() > 0) {
             // load the collection up to the limit
             $attributes = [];
-            for ($i = 0; $i < $this->getDatabase()->getAttributeLimit(); $i++) {
+            for ($i = 0; $i < $this->getDatabase()->getLimitForAttributes(); $i++) {
                 $attributes[] = new Document([
                     '$id' => ID::custom("test{$i}"),
                     'type' => Database::VAR_INTEGER,
@@ -2321,7 +2321,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeCountLimit()
     {
-        if ($this->getDatabase()->getAttributeLimit() > 0) {
+        if ($this->getDatabase()->getLimitForAttributes() > 0) {
             $collection = static::getDatabase()->getCollection('attributeLimit');
 
             // create same attribute in testExceptionAttributeLimit
@@ -2482,7 +2482,7 @@ abstract class Base extends TestCase
 
         // Testing for indexLimit
         // Add up to the limit, then check if the next index throws IndexLimitException
-        for ($i = 0; $i < ($this->getDatabase()->getIndexLimit()); $i++) {
+        for ($i = 0; $i < ($this->getDatabase()->getLimitForIndexes()); $i++) {
             $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
@@ -2589,15 +2589,15 @@ abstract class Base extends TestCase
     public function testGetAttributeLimit()
     {
         if (static::getAdapterName() === 'mariadb' || static::getAdapterName() === 'mysql') {
-            $this->assertEquals(1012, $this->getDatabase()->getAttributeLimit());
+            $this->assertEquals(1012, $this->getDatabase()->getLimitForAttributes());
         } else {
-            $this->assertEquals(0, $this->getDatabase()->getAttributeLimit());
+            $this->assertEquals(0, $this->getDatabase()->getLimitForAttributes());
         }
     }
 
     public function testGetIndexLimit()
     {
-        $this->assertEquals(59, $this->getDatabase()->getIndexLimit());
+        $this->assertEquals(59, $this->getDatabase()->getLimitForIndexes());
     }
 
     public function testGetId()

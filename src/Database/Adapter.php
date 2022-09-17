@@ -352,14 +352,28 @@ abstract class Adapter
      * 
      * @return int
      */
-    abstract public function getStringLimit(): int;
+    abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
      * 
      * @return int
      */
-    abstract public function getIntLimit(): int;
+    abstract public function getLimitForInt(): int;
+
+    /**
+     * Get maximum attributes limit.
+     * 
+     * @return int
+     */
+    abstract public function getLimitForAttributes(): int;
+
+    /**
+     * Get maximum index limit.
+     * 
+     * @return int
+     */
+    abstract public function getLimitForIndexes(): int;
 
     /**
      * Is index supported?
@@ -383,19 +397,19 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
+     * Does the adapter handle casting?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForCasting(): bool;
+
+    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection
      * @return int
      */
     abstract public function getAttributeCount(Document $collection): int;
-
-    /**
-     * Get maximum column limit.
-     * 
-     * @return int
-     */
-    abstract public function getAttributeLimit(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row
@@ -439,25 +453,11 @@ abstract class Adapter
     abstract public function getIndexCount(Document $collection): int;
 
     /**
-     * Get maximum index limit.
-     * 
-     * @return int
-     */
-    abstract public function getIndexLimit(): int;
-
-    /**
      * Get list of keywords that cannot be used
      * 
      * @return string[]
      */
     abstract public function getKeywords(): array;
-
-    /**
-     * Does the adapter handle casting?
-     * 
-     * @return bool
-     */
-    abstract public function getSupportForCasting(): bool;
 
     /**
      * Filter Keys

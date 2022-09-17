@@ -8,7 +8,6 @@ use Utopia\Database\Document;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
-use Utopia\Validator\DatetimeValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 

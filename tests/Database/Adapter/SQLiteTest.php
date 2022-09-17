@@ -45,7 +45,7 @@ class SQLiteTest extends Base
      */
     static function getUsedIndexes(): int
     {
-        return SQLite::getNumberOfDefaultIndexes();
+        return SQLite::getCountOfDefaultIndexes();
     }
 
     /**

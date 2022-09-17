@@ -535,7 +535,7 @@ class Database
         ]);
 
         // Check index limits, if given
-        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getLimitForIndexes()) {
+        if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
 
@@ -543,7 +543,7 @@ class Database
         if ($attributes) {
             if (
                 $this->adapter->getLimitForAttributes() > 0 &&
-                $this->adapter->getAttributeCount($collection) > $this->adapter->getLimitForAttributes()
+                $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
             ) {
                 throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
             }
@@ -647,7 +647,7 @@ class Database
 
         if (
             $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getLimitForAttributes()
+            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
@@ -998,7 +998,7 @@ class Database
 
         if (
             $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getAttributeCount($collection) > $this->adapter->getLimitForAttributes()
+            $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
             return false;
@@ -1170,7 +1170,7 @@ class Database
             }
         }
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getLimitForIndexes()) {
+        if ($this->adapter->getCountOfIndexes($collection) >= $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -1795,7 +1795,7 @@ class Database
     {
         // If negative, return 0
         // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getNumberOfDefaultAttributes() - 1, 0);
+        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
     }
 
     /**
@@ -1805,7 +1805,7 @@ class Database
      */
     public function getLimitForIndexes()
     {
-        return $this->adapter->getLimitForIndexes() - $this->adapter->getNumberOfDefaultIndexes();
+        return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
     }
 
     /**

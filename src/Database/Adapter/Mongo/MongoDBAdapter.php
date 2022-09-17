@@ -906,29 +906,49 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * Get current index count from collection document
-     * 
-     * @param Document $collection
-     * @return int
-     */
-    public function getIndexCount(Document $collection): int
-    {
-        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
-
-        return $indexes + static::getNumberOfDefaultIndexes();
-    }
-
-    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
      * @return int
      */
-    public function getAttributeCount(Document $collection): int
+    public function getCountOfAttributes(Document $collection): int
     {
         $attributes = \count($collection->getAttribute('attributes') ?? []);
 
-        return $attributes + static::getNumberOfDefaultAttributes();
+        return $attributes + static::getCountOfDefaultAttributes();
+    }
+
+    /**
+     * Get current index count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    public function getCountOfIndexes(Document $collection): int
+    {
+        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
+
+        return $indexes + static::getCountOfDefaultIndexes();
+    }
+
+    /**
+     * Returns number of attributes used by default.
+     *
+     * @return int
+     */
+    public static function getCountOfDefaultAttributes(): int
+    {
+        return 6;
+    }
+    
+    /**
+     * Returns number of indexes used by default.
+     *
+     * @return int
+     */
+    public static function getCountOfDefaultIndexes(): int
+    {
+        return 5;
     }
 
     /**
@@ -940,16 +960,6 @@ class MongoDBAdapter extends Adapter
     public static function getRowLimit(): int
     {
         return 0;
-    }
-
-    public static function getNumberOfDefaultAttributes(): int
-    {
-        return 6;
-    }
-
-    public static function getNumberOfDefaultIndexes(): int
-    {
-        return 5;
     }
 
     /**

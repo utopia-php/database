@@ -12,6 +12,20 @@ use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
+
+/**
+ * Main differences from MariaDB and MySQL:
+ * 
+ * 1. No concept of a schema. All tables are in the same schema.
+ * 2. AUTO_INCREMENT is AUTOINCREAMENT.
+ * 3. Can't create indexes in the same statement as creating a table.
+ * 4. Can't use SET to bind values on INSERT
+ * 5. last_insert_id is last_insert_rowid
+ * 6. Can only drop one table at a time
+ * 7. no index length support?
+ * 8. DELETE doesn't support ORDER BY or LIMIT
+ * 9. MODIFY COLUMN is not supported
+ */
 class SQLite extends MySQL
 {
     /**
@@ -26,11 +40,10 @@ class SQLite extends MySQL
      */
     public function exists(string $database, ?string $collection): bool
     {
-        return false;
         $database = $this->filter($database);
 
         if (\is_null($collection)) {
-            return true;
+            return false;
         }
 
         $collection = $this->filter($collection);
@@ -43,9 +56,7 @@ class SQLite extends MySQL
 
         $document = $stmt->fetch();
 
-        // return (($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}");
-
-        return false;
+        return (($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}");
     }
 
     /**
@@ -100,26 +111,26 @@ class SQLite extends MySQL
             $attributes[$key] = "`{$attrId}` {$attrType}, ";
         }
 
-        foreach ($indexes as $key => $index) {
-            $indexId = $this->filter($index->getId());
-            $indexType = $index->getAttribute('type');
+        // foreach ($indexes as $key => $index) {
+        //     $indexId = $this->filter($index->getId());
+        //     $indexType = $index->getAttribute('type');
 
-            $indexAttributes = $index->getAttribute('attributes');
-            foreach ($indexAttributes as $nested => $attribute) {
-                $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
-                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
-                $indexAttribute = $this->filter($attribute);
+        //     $indexAttributes = $index->getAttribute('attributes');
+        //     foreach ($indexAttributes as $nested => $attribute) {
+        //         $indexLength = $index->getAttribute('lengths')[$key] ?? '';
+        //         $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
+        //         $indexOrder = $index->getAttribute('orders')[$key] ?? '';
+        //         $indexAttribute = $this->filter($attribute);
 
-                if ($indexType === Database::INDEX_FULLTEXT) {
-                    $indexOrder = '';
-                }
+        //         if ($indexType === Database::INDEX_FULLTEXT) {
+        //             $indexOrder = '';
+        //         }
 
-                $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
-            }
+        //         $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+        //     }
 
-            $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
-        }
+        //     $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+        // }
 
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
@@ -132,24 +143,27 @@ class SQLite extends MySQL
                 )")
             ->execute();
 
-        $this->createIndex("{$namespace}_{$id}", '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
-        $this->createIndex("{$namespace}_{$id}", '_created_at', Database::INDEX_KEY, ['_createdAt'], [], []);
-        $this->createIndex("{$namespace}_{$id}", '_updated_at', Database::INDEX_KEY, ['_updated_at'], [], []);
+        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
+        $this->createIndex($id, '_created_at', Database::INDEX_KEY, ['_createdAt'], [], []);
+        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, ['_updatedAt'], [], []);
 
-        $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
-                    `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-                    `_type` VARCHAR(12) NOT NULL,
-                    `_permission` VARCHAR(255) NOT NULL,
-                    `_document` VARCHAR(255) NOT NULL
-                )")
-            ->execute();
-
-        $this->createIndex("{$namespace}_{$id}_perms", '_index1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
-        $this->createIndex("{$namespace}_{$id}_perms", '_index2', Database::INDEX_KEY, ['_permission'], [], []);
+        try {
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
+                        `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+                        `_type` VARCHAR(12) NOT NULL,
+                        `_permission` VARCHAR(255) NOT NULL,
+                        `_document` VARCHAR(255) NOT NULL
+                    )")
+                ->execute();
+        } catch (\Throwable $th) {
+            var_dump($th->getMessage());
+        }
         
-
-        // Update $this->getIndexCount when adding another default index
+        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission'], [], []);
+        
+        // Update $this->getCountOfIndexes when adding another default index
         return true;
     }
 
@@ -164,9 +178,14 @@ class SQLite extends MySQL
     {
         $id = $this->filter($id);
 
-        return $this->getPDO()
-            ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}`, `{$this->getNamespace()}_{$id}_perms`;")
+        $this->getPDO()
+            ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}`;")
             ->execute();
+        $this->getPDO()
+            ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}_perms`;")
+            ->execute();
+
+            return true;
     }
 
     /**
@@ -213,18 +232,7 @@ class SQLite extends MySQL
      */
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getNamespace()}_{$name}`
-                MODIFY `{$id}` {$type};")
-            ->execute();
+        return true;
     }
 
     /**
@@ -308,29 +316,16 @@ class SQLite extends MySQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
-
-        foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
-
-            $attributes[$key] = "`{$attribute}`{$length} {$order}";
+        try {
+            $x = $this->getPDO()
+                ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+                ->execute();
+        } catch (\Throwable $th) {
+            var_dump($this->getSQLIndex($name, $id, $type, $attributes));
+            var_dump($th->getMessage());
         }
-
-        return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
-            ->execute();
+        
+        return $x;
     }
 
     /**
@@ -348,8 +343,7 @@ class SQLite extends MySQL
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getNamespace()}_{$name}`
-                DROP INDEX `{$id}`;")
+            ->prepare("DROP INDEX `{$this->getNamespace()}_{$name}_{$id}`;")
             ->execute();
     }
 
@@ -414,7 +408,8 @@ class SQLite extends MySQL
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
-        $columns = '';
+        $columns = ['_uid'];
+        $values = ['_uid'];
 
         $this->getPDO()->beginTransaction();
 
@@ -424,14 +419,14 @@ class SQLite extends MySQL
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $values[] = 'value_' . $bindIndex;
+            $columns[] = "`{$column}`";
             $bindIndex++;
         }
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO `{$this->getNamespace()}_{$name}`
-                SET {$columns} _uid = :_uid");
+                (".implode(', ', $columns).") VALUES (:".implode(', :', $values).");");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -441,7 +436,7 @@ class SQLite extends MySQL
                 $value = json_encode($value);
             }
 
-            $bindKey = 'key_' . $attributeIndex;
+            $bindKey = 'value_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
@@ -464,7 +459,7 @@ class SQLite extends MySQL
         try {
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("select last_insert_id() as id");
+            $statment = $this->getPDO()->prepare("select last_insert_rowid() as id");
             $statment->execute();
             $last = $statment->fetch();
             $document['$internalId'] = $last['id'];
@@ -475,10 +470,10 @@ class SQLite extends MySQL
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
             switch ($e->getCode()) {
-                case 1062:
-                case 23000:
+                case "1062":
+                case "23000":
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-
+                break;
                 default:
                     throw $e;
             }
@@ -662,8 +657,8 @@ class SQLite extends MySQL
             } catch (PDOException $e) {
                 $this->getPDO()->rollBack();
                 switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
+                    case '1062':
+                    case '23000':
                         throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
                     default:
@@ -694,7 +689,7 @@ class SQLite extends MySQL
 
         $this->getPDO()->beginTransaction();
 
-        $stmt = $this->getPDO()->prepare("DELETE FROM `{$this->getNamespace()}_{$name}` WHERE _uid = :_uid LIMIT 1");
+        $stmt = $this->getPDO()->prepare("DELETE FROM `{$this->getNamespace()}_{$name}` WHERE _uid = :_uid");
         $stmt->bindValue(':_uid', $id);
 
         $stmtPermissions = $this->getPDO()->prepare("DELETE FROM `{$this->getNamespace()}_{$name}_perms` WHERE _document = :_uid");
@@ -1029,126 +1024,6 @@ class SQLite extends MySQL
     }
 
     /**
-     * Get max STRING limit
-     *
-     * @return int
-     */
-    public function getStringLimit(): int
-    {
-        return 4294967295;
-    }
-
-    /**
-     * Get max INT limit
-     *
-     * @return int
-     */
-    public function getIntLimit(): int
-    {
-        return 4294967295;
-    }
-
-    /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is unique index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForUniqueIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is fulltext index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Get current index count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getIndexCount(Document $collection): int
-    {
-        $indexes = \count($collection->getAttribute('indexes') ?? []);
-        return $indexes + static::getNumberOfDefaultIndexes();
-    }
-
-    /**
-     * Get maximum index limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     *
-     * @return int
-     */
-    public function getIndexLimit(): int
-    {
-        return 64;
-    }
-
-    /**
-     * Get current attribute count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getAttributeCount(Document $collection): int
-    {
-        $attributes = \count($collection->getAttribute('attributes') ?? []);
-
-        // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + static::getNumberOfDefaultAttributes() + 1;
-    }
-
-    /**
-     * Get maximum column limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     * Can be inherited by MySQL since we utilize the InnoDB engine
-     *
-     * @return int
-     */
-    public function getAttributeLimit(): int
-    {
-        return 1017;
-    }
-
-    /**
-     * Get maximum width, in bytes, allowed for a SQL row
-     * Return 0 when no restrictions apply
-     *
-     * @return int
-     */
-    public static function getRowLimit(): int
-    {
-        return 65535;
-    }
-
-    public static function getNumberOfDefaultAttributes(): int
-    {
-        return 4;
-    }
-
-    public static function getNumberOfDefaultIndexes(): int
-    {
-        return 5;
-    }
-
-    /**
      * Estimate maximum number of bytes required to store a document in $collection.
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
@@ -1418,6 +1293,8 @@ class SQLite extends MySQL
      */
     protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
     {
+        $postfix = '';
+
         switch ($type) {
             case Database::INDEX_KEY:
             case Database::INDEX_ARRAY:
@@ -1426,6 +1303,8 @@ class SQLite extends MySQL
 
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
+                $postfix = ' COLLATE NOCASE';
+
                 break;
 
             case Database::INDEX_FULLTEXT:
@@ -1437,7 +1316,27 @@ class SQLite extends MySQL
                 break;
         }
 
-        return "CREATE {$type} `{$id}` ON `{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . " )";
+        $attributes = \array_map(fn ($attribute) => match ($attribute) {
+            '$id' => ID::custom('_uid'),
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $attribute
+        }, $attributes);
+
+        foreach ($attributes as $key => $attribute) {
+            $length = $lengths[$key] ?? '';
+            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
+            $order = $orders[$key] ?? '';
+            $attribute = $this->filter($attribute);
+
+            if (Database::INDEX_FULLTEXT === $type) {
+                $order = '';
+            }
+
+            $attributes[$key] = "`{$attribute}`{$postfix} {$order}";
+        }
+
+        return "CREATE {$type} `{$this->getNamespace()}_{$collection}_{$id}` ON `{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . ")";
     }
 
     /**
@@ -1460,55 +1359,161 @@ class SQLite extends MySQL
     }
 
     /**
-     * Get PDO Type
-     *
-     * @param mixed $value
-     * @return int
-     * @throws Exception 
+     * Get list of keywords that cannot be used
+     *  Refference: https://www.sqlite.org/lang_keywords.html
+     * 
+     * @return string[]
      */
-    protected function getPDOType(mixed $value): int
-    {
-        switch (gettype($value)) {
-            case 'double':
-            case 'string':
-                return PDO::PARAM_STR;
-
-            case 'integer':
-            case 'boolean':
-                return PDO::PARAM_INT;
-
-                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
-
-            case 'NULL':
-                return PDO::PARAM_NULL;
-
-            default:
-                throw new Exception('Unknown PDO Type for ' . gettype($value));
-        }
-    }
-
-    /**
-     * Returns the current PDO object
-     * @return PDO 
-     */
-    protected function getPDO()
-    {
-        return $this->pdo;
-    }
-
-    /**
-     * Returns default PDO configuration
-     */
-    public static function getPdoAttributes(): array
+    public function getKeywords(): array
     {
         return [
-            PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
-            PDO::ATTR_PERSISTENT => true, // Create a persistent connection
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on srrors
-            PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
-            PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
+            'ABORT',
+            'ACTION',
+            'ADD',
+            'AFTER',
+            'ALL',
+            'ALTER',
+            'ALWAYS',
+            'ANALYZE',
+            'AND',
+            'AS',
+            'ASC',
+            'ATTACH',
+            'AUTOINCREMENT',
+            'BEFORE',
+            'BEGIN',
+            'BETWEEN',
+            'BY',
+            'CASCADE',
+            'CASE',
+            'CAST',
+            'CHECK',
+            'COLLATE',
+            'COLUMN',
+            'COMMIT',
+            'CONFLICT',
+            'CONSTRAINT',
+            'CREATE',
+            'CROSS',
+            'CURRENT',
+            'CURRENT_DATE',
+            'CURRENT_TIME',
+            'CURRENT_TIMESTAMP',
+            'DATABASE',
+            'DEFAULT',
+            'DEFERRABLE',
+            'DEFERRED',
+            'DELETE',
+            'DESC',
+            'DETACH',
+            'DISTINCT',
+            'DO',
+            'DROP',
+            'EACH',
+            'ELSE',
+            'END',
+            'ESCAPE',
+            'EXCEPT',
+            'EXCLUDE',
+            'EXCLUSIVE',
+            'EXISTS',
+            'EXPLAIN',
+            'FAIL',
+            'FILTER',
+            'FIRST',
+            'FOLLOWING',
+            'FOR',
+            'FOREIGN',
+            'FROM',
+            'FULL',
+            'GENERATED',
+            'GLOB',
+            'GROUP',
+            'GROUPS',
+            'HAVING',
+            'IF',
+            'IGNORE',
+            'IMMEDIATE',
+            'IN',
+            'INDEX',
+            'INDEXED',
+            'INITIALLY',
+            'INNER',
+            'INSERT',
+            'INSTEAD',
+            'INTERSECT',
+            'INTO',
+            'IS',
+            'ISNULL',
+            'JOIN',
+            'KEY',
+            'LAST',
+            'LEFT',
+            'LIKE',
+            'LIMIT',
+            'MATCH',
+            'MATERIALIZED',
+            'NATURAL',
+            'NO',
+            'NOT',
+            'NOTHING',
+            'NOTNULL',
+            'NULL',
+            'NULLS',
+            'OF',
+            'OFFSET',
+            'ON',
+            'OR',
+            'ORDER',
+            'OTHERS',
+            'OUTER',
+            'OVER',
+            'PARTITION',
+            'PLAN',
+            'PRAGMA',
+            'PRECEDING',
+            'PRIMARY',
+            'QUERY',
+            'RAISE',
+            'RANGE',
+            'RECURSIVE',
+            'REFERENCES',
+            'REGEXP',
+            'REINDEX',
+            'RELEASE',
+            'RENAME',
+            'REPLACE',
+            'RESTRICT',
+            'RETURNING',
+            'RIGHT',
+            'ROLLBACK',
+            'ROW',
+            'ROWS',
+            'SAVEPOINT',
+            'SELECT',
+            'SET',
+            'TABLE',
+            'TEMP',
+            'TEMPORARY',
+            'THEN',
+            'TIES',
+            'TO',
+            'TRANSACTION',
+            'TRIGGER',
+            'UNBOUNDED',
+            'UNION',
+            'UNIQUE',
+            'UPDATE',
+            'USING',
+            'VACUUM',
+            'VALUES',
+            'VIEW',
+            'VIRTUAL',
+            'WHEN',
+            'WHERE',
+            'WINDOW',
+            'WITH',
+            'WITHOUT',
         ];
     }
-
 }

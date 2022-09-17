@@ -1109,11 +1109,11 @@ class SQLite extends MySQL
     }
 
     /**
-     * Does the adapter handle casting?
+     * Is fulltext index supported?
      *
      * @return bool
      */
-    public function getSupportForCasting(): bool
+    public function getSupportForFulltextIndex(): bool
     {
         return false;
     }

@@ -689,6 +689,7 @@ abstract class Base extends TestCase
      */
     public function testListDocumentSearch(Document $document)
     {
+        if($this->getDatabase())
         static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [

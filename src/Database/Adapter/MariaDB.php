@@ -1603,16 +1603,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Returns the index type for read permissions
-     *
-     * @return string
-     */
-    protected function getIndexTypeForReadPermission(): string
-    {
-        return Database::INDEX_FULLTEXT;
-    }
-
-    /**
      * Get SQL Type
      *
      * @param string $type

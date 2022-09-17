@@ -18,16 +18,6 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Returns the index type for read permissions
-     *
-     * @return string
-     */
-    protected function getIndexTypeForReadPermission(): string
-    {
-        return Database::INDEX_ARRAY;
-    }
-
-    /**
      * Get SQL Index
      * 
      * @param string $collection

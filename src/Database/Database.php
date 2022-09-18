@@ -560,7 +560,6 @@ class Database
     public function createCollectionAttributes(string $collection, array $attributes = []): bool
     {
         try {
-
         foreach ($attributes as $attribute){
                 self::createAttribute(
                     $collection,
@@ -1053,7 +1052,6 @@ class Database
     public function checkAttribute(Document $collection, Document $attribute): bool
     {
         $collection = clone $collection;
-
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
         if (
@@ -1061,7 +1059,6 @@ class Database
             $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
-            return false;
         }
 
         if (
@@ -1069,7 +1066,6 @@ class Database
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
-            return false;
         }
 
         return true;

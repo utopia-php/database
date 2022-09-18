@@ -133,8 +133,8 @@ class MariaDB extends Adapter
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
         try {
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
+            $this->getPDO()->prepare("
+                        CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_uid` CHAR(255) NOT NULL,
                         `_createdAt` datetime(3) DEFAULT NULL,
@@ -146,9 +146,16 @@ class MariaDB extends Adapter
                         KEY `_updated_at` (`_updatedAt`)
                     )")
                 ->execute();
-
+        } catch (\Exception $th) {
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
+                ->prepare("DROP TABLE IF EXISTS `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`;")
+                ->execute();
+            throw $th;
+        }
+
+        try {
+            $this->getPDO()->prepare(
+                "CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
                         `_type` VARCHAR(12) NOT NULL,
                         `_permission` VARCHAR(255) NOT NULL,
@@ -165,7 +172,6 @@ class MariaDB extends Adapter
             throw $th;
         }
 
-        // Update $this->getIndexCount when adding another default index
         return true;
     }
 

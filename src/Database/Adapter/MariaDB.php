@@ -132,38 +132,32 @@ class MariaDB extends Adapter
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
-        try {
-            $this->getPDO()->prepare("
-                        CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_uid` CHAR(255) NOT NULL,
-                        `_createdAt` datetime(3) DEFAULT NULL,
-                        `_updatedAt` datetime(3) DEFAULT NULL,
-                        `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        PRIMARY KEY (`_id`),
-                        UNIQUE KEY `_index1` (`_uid`),
-                        KEY `_created_at` (`_createdAt`),
-                        KEY `_updated_at` (`_updatedAt`)
-                    )")
-                ->execute();
 
-            $this->getPDO()->prepare(
-                "CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_type` VARCHAR(12) NOT NULL,
-                        `_permission` VARCHAR(255) NOT NULL,
-                        `_document` VARCHAR(255) NOT NULL,
-                        PRIMARY KEY (`_id`),
-                        UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_index2` (`_permission`)
-                    )")
-                ->execute();
-        } catch (\Exception $th) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}_perms`;")
-                ->execute();
-            throw $th;
-        }
+        $this->getPDO()->prepare("
+            CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
+            `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+            `_uid` CHAR(255) NOT NULL,
+            `_createdAt` datetime(3) DEFAULT NULL,
+            `_updatedAt` datetime(3) DEFAULT NULL,
+            `_permissions` MEDIUMTEXT DEFAULT NULL,
+            PRIMARY KEY (`_id`),
+            UNIQUE KEY `_index1` (`_uid`),
+            KEY `_created_at` (`_createdAt`),
+            KEY `_updated_at` (`_updatedAt`)
+        )")
+        ->execute();
+
+        $this->getPDO()->prepare("
+            CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
+            `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+            `_type` VARCHAR(12) NOT NULL,
+            `_permission` VARCHAR(255) NOT NULL,
+            `_document` VARCHAR(255) NOT NULL,
+            PRIMARY KEY (`_id`),
+            UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
+            INDEX `_index2` (`_permission`)
+        )")
+        ->execute();
 
         return true;
     }

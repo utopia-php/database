@@ -8,16 +8,6 @@ use Utopia\Database\Database;
 class MySQL extends MariaDB
 {
     /**
-     * Returns the attribute type for read permissions
-     *
-     * @return string
-     */
-    protected function getTypeForReadPermission(): string
-    {
-        return "JSON";
-    }
-
-    /**
      * Get SQL Index
      * 
      * @param string $collection

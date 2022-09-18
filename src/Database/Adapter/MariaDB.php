@@ -1603,16 +1603,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Returns the attribute type for read permissions
-     *
-     * @return string
-     */
-    protected function getTypeForReadPermission(): string
-    {
-        return "TEXT";
-    }
-
-    /**
      * Get SQL Type
      *
      * @param string $type

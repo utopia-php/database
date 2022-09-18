@@ -1698,6 +1698,7 @@ abstract class Base extends TestCase
 
         var_dump($documentsTest);
         var_dump('*****');
+        var_dump(static::getDatabase()->getAdapter()->getDebug());
         var_dump($documents);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);

@@ -179,14 +179,19 @@ class SQLite extends MySQL
     {
         $id = $this->filter($id);
 
+        $this->getPDO()->beginTransaction();
+
         $this->getPDO()
             ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}`;")
             ->execute();
+
         $this->getPDO()
             ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}_perms`;")
             ->execute();
 
-            return true;
+        $this->getPDO()->commit();
+
+        return true;
     }
 
     /**
@@ -258,6 +263,27 @@ class SQLite extends MySQL
     }
 
     /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE `{$this->getNamespace()}_{$name}`
+                DROP COLUMN `{$id}`;")
+            ->execute();
+    }
+
+    /**
      * Rename Index
      *
      * @param string $collection
@@ -299,27 +325,6 @@ class SQLite extends MySQL
     }
 
     /**
-     * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param bool $array
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE `{$this->getNamespace()}_{$name}`
-                DROP COLUMN `{$id}`;")
-            ->execute();
-    }
-
-    /**
      * Create Index
      *
      * @param string $collection
@@ -337,16 +342,9 @@ class SQLite extends MySQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        try {
-            $x = $this->getPDO()
-                ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
-                ->execute();
-        } catch (\Throwable $th) {
-            var_dump($this->getSQLIndex($name, $id, $type, $attributes));
-            var_dump($th->getMessage());
-        }
-        
-        return $x;
+        return $this->getPDO()
+            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+            ->execute();
     }
 
     /**
@@ -851,14 +849,9 @@ class SQLite extends MySQL
             {$order}
             LIMIT :offset, :limit;
         ";
-try {
-    $stmt = $this->getPDO()->prepare($sql);
-    //code...
-} catch (\Throwable $th) {
-    var_dump($sql);
-    //throw $th;
-}
-
+        
+        $stmt = $this->getPDO()->prepare($sql);
+        
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
             foreach ($query->getValues() as $key => $value) {
@@ -1050,91 +1043,6 @@ try {
     }
 
     /**
-     * Estimate maximum number of bytes required to store a document in $collection.
-     * Byte requirement varies based on column type and size.
-     * Needed to satisfy MariaDB/MySQL row width limit.
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getAttributeWidth(Document $collection): int
-    {
-        // Default collection has:
-        // `_id` int(11) => 4 bytes
-        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
-        // but this number seems to vary, so we give a +500 byte buffer
-        $total = 1500;
-
-        /** @var array $attributes */
-        $attributes = $collection->getAttributes()['attributes'];
-        foreach ($attributes as $attribute) {
-            switch ($attribute['type']) {
-                case Database::VAR_STRING:
-                    switch (true) {
-                        case ($attribute['size'] > 16777215):
-                            // 8 bytes length + 4 bytes for LONGTEXT
-                            $total += 12;
-                            break;
-
-                        case ($attribute['size'] > 65535):
-                            // 8 bytes length + 3 bytes for MEDIUMTEXT
-                            $total += 11;
-                            break;
-
-                        case ($attribute['size'] > 16383):
-                            // 8 bytes length + 2 bytes for TEXT
-                            $total += 10;
-                            break;
-
-                        case ($attribute['size'] > 255):
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += ($attribute['size'] * 4) + 2;
-                            break;
-
-                        default:
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += ($attribute['size'] * 4) + 1;
-                            break;
-                    }
-                    break;
-
-                case Database::VAR_INTEGER:
-                    if ($attribute['size'] >= 8) {
-                        $total += 8; // BIGINT takes 8 bytes
-                    } else {
-                        $total += 4; // INT takes 4 bytes
-                    }
-                    break;
-                case Database::VAR_FLOAT:
-                    // FLOAT(p) takes 4 bytes when p <= 24, 8 otherwise
-                    $total += 4;
-                    break;
-
-                case Database::VAR_BOOLEAN:
-                    // TINYINT(1) takes one byte
-                    $total += 1;
-                    break;
-
-                case Database::VAR_DOCUMENT:
-                    // CHAR(255)
-                    $total += 255;
-                    break;
-
-                case Database::VAR_DATETIME:
-                    $total += 19; // 2022-06-26 14:46:24
-                    break;
-                default:
-                    throw new Exception('Unknown Type');
-                    break;
-            }
-        }
-
-        return $total;
-    }
-
-    /**
      * Is schemas supported?
      *
      * @return bool
@@ -1152,68 +1060,6 @@ try {
     public function getSupportForFulltextIndex(): bool
     {
         return false;
-    }
-
-    /**
-     * Returns the attribute type for read permissions
-     *
-     * @return string
-     */
-    protected function getTypeForReadPermission(): string
-    {
-        return "TEXT";
-    }
-
-    /**
-     * Get SQL Type
-     *
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
-    {
-        switch ($type) {
-            case Database::VAR_STRING:
-                // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
-                    return 'LONGTEXT';
-                }
-
-                if ($size > 65535) {
-                    return 'MEDIUMTEXT';
-                }
-
-                if ($size > 16383) {
-                    return 'TEXT';
-                }
-
-                return "VARCHAR({$size})";
-
-            case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
-                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
-                    return 'BIGINT';
-                }
-
-                return 'INT';
-
-            case Database::VAR_FLOAT:
-                return 'FLOAT';
-
-            case Database::VAR_BOOLEAN:
-                return 'TINYINT(1)';
-
-            case Database::VAR_DOCUMENT:
-                return 'CHAR(255)';
-
-            case Database::VAR_DATETIME:
-                return 'DATETIME(3)';
-                break;
-            default:
-                throw new Exception('Unknown Type');
-        }
     }
 
     /**

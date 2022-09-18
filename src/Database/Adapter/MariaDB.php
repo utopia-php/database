@@ -146,14 +146,7 @@ class MariaDB extends Adapter
                         KEY `_updated_at` (`_updatedAt`)
                     )")
                 ->execute();
-        } catch (\Exception $th) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`;")
-                ->execute();
-            throw $th;
-        }
 
-        try {
             $this->getPDO()->prepare(
                 "CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,

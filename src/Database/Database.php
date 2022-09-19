@@ -147,6 +147,7 @@ class Database
 
     // Collections
     const METADATA = '_metadata';
+    const METADATA_ATTRIBUTE = '_metadata_attribute';
 
     // Cursor
     const CURSOR_BEFORE = 'before';
@@ -463,6 +464,103 @@ class Database
         $this->createCollection(self::METADATA);
         $this->createCollectionAttributes(self::METADATA, $attributes);
 
+
+        $this->createCollection(self::METADATA_ATTRIBUTE, [
+            new Document([
+                '$id' => ID::custom('collectionId'),
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('collectionInternalId'),
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('key'),
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('type'),
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('required'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('size'),
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('signed'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('default'),
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+            ]),
+            new Document([
+                '$id' => ID::custom('array'),
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ]),
+            new Document([
+                '$id' => ID::custom('filters'),
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ]),
+            new Document([
+                '$id' => ID::custom('format'),
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ]),
+            new Document([
+                '$id' => ID::custom('formatOptions'),
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'filters' => ['json']
+            ])
+
+        ]);
+
         return true;
     }
 
@@ -768,6 +866,37 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
+
+
+
+
+
+        $d = new Document([
+            'collectionId' => $collection->getId(),
+            'collectionInternalId' => $collection->getInternalId(),
+            'key' => $id,
+            'type' => $type,
+            'size' => $size,
+            'required' => $required,
+            'default' => $default,
+            'signed' => $signed,
+            'array' => $array,
+            'format' => $format,
+            'formatOptions' => $formatOptions,
+            'filters' => $filters,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $this->createDocument(self::METADATA_ATTRIBUTE, $d);
+        $this->deleteCachedCollection(self::METADATA);
+        $this->deleteCachedCollection($collection->getId());
+
+
 
         return $attribute;
     }

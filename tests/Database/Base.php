@@ -19,6 +19,7 @@ use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
 
+
 abstract class Base extends TestCase
 {
     /**
@@ -142,9 +143,10 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer_default', Database::VAR_INTEGER, 0, false, 1));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float_default', Database::VAR_FLOAT, 0, false, 1.5));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean_default', Database::VAR_BOOLEAN, 0, false, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'datetime_default', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(16, $collection->getAttribute('attributes'));
+        $this->assertCount(17, $collection->getAttribute('attributes'));
 
         // Delete
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
@@ -157,7 +159,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean'));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(8, $collection->getAttribute('attributes'));
+        $this->assertCount(9, $collection->getAttribute('attributes'));
 
         // Delete Array
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_list'));
@@ -166,13 +168,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_list'));
 
         $collection = static::getDatabase()->getCollection('attributes');
-        $this->assertCount(4, $collection->getAttribute('attributes'));
+        $this->assertCount(5, $collection->getAttribute('attributes'));
 
         // Delete default
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string_default'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'integer_default'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'float_default'));
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'boolean_default'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'datetime_default'));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(0, $collection->getAttribute('attributes'));
@@ -628,6 +631,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'float', Database::VAR_FLOAT, 0, false, 1.5));
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'boolean', Database::VAR_BOOLEAN, 0, false, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'colors', Database::VAR_STRING, 32, false, ['red', 'green', 'blue'], true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('defaults', 'datetime', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
 
         $document = static::getDatabase()->createDocument('defaults', new Document([
             '$permissions' => [
@@ -638,8 +642,14 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $this->assertNotEmpty(true, $document->getId());
+        $document2 = static::getDatabase()->getDocument('defaults', $document->getId());
+        $this->assertCount(4, $document2->getPermissions());
+        $this->assertEquals('read("any")', $document2->getPermissions()[0]);
+        $this->assertEquals('create("any")', $document2->getPermissions()[1]);
+        $this->assertEquals('update("any")', $document2->getPermissions()[2]);
+        $this->assertEquals('delete("any")', $document2->getPermissions()[3]);
 
+        $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('default', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
@@ -651,6 +661,7 @@ abstract class Base extends TestCase
         $this->assertEquals('red', $document->getAttribute('colors')[0]);
         $this->assertEquals('green', $document->getAttribute('colors')[1]);
         $this->assertEquals('blue', $document->getAttribute('colors')[2]);
+        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $document->getAttribute('datetime'));
 
         // cleanup collection
         static::getDatabase()->deleteCollection('defaults');
@@ -1751,6 +1762,72 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testUpdateDocument
+     */
+    public function testFindEdgeCases(Document $document)
+    {
+        $collection = 'edgeCases';
+
+        static::getDatabase()->createCollection($collection);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'value', Database::VAR_STRING, 256, true));
+
+        $values = [
+            'NormalString',
+            '{"type":"json","somekey":"someval"}',
+            '{NormalStringInBraces}',
+            '"NormalStringInDoubleQuotes"',
+            '{"NormalStringInDoubleQuotesAndBraces"}',
+            "'NormalStringInSingleQuotes'",
+            "{'NormalStringInSingleQuotesAndBraces'}",
+            "SingleQuote'InMiddle",
+            'DoubleQuote"InMiddle',
+            'Slash/InMiddle',
+            'Backslash\InMiddle',
+            'Colon:InMiddle',
+            '"quoted":"colon"'
+        ];
+
+        foreach ($values as $value) {
+            static::getDatabase()->createDocument($collection, new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ],
+                'value' => $value
+            ]));
+        }
+
+        /**
+         * Check Basic
+         */
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(count($values), count($documents));
+        $this->assertNotEmpty($documents[0]->getId());
+        $this->assertEquals($collection, $documents[0]->getCollection());
+        $this->assertEquals(['any'], $documents[0]->getRead());
+        $this->assertEquals(['any'], $documents[0]->getUpdate());
+        $this->assertEquals(['any'], $documents[0]->getDelete());
+        $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
+
+        /**
+         * Check `equals` query 
+         */
+        foreach ($values as $value) {
+            $documents = static::getDatabase()->find($collection, [
+                Query::limit(25),
+                Query::equal('value', [$value])
+            ]);
+    
+            $this->assertEquals(1, count($documents));
+            $this->assertEquals($value, $documents[0]->getAttribute('value'));
+        }
+    }
+
+    /**
      * @depends testFind
      */
     public function testFindOne()
@@ -1758,7 +1835,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->findOne('movies', [
             Query::offset(2),
             Query::orderAsc('name')
-        ], 2, ['name']);
+        ]);
         $this->assertEquals('Frozen', $document['name']);
 
         $document = static::getDatabase()->findOne('movies', [
@@ -1774,7 +1851,7 @@ abstract class Base extends TestCase
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
-        $count = static::getDatabase()->count('movies', [Query::equal('year', [2019]),]);
+        $count = static::getDatabase()->count('movies', [Query::equal('year', [2019])]);
         $this->assertEquals(2, $count);
 
         Authorization::unsetRole('user:x');
@@ -2654,8 +2731,10 @@ abstract class Base extends TestCase
         $flowers = $database->createCollection('flowers');
         $database->createAttribute('flowers', 'name', Database::VAR_STRING, 128, true);
         $database->createAttribute('flowers', 'inStock', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('flowers', 'date', Database::VAR_STRING, 128, false);
 
         $database->createDocument('flowers', new Document([
+            '$id' => 'flowerWithDate',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2663,7 +2742,8 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Violet',
-            'inStock' => 51
+            'inStock' => 51,
+            'date' => '2000-06-12 14:12:55.000'
         ]));
 
         $doc = $database->createDocument('flowers', new Document([
@@ -2818,6 +2898,7 @@ abstract class Base extends TestCase
         $this->assertEquals(500, $doc->getAttribute('price'));
 
         $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
+        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
 
         // Delete cache to force read from database with new schema
         $database->deleteCachedDocument('flowers', 'LiliPriced');
@@ -2826,6 +2907,11 @@ abstract class Base extends TestCase
 
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
+
+        // String to Datetime
+        $database->deleteCachedDocument('flowers', 'flowerWithDate');
+        $doc = $database->getDocument('flowers', 'flowerWithDate');
+        $this->assertEquals('2000-06-12 14:12:55.000', $doc->getAttribute('date'));
     }
 
     /**
@@ -2847,8 +2933,8 @@ abstract class Base extends TestCase
     {
         static::getDatabase()->createCollection('datetime');
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
 
         $doc = static::getDatabase()->createDocument('datetime', new Document([
             '$id' => ID::custom('id1234'),
@@ -2891,6 +2977,15 @@ abstract class Base extends TestCase
             ],
             'date' => "1975-12-06 00:00:61"
         ]));
+    }
+
+    public function testCreateDateTimeAttributeFailure()
+    {
+        static::getDatabase()->createCollection('datetime_fail');
+
+        /** Test for FAILURE */
+        $this->expectException(Exception::class);
+        static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
     }
 
     public function testReservedKeywords()
@@ -3002,5 +3097,82 @@ abstract class Base extends TestCase
         }
 
         // TODO: Index name tests
+    }
+
+    public function testWritePermissions()
+    {
+        // Skip for mongo, permissions seem to have bug there
+        if (!(in_array(static::getAdapterName(), ['mysql', 'mariadb']))) {
+            $this->assertTrue(true);
+            return;
+        }
+
+        $database = static::getDatabase();
+
+        $database->createCollection('animals');
+
+        $database->createAttribute('animals', 'type', Database::VAR_STRING, 128, true);
+
+        $dog = $database->createDocument('animals', new Document([
+            '$id' => 'dog',
+            '$permissions' => [
+                Permission::delete(Role::any()),
+            ],
+            'type' => 'Dog'
+        ]));
+
+        $cat = $database->createDocument('animals', new Document([
+            '$id' => 'cat',
+            '$permissions' => [
+                Permission::update(Role::any()),
+            ],
+            'type' => 'Cat'
+        ]));
+
+        // No read permissions:
+
+        $docs = $database->find('animals');
+        $this->assertCount(0, $docs);
+
+        $doc = $database->getDocument('animals', 'dog');
+        $this->assertTrue($doc->isEmpty());
+
+        $doc = $database->getDocument('animals', 'cat');
+        $this->assertTrue($doc->isEmpty());
+
+        // Cannot delete with update permission:
+        $didFail = false;
+
+        try {
+            $database->deleteDocument('animals', 'cat');
+        } catch(ExceptionAuthorization) {
+            $didFail = true;
+        }
+
+        $this->assertTrue($didFail);
+
+        // Cannot update with delete permission:
+        $didFail = false;
+
+        try {
+            $newDog = $dog->setAttribute('type', 'newDog');
+            $database->updateDocument('animals', 'dog', $newDog);
+        } catch(ExceptionAuthorization) {
+            $didFail = true;
+        }
+
+        $this->assertTrue($didFail);
+
+        // Can delete:
+        $database->deleteDocument('animals', 'dog');
+
+        // Can update:
+        $newCat = $cat->setAttribute('type', 'newCat');
+        $database->updateDocument('animals', 'cat', $newCat);
+
+        $docs = Authorization::skip(fn() => $database->find('animals'));
+        $this->assertCount(1, $docs);
+        $this->assertEquals('cat', $docs[0]['$id']);
+        $this->assertEquals('newCat', $docs[0]['type']);
     }
 }

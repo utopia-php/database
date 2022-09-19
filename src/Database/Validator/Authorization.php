@@ -11,8 +11,7 @@ class Authorization extends Validator
      * @var array
      */
     static $roles = [
-        'any' => true,
-        'role:all' => true,
+        'any' => true
     ];
 
     /**
@@ -159,9 +158,13 @@ class Authorization extends Validator
      */
     public static function skip(callable $callback)
     {
+        $initialStatus = self::$status;
+
         self::disable();
+
         $result = $callback();
-        self::reset();
+
+        self::$status = $initialStatus;
 
         return $result;
     }

@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\ID;
 use Utopia\Database\Permission;
@@ -42,11 +43,9 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::create(Role::team(ID::custom('123abc'), 'edit'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['create("member:123abc")'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::create(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['create("status:verified")'];
+        $document['$permissions'] = [Permission::create(Role::users('verified'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [Permission::read(Role::any())];
@@ -59,11 +58,9 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::read(Role::team(ID::custom('123abc'), 'viewer'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['read("member:123abc")'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::read(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['read("status:verified")'];
+        $document['$permissions'] = [Permission::read(Role::users('verified'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [Permission::update(Role::any())];
@@ -76,11 +73,9 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::update(Role::team(ID::custom('123abc'), 'edit'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['update("member:123abc")'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::update(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['update("status:verified")'];
+        $document['$permissions'] = [Permission::update(Role::users('verified'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [Permission::delete(Role::any())];
@@ -93,11 +88,9 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::delete(Role::team(ID::custom('123abc'), 'edit'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['delete("member:123abc")'];
-        $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::delete(Role::guests())];
         $this->assertTrue($object->isValid($document->getPermissions()));
-        $document['$permissions'] = ['delete("status:verified")'];
+        $document['$permissions'] = [Permission::delete(Role::users('verified'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
@@ -152,9 +145,9 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
 
         $document['$permissions'] = [
-            Permission::read(Role::status('verified')),
-            Permission::create(Role::status('verified')),
-            Permission::update(Role::status('verified')),
+            Permission::read(Role::users('verified')),
+            Permission::create(Role::users('verified')),
+            Permission::update(Role::users('verified')),
         ];
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
@@ -208,103 +201,94 @@ class PermissionsTest extends TestCase
 
         // Permissions must be of type string
         $this->assertFalse($object->isValid([0, 1.5]));
-        $this->assertEquals('Permission must be of type string.', $object->getDescription());
+        $this->assertEquals('Every permission must be of type string.', $object->getDescription());
         $this->assertFalse($object->isValid([false, []]));
-        $this->assertEquals('Permission must be of type string.', $object->getDescription());
+        $this->assertEquals('Every permission must be of type string.', $object->getDescription());
         $this->assertFalse($object->isValid([['a']]));
-        $this->assertEquals('Permission must be of type string.', $object->getDescription());
+        $this->assertEquals('Every permission must be of type string.', $object->getDescription());
 
         // Wildcard character unsupported
         $this->assertFalse($object->isValid(['*']));
         $this->assertEquals('Wildcard permission "*" has been replaced. Use "any" instead.', $object->getDescription());
 
-        // Role prefix values unsupported without method
-        $this->assertFalse($object->isValid(['role:all']));
-
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "role:all".', $object->getDescription());
-        $this->assertFalse($object->isValid(['role:guest']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "role:guest".', $object->getDescription());
-        $this->assertFalse($object->isValid(['role:member']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "role:member".', $object->getDescription());
-
         // Role prefix values deprecated
-        $this->assertTrue($object->isValid(['read("role:all")']));
-        $this->assertEquals('Permissions using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.', $object->getDescription());
-        $this->assertTrue($object->isValid(['create("role:guest")']));
-        $this->assertEquals('Permissions using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.', $object->getDescription());
-        $this->assertTrue($object->isValid(['update("role:member")']));
-        $this->assertEquals('Permissions using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.', $object->getDescription());
+        $this->assertFalse($object->isValid(['read("role:all")']));
+        $this->assertEquals('Permissions using the "role:" prefix have been replaced. Use "users", "guests", or "any" instead.', $object->getDescription());
+        $this->assertFalse($object->isValid(['create("role:guest")']));
+        $this->assertEquals('Permissions using the "role:" prefix have been replaced. Use "users", "guests", or "any" instead.', $object->getDescription());
+        $this->assertFalse($object->isValid(['update("role:member")']));
+        $this->assertEquals('Permissions using the "role:" prefix have been replaced. Use "users", "guests", or "any" instead.', $object->getDescription());
 
         // Only contains a single ':'
         $this->assertFalse($object->isValid(['user1234']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "user1234".', $object->getDescription());
+        $this->assertEquals('Permission "user1234" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
         $this->assertFalse($object->isValid(['user::1234']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "user::1234".', $object->getDescription());
+        $this->assertEquals('Permission "user::1234" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
         $this->assertFalse($object->isValid(['user:123:4']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "user:123:4".', $object->getDescription());
+        $this->assertEquals('Permission "user:123:4" is not allowed. Must be one of: create, read, update, delete, write.', $object->getDescription());
 
         // Split role into format {$type}:{$value}
         // Permission must have value
         $this->assertFalse($object->isValid(['read("member:")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("member:")".', $object->getDescription());
+        $this->assertEquals('Role "member" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("user:")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("user:")".', $object->getDescription());
+        $this->assertEquals('Role "user" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("team:")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:")".', $object->getDescription());
+        $this->assertEquals('Role "team" must have an ID value.', $object->getDescription());
 
         // Permission role:$value must be one of: all, guest, member
         $this->assertFalse($object->isValid(['read("anyy")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("anyy")".', $object->getDescription());
+        $this->assertEquals('Role "anyy" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("gguest")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("gguest")".', $object->getDescription());
+        $this->assertEquals('Role "gguest" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("memer:123abc")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("memer:123abc")".', $object->getDescription());
+        $this->assertEquals('Role "memer" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
 
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading special chars
-        $this->assertFalse($object->isValid(['read("member:_1234")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("member:_1234")".', $object->getDescription());
-        $this->assertFalse($object->isValid(['read("member:-1234")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("member:-1234")".', $object->getDescription());
-        $this->assertFalse($object->isValid(['read("member:.1234")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("member:.1234")".', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::user('_1234'))]));
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::team('-1234'))]));
+        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::member('.1234'))]));
+        $this->assertEquals('Role "member" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // No unsupported special characters
-        $this->assertFalse($object->isValid(['create("member:12$4")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "create("member:12$4")".', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::create(Role::user(ID::custom('12&4')))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "create("user:12&4")".', $object->getDescription());
-        $this->assertFalse($object->isValid(['create("member:ab(124")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "create("member:ab(124")".', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::user('12$4'))]));
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::user('12&4'))]));
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::user('ab(124'))]));
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Shorter than 36 chars
         $this->assertTrue($object->isValid([Permission::read(Role::user(ID::custom('aaaaaaaabbbbbbbbccccccccddddddddeeee')))]));
         $this->assertFalse($object->isValid([Permission::read(Role::user(ID::custom('aaaaaaaabbbbbbbbccccccccddddddddeeeee')))]));
-        $this->assertEquals("Identifier must be a valid key: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can't start with a special char", $object->getDescription());
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertFalse($object->isValid(['update("memmber:1234")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "update("memmber:1234")".', $object->getDescription());
+        $this->assertEquals('Role "memmber" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("tteam:1234")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "update("tteam:1234")".', $object->getDescription());
+        $this->assertEquals('Role "tteam" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("userr:1234")']));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "update("userr:1234")".', $object->getDescription());
+        $this->assertEquals('Role "userr" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
 
         // Team permission
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:_abcd")".', $object->getDescription());
+        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd/')))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:abcd/")".', $object->getDescription());
+        $this->assertEquals('Dimension must not be empty.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''),'abcd'))]));
-        $this->assertEquals('Identifier must not be empty.', $object->getDescription());
+        $this->assertEquals('Role "team" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), '/efgh'))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:abcd//efgh")".', $object->getDescription());
+        $this->assertEquals('Only one dimension can be provided.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'e/fgh'))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:abcd/e/fgh")".', $object->getDescription());
+        $this->assertEquals('Only one dimension can be provided.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('ab&cd3'), 'efgh'))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:ab&cd3/efgh")".', $object->getDescription());
+        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'ef*gh'))]));
-        $this->assertEquals('Must be of the form "permission("role:id/dimension")", got "read("team:abcd/ef*gh")".', $object->getDescription());
+        $this->assertEquals('Role "team" dimension value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Permission-list length must be valid
         $object = new Permissions(100);

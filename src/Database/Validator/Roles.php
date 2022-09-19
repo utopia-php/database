@@ -3,22 +3,14 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
+use Utopia\Database\Role;
 use Utopia\Validator;
 
 class Roles extends Validator
 {
     protected string $message = 'Roles Error';
 
-    protected array $legacyDimensions = [
-        'all',
-        'member',
-        'guest'
-    ];
-
-    protected array $statusDimensions = [
-        'verified',
-        'unverified',
-    ];
+    protected array $allowed;
 
     protected int $length;
 
@@ -26,10 +18,12 @@ class Roles extends Validator
      * Roles constructor.
      *
      * @param int $length maximum amount of role. 0 means unlimited.
+     * @param array $allowed allowed roles. Defaults to all available.
      */
-    public function __construct(int $length = 0,)
+    public function __construct(int $length = 0, array $allowed = Database::ROLES)
     {
         $this->length = $length;
+        $this->allowed = $allowed;
     }
 
     /**
@@ -59,6 +53,7 @@ class Roles extends Validator
             $this->message = 'Roles must be an array of strings.';
             return false;
         }
+
         if ($this->length && \count($roles) > $this->length) {
             $this->message = 'You can only provide up to ' . $this->length . ' roles.';
             return false;
@@ -66,7 +61,7 @@ class Roles extends Validator
 
         foreach ($roles as $role) {
             if (!\is_string($role)) {
-                $this->message = 'Role must be of type string.';
+                $this->message = 'Every role must be of type string.';
                 return false;
             }
             if ($role === '*') {
@@ -74,74 +69,35 @@ class Roles extends Validator
                 return false;
             }
             if (\str_contains($role, 'role:')) {
-                $this->message = 'Roles using the "role:" prefix have been deprecated. Use "users", "guests", or "any" instead.';
-            }
-
-            $allowedRoles = \implode('|', Database::ROLES);
-
-            $roleMatcher = "/^((?<role>{$allowedRoles})(?::(?<id>[a-zA-Z\d]+[a-zA-Z._\-\d]*))?(?:\/(?<dimension>[a-zA-Z\d]+[a-zA-Z._\-]*))?)$/";
-
-            $matches = [];
-            if (!\preg_match($roleMatcher, $role, $matches)) {
-                $this->message = 'Must be of the form "role:id/dimension", got "' . $role . '".';
+                $this->message = 'Roles using the "role:" prefix have been removed. Use "users", "guests", or "any" instead.';
                 return false;
             }
 
-            $type = $matches['role'];
-            $id = $matches['id'] ?? '';
-            $dimension = $matches['dimension'] ?? '';
+            $isAllowed = false;
+            foreach ($this->allowed as $allowed) {
+                if (\str_starts_with($role, $allowed)) {
+                    $isAllowed = true;
+                    break;
+                }
+            }
+            if (!$isAllowed) {
+                $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', $this->allowed) . '.';
+                return false;
+            }
 
-            switch ($type) {
-                case 'any':
-                case 'guests':
-                case 'users':
-                    if (!empty($id)) {
-                        $this->message = '"' . $type . '"' . ' role can not have a value.';
-                        return false;
-                    }
-                    if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
-                        return false;
-                    }
-                    break;
-                /** @noinspection PhpMissingBreakStatementInspection */
-                case 'user':
-                    if (!empty($dimension) && !\in_array($dimension, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
-                        return false;
-                    }
-                case 'member':
-                case 'team':
-                    $key = new Key();
-                    if (empty($id)) {
-                        $this->message = 'ID must not be empty.';
-                        return false;
-                    }
-                    if (!$key->isValid($id)) {
-                        $this->message = 'ID must be a valid key: ' . $key->getDescription();
-                        return false;
-                    }
-                    break;
-                case 'status':
-                    // Dimension is in the ID position for status role e.g. "status:verified"
-                    if (!\in_array($id, $this->statusDimensions)) {
-                        $this->message = 'Status dimension must be one of: ' . \implode(', ', $this->statusDimensions);
-                        return false;
-                    }
-                    break;
-                case 'role':
-                    if (empty($id)) {
-                        $this->message = 'Role must not be empty.';
-                        return false;
-                    }
-                    if (!\in_array($id, $this->legacyDimensions)) {
-                        $this->message = 'Role must be one of: ' . \implode(', ', $this->legacyDimensions);
-                        return false;
-                    }
-                    break;
-                default:
-                    $this->message = 'Permission must begin with one of: ' . \implode(", ", $roles);
-                    return false;
+            try {
+                $role = Role::parse($role);
+            } catch (\Exception $e) {
+                $this->message = $e->getMessage();
+                return false;
+            }
+
+            $roleName = $role->getRole();
+            $identifier = $role->getIdentifier();
+            $dimension = $role->getDimension();
+
+            if (!$this->isValidRole($roleName, $identifier, $dimension)) {
+                return false;
             }
         }
         return true;
@@ -169,5 +125,87 @@ class Roles extends Validator
     public function getType(): string
     {
         return self::TYPE_ARRAY;
+    }
+
+    protected function isValidRole(
+        string $role,
+        string $identifier,
+        string $dimension
+    ): bool
+    {
+        $key = new Key();
+
+        $config = Database::ROLE_CONFIGURATION[$role] ?? null;
+
+        if (empty($config)) {
+            $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
+            return false;
+        }
+
+        if (!isset($config['identifier'])) {
+            $this->message = 'Role "' . $role . '" missing identifier configuration.';
+            return false;
+        }
+
+        if (!isset($config['dimension'])) {
+            $this->message = 'Role "' . $role . '" missing dimension configuration.';
+            return false;
+        }
+
+        // Process identifier configuration
+        $allowed = $config['identifier']['allowed'] ?? false;
+        $required = $config['identifier']['required'] ?? false;
+
+        // Not allowed and has an identifier
+        if (!$allowed && !empty($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
+            return false;
+        }
+
+        // Required and has no identifier
+        if ($allowed && $required && empty($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
+            return false;
+        }
+
+        // Allowed and has an invalid identifier
+        if ($allowed
+            && !empty($identifier)
+            && !$key->isValid($identifier)) {
+            $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
+            return false;
+        }
+
+        // Process dimension configuration
+        $allowed = $config['dimension']['allowed'] ?? false;
+        $required = $config['dimension']['required'] ?? false;
+        $options = $config['dimension']['options'] ?? [$dimension];
+
+        // Not allowed and has a dimension
+        if (!$allowed && !empty($dimension)) {
+            $this->message = 'Role "' . $role . '"' . ' can not have a dimension value.';
+            return false;
+        }
+
+        // Required and has no dimension
+        if ($allowed && $required && empty($dimension)) {
+            $this->message = 'Role "' . $role . '"' . ' must have a dimension value.';
+            return false;
+        }
+
+        if ($allowed && !empty($dimension)) {
+            // Allowed and dimension is not an allowed option
+            if (!\in_array($dimension, $options)) {
+                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid. Must be one of: ' . \implode(', ', $options) . '.';
+                return false;
+            }
+            // Allowed and dimension is not a valid key
+            if (!$key->isValid($dimension)) {
+                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid: ' . $key->getDescription();
+                return false;
+            }
+        }
+
+        return true;
     }
 }

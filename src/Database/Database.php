@@ -43,6 +43,9 @@ class Database
     const PERMISSION_UPDATE = 'update';
     const PERMISSION_DELETE = 'delete';
 
+    // Aggregate permissions
+    const PERMISSION_WRITE = 'write';
+
     const PERMISSIONS = [
         self::PERMISSION_CREATE,
         self::PERMISSION_READ,
@@ -50,15 +53,95 @@ class Database
         self::PERMISSION_DELETE,
     ];
 
+    // Roles
+    const ROLE_ANY = 'any';
+    const ROLE_GUESTS = 'guests';
+    const ROLE_USERS = 'users';
+    const ROLE_USER = 'user';
+    const ROLE_TEAM = 'team';
+    const ROLE_MEMBER = 'member';
+
     const ROLES = [
-        'any',
-        'users',
-        'user',
-        'team',
-        'member',
-        'guests',
-        'status',
-        'role',
+        self::ROLE_ANY,
+        self::ROLE_GUESTS,
+        self::ROLE_USERS,
+        self::ROLE_USER,
+        self::ROLE_TEAM,
+        self::ROLE_MEMBER,
+    ];
+
+    const ROLE_CONFIGURATION = [
+        Database::ROLE_ANY => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        Database::ROLE_GUESTS => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        Database::ROLE_USERS => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+                'options' => Database::USER_DIMENSIONS
+            ],
+        ],
+        Database::ROLE_USER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+                'options' => Database::USER_DIMENSIONS
+            ],
+        ],
+        Database::ROLE_TEAM => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+            ],
+        ],
+        Database::ROLE_MEMBER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+    ];
+
+    // Dimensions
+    const DIMENSION_VERIFIED = 'verified';
+    const DIMENSION_UNVERIFIED = 'unverified';
+
+    const USER_DIMENSIONS = [
+        self::DIMENSION_VERIFIED,
+        self::DIMENSION_UNVERIFIED,
     ];
 
     // Collections
@@ -557,6 +640,12 @@ class Database
             }
         }
 
+        /** Ensure required filters for the attribute are passed */
+        $requiredFilters = $this->getRequiredFilters($type);
+        if (!empty(array_diff($requiredFilters, $filters))) {
+            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        }
+
         if (
             $this->adapter->getAttributeLimit() > 0 &&
             $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
@@ -618,28 +707,8 @@ class Database
             if ($required === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
-            switch (\gettype($default)) {
-                    // first enforce typed array for each value in $default
-                case 'array':
-                    foreach ($default as $value) {
-                        if ($type !== \gettype($value)) {
-                            throw new Exception('Default value contents do not match given type ' . $type);
-                        }
-                    }
-                    break;
-                    // then enforce for primitive types
-                case self::VAR_STRING:
-                case self::VAR_INTEGER:
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                    if ($type !== \gettype($default)) {
-                        throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
-                    }
-                    break;
-                default:
-                    throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
-            }
+
+            $this->validateDefaultTypes($type, $default);
         }
 
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
@@ -649,6 +718,73 @@ class Database
         }
 
         return $attribute;
+    }
+
+    /**
+     * Get the list of required filters for each data type
+     *
+     * @param string $type Type of the attribute
+     *
+     * @return array
+     */
+    protected function getRequiredFilters(string $type): array 
+    {
+        switch ($type) {
+            case self::VAR_STRING:
+            case self::VAR_INTEGER:
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+                return [];
+            case self::VAR_DATETIME:
+                return ['datetime'];
+            default:
+                return [];
+        }
+    }
+
+    /**
+     * Function to validate if the default value of an attribute matches its attribute type
+     *
+     * @param string $type Type of the attribute
+     * @param mixed $default Default value of the attribute
+     *
+     * @throws Exception
+     * @return void
+     */
+    protected function validateDefaultTypes(string $type, mixed $default): void
+    {
+        $defaultType = \gettype($default);
+
+        if ($defaultType === 'NULL') {
+            // Disable null. No validation required
+            return;
+        }
+
+        if ($defaultType === 'array') {
+            foreach ($default as $value) {
+                $this->validateDefaultTypes($type, $value);
+            }
+            return;
+        }
+
+        switch ($type) {
+            case self::VAR_STRING:
+            case self::VAR_INTEGER:
+            case self::VAR_FLOAT:
+            case self::VAR_BOOLEAN:
+                if ($type !== $defaultType) {
+                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            case self::VAR_DATETIME:
+                if ($defaultType !== self::VAR_STRING) {
+                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                break;
+            default:
+                throw new Exception('Unknown attribute type: ' . $type);
+                break;
+        }
     }
 
     /**
@@ -768,31 +904,8 @@ class Database
             if ($attribute->getAttribute('required') === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
-            switch (\gettype($default)) {
-                    // first enforce typed array for each value in $default
-                case 'array':
-                    foreach ($default as $value) {
-                        if ($attribute->getAttribute('type') !== \gettype($value)) {
-                            throw new Exception('Default value contents do not match given type ' . $attribute->getAttribute('type'));
-                        }
-                    }
-                    break;
-                    // then enforce for primitive types
-                case self::VAR_STRING:
-                case self::VAR_INTEGER:
-                case self::VAR_FLOAT:
-                case self::VAR_BOOLEAN:
-                    if ($attribute->getAttribute('type') !== \gettype($default)) {
-                        throw new Exception('Default value ' . $default . ' does not match given type ' . $attribute->getAttribute('type'));
-                    }
-                    break;
-                case 'NULL':
-                    // Disable null. No validation required
-                    break;
-                default:
-                    throw new Exception('Unknown attribute type for: ' . $default);
-                    break;
-            }
+
+            $this->validateDefaultTypes($attribute->getAttribute('type'), $default);
 
             $attribute->setAttribute('default', $default);
         });
@@ -836,6 +949,7 @@ class Database
                         break;
                     case self::VAR_FLOAT:
                     case self::VAR_BOOLEAN:
+                    case self::VAR_DATETIME:
                         break;
                     default:
                         throw new Exception('Unknown attribute type: ' . $type);
@@ -1246,7 +1360,7 @@ class Database
         $time = DateTime::now();
         $document->setAttribute('$updatedAt', $time);
 
-        $old = $this->getDocument($collection, $id); // TODO make sure user don\'t need read permission for write operations
+        $old = Authorization::skip(fn() => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
         $collection = $this->getCollection($collection);
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -1285,7 +1399,8 @@ class Database
     public function deleteDocument(string $collection, string $id): bool
     {
         $validator = new Authorization(self::PERMISSION_DELETE);
-        $document = $this->getDocument($collection, $id);
+
+        $document = Authorization::skip(fn() => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
         $collection = $this->getCollection($collection);
 
         if ($collection->getId() !== self::METADATA
@@ -1376,15 +1491,10 @@ class Database
     /**
      * @param string $collection
      * @param array $queries
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param Document|null $cursor
-     * @param string $cursorDirection
-     *
-     * @return Document|bool
+     * @return bool|Document
+     * @throws Exception
      */
-    public function findOne(string $collection, array $queries = [])
+    public function findOne(string $collection, array $queries = []): bool|Document
     {
         $results = $this->find($collection, \array_merge([Query::limit(1)], $queries));
         return \reset($results);

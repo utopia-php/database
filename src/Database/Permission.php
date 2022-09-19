@@ -72,33 +72,62 @@ class Permission
      *
      * @param string $permission
      * @return Permission
+     * @throws \Exception
      */
     public static function parse(string $permission): Permission
     {
-        $parts = \explode('("', $permission);
-        $permission = $parts[0];
-        $fullRole = \str_replace('")', '', $parts[1]);
-        $parts = \explode(':', $fullRole);
+        $permissionParts = \explode('("', $permission);
 
-        if (\count($parts) === 1) {
-            return new Permission($permission, $fullRole);
+        if (\count($permissionParts) !== 2) {
+            throw new \Exception('Invalid permission string format: "' . $permission . '".');
         }
-        $role = $parts[0];
-        $fullIdentifier = $parts[1];
-        $parts = \explode('/', $fullIdentifier);
 
-        if (\count($parts) === 1) {
-            return new Permission($permission, $role, $fullIdentifier);
+        $permission = $permissionParts[0];
+        $fullRole = \str_replace('")', '', $permissionParts[1]);
+        $roleParts = \explode(':', $fullRole);
+        $role = $roleParts[0];
+
+        $hasIdentifier = \count($roleParts) > 1;
+        $hasDimension = \str_contains($fullRole, '/');
+
+        if (!$hasIdentifier && !$hasDimension) {
+            return new Permission($permission, $role);
         }
-        $identifier = $parts[0];
-        $dimension = $parts[1];
 
-        return new Permission(
-            $permission,
-            $role,
-            $identifier,
-            $dimension,
-        );
+        if ($hasIdentifier && !$hasDimension) {
+            $identifier = $roleParts[1];
+            return new Permission($permission, $role, $identifier);
+        }
+
+        if (!$hasIdentifier && $hasDimension) {
+            $dimensionParts = \explode('/', $fullRole);
+            if (\count($dimensionParts) !== 2) {
+                throw new \Exception('Only one dimension can be provided.');
+            }
+
+            $role = $dimensionParts[0];
+            $dimension = $dimensionParts[1];
+
+            if (empty($dimension)) {
+                throw new \Exception('Dimension must not be empty.');
+            }
+            return new Permission($permission, $role, '', $dimension);
+        }
+
+        // Has both identifier and dimension
+        $dimensionParts = \explode('/', $roleParts[1]);
+        if (\count($dimensionParts) !== 2) {
+            throw new \Exception('Only one dimension can be provided.');
+        }
+
+        $identifier = $dimensionParts[0];
+        $dimension = $dimensionParts[1];
+
+        if (empty($dimension)) {
+            throw new \Exception('Dimension must not be empty.');
+        }
+
+        return new Permission($permission, $role, $identifier, $dimension);
     }
 
     /**
@@ -106,7 +135,7 @@ class Permission
      *
      * @param ?array $permissions
      * @param array $allowed
-     * @return array
+     * @return ?array
      */
     public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
     {
@@ -198,6 +227,23 @@ class Permission
     {
         $permission = new Permission(
             'delete',
+            $role->getRole(),
+            $role->getIdentifier(),
+            $role->getDimension()
+        );
+        return $permission->toString();
+    }
+
+    /**
+     * Create a write permission string from the given Role
+     *
+     * @param Role $role
+     * @return string
+     */
+    public static function write(Role $role): string
+    {
+        $permission = new Permission(
+            'write',
             $role->getRole(),
             $role->getIdentifier(),
             $role->getDimension()

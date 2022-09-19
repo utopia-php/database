@@ -589,19 +589,15 @@ class Database
      */
     public function createCollectionIndexes(string $collection, array $indexes = []): bool
     {
-        try {
-            foreach ($indexes as $index){
-                self::createIndex(
-                    $collection,
-                    $index->getId(),
-                    $index->getAttribute('type'),
-                    $index->getAttribute('attributes'),
-                    $index->getAttribute('lengths'),
-                    $index->getAttribute('orders'),
-                );
-            }
-        } catch (Throwable $e){
-            throw $e;
+        foreach ($indexes as $index){
+            self::createIndex(
+                $collection,
+                $index->getId(),
+                $index->getAttribute('type'),
+                $index->getAttribute('attributes'),
+                $index->getAttribute('lengths'),
+                $index->getAttribute('orders'),
+            );
         }
 
         return true;

@@ -444,21 +444,14 @@ class Database
      */
     public function createMetadata(): bool
     {
-        /**
-         * Create array of attribute documents
-         */
         $attributes = array_map(function ($attribute) {
             return new Document([
-                '$id' => ID::custom($attribute[0]),
-                'type' => $attribute[1],
-                'size' => $attribute[2],
-                'required' => $attribute[3],
+                '$id' => ID::custom($attribute['key']),
+                'type' => $attribute['type'],
+                'size' => $attribute['size'],
+                'required' => $attribute['required'],
             ]);
-        }, [ // Array of [$id, $type, $size, $required]
-            ['name', self::VAR_STRING, 512, true],
-            ['attributes', self::VAR_STRING, 1000000, false],
-            ['indexes', self::VAR_STRING, 1000000, false],
-        ]);
+        }, $this->collection['attributes']);
 
         $this->createCollection(self::METADATA);
         $this->createCollectionAttributes(self::METADATA, $attributes);

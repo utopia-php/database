@@ -669,14 +669,16 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param null $default
      * @param bool $signed
      * @param bool $array
-     * @param string $format optional validation format of attribute
-     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param string|null $format optional validation format of attribute
+     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
      *
      * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -787,17 +789,10 @@ class Database
      */
     protected function getRequiredFilters(string $type): array 
     {
-        switch ($type) {
-            case self::VAR_STRING:
-            case self::VAR_INTEGER:
-            case self::VAR_FLOAT:
-            case self::VAR_BOOLEAN:
-                return [];
-            case self::VAR_DATETIME:
-                return ['datetime'];
-            default:
-                return [];
-        }
+        return match ($type) {
+            self::VAR_DATETIME => ['datetime'],
+            default => [],
+        };
     }
 
     /**

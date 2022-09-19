@@ -1520,6 +1520,7 @@ class Database
             throw new Exception("Collection not found");
         }
 
+        $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
         return $this->adapter->count($collection->getId(), $queries, $max);

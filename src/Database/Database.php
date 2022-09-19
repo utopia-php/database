@@ -560,7 +560,7 @@ class Database
     public function createCollectionAttributes(string $collection, array $attributes = []): bool
     {
         try {
-        foreach ($attributes as $attribute){
+            foreach ($attributes as $attribute){
                 self::createAttribute(
                     $collection,
                     $attribute->getId(),
@@ -574,9 +574,9 @@ class Database
                     $attribute->getAttribute('formatOptions')?? [],
                     $attribute->getAttribute('filters') ?? []
                 );
-        }
-
+            }
         } catch (Throwable $e){
+            self::deleteCollection($collection); // todo: Is this ok?
             throw $e;
         }
         return true;

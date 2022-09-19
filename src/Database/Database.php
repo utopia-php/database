@@ -568,7 +568,7 @@ class Database
                 $attribute->getAttribute('size') ?? 0,
                 $attribute->getAttribute('required'),
                 $attribute->getAttribute('default'),
-                $attribute->getAttribute('signed') ?? true, // why default is true?
+                $attribute->getAttribute('signed') ?? false,
                 $attribute->getAttribute('array') ?? false,
                 $attribute->getAttribute('format'),
                 $attribute->getAttribute('formatOptions')?? [],
@@ -676,7 +676,7 @@ class Database
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = false, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         if(empty($collection)){
             throw new Exception('CreateAttribute error empty collection');

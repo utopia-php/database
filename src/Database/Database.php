@@ -440,12 +440,12 @@ class Database
      * @throws LimitException
      * @throws AuthorizationException
      * @throws StructureException
+     * @throws Throwable
      */
     public function createMetadata(): bool
     {
         /**
          * Create array of attribute documents
-         * @var Document[] $attributes
          */
         $attributes = array_map(function ($attribute) {
             return new Document([
@@ -471,7 +471,7 @@ class Database
      * Optionally check if collection exists in database
      *
      * @param string $database database name
-     * @param string $collection (optional) collection name
+     * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
@@ -510,6 +510,7 @@ class Database
      * @param Document[] $indexes (optional)
      *
      * @return Document
+     * @throws Exception|Throwable
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
@@ -559,25 +560,20 @@ class Database
      */
     public function createCollectionAttributes(string $collection, array $attributes = []): bool
     {
-        try {
-            foreach ($attributes as $attribute){
-                self::createAttribute(
-                    $collection,
-                    $attribute->getId(),
-                    $attribute->getAttribute('type'),
-                    $attribute->getAttribute('size') ?? 0,
-                    $attribute->getAttribute('required'),
-                    $attribute->getAttribute('default'),
-                    $attribute->getAttribute('signed') ?? true, // why default is true?
-                    $attribute->getAttribute('array') ?? false,
-                    $attribute->getAttribute('format'),
-                    $attribute->getAttribute('formatOptions')?? [],
-                    $attribute->getAttribute('filters') ?? []
-                );
-            }
-        } catch (Throwable $e){
-            self::deleteCollection($collection); // todo: Is this ok?
-            throw $e;
+        foreach ($attributes as $attribute){
+            self::createAttribute(
+                $collection,
+                $attribute->getId(),
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size') ?? 0,
+                $attribute->getAttribute('required'),
+                $attribute->getAttribute('default'),
+                $attribute->getAttribute('signed') ?? true, // why default is true?
+                $attribute->getAttribute('array') ?? false,
+                $attribute->getAttribute('format'),
+                $attribute->getAttribute('formatOptions')?? [],
+                $attribute->getAttribute('filters') ?? []
+            );
         }
         return true;
     }

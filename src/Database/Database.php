@@ -580,7 +580,7 @@ class Database
      * @return bool
      * @throws Exception
      */
-    public function createCollectionIndexes(string $collection, array $indexes = []): bool
+    public function createIndexes(string $collection, array $indexes = []): bool
     {
         foreach ($indexes as $index){
             $this->createIndex(

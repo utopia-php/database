@@ -554,7 +554,7 @@ class Database
     public function createCollectionAttributes(string $collection, array $attributes = []): bool
     {
         foreach ($attributes as $attribute){
-            self::createAttribute(
+            $this->createAttribute(
                 $collection,
                 $attribute->getId(),
                 $attribute->getAttribute('type'),

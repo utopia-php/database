@@ -551,7 +551,7 @@ class Database
      *
      * @return bool
      */
-    public function createCollectionAttributes(string $collection, array $attributes = []): bool
+    public function createAttributes(string $collection, array $attributes = []): bool
     {
         foreach ($attributes as $attribute){
             $this->createAttribute(

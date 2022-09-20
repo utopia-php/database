@@ -203,7 +203,7 @@ class Structure extends Validator
             return false;
         }
 
-        if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
+        if (empty($this->collection->getId()) || (Database::METADATA !== $this->collection->getCollection() && Database::METADATA_ATTRIBUTE !== $this->collection->getCollection())) {
             $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
             return false;
         }

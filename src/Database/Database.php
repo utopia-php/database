@@ -7,13 +7,11 @@ use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
-use function PHPUnit\Framework\throwException;
 
 class Database
 {
@@ -286,23 +284,125 @@ class Database
         'name' => 'collections',
         'attributes' => [
             [
-                'key' => 'shmuel',
-                'type' => self::VAR_STRING,
-                'size' => 256,
-                'required' => true,
-                'signed' => true,
+                '$id' => 'collectionId',
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
                 'array' => false,
                 'filters' => [],
             ],
             [
-                'key' => 'shmuel2',
-                'type' => self::VAR_STRING,
-                'size' => 256,
-                'required' => true,
-                'signed' => true,
+                '$id' => 'collectionInternalId',
+                'type' => Database::VAR_STRING,
+                'size' => 50,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
                 'array' => false,
                 'filters' => [],
             ],
+            [
+                '$id' => 'key',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'type',
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'required',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'size',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'signed',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'default',
+                'type' => Database::VAR_STRING,
+                'size' => 1000,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => ['json'], // Can be mixed
+            ],
+            [
+                '$id' => 'array',
+                'type' => Database::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'filters',
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'signed' => false,
+                'filters' => ['json'],
+            ],
+            [
+                '$id' => 'format',
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'signed' => false,
+                'filters' => [],
+            ],
+            [
+                '$id' => 'formatOptions',
+                'type' => Database::VAR_STRING,
+                'required' => false,
+                'size' => 1000000,
+                'array' => false,
+                'default' => null,
+                'signed' => false,
+                'filters' => ['json'],
+            ]
         ],
         'indexes' => [],
     ];
@@ -483,131 +583,31 @@ class Database
      */
     public function createMetadata(): bool
     {
+        $this->adapter->createCollection(self::METADATA);
 
-        $attributes = array_map(function ($attribute) {
-            return new Document([
-                '$id' => ID::custom($attribute['key']),
-                'type' => $attribute['type'],
-                'size' => $attribute['size'],
-                'required' => $attribute['required'],
-            ]);
-        }, $this->collection['attributes']);
+        foreach ($this->collection['attributes'] as $attribute){
+            $this->adapter->createAttribute(
+        self::METADATA,
+                ID::custom($attribute['$id']),
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'],
+                $attribute['array']
+            );
+        }
 
+        $this->adapter->createCollection(self::METADATA_ATTRIBUTE);
 
-        $this->createCollection(self::METADATA);
-        $this->createCollectionAttributes(self::METADATA, $attributes);
-        
-        $attributes = array_map(function ($attribute) {
-            return new Document([
-                '$id' => ID::custom($attribute['key']),
-                'type' => $attribute['type'],
-                'size' => $attribute['size'],
-                'required' => $attribute['required'],
-            ]);
-        }, $this->collection123['attributes']);
-
-
-        $this->createCollection(self::METADATA_ATTRIBUTE);
-        $this->createCollectionAttributes(self::METADATA_ATTRIBUTE, $attributes);
-
-//
-//        $this->createCollectionAttributes(self::METADATA_ATTRIBUTE, [
-//            new Document([
-//                '$id' => ID::custom('collectionId'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 50,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('collectionInternalId'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 50,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('key'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 255,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('type'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 255,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('required'),
-//                'type' => Database::VAR_BOOLEAN,
-//                'size' => 0,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('size'),
-//                'type' => Database::VAR_INTEGER,
-//                'size' => 0,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('signed'),
-//                'type' => Database::VAR_BOOLEAN,
-//                'size' => 0,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('default'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 255,
-//                'required' => false,
-//                'default' => null,
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('array'),
-//                'type' => Database::VAR_BOOLEAN,
-//                'size' => 0,
-//                'required' => false,
-//                'array' => false,
-//                'default' => null,
-//                'filters' => ['json']
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('filters'),
-//                'type' => Database::VAR_STRING,
-//                'required' => false,
-//                'size' => 1000000,
-//                'array' => false,
-//                'default' => null,
-//                'filters' => ['json']
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('format'),
-//                'type' => Database::VAR_STRING,
-//                'required' => false,
-//                'size' => 1000000,
-//                'array' => false,
-//                'default' => null,
-//                'filters' => ['json']
-//            ]),
-//            new Document([
-//                '$id' => ID::custom('formatOptions'),
-//                'type' => Database::VAR_STRING,
-//                'required' => false,
-//                'size' => 1000000,
-//                'array' => false,
-//                'default' => null,
-//                'filters' => ['json']
-//            ])
-//
-//        ]);
-
-
+        foreach ($this->collection123['attributes'] as $attribute){
+            $this->adapter->createAttribute(
+                self::METADATA_ATTRIBUTE,
+                ID::custom($attribute['$id']),
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'],
+                $attribute['array']
+            );
+        }
 
         return true;
     }
@@ -834,7 +834,6 @@ class Database
 
         $collection = $this->getCollection($collection);
         var_dump("createAttribute:");
-        var_dump($collection);
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
@@ -920,7 +919,6 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
-
         if($collection->getId() == self::METADATA){
             return $attribute;
         }
@@ -932,21 +930,13 @@ class Database
             'type' => $type,
             'size' => $size,
             'required' => $required,
-            'default' => $default,
+            'default' => [$default],
             'signed' => $signed,
             'array' => $array,
             'format' => $format,
             'formatOptions' => $formatOptions,
             'filters' => $filters,
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
         ]);
-
-        var_dump($d);
 
         $this->createDocument(self::METADATA_ATTRIBUTE, $d);
         $this->deleteCachedCollection(self::METADATA);
@@ -1481,13 +1471,18 @@ class Database
      */
     public function getDocument(string $collection, string $id): Document
     {
+
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
         }
 
         if ($collection === self::METADATA && $id === self::METADATA_ATTRIBUTE) {
-            var_dump("return new Document(collection123);");
+          //  var_dump("return new Document(collection123);");
             return new Document($this->collection123);
+        }
+
+        if($collection === self::METADATA){
+            var_dump($collection);
         }
 
         if (empty($collection)) {
@@ -1495,9 +1490,6 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-        $document = null;
-        $cache = null;
-
         $validator = new Authorization(self::PERMISSION_READ);
 
         // TODO@kodumbeats Check if returned cache id matches request
@@ -1546,6 +1538,8 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        var_dump("createDocument = " . $collection);
+        var_dump("----------------------------------");
         $collection = $this->getCollection($collection);
 
         $time = DateTime::now();

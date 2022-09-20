@@ -113,8 +113,6 @@ class MongoDBAdapter extends Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
      * @return bool
      * @throws Exception
      */

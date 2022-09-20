@@ -57,7 +57,13 @@ class SQLiteTest extends Base
             return self::$database;
         }
 
-        $pdo = new PDO("sqlite:".__DIR__."/database.sql", null, null, SQLite::getPDOAttributes());
+        $sqliteDir = __DIR__."/database.sql";
+
+        if(file_exists($sqliteDir)) {
+            unlink($sqliteDir);
+        }
+
+        $pdo = new PDO("sqlite:".$sqliteDir, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);

@@ -1687,19 +1687,28 @@ abstract class Base extends TestCase
         $documentsTest = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::orderDesc('$createdAt'),
+            Query::orderDesc('$id'),
         ]);
+
+        var_dump("########## documentsTest ##########");
+        var_dump($documentsTest);
+        var_dump("########## documentsTest ##########");
+
         $documents = static::getDatabase()->find('movies', [
             Query::limit(1),
             Query::offset(0),
-            Query::orderDesc('$createdAt'),
+            Query::orderDesc('$id'),
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        var_dump($documentsTest);
-        var_dump('*****');
-        var_dump(static::getDatabase()->getAdapter()->getDebug());
+        var_dump("########## documents ##########");
         var_dump($documents);
+        var_dump("########## documents ##########");
+
+        // var_dump($documentsTest);
+        // var_dump('*****');
+        // var_dump(static::getDatabase()->getAdapter()->getDebug());
+        // var_dump($documents);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 

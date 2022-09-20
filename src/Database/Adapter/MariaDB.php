@@ -147,17 +147,24 @@ class MariaDB extends Adapter
         )")
         ->execute();
 
-        $this->getPDO()->prepare("
-            CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
-            `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-            `_type` VARCHAR(12) NOT NULL,
-            `_permission` VARCHAR(255) NOT NULL,
-            `_document` VARCHAR(255) NOT NULL,
-            PRIMARY KEY (`_id`),
-            UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-            INDEX `_index2` (`_permission`)
-        )")
-        ->execute();
+        try {
+            $this->getPDO()->prepare("
+                CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
+                `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                `_type` VARCHAR(12) NOT NULL,
+                `_permission` VARCHAR(255) NOT NULL,
+                `_document` VARCHAR(255) NOT NULL,
+                PRIMARY KEY (`_id`),
+                UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
+                INDEX `_index2` (`_permission`)
+            )")
+            ->execute();
+        } catch (\Exception $th) {
+            $this->getPDO()
+                ->prepare("DROP TABLE IF EXISTS `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`, `{$this->getDefaultDatabase()}`.`{$this->getNamespace()}_{$id}`;")
+                ->execute();
+            throw $th;
+        }
 
         return true;
     }

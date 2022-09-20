@@ -7,13 +7,11 @@ use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
-use function PHPUnit\Framework\throwException;
 
 class Database
 {
@@ -536,8 +534,9 @@ class Database
         $this->createCollectionAttributes($id, $attributes);
         $this->createCollectionIndexes($id, $indexes);
 
-        $collection->setAttribute('attributes', $attributes);
-        $collection->setAttribute('indexes', $indexes);
+        $collection
+            ->setAttribute('attributes', $attributes)
+            ->setAttribute('indexes', $indexes);
 
         return $this->updateDocument(self::METADATA, $id, $collection);
     }

@@ -681,7 +681,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id) && $collection->getId() != '_metadata') {
+            if (\strtolower($attribute->getId()) === \strtolower($id) && $collection->getId() !== self::METADATA) {
                 throw new DuplicateException('Attribute already exists:' . $attribute->getId());
             }
         }

@@ -550,10 +550,10 @@ class Database
      *
      * @return bool
      */
-    public function createCollectionAttributes(string $collection, array $attributes = []): bool
+    public function createAttributes(string $collection, array $attributes = []): bool
     {
         foreach ($attributes as $attribute){
-            self::createAttribute(
+            $this->createAttribute(
                 $collection,
                 $attribute->getId(),
                 $attribute->getAttribute('type'),
@@ -563,7 +563,7 @@ class Database
                 $attribute->getAttribute('signed') ?? false,
                 $attribute->getAttribute('array') ?? false,
                 $attribute->getAttribute('format'),
-                $attribute->getAttribute('formatOptions')?? [],
+                $attribute->getAttribute('formatOptions') ?? [],
                 $attribute->getAttribute('filters') ?? []
             );
         }
@@ -579,10 +579,10 @@ class Database
      * @return bool
      * @throws Exception
      */
-    public function createCollectionIndexes(string $collection, array $indexes = []): bool
+    public function createIndexes(string $collection, array $indexes = []): bool
     {
         foreach ($indexes as $index){
-            self::createIndex(
+            $this->createIndex(
                 $collection,
                 $index->getId(),
                 $index->getAttribute('type'),
@@ -667,11 +667,11 @@ class Database
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = false, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         if(empty($collection)){
-            throw new Exception('CreateAttribute error empty collection');
+            throw new Exception("Collection can't be empty.");
         }
 
         if(empty($id)){
-            throw new Exception('CreateAttribute error empty id');
+            throw new Exception("ID can't be empty");
         }
 
         $collection = $this->getCollection($collection);
@@ -680,7 +680,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id) && $collection->getId() != '_metadata') {
+            if (\strtolower($attribute->getId()) === \strtolower($id) && $collection->getId() !== self::METADATA) {
                 throw new DuplicateException('Attribute already exists:' . $attribute->getId());
             }
         }

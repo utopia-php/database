@@ -583,7 +583,7 @@ class Database
     public function createCollectionIndexes(string $collection, array $indexes = []): bool
     {
         foreach ($indexes as $index){
-            self::createIndex(
+            $this->createIndex(
                 $collection,
                 $index->getId(),
                 $index->getAttribute('type'),

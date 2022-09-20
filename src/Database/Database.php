@@ -452,7 +452,7 @@ class Database
         }, $this->collection['attributes']);
 
         $this->createCollection(self::METADATA);
-        $this->createCollectionAttributes(self::METADATA, $attributes);
+        $this->createAttributes(self::METADATA, $attributes);
 
         return true;
     }
@@ -531,8 +531,8 @@ class Database
 
         $this->createDocument(self::METADATA, $collection);
 
-        $this->createCollectionAttributes($id, $attributes);
-        $this->createCollectionIndexes($id, $indexes);
+        $this->createAttributes($id, $attributes);
+        $this->createIndexes($id, $indexes);
 
         $collection
             ->setAttribute('attributes', $attributes)

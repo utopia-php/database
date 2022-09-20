@@ -672,7 +672,7 @@ class Database
         }
 
         if(empty($id)){
-            throw new Exception('CreateAttribute error empty id');
+            throw new Exception("ID can't be empty");
         }
 
         $collection = $this->getCollection($collection);

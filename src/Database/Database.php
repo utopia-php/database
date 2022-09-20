@@ -668,7 +668,7 @@ class Database
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = false, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         if(empty($collection)){
-            throw new Exception('CreateAttribute error empty collection');
+            throw new Exception("Collection can't be empty.");
         }
 
         if(empty($id)){

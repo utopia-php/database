@@ -564,7 +564,7 @@ class Database
                 $attribute->getAttribute('signed') ?? false,
                 $attribute->getAttribute('array') ?? false,
                 $attribute->getAttribute('format'),
-                $attribute->getAttribute('formatOptions')?? [],
+                $attribute->getAttribute('formatOptions') ?? [],
                 $attribute->getAttribute('filters') ?? []
             );
         }

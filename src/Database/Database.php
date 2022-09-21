@@ -253,7 +253,7 @@ class Database
                 'required' => false,
                 'signed' => true,
                 'array' => false,
-                'filters' => ['json'],
+                'filters' => ['filter123'],
             ],
             [
                 '$id' => 'indexes',
@@ -278,7 +278,7 @@ class Database
      *
      * @var array
      */
-    protected array $collection123 = [
+    protected array $collectionAttributes = [
         '$id' => self::METADATA_ATTRIBUTE,
         '$collection' => self::METADATA_ATTRIBUTE,
         'name' => 'collections',
@@ -598,7 +598,7 @@ class Database
 
         $this->adapter->createCollection(self::METADATA_ATTRIBUTE);
 
-        foreach ($this->collection123['attributes'] as $attribute){
+        foreach ($this->collectionAttributes['attributes'] as $attribute){
             $this->adapter->createAttribute(
                 self::METADATA_ATTRIBUTE,
                 ID::custom($attribute['$id']),
@@ -672,7 +672,7 @@ class Database
         }
 
         if ($id === self::METADATA_ATTRIBUTE) {
-            return new Document($this->collection123);
+            return new Document($this->collectionAttributes);
         }
 
         $collection = new Document([
@@ -689,14 +689,13 @@ class Database
         ]);
 
         $this->createDocument(self::METADATA, $collection);
-
         $this->createCollectionAttributes($id, $attributes);
         $this->createCollectionIndexes($id, $indexes);
-
-        $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
+        $this->updateDocument(self::METADATA, $id, $collection);
+        $collection->setAttribute('attributes', $attributes);
 
-        return $this->updateDocument(self::METADATA, $id, $collection);
+        return $collection;
     }
 
 
@@ -1477,12 +1476,7 @@ class Database
         }
 
         if ($collection === self::METADATA && $id === self::METADATA_ATTRIBUTE) {
-          //  var_dump("return new Document(collection123);");
-            return new Document($this->collection123);
-        }
-
-        if($collection === self::METADATA){
-            var_dump($collection);
+            return new Document($this->collectionAttributes);
         }
 
         if (empty($collection)) {
@@ -1515,6 +1509,10 @@ class Database
             && !$validator->isValid($document->getRead())) {
             return new Document();
         }
+
+//        if($collection->getId() === self::METADATA){
+//            var_dump("getDocument " . $collection->getId() . " id = " . $id);
+//        }
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);

@@ -253,7 +253,7 @@ class Database
                 'required' => false,
                 'signed' => true,
                 'array' => false,
-                'filters' => ['filter123'],
+                'filters' => ['subQueryAttributes'],
             ],
             [
                 '$id' => 'indexes',
@@ -493,6 +493,36 @@ class Database
              */
             function (?string $value) {
                 return DateTime::formatTz($value);
+            }
+        );
+
+
+        self::addFilter(
+            'subQueryAttributes',
+            function (mixed $value, Document $document, Database $database) {
+                var_dump("--------------start end encode --------------");
+                return null;
+            },
+            function (mixed $value, Document $document, Database $database) {
+
+                var_dump("--------------start decode--------------");
+
+                if($document->getId() == self::METADATA_ATTRIBUTE){
+                    return [];
+                }
+
+                if($document->getId() == self::METADATA){
+                    return [];
+                }
+
+                var_dump($document);
+                var_dump("--------------end decode--------------");
+
+                return Authorization::skip(fn () => $database->find(self::METADATA_ATTRIBUTE, [
+                    Query::equal('collectionInternalId', [$document->getInternalId()]),
+                    Query::limit(9999),
+                ]));
+
             }
         );
     }
@@ -1237,26 +1267,41 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        if ($collection === self::METADATA || $collection === self::METADATA_ATTRIBUTE) {
+            throw new Exception("Can't delete metadata attributes");
+        }
+        
+        var_dump("deleteAttribute collection = " . $collection . " id=" . $id);
+
         $collection = $this->getCollection($collection);
-
-        $attributes = $collection->getAttribute('attributes', []);
-
-        foreach ($attributes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $id) {
-                unset($attributes[$key]);
-            }
+        if($collection->isEmpty()){
+            throw new Exception('Collection not found');
         }
 
-        $collection->setAttribute('attributes', $attributes);
+        Authorization::disable(); // todo: please check me with Authorization :)
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        $attribute = $this->findOne(self::METADATA_ATTRIBUTE, [
+            Query::equal('collectionId', [$collection->getId()]),
+            Query::equal('key', [$id])
+        ]);
+
+        if($attribute === false){
+            throw new Exception('Attribute not found');
         }
 
-        return $this->adapter->deleteAttribute($collection->getId(), $id);
+        $res = $this->adapter->deleteAttribute($collection->getId(), $id);
+        $this->deleteDocument(self::METADATA_ATTRIBUTE, $attribute->getId());
+
+        Authorization::reset();
+        // todo: please check me with cache clean :)
+       // $this->deleteCachedDocument(self::METADATA_ATTRIBUTE, $attribute->getId());
+      //  $this->deleteCachedCollection($collection->getId());
+
+        return $res;
     }
 
     /**
@@ -1666,11 +1711,14 @@ class Database
      * @param Query[] $queries
      *
      * @return Document[]
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function find(string $collection, array $queries = []): array
     {
         $collection = $this->getCollection($collection);
+        if($collection->isEmpty()){
+            throw new Exception("Collection not found");
+        }
 
         $grouped = Query::groupByType($queries);
         /** @var Query[] */ $filters = $grouped['filters'];

@@ -3,7 +3,7 @@
 namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
-use phpDocumentor\Reflection\DocBlock\Tags\Var_;
+use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
@@ -137,8 +137,8 @@ class MongoDBAdapter extends Adapter
                 ]
             ],
             [
-                'key' => ['_read' => $this->getOrder(Database::ORDER_DESC)],
-                'name' => '_read_permissions',
+                'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
+                'name' => '_permissions',
             ]
         ]);
 
@@ -348,7 +348,7 @@ class MongoDBAdapter extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $result = $this->client->find($name, ['_uid' => $id], ['limit' => 1])->cursor->firstBatch;
-        
+
         if (empty($result)) {
             return new Document([]);
         }
@@ -370,13 +370,11 @@ class MongoDBAdapter extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        
-        $id = $document->getId();
-        $document->setAttribute('_uid', $id);
-        $record =  $this->replaceChars('$', '_',$document);
+        $document->removeAttribute('$internalId');
+        $record =  $this->replaceChars('$', '_', $document);
 
         $result = $this->client->insert($name, $this->remove_null_keys($record));
-        
+
         $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
@@ -471,8 +469,10 @@ class MongoDBAdapter extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $filters = $this->buildFilters($queries);
 
-        if(Authorization::$status) {
-            $filters['_read']['$in'] = Authorization::getRoles();
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
@@ -495,8 +495,8 @@ class MongoDBAdapter extends Adapter
             // Allow after pagination without any order
             if (!empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderOperator = $cursorDirection === Database::CURSOR_AFTER 
-                    ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER) 
+                $orderOperator = $cursorDirection === Database::CURSOR_AFTER
+                    ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
                     : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
                 $filters = array_merge($filters, [
@@ -595,7 +595,8 @@ class MongoDBAdapter extends Adapter
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         return $this->client->count($name, $filters, $options);
@@ -623,7 +624,8 @@ class MongoDBAdapter extends Adapter
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_read']['$in'] = Authorization::getRoles();
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -676,7 +678,7 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Keys cannot begin with $ in MongoDB
-     * Convert $ prefix to _ on $id, $read, $write, and $collection
+     * Convert $ prefix to _ on $id, $permissions, and $collection
      *
      * @param string $from
      * @param string $to
@@ -687,50 +689,44 @@ class MongoDBAdapter extends Adapter
     {
         $array = (array) $array;
         $filter = [
-            'read',
+            'permissions',
             'createdAt',
             'updatedAt',
-            'write',
             'collection'
         ];
 
         $result = [];
-        foreach($array as $k => $v) {
+        foreach ($array as $k => $v) {
             $clean_key = str_replace($from, "", $k);
             $key = in_array($clean_key, $filter) ? str_replace($from, $to, $k) : $k;
 
             $result[$key] = $v;
         }
 
-        if($from === '_') {
-            if(array_key_exists('_id', $array)) {
+        if ($from === '_') {
+            if (array_key_exists('_id', $array)) {
                 $result['$internalId'] = (string)$array['_id'];
 
                 unset($result['_id']);
-            } 
+            }
 
-            if(array_key_exists('_uid', $array)) {
+            if (array_key_exists('_uid', $array)) {
                 $result['$id'] = $array['_uid'];
 
                 unset($result['_uid']);
             }
-        } else if($from === '$') {
-            if(array_key_exists('$id', $array)) {
+        } else if ($from === '$') {
+            if (array_key_exists('$id', $array)) {
                 $result['_uid'] = $array['$id'];
-                
-                unset($result['$id']);
 
-                if(array_key_exists('$uid', $result)) {
-                    unset($result['$uid']);
-                }
+                unset($result['$id']);
             }
-            
-            if(array_key_exists('$internalId', $array)) {
+
+            if (array_key_exists('$internalId', $array)) {
                 $result['_id'] = new \MongoDB\BSON\ObjectId($array['$internalId']);
 
                 unset($result['$internalId']);
             }
-        
         }
 
         return $result;
@@ -752,17 +748,16 @@ class MongoDBAdapter extends Adapter
                 $query->setAttribute('_uid');
             }
             $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getOperator());
+            $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
-            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
             if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
             } elseif ($operator === '$search') {
-                // $filters[$attribute]['$in'] = \array_merge([$value], \explode(' ', $value));
-                $filters['$text']['$search'] = $value;
+                // only one fulltext index per mongo collection, so attribute not necessary
+                $filters['$text'][$operator] = $value;
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -1059,12 +1054,13 @@ class MongoDBAdapter extends Adapter
         return $new_array;
     }
 
-    function remove_null_keys(array|Document $target): array {
+    function remove_null_keys(array|Document $target): array
+    {
         $target = is_array($target) ? $target : $target->getArrayCopy();
         $cleaned = [];
 
-        foreach($target as $key => $value) {
-            if(\is_null($value)) continue;
+        foreach ($target as $key => $value) {
+            if (\is_null($value)) continue;
 
             $cleaned[$key] = $value;
         }
@@ -1072,5 +1068,4 @@ class MongoDBAdapter extends Adapter
 
         return $cleaned;
     }
-
 }

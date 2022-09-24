@@ -1374,7 +1374,7 @@ class Database
             throw new Exception("cursor Document must be from the same Collection.");
         }
 
-        $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
+        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         $queries = self::convertQueries($collection, $filters);
 

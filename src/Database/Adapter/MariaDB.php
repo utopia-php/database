@@ -197,7 +197,7 @@ class MariaDB extends Adapter
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLSchema()}`{$this->getNamespace()}_{$id}`, {$this->getSQLSchema()}`{$this->getNamespace()}_{$id}_perms`;")
+                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id.'_perms')};")
                 ->execute();
             throw $th;
         }
@@ -218,7 +218,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$id}`, {$this->getSQLSchema()}`{$this->getNamespace()}_{$id}_perms`;")
+            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
             ->execute();
     }
 
@@ -246,7 +246,7 @@ class MariaDB extends Adapter
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 ADD COLUMN `{$id}` {$type};")
             ->execute();
     }
@@ -275,7 +275,7 @@ class MariaDB extends Adapter
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 MODIFY `{$id}` {$type};")
             ->execute();
     }
@@ -297,7 +297,7 @@ class MariaDB extends Adapter
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$collection}` RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -318,7 +318,7 @@ class MariaDB extends Adapter
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$collection}` RENAME INDEX `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -338,7 +338,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 DROP COLUMN `{$id}`;")
             ->execute();
     }
@@ -401,7 +401,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 DROP INDEX `{$id}`;")
             ->execute();
     }
@@ -421,7 +421,7 @@ class MariaDB extends Adapter
 
         $stmt = $this->getPDO()->prepare("
             SELECT * 
-            FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}` 
+            FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");
 
@@ -483,7 +483,7 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`
+            ->prepare("INSERT INTO {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
@@ -510,7 +510,7 @@ class MariaDB extends Adapter
         }
 
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $queryPermissions = "INSERT INTO {$this->getSQLTable($name.'_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
 
@@ -569,7 +569,7 @@ class MariaDB extends Adapter
          */
         $permissionsStmt = $this->getPDO()->prepare("
                 SELECT _type, _permission
-                FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}_perms` p
+                FROM {$this->getSQLTable($name.'_perms')} p
                 WHERE p._document = :_uid
         ");
         $permissionsStmt->bindValue(':_uid', $document->getId());
@@ -632,7 +632,7 @@ class MariaDB extends Adapter
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
                 DELETE
-                FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}_perms`
+                FROM {$this->getSQLTable($name.'_perms')}
                 WHERE
                     _document = :_uid
                     {$removeQuery}
@@ -660,7 +660,7 @@ class MariaDB extends Adapter
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(
                     "
-                    INSERT INTO {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}_perms`
+                    INSERT INTO {$this->getSQLTable($name.'_perms')}
                     (_document, _type, _permission) VALUES " . \implode(', ', $values)
                 );
 
@@ -685,7 +685,7 @@ class MariaDB extends Adapter
         }
 
         $stmt = $this->getPDO()
-            ->prepare("UPDATE {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`
+            ->prepare("UPDATE {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_uid WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId());
@@ -747,10 +747,10 @@ class MariaDB extends Adapter
 
         $this->getPDO()->beginTransaction();
 
-        $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}` WHERE _uid = :_uid");
+        $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name)} WHERE _uid = :_uid");
         $stmt->bindValue(':_uid', $id);
 
-        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}_perms` WHERE _document = :_uid");
+        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name.'_perms')} WHERE _document = :_uid");
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
@@ -882,7 +882,7 @@ class MariaDB extends Adapter
 
         $sql = "
             SELECT table_main.*
-            FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}` as table_main
+            FROM {$this->getSQLTable($name)} as table_main
             " . $sqlWhere . "
             GROUP BY _uid
             {$order}
@@ -986,7 +986,7 @@ class MariaDB extends Adapter
             FROM
                 (
                     SELECT 1
-                    FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}` table_main
+                    FROM {$this->getSQLTable($name)} table_main
                     " . $sqlWhere . "
                     {$limit}
                 ) table_count
@@ -1056,7 +1056,7 @@ class MariaDB extends Adapter
             SELECT SUM({$attribute}) as sum
             FROM (
                 SELECT {$attribute}
-                FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$name}` table_main
+                FROM {$this->getSQLTable($name)} table_main
                  " . $sqlWhere . "
                 {$limit}
             ) table_count
@@ -1779,7 +1779,7 @@ class MariaDB extends Adapter
                 break;
         }
 
-        return "CREATE {$type} `{$id}` ON {$this->getSQLSchema()}`{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . " )";
+        return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
     }
 
     /**
@@ -1795,7 +1795,7 @@ class MariaDB extends Adapter
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (
                     SELECT distinct(_document)
-                    FROM {$this->getSQLSchema()}`{$this->getNamespace()}_{$collection}_perms`
+                    FROM {$this->getSQLTable($collection.'_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
                     AND _type = 'read'
                 )";
@@ -1804,10 +1804,7 @@ class MariaDB extends Adapter
     /**
      * Get SQL schema
      *
-     * @param string $collection 
-     * @param array $roles 
      * @return string 
-     * @throws Exception 
      */
     protected function getSQLSchema(): string
     {
@@ -1816,6 +1813,17 @@ class MariaDB extends Adapter
         }
 
         return "`{$this->getDefaultDatabase()}`.";
+    }
+
+    /**
+     * Get SQL table
+     *
+     * @param string $name 
+     * @return string 
+     */
+    protected function getSQLTable(string $name): string
+    {
+        return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
     }
 
     /**

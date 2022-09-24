@@ -430,7 +430,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract static public function getCountOfDefaultAttributes(): int;
+    abstract public static function getCountOfDefaultAttributes(): int;
 
     /**
      * Returns number of indexes used by default.

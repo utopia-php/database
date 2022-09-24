@@ -55,7 +55,7 @@ abstract class Base extends TestCase
         if(!$schemaSupport) {
             $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
-            $this->assertEquals(false, $schemaSupport); // Dummy assertion to skip test
+            $this->markTestSkipped()
             return;
         }
 

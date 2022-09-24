@@ -699,7 +699,7 @@ abstract class Base extends TestCase
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
         if(!$fulltextSupport) {
-            $this->assertEquals(false, $fulltextSupport); // dummy assertion to skip this test
+            $this->markTestSkipped()
             return;
         }
 

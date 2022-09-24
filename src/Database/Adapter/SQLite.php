@@ -98,6 +98,8 @@ class SQLite extends MySQL
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
+        $this->getPDO()->beginTransaction();
+
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
@@ -108,27 +110,6 @@ class SQLite extends MySQL
 
             $attributes[$key] = "`{$attrId}` {$attrType}, ";
         }
-
-        // foreach ($indexes as $key => $index) {
-        //     $indexId = $this->filter($index->getId());
-        //     $indexType = $index->getAttribute('type');
-
-        //     $indexAttributes = $index->getAttribute('attributes');
-        //     foreach ($indexAttributes as $nested => $attribute) {
-        //         $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-        //         $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
-        //         $indexOrder = $index->getAttribute('orders')[$key] ?? '';
-        //         $indexAttribute = $this->filter($attribute);
-
-        //         if ($indexType === Database::INDEX_FULLTEXT) {
-        //             $indexOrder = '';
-        //         }
-
-        //         $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
-        //     }
-
-        //     $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
-        // }
 
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
@@ -144,6 +125,16 @@ class SQLite extends MySQL
         $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
         $this->createIndex($id, '_created_at', Database::INDEX_KEY, ['_createdAt'], [], []);
         $this->createIndex($id, '_updated_at', Database::INDEX_KEY, ['_updatedAt'], [], []);
+
+        foreach ($indexes as $key => $index) {
+            $indexId = $this->filter($index->getId());
+            $indexType = $index->getAttribute('type');
+            $indexAttributes = $index->getAttribute('attributes', []);
+            $indexLengths = $index->getAttribute('lengths', []);
+            $indexOrders = $index->getAttribute('orders', []);
+
+            $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
+        }
 
         try {
             $this->getPDO()
@@ -161,6 +152,8 @@ class SQLite extends MySQL
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
         $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission'], [], []);
         
+        $this->getPDO()->commit();
+
         // Update $this->getCountOfIndexes when adding another default index
         return true;
     }

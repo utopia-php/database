@@ -55,7 +55,7 @@ abstract class Base extends TestCase
         if(!$schemaSupport) {
             $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
-            $this->assertEquals(false, $schemaSupport); // Dummy assertion to skip test
+            $this->markTestSkipped()
             return;
         }
 
@@ -699,7 +699,7 @@ abstract class Base extends TestCase
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
         if(!$fulltextSupport) {
-            $this->assertEquals(false, $fulltextSupport); // dummy assertion to skip this test
+            $this->markTestSkipped()
             return;
         }
 
@@ -1687,19 +1687,28 @@ abstract class Base extends TestCase
         $documentsTest = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::orderDesc('$createdAt'),
+            Query::orderDesc('$id'),
         ]);
+
+        var_dump("########## documentsTest ##########");
+        var_dump($documentsTest);
+        var_dump("########## documentsTest ##########");
+
         $documents = static::getDatabase()->find('movies', [
             Query::limit(1),
             Query::offset(0),
-            Query::orderDesc('$createdAt'),
+            Query::orderDesc('$id'),
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        var_dump($documentsTest);
-        var_dump('*****');
-        var_dump(static::getDatabase()->getAdapter()->getDebug());
+        var_dump("########## documents ##########");
         var_dump($documents);
+        var_dump("########## documents ##########");
+
+        // var_dump($documentsTest);
+        // var_dump('*****');
+        // var_dump(static::getDatabase()->getAdapter()->getDebug());
+        // var_dump($documents);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 

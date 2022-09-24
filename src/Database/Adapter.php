@@ -430,14 +430,14 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract static public function getCountOfDefaultAttributes(): int;
+    abstract public static function getCountOfDefaultAttributes(): int;
 
     /**
      * Returns number of indexes used by default.
      *
      * @return int
      */
-    abstract static public function getCountOfDefaultIndexes(): int;
+    abstract public static function getCountOfDefaultIndexes(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row

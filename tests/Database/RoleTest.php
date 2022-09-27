@@ -7,7 +7,7 @@ use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 
-class RoleHelperTest extends TestCase
+class RoleTest extends TestCase
 {
     public function testOutputFromString()
     {

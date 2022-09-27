@@ -377,15 +377,4 @@ class MongoDBTest extends Base
 
         $this->assertEquals(true, $res);
     }
-
-    /**
-     * Return keywords reserved by database backend
-     *
-     * @return string[]
-     */
-    static function getReservedKeywords(): array
-    {
-        // Mongo does not have concept of reserverd words. We put something here just to run the rests for this adapter too
-        return ['mogno'];
-    }
 }

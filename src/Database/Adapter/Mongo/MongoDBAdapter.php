@@ -837,7 +837,7 @@ class MongoDBAdapter extends Adapter
      *
      * @return int
      */
-    public function getStringLimit(): int
+    public function getLimitForString(): int
     {
         return 2147483647;
     }
@@ -847,10 +847,42 @@ class MongoDBAdapter extends Adapter
      *
      * @return int
      */
-    public function getIntLimit(): int
+    public function getLimitForInt(): int
     {
         // Mongo does not handle integers directly, so using MariaDB limit for now
         return 4294967295;
+    }
+
+    /**
+     * Get maximum column limit.
+     * Returns 0 to indicate no limit
+     *
+     * @return int
+     */
+    public function getLimitForAttributes(): int
+    {
+        return 0;
+    }
+
+    /**
+     * Get maximum index limit.
+     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
+     *
+     * @return int
+     */
+    public function getLimitForIndexes(): int
+    {
+        return 64;
+    }
+
+    /**
+     * Is schemas supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemas(): bool
+    {
+        return true;
     }
 
     /**
@@ -884,51 +916,49 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * Get current index count from collection document
-     * 
-     * @param Document $collection
-     * @return int
-     */
-    public function getIndexCount(Document $collection): int
-    {
-        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
-
-        return $indexes + static::getNumberOfDefaultIndexes();
-    }
-
-    /**
-     * Get maximum index limit.
-     * https://docs.mongodb.com/manual/reference/limits/#mongodb-limit-Number-of-Indexes-per-Collection
-     *
-     * @return int
-     */
-    public function getIndexLimit(): int
-    {
-        return 64;
-    }
-
-    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
      * @return int
      */
-    public function getAttributeCount(Document $collection): int
+    public function getCountOfAttributes(Document $collection): int
     {
         $attributes = \count($collection->getAttribute('attributes') ?? []);
 
-        return $attributes + static::getNumberOfDefaultAttributes();
+        return $attributes + static::getCountOfDefaultAttributes();
     }
 
     /**
-     * Get maximum column limit.
-     * Returns 0 to indicate no limit
+     * Get current index count from collection document
+     * 
+     * @param Document $collection
+     * @return int
+     */
+    public function getCountOfIndexes(Document $collection): int
+    {
+        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
+
+        return $indexes + static::getCountOfDefaultIndexes();
+    }
+
+    /**
+     * Returns number of attributes used by default.
      *
      * @return int
      */
-    public function getAttributeLimit(): int
+    public static function getCountOfDefaultAttributes(): int
     {
-        return 0;
+        return 6;
+    }
+    
+    /**
+     * Returns number of indexes used by default.
+     *
+     * @return int
+     */
+    public static function getCountOfDefaultIndexes(): int
+    {
+        return 5;
     }
 
     /**
@@ -940,16 +970,6 @@ class MongoDBAdapter extends Adapter
     public static function getRowLimit(): int
     {
         return 0;
-    }
-
-    public static function getNumberOfDefaultAttributes(): int
-    {
-        return 6;
-    }
-
-    public static function getNumberOfDefaultIndexes(): int
-    {
-        return 5;
     }
 
     /**
@@ -1034,7 +1054,7 @@ class MongoDBAdapter extends Adapter
      * @param mixed $list
      * @return array
      */
-    function flattenArray(mixed $list): array
+    protected function flattenArray(mixed $list): array
     {
         if (!is_array($list)) {
             // make sure the input is an array
@@ -1048,5 +1068,18 @@ class MongoDBAdapter extends Adapter
         }
 
         return $new_array;
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     * 
+     * Mongo does not have concept of reserverd words.
+     *  We put something here just to run the rests for this adapter too
+     * 
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return ['mongodb'];
     }
 }

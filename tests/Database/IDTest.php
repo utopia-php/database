@@ -7,7 +7,7 @@ use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 
-class IDHelperTest extends TestCase
+class IDTest extends TestCase
 {
 
     public function testCustomID()

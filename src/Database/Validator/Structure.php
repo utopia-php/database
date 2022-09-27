@@ -260,7 +260,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator;
+                    $validator = new DatetimeValidator();
                     break;
 
                 default:

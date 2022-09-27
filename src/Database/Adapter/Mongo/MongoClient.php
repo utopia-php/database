@@ -376,7 +376,7 @@ class MongoClient
         ], $options));
 
         
-        return $this->last_inserted_document($collection);
+        return $this->lastInsertedDocument($collection);
     }
 
     /**
@@ -387,7 +387,7 @@ class MongoClient
      * @return array
      */
 
-    public function last_inserted_document(string $collection): array
+    public function lastInsertedDocument(string $collection): array
     {
         $result = $this->find($collection, [], [
             'sort' => ['_id' => -1],

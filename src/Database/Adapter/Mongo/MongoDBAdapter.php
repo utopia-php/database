@@ -373,7 +373,7 @@ class MongoDBAdapter extends Adapter
         $document->removeAttribute('$internalId');
         $record =  $this->replaceChars('$', '_', $document);
 
-        $result = $this->client->insert($name, $this->remove_null_keys($record));
+        $result = $this->client->insert($name, $this->removeNullKeys($record));
 
         $result = $this->replaceChars('_', '$', $result);
 
@@ -465,9 +465,11 @@ class MongoDBAdapter extends Adapter
      * @return Document[]
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
-    {
+    {        
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $filters = $this->buildFilters($queries);
+
+        /// Add function for options/sort keys
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -475,15 +477,19 @@ class MongoDBAdapter extends Adapter
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
+        $options = ['limit' => $limit, 'skip' => $offset];
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
+
+            $attribute = $attribute == 'id' ? "_uid" : $attribute;
+
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
 
@@ -511,6 +517,7 @@ class MongoDBAdapter extends Adapter
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
+                
                 $options['sort']['_id'] = $this->getOrder($orderType);
             }
         }
@@ -554,7 +561,11 @@ class MongoDBAdapter extends Adapter
          */
         $found = [];
 
-        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+        $results = $this->client->find($name, $filters, $options);
+
+        var_dump($results);
+
+        $results = $results->cursor->firstBatch ?? [];
 
         foreach ($this->client->toArray($results) as $i => $result) {
             $found[] = new Document($this->replaceChars('_', '$', $result));
@@ -747,6 +758,15 @@ class MongoDBAdapter extends Adapter
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
+
+            if ($query->getAttribute() === '$createdAt') {
+                $query->setAttribute('_createdAt');
+            }
+
+            if ($query->getAttribute() === '$updatedAt') {
+                $query->setAttribute('_updatedAt');
+            }
+            
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
@@ -1054,7 +1074,7 @@ class MongoDBAdapter extends Adapter
         return $new_array;
     }
 
-    function remove_null_keys(array|Document $target): array
+    function removeNullKeys(array|Document $target): array
     {
         $target = is_array($target) ? $target : $target->getArrayCopy();
         $cleaned = [];

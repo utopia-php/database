@@ -130,7 +130,7 @@ class MongoDBTest extends Base
     /**
      * @depends testUpdateDocument
      */
-    public function testFind(Document $document)
+    public function _testFind(Document $document)
     {
         static::getDatabase()->createCollection('movies');
 

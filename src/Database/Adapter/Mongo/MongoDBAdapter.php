@@ -371,9 +371,7 @@ class MongoDBAdapter extends Adapter
         }
 
         $result = $this->replaceChars('_', '$', $result[0]);
-
-        $result['$createdAt'] = \Utopia\Database\DateTime::format($result['$createdAt']->toDateTime());
-        $result['$updatedAt'] = \Utopia\Database\DateTime::format($result['$updatedAt']->toDateTime());
+        $result = $this->timeToDocument($result);
 
         return new Document($result);
     }
@@ -415,7 +413,7 @@ class MongoDBAdapter extends Adapter
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
         $record = $this->timeToMongo($record);
-        
+
         $this->client->update(
             $name,
             ['_uid' => $document->getId()],
@@ -581,7 +579,9 @@ class MongoDBAdapter extends Adapter
         }
 
         $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
+        $filters = $this->timeFilter($filters);
 
+        var_dump($filters);
 
         /**
          * @var Document[]
@@ -604,6 +604,27 @@ class MongoDBAdapter extends Adapter
         }
 
         return $found;
+    }
+
+    private function timeFilter($filters):array 
+    {
+        $results = $filters;
+
+        foreach($filters as $k=>$v) {
+            if($k === '_createdAt' || $k == '_updatedAt') {
+                if(is_array($v)) {
+                    foreach($v as $sk=>$sv) {
+                        $results[$k][$sk] = new \MongoDB\BSON\UTCDateTime((new \DateTime($sv))->format('YmdHisv'));
+                    }
+                }
+            } else {
+                if(is_array($v)) {
+                    $results[$k] = $this->timeFilter($v);
+                }
+            }
+        }
+
+        return $results;
     }
 
     private function timeToDocument($record):array

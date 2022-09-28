@@ -487,7 +487,6 @@ class MongoClient
      */
     public function find(string $collection, array $filters = [], array $options = []): \stdClass
     {
-
         $result =  $this->query(
             array_merge([
                 MongoCommand::FIND => $collection,
@@ -495,7 +494,18 @@ class MongoClient
             ], $options)
         );
 
+
         return $result;
+        
+        // $cursorId = $result->cursor->id;
+        // $batch = $result->cursor->firstBatch;
+
+        // $response = new \stdClass();
+        // $response->cursorId = $cursorId;
+        // $response->batch = $batch;
+        // return array_merge($batch, [
+        //     'cursorId' => $cursorId
+        // ]);
     }
 
     /**
@@ -512,7 +522,7 @@ class MongoClient
      */
     public function findAndModify(string $collection, array $update, bool $remove = false, array $filters = [], array $options = []): \stdClass
     {
-        return $this->query(
+        $result = $this->query(
             array_merge([
                 MongoCommand::FIND_AND_MODIFY => $collection,
                 'filter' => $this->toObject($filters),
@@ -520,6 +530,27 @@ class MongoClient
                 'update' => $update,
             ], $options)
         );
+
+        return $result;
+    }
+
+    /**
+     * Use in conjunction with commands that return a cursor.
+     * https://www.mongodb.com/docs/v5.0/reference/command/getMore/#getmore
+     * 
+     * @param int $cursorId
+     * @param string $collection
+     * @param int batchSize
+     * 
+     * @return  \stdClass
+     */
+    public function getMore(int $cursorId, string $collection, int $batchSize = 25): \stdClass
+    {
+        return $this->query([
+            MongoCommand::GET_MORE => $cursorId,
+            'collection' => $collection,
+            'batchSize' => $batchSize
+        ]);
     }
 
     /**

@@ -1436,6 +1436,7 @@ abstract class Base extends TestCase
             Query::orderDesc('year'),
             Query::cursorAfter($movies[1])
         ]);
+
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
@@ -1686,6 +1687,7 @@ abstract class Base extends TestCase
             Query::orderDesc('$createdAt'),
             Query::cursorAfter($documentsTest[0])
         ]);
+
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 

@@ -7,11 +7,28 @@ use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 
 class MongoDBAdapter extends Adapter
 {
+    /**
+     * @var array
+     */
+    private array $operators = [
+        '$eq',
+        '$ne',
+        '$lt',
+        '$lte',
+        '$gt',
+        '$gte',
+        '$in',
+        '$text',
+        '$search',
+        '$or'
+    ];
+
     /**
      * @var MongoClient
      */
@@ -354,9 +371,11 @@ class MongoDBAdapter extends Adapter
         }
 
         $result = $this->replaceChars('_', '$', $result[0]);
-        $newDoc = new Document($this->client->toArray($result));
 
-        return $newDoc;
+        $result['$createdAt'] = \Utopia\Database\DateTime::format($result['$createdAt']->toDateTime());
+        $result['$updatedAt'] = \Utopia\Database\DateTime::format($result['$updatedAt']->toDateTime());
+
+        return new Document($result);
     }
 
     /**
@@ -371,7 +390,8 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $document->removeAttribute('$internalId');
-        $record =  $this->replaceChars('$', '_', $document);
+        $record = $this->replaceChars('$', '_', $document);
+        $record = $this->timeToMongo($record);        
 
         $result = $this->client->insert($name, $this->removeNullKeys($record));
 
@@ -392,10 +412,14 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $record = $document->getArrayCopy();
+        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->timeToMongo($record);
+        
         $this->client->update(
             $name,
             ['_uid' => $document->getId()],
-            $this->replaceChars('$', '_', $document->getArrayCopy()),
+            $record,
         );
 
         return $document;
@@ -556,6 +580,9 @@ class MongoDBAdapter extends Adapter
             ]);
         }
 
+        $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
+
+
         /**
          * @var Document[]
          */
@@ -563,12 +590,13 @@ class MongoDBAdapter extends Adapter
 
         $results = $this->client->find($name, $filters, $options);
 
-        var_dump($results);
-
         $results = $results->cursor->firstBatch ?? [];
 
         foreach ($this->client->toArray($results) as $i => $result) {
-            $found[] = new Document($this->replaceChars('_', '$', $result));
+            $record = $this->replaceChars('_', '$', $result);
+            $record = $this->timeToDocument($record);
+    
+            $found[] = new Document($record);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -576,6 +604,45 @@ class MongoDBAdapter extends Adapter
         }
 
         return $found;
+    }
+
+    private function timeToDocument($record):array
+    {
+        $record['$createdAt'] = \Utopia\Database\DateTime::format($record['$createdAt']->toDateTime());
+        $record['$updatedAt'] = \Utopia\Database\DateTime::format($record['$updatedAt']->toDateTime());
+
+        return $record;
+    }
+
+    private function timeToMongo($record):array
+    {
+        $createdAt = $record['_createdAt'];
+        $createdAt = new \DateTime($createdAt);
+
+        $record['_createdAt'] = new \MongoDB\BSON\UTCDateTime($createdAt->format('YmdHisv'));
+
+        $updatedAt = $record['_updatedAt'];
+        $updatedAt = new \DateTime($updatedAt);
+
+        $record['_updatedAt'] = new \MongoDB\BSON\UTCDateTime($updatedAt->format('YmdHisv'));
+
+        return $record;
+    }
+
+    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []):array {
+        $result = [];
+
+        foreach ($array as $key => $value) {
+            if (false == in_array($key, $exclude)) {
+                $key = str_replace($from, $to, $key);
+            }
+            
+            $result[$key] = is_array($value) 
+                ? $this->recursiveReplace($value, $from, $to, $exclude) 
+                : $result[$key] = $value;
+        }
+
+        return $result;
     }
 
     /**
@@ -711,7 +778,7 @@ class MongoDBAdapter extends Adapter
             $clean_key = str_replace($from, "", $k);
             $key = in_array($clean_key, $filter) ? str_replace($from, $to, $k) : $k;
 
-            $result[$key] = $v;
+            $result[$key] = is_array($v) ? $this->replaceChars($from, $to, $v) : $v;
         }
 
         if ($from === '_') {
@@ -798,35 +865,27 @@ class MongoDBAdapter extends Adapter
         switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '$eq';
-                break;
 
             case Query::TYPE_NOTEQUAL:
                 return '$ne';
-                break;
 
             case Query::TYPE_LESSER:
                 return '$lt';
-                break;
 
             case Query::TYPE_LESSEREQUAL:
                 return '$lte';
-                break;
 
             case Query::TYPE_GREATER:
                 return '$gt';
-                break;
 
             case Query::TYPE_GREATEREQUAL:
                 return '$gte';
-                break;
 
             case Query::TYPE_CONTAINS:
                 return '$in';
-                break;
 
             case Query::TYPE_SEARCH:
                 return '$search';
-                break;
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);

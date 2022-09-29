@@ -212,15 +212,22 @@ class Structure extends Validator
         $structure = $document->getArrayCopy();
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
-        foreach ($attributes as $key => $attribute) { // Check all required attributes are set
+        foreach ($attributes as $attribute) { // Check all required attributes are set
 
-            $name = $attribute['$id'] ?? '';
+            $attributeId = $attribute['key'] ?? '';
+            if(empty($attributeId)){
+                $attributeId = $attribute['$id'] ?? ''; // todo:fix this mock
+            }
+
             $required = $attribute['required'] ?? false;
+            $keys[$attributeId] = $attribute; // List of allowed attributes to help find unknown ones
 
-            $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
-
-            if($required && !isset($structure[$name])) {
-                $this->message = 'Missing required attribute "'.$name.'"';
+            if($required && !isset($structure[$attributeId])) {
+                var_dump($attribute['$id']);
+                var_dump($attributeId);
+                var_dump($structure);
+                var_dump($attribute);
+                $this->message = 'Missing required attribute "'.$attributeId.'"';
                 return false;
             }
         }

@@ -184,6 +184,7 @@ class Database
     protected array $attributes = [
         [
             '$id' => '$id',
+            'key' => '$id',
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
@@ -193,6 +194,7 @@ class Database
         ],
         [
             '$id' => '$collection',
+            'key' => '$collection',
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
@@ -202,6 +204,7 @@ class Database
         ],
         [
             '$id' => '$createdAt',
+            'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'format' => '',
             'size' => 0,
@@ -213,6 +216,7 @@ class Database
         ],
         [
             '$id' => '$updatedAt',
+            'key' => '$updatedAt',
             'type' => Database::VAR_DATETIME,
             'format' => '',
             'size' => 0,
@@ -241,7 +245,7 @@ class Database
                 'type' => self::VAR_STRING,
                 'size' => 256,
                 'required' => true,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
                 'filters' => [],
             ],
@@ -251,7 +255,7 @@ class Database
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
                 'required' => false,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
                 'filters' => ['subQueryAttributes'],
             ],
@@ -261,7 +265,7 @@ class Database
                 'type' => self::VAR_STRING,
                 'size' => 1000000,
                 'required' => false,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
                 'filters' => ['json'],
             ],
@@ -285,6 +289,7 @@ class Database
         'attributes' => [
             [
                 '$id' => 'collectionId',
+                'key' => 'collectionId',
                 'type' => Database::VAR_STRING,
                 'size' => 50,
                 'required' => false,
@@ -295,6 +300,7 @@ class Database
             ],
             [
                 '$id' => 'collectionInternalId',
+                'key' => 'collectionInternalId',
                 'type' => Database::VAR_STRING,
                 'size' => 50,
                 'required' => false,
@@ -305,6 +311,7 @@ class Database
             ],
             [
                 '$id' => 'key',
+                'key' => 'key',
                 'type' => Database::VAR_STRING,
                 'size' => 255,
                 'required' => false,
@@ -315,6 +322,7 @@ class Database
             ],
             [
                 '$id' => 'type',
+                'key' => 'type',
                 'type' => Database::VAR_STRING,
                 'size' => 255,
                 'required' => false,
@@ -325,6 +333,7 @@ class Database
             ],
             [
                 '$id' => 'required',
+                'key' => 'required',
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -335,6 +344,7 @@ class Database
             ],
             [
                 '$id' => 'size',
+                'key' => 'size',
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
                 'required' => false,
@@ -345,6 +355,7 @@ class Database
             ],
             [
                 '$id' => 'signed',
+                'key' => 'signed',
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -355,16 +366,18 @@ class Database
             ],
             [
                 '$id' => 'default',
+                'key' => 'default',
                 'type' => Database::VAR_STRING,
                 'size' => 1000,
                 'required' => false,
                 'default' => null,
                 'signed' => false,
                 'array' => false,
-                'filters' => ['json'], // Can be mixed
+                'filters' => [],
             ],
             [
                 '$id' => 'array',
+                'key' => 'array',
                 'type' => Database::VAR_BOOLEAN,
                 'size' => 0,
                 'required' => false,
@@ -375,6 +388,7 @@ class Database
             ],
             [
                 '$id' => 'filters',
+                'key' => 'filters',
                 'type' => Database::VAR_STRING,
                 'required' => false,
                 'size' => 1000000,
@@ -385,6 +399,7 @@ class Database
             ],
             [
                 '$id' => 'format',
+                'key' => 'format',
                 'type' => Database::VAR_STRING,
                 'required' => false,
                 'size' => 1000000,
@@ -395,6 +410,7 @@ class Database
             ],
             [
                 '$id' => 'formatOptions',
+                'key' => 'formatOptions',
                 'type' => Database::VAR_STRING,
                 'required' => false,
                 'size' => 1000000,
@@ -500,23 +516,21 @@ class Database
         self::addFilter(
             'subQueryAttributes',
             function (mixed $value, Document $document, Database $database) {
-                var_dump("--------------start end encode --------------");
                 return null;
             },
             function (mixed $value, Document $document, Database $database) {
 
-                var_dump("--------------start decode--------------");
-
                 if($document->getId() == self::METADATA_ATTRIBUTE){
+                    var_dump("---------- remove does this happen? ----start decode--------------" . self::METADATA_ATTRIBUTE);
+                    die;
                     return [];
                 }
 
                 if($document->getId() == self::METADATA){
+                    var_dump("----------- remove does this happen?  ---start decode--------------" . self::METADATA);
+                    die;
                     return [];
                 }
-
-                var_dump($document);
-                var_dump("--------------end decode--------------");
 
                 return Authorization::skip(fn () => $database->find(self::METADATA_ATTRIBUTE, [
                     Query::equal('collectionInternalId', [$document->getInternalId()]),
@@ -850,6 +864,7 @@ class Database
      * @return bool
      * @throws DuplicateException
      * @throws LimitException
+     * @throws Exception
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = false, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -862,13 +877,15 @@ class Database
         }
 
         $collection = $this->getCollection($collection);
-        var_dump("createAttribute:");
+
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
+
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id) && $collection->getId() != '_metadata') {
-                throw new DuplicateException('Attribute already exists:' . $attribute->getId());
+            $key = $attribute->getAttribute('key');
+            if (\strtolower($key) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists:' . $key);
             }
         }
 
@@ -959,7 +976,7 @@ class Database
             'type' => $type,
             'size' => $size,
             'required' => $required,
-            'default' => [$default],
+            'default' => $default,
             'signed' => $signed,
             'array' => $array,
             'format' => $format,
@@ -1039,10 +1056,10 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $key Metadata key to update
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
      *
-     * @return Document
+     * @return void
+     * @throws Exception
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
     {
@@ -1141,11 +1158,11 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param callable|float|object|int|bool|array|string|null $default
      *
      * @return void
      */
-    public function updateAttributeDefault(string $collection, string $id, $default = null): void
+    public function updateAttributeDefault(string $collection, string $id, callable|float|object|int|bool|array|string $default = null): void
     {
         $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
             if ($attribute->getAttribute('required') === true) {
@@ -1163,14 +1180,15 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
+     * @param string|null $type
+     * @param int|null $size utf8mb4 chars length
      * @param bool $signed
      * @param bool $array
      *
      * To update attribute key (ID), use renameAttribute instead.
      *
      * @return bool
+     * @throws Exception
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
     {
@@ -1200,7 +1218,6 @@ class Database
                         break;
                     default:
                         throw new Exception('Unknown attribute type: ' . $type);
-                        break;
                 }
 
                 $attribute
@@ -1274,8 +1291,6 @@ class Database
         if ($collection === self::METADATA || $collection === self::METADATA_ATTRIBUTE) {
             throw new Exception("Can't delete metadata attributes");
         }
-        
-        var_dump("deleteAttribute collection = " . $collection . " id=" . $id);
 
         $collection = $this->getCollection($collection);
         if($collection->isEmpty()){
@@ -1298,8 +1313,8 @@ class Database
 
         Authorization::reset();
         // todo: please check me with cache clean :)
-       // $this->deleteCachedDocument(self::METADATA_ATTRIBUTE, $attribute->getId());
-      //  $this->deleteCachedCollection($collection->getId());
+        $this->deleteCachedDocument(self::METADATA, $collection->getId());
+        $this->deleteCachedCollection($collection->getId());
 
         return $res;
     }
@@ -1315,46 +1330,44 @@ class Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        if(in_array($collection, [self::METADATA, self::METADATA_ATTRIBUTE])){
+            throw new Exception("Can't rename Metadata Attributes");
+        }
+
         $collection = $this->getCollection($collection);
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+        if($collection->isEmpty()){
+            throw new Exception('Collection not found');
+        }
 
-        $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        Authorization::disable(); // todo: please check me with Authorization :)
 
-        if ($attribute === false) {
+        $attribute = $this->findOne(self::METADATA_ATTRIBUTE, [
+            Query::equal('collectionId', [$collection->getId()]),
+            Query::equal('key', [$old])
+        ]);
+
+        if($attribute === false){
             throw new Exception('Attribute not found');
         }
 
-        $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $exists = $this->findOne(self::METADATA_ATTRIBUTE, [
+            Query::equal('collectionId', [$collection->getId()]),
+            Query::equal('key', [$new])
+        ]);
 
-        if ($attributeNew !== false) {
-            throw new DuplicateException('Attribute name already used');
+        if($exists !== false){
+            throw new Exception('Attribute name already used');
         }
 
-        foreach ($attributes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $old) {
-                $attributes[$key]['key'] = $new;
-                $attributes[$key]['$id'] = $new;
-                break;
-            }
-        }
+        $attribute->setAttribute('key', $new);
 
-        foreach ($indexes as $index) {
-            $indexAttributes = $index->getAttribute('attributes', []);
+        $this->updateDocument(self::METADATA_ATTRIBUTE, $attribute->getId(), $attribute);
+        $res = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
-            $indexAttributes = \array_map(fn ($attribute) => ($attribute === $old) ? $new : $attribute, $indexAttributes);
+        $this->deleteCachedDocument(self::METADATA, $collection->getId());
+        $this->deleteCachedCollection($collection->getId());
 
-            $index->setAttribute('attributes', $indexAttributes);
-        }
-
-        $collection->setAttribute('attributes', $attributes);
-        $collection->setAttribute('indexes', $indexes);
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-        }
-
-        return $this->adapter->renameAttribute($collection->getId(), $old, $new);
+        return $res;
     }
 
     /**
@@ -1558,8 +1571,10 @@ class Database
 //        if($collection->getId() === self::METADATA){
 //            var_dump("getDocument " . $collection->getId() . " id = " . $id);
 //        }
+        var_dump($document);
 
         $document = $this->casting($collection, $document);
+
         $document = $this->decode($collection, $document);
 
         $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
@@ -1581,10 +1596,7 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        var_dump("createDocument = " . $collection);
-        var_dump("----------------------------------");
         $collection = $this->getCollection($collection);
-
         $time = DateTime::now();
 
         $document
@@ -1594,10 +1606,13 @@ class Database
             ->setAttribute('$updatedAt', $time);
 
         $document = $this->encode($collection, $document);
-
         $validator = new Structure($collection);
 
         if (!$validator->isValid($document)) {
+            var_dump("StructureException StructureException StructureException StructureException StructureException StructureException");
+            var_dump($document);
+            var_dump("StructureException StructureException StructureException StructureException StructureException StructureException");
+
             throw new StructureException($validator->getDescription());
         }
         $document = $this->adapter->createDocument($collection->getId(), $document);
@@ -1863,7 +1878,8 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            //$key = $attribute['$id'] ?? '';
+            $key = $attribute['key'] ?? ''; // todo:We have a problem...
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
@@ -1876,7 +1892,7 @@ class Database
 
             // assign default only if no no value provided
             if (is_null($value) && !is_null($default)) {
-                $value = ($array) ? $default : [$default];
+                $value = ($array) ? json_decode($default) : [json_decode($default)];
             } else {
                 $value = ($array) ? $value : [$value];
             }
@@ -1891,6 +1907,10 @@ class Database
 
             if (!$array) {
                 $value = $value[0];
+            }
+
+            if($document->getCollection() == self::METADATA_ATTRIBUTE && $key === 'default'){
+                $value = json_encode($value);
             }
 
             $document->setAttribute($key, $value);
@@ -1913,7 +1933,8 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            //$key = $attribute['$id'] ?? '';
+            $key = $attribute['key'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
@@ -1950,7 +1971,8 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            //$key = $attribute['$id'] ?? '';
+            $key = $attribute['key'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);

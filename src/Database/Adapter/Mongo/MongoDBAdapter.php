@@ -28,6 +28,7 @@ class MongoDBAdapter extends Adapter
         '$search',
         '$or',
         '$and',
+        '$match',
     ];
 
     /**
@@ -565,18 +566,21 @@ class MongoDBAdapter extends Adapter
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
+            $mongoId = new \MongoDB\BSON\ObjectId($cursor['$internalId']);
+
             $filter_ext = [
                 [
                     $attribute => [
                         $this->getQueryOperator($orderOperator) => $cursor[$attribute]
                     ]
-                ], [
+                ], 
+                [
                     $attribute => $cursor[$attribute],
                     '_id' => [
-                        $this->getQueryOperator($orderOperatorInternalId) => (new \MongoDB\BSON\ObjectId($cursor['$internalId']))
+                        $this->getQueryOperator($orderOperatorInternalId) => $mongoId
                     ]
 
-                ]
+                ],
             ];
 
             $filters = [
@@ -591,9 +595,9 @@ class MongoDBAdapter extends Adapter
 // var_dump($options['sort']);
 // var_dump("######## END SORT");
 
-// var_dump("######## FILTER");
-// var_dump($filters);
-// var_dump("######## END FILTER");
+var_dump("######## FILTER");
+var_dump($filters);
+var_dump("######## END FILTER");
         /**
          * @var Document[]
          */

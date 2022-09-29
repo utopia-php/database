@@ -1689,11 +1689,11 @@ abstract class Base extends TestCase
         ]);
 
         var_dump(array_map(function ($document) {
-            return 'DTs- ' . $document['name'] . ' / ' . $document['$id'] . ' - ' . $document['$createdAt'];
+            return 'DTs- ' . $document['name'] . ' / ' . $document['$internalId'] . ' - ' . $document['$createdAt'];
         }, $documentsTest));
 
         var_dump(array_map(function ($document) {
-            return 'Ds- ' . $document['name'] . ' / ' . $document['$id'] . ' - ' . $document['$createdAt'];
+            return 'Ds- ' . $document['name'] . ' / ' . $document['$internalId'] . ' - ' . $document['$createdAt'];
         }, $documents));
 
 

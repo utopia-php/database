@@ -26,7 +26,8 @@ class MongoDBAdapter extends Adapter
         '$in',
         '$text',
         '$search',
-        '$or'
+        '$or',
+        '$and',
     ];
 
     /**
@@ -394,7 +395,8 @@ class MongoDBAdapter extends Adapter
         $result = $this->client->insert($name, $this->removeNullKeys($record));
 
         $result = $this->replaceChars('_', '$', $result);
-
+        $result = $this->timeToDocument($result);
+        
         return new Document($result);
     }
 
@@ -511,6 +513,8 @@ class MongoDBAdapter extends Adapter
             }
 
             $attribute = $attribute == 'id' ? "_uid" : $attribute;
+            $attribute = $attribute == 'createdAt' ? "_createdAt" : $attribute;
+            $attribute = $attribute == 'updatedAt' ? "_updatedAt" : $attribute;
 
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
@@ -561,28 +565,35 @@ class MongoDBAdapter extends Adapter
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
-            $filters = array_merge($filters, [
-                '$or' => [
-                    [
-                        $attribute => [
-                            $this->getQueryOperator($orderOperator) => $cursor[$attribute]
-                        ]
-                    ], [
-                        $attribute => $cursor[$attribute],
-                        '_id' => [
-                            $this->getQueryOperator($orderOperatorInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
-                        ]
-
+            $filter_ext = [
+                [
+                    $attribute => [
+                        $this->getQueryOperator($orderOperator) => $cursor[$attribute]
                     ]
+                ], [
+                    $attribute => $cursor[$attribute],
+                    '_id' => [
+                        $this->getQueryOperator($orderOperatorInternalId) => (new \MongoDB\BSON\ObjectId($cursor['$internalId']))
+                    ]
+
                 ]
-            ]);
+            ];
+
+            $filters = [
+                '$and' => [$filters, ['$or' => $filter_ext]]
+            ];
         }
 
         $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
         $filters = $this->timeFilter($filters);
 
-        var_dump($filters);
+// var_dump("######## SORT");
+// var_dump($options['sort']);
+// var_dump("######## END SORT");
 
+// var_dump("######## FILTER");
+// var_dump($filters);
+// var_dump("######## END FILTER");
         /**
          * @var Document[]
          */
@@ -591,6 +602,7 @@ class MongoDBAdapter extends Adapter
         $results = $this->client->find($name, $filters, $options);
 
         $results = $results->cursor->firstBatch ?? [];
+
 
         foreach ($this->client->toArray($results) as $i => $result) {
             $record = $this->replaceChars('_', '$', $result);
@@ -616,6 +628,8 @@ class MongoDBAdapter extends Adapter
                     foreach($v as $sk=>$sv) {
                         $results[$k][$sk] = new \MongoDB\BSON\UTCDateTime((new \DateTime($sv))->format('YmdHisv'));
                     }
+                } else {
+                    $results[$k] = new \MongoDB\BSON\UTCDateTime((new \DateTime($v))->format('YmdHisv'));
                 }
             } else {
                 if(is_array($v)) {
@@ -629,8 +643,11 @@ class MongoDBAdapter extends Adapter
 
     private function timeToDocument($record):array
     {
-        $record['$createdAt'] = \Utopia\Database\DateTime::format($record['$createdAt']->toDateTime());
-        $record['$updatedAt'] = \Utopia\Database\DateTime::format($record['$updatedAt']->toDateTime());
+        $createdAt = \Utopia\Database\DateTime::format($record['$createdAt']->toDateTime());
+        $updatedAt = \Utopia\Database\DateTime::format($record['$updatedAt']->toDateTime());
+
+        $record['$createdAt'] = (string) $createdAt;
+        $record['$updatedAt'] = (string) $updatedAt;
 
         return $record;
     }
@@ -665,6 +682,7 @@ class MongoDBAdapter extends Adapter
 
         return $result;
     }
+
 
     /**
      * Count Documents

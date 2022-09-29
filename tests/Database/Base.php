@@ -1688,6 +1688,14 @@ abstract class Base extends TestCase
             Query::cursorAfter($documentsTest[0])
         ]);
 
+        var_dump(array_map(function ($document) {
+            return 'DTs- ' . $document['name'] . ' / ' . $document['$id'] . ' - ' . $document['$createdAt'];
+        }, $documentsTest));
+
+        var_dump(array_map(function ($document) {
+            return 'Ds- ' . $document['name'] . ' / ' . $document['$id'] . ' - ' . $document['$createdAt'];
+        }, $documents));
+
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
@@ -2949,6 +2957,7 @@ abstract class Base extends TestCase
             'date' => DateTime::now(),
         ]));
 
+        // var_dump($doc->getCreatedAt());
         $this->assertEquals(29, strlen($doc->getCreatedAt()));
         $this->assertEquals(29, strlen($doc->getUpdatedAt()));
         $this->assertEquals('+00:00', substr($doc->getCreatedAt(), -6));

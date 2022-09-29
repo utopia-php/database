@@ -496,16 +496,7 @@ class MongoClient
 
 
         return $result;
-        
-        // $cursorId = $result->cursor->id;
-        // $batch = $result->cursor->firstBatch;
 
-        // $response = new \stdClass();
-        // $response->cursorId = $cursorId;
-        // $response->batch = $batch;
-        // return array_merge($batch, [
-        //     'cursorId' => $cursorId
-        // ]);
     }
 
     /**

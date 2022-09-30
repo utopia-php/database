@@ -151,7 +151,7 @@ class Postgres extends MariaDB
         }
         
         // Update $this->getIndexCount when adding another default index
-        return $this->createIndex($id, "_index2_{$namespace}_{$id}", $this->getIndexTypeForReadPermission(), ['_read'], [], []);
+        return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
     }
 
     /**

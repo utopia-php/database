@@ -6,11 +6,11 @@ use PDO;
 use Redis;
 use Utopia\Cache\Cache;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\MySQL;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Tests\Base;
 
-class MySQLTest extends Base
+class SQLiteTest extends Base
 {
     /**
      * @var Database
@@ -26,7 +26,7 @@ class MySQLTest extends Base
      */
     static function getAdapterName(): string
     {
-        return "mysql";
+        return "sqlite";
     }
 
     /**
@@ -36,7 +36,7 @@ class MySQLTest extends Base
      */
     static function getAdapterRowLimit(): int
     {
-        return MySQL::getRowLimit();
+        return SQLite::getRowLimit();
     }
 
     /**
@@ -45,7 +45,7 @@ class MySQLTest extends Base
      */
     static function getUsedIndexes(): int
     {
-        return MySQL::getCountOfDefaultIndexes();
+        return SQLite::getCountOfDefaultIndexes();
     }
 
     /**
@@ -57,12 +57,13 @@ class MySQLTest extends Base
             return self::$database;
         }
 
-        $dbHost = 'mysql';
-        $dbPort = '3307';
-        $dbUser = 'root';
-        $dbPass = 'password';
+        $sqliteDir = __DIR__."/database.sql";
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
+        if(file_exists($sqliteDir)) {
+            unlink($sqliteDir);
+        }
+
+        $pdo = new PDO("sqlite:".$sqliteDir, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
@@ -70,7 +71,7 @@ class MySQLTest extends Base
 
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MySQL($pdo), $cache);
+        $database = new Database(new SQLite($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 

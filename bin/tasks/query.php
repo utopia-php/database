@@ -3,6 +3,7 @@
 /**
  * @var CLI
  */ global $cli;
+
 use Faker\Factory;
 use MongoDB\Client;
 use Utopia\Cache\Cache;
@@ -17,19 +18,21 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
+
 $cli
     ->task('query')
     ->desc('Query mock data')
     ->param('adapter', '', new Text(0), 'Database adapter', false)
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->param('limit', 25, new Numeric(), 'Limit on queried documents', true)
-    ->action(function ($adapter, $name, $limit) {
+    ->action(function (string $adapter, string $name, int $limit) {
         $database = null;
 
         switch ($adapter) {
             case 'mongodb':
                 $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                $client = new Client('mongodb://mongo/',
+                $client = new Client(
+                    'mongodb://mongo/',
                     [
                         'username' => 'root',
                         'password' => 'example',
@@ -130,7 +133,8 @@ $cli
         fclose($f);
     });
 
-function runQueries($database, $limit) {
+function runQueries(Database $database, int $limit)
+{
     $results = [];
     // Recent travel blogs
     $query = ["created.greater(1262322000)", "genre.equal('travel')"];
@@ -151,21 +155,23 @@ function runQueries($database, $limit) {
     return $results;
 }
 
-function addRoles($faker, $count) {
-    for ($i=0; $i < $count; $i++) {
+function addRoles($faker, $count)
+{
+    for ($i = 0; $i < $count; $i++) {
         Authorization::setRole($faker->numerify('user####'));
     }
     return count(Authorization::getRoles());
 }
 
-function runQuery($query, $database, $limit) {
-    Console::log('Running query: ['.implode(', ', $query).']');
-    $query = array_map(function($q) {
+function runQuery(array $query, Database $database, int $limit)
+{
+    Console::log('Running query: [' . implode(', ', $query) . ']');
+    $query = array_map(function ($q) {
         return Query::parse($q);
     }, $query);
 
     $start = microtime(true);
-    $documents = $database->find('articles', $query, $limit);
+    $database->find('articles', array_merge($query, [Query::limit($limit)]));
     $time = microtime(true) - $start;
     Console::success("{$time} s");
     return $time;

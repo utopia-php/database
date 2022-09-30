@@ -169,11 +169,10 @@ abstract class Adapter
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
-     * 
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
@@ -199,6 +198,19 @@ abstract class Adapter
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
+
+    /**
+     * Update Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $array
+     * 
+     * @return bool
+     */
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Delete Attribute
@@ -305,7 +317,7 @@ abstract class Adapter
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
-     * @param array $cursor Array copy of document used for before/after pagination
+     * @param array $cursor
      * @param string $cursorDirection
      *
      * @return Document[]
@@ -340,15 +352,35 @@ abstract class Adapter
      * 
      * @return int
      */
-    abstract public function getStringLimit(): int;
+    abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
      * 
      * @return int
      */
-    abstract public function getIntLimit(): int;
+    abstract public function getLimitForInt(): int;
 
+    /**
+     * Get maximum attributes limit.
+     * 
+     * @return int
+     */
+    abstract public function getLimitForAttributes(): int;
+
+    /**
+     * Get maximum index limit.
+     * 
+     * @return int
+     */
+    abstract public function getLimitForIndexes(): int;
+
+    /**
+     * Is schemas supported?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForSchemas(): bool;
     /**
      * Is index supported?
      * 
@@ -371,19 +403,41 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
+     * Does the adapter handle casting?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForCasting(): bool;
+
+    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection
      * @return int
      */
-    abstract public function getAttributeCount(Document $collection): int;
+    abstract public function getCountOfAttributes(Document $collection): int;
 
     /**
-     * Get maximum column limit.
+     * Get current index count from collection document
      * 
+     * @param Document $collection
      * @return int
      */
-    abstract public function getAttributeLimit(): int;
+    abstract public function getCountOfIndexes(Document $collection): int;
+
+    /**
+     * Returns number of attributes used by default.
+     *
+     * @return int
+     */
+    abstract public static function getCountOfDefaultAttributes(): int;
+
+    /**
+     * Returns number of indexes used by default.
+     *
+     * @return int
+     */
+    abstract public static function getCountOfDefaultIndexes(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row
@@ -392,20 +446,6 @@ abstract class Adapter
      * @return int
      */
     abstract public static function getRowLimit(): int;
-
-    /**
-     * Returns number of attributes used by default.
-     *
-     * @return int
-     */
-    abstract static public function getNumberOfDefaultAttributes(): int;
-
-    /**
-     * Returns number of indexes used by default.
-     *
-     * @return int
-     */
-    abstract static public function getNumberOfDefaultIndexes(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.
@@ -419,26 +459,11 @@ abstract class Adapter
     abstract public function getAttributeWidth(Document $collection): int;
 
     /**
-     * Get current index count from collection document
+     * Get list of keywords that cannot be used
      * 
-     * @param Document $collection
-     * @return int
+     * @return string[]
      */
-    abstract public function getIndexCount(Document $collection): int;
-
-    /**
-     * Get maximum index limit.
-     * 
-     * @return int
-     */
-    abstract public function getIndexLimit(): int;
-
-    /**
-     * Does the adapter handle casting?
-     * 
-     * @return bool
-     */
-    abstract public function getSupportForCasting(): bool;
+    abstract public function getKeywords(): array;
 
     /**
      * Filter Keys
@@ -446,11 +471,11 @@ abstract class Adapter
      * @throws Exception
      * @return string
      */
-    public function filter(string $value):string
+    public function filter(string $value): string
     {
         $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
-        if(\is_null($value)) {
+        if (\is_null($value)) {
             throw new Exception('Failed to filter key');
         }
 

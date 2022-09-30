@@ -9,7 +9,6 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -276,7 +275,7 @@ class MariaDB extends Adapter
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                MODIFY `{$id}` {$type};")
+                MODIFY {$this->getSQLQuote()}{$id}{$this->getSQLQuote()} {$type};")
             ->execute();
     }
 
@@ -297,7 +296,10 @@ class MariaDB extends Adapter
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN
+                {$this->getSQLQuote()}{$old}{$this->getSQLQuote()}
+                TO
+                {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
             ->execute();
     }
 
@@ -362,7 +364,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
+            '$id' => '_uid',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $attribute
@@ -792,7 +794,7 @@ class MariaDB extends Adapter
         $orders = [];
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => ID::custom('_uid'),
+            '$id' => '_uid',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -858,7 +860,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
+                '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
@@ -962,7 +964,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
+                '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
@@ -1032,7 +1034,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
+                '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
@@ -1824,6 +1826,14 @@ class MariaDB extends Adapter
     protected function getSQLTable(string $name): string
     {
         return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
+    }
+
+    /**
+     * Get SQL Quote
+     */
+    protected function getSQLQuote(): string
+    {
+        return "`";
     }
 
     /**

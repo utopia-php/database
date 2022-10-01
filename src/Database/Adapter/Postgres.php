@@ -15,6 +15,14 @@ use Utopia\Database\Validator\Authorization;
 class Postgres extends MariaDB
 {
     /**
+     * Differences between MariaDB and Postgres
+     * 
+     * 1. Need to use CASCADE to DROP schema
+     * 2. Quotes are different ` vs "
+     * 3. DATETIME is TIMESTAMP
+     */
+
+    /**
      * Create Database
      *
      * @param string $name
@@ -30,64 +38,19 @@ class Postgres extends MariaDB
             ->execute();
     }
 
-    /**
-     * Check if database exists
-     * Optionally check if collection exists in database
-     *
-     * @param string $database database name
-     * @param string $collection (optional) collection name
-     *
-     * @return bool
-     */
-    public function exists(string $database, string $collection = null): bool
-    {
-        $database = $this->filter($database);
-
-        if (!\is_null($collection)) {
-            $collection = $this->filter($collection);
-
-            $select = 'TABLE_NAME';
-            $from = 'INFORMATION_SCHEMA.TABLES' ;
-            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
-            $match = "{$this->getNamespace()}_{$collection}";
-        } else {
-            $select = 'SCHEMA_NAME';
-            $from = 'INFORMATION_SCHEMA.SCHEMATA' ;
-            $where = 'SCHEMA_NAME = :schema';
-            $match = $database;
-        }
-
-        $stmt = $this->getPDO()
-            ->prepare("SELECT {$select}
-                FROM {$from}
-                WHERE {$where};");
-
-        $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
-
-        if (!\is_null($collection)) {
-            $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
-        }
-
-        $stmt->execute();
-
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return (($document[strtolower($select)] ?? '') === $match);
-    }
-
-    /**
+   /**
      * Delete Database
-     * 
-     * @param string $name
      *
+     * @param string $name
      * @return bool
+     * @throws Exception
+     * @throws PDOException
      */
     public function delete(string $name): bool
     {
         $name = $this->filter($name);
-
         return $this->getPDO()
-            ->prepare("DROP SCHEMA \"{$name}\" CASCADE;")
+            ->prepare("DROP {$this->getSQLSchemaKeyword()} {$this->getSQLQuote()}{$name}{$this->getSQLQuote()} CASCADE;")
             ->execute();
     }
 
@@ -122,17 +85,30 @@ class Postgres extends MariaDB
             ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
-                \"_read\" TEXT[] NOT NULL,
-                \"_write\" TEXT[] NOT NULL,
+                \"_createdAt\" TIMESTAMP DEFAULT NULL,
+                \"_updatedAt\" TIMESTAMP DEFAULT NULL,
+                \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\")
                 )");
-
+//,
+//INDEX (\"_createdAt\"),
+//INDEX (\"_updatedAt\")
         $stmtIndex = $this->getPDO()
             ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
         try{
             $stmt->execute();
             $stmtIndex->execute();
+
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}_perms\" (
+                        \"_id\" SERIAL NOT NULL,
+                        \"_type\" VARCHAR(12) NOT NULL,
+                        \"_permission\" VARCHAR(255) NOT NULL,
+                        \"_document\" VARCHAR(255) NOT NULL,
+                        PRIMARY KEY (\"_id\")
+                    )")
+                ->execute();
 
             foreach ($indexes as &$index) {
                 $indexId = $this->filter($index->getId()); 
@@ -141,9 +117,8 @@ class Postgres extends MariaDB
                 $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
             }
         }catch(Exception $e){
-            var_dump($e->getMessage());
             $this->getPDO()->rollBack();
-            throw new Exception('Failed to create collection');
+            throw new Exception('Failed to create collection: '.$e->getMessage());
         }
         
         if(!$this->getPDO()->commit()) {
@@ -151,7 +126,9 @@ class Postgres extends MariaDB
         }
         
         // Update $this->getIndexCount when adding another default index
-        return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
+        // return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
+
+        return true;
     }
 
     /**
@@ -217,6 +194,30 @@ class Postgres extends MariaDB
     }
 
     /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$collection}\" RENAME COLUMN
+                {$this->getSQLQuote()}{$old}{$this->getSQLQuote()}
+                TO
+                {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
+            ->execute();
+    }
+
+    /**
      * Create Index
      * 
      * @param string $collection
@@ -233,6 +234,13 @@ class Postgres extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $attributes = \array_map(fn ($attribute) => match ($attribute) {
+            '$id' =>'_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $attribute
+        }, $attributes);
+
         foreach($attributes as $key => &$attribute) {
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '('.(int)$length.')';
@@ -243,7 +251,7 @@ class Postgres extends MariaDB
                 $order = '';
             }
 
-            $attribute = "\"{$attribute}\"{$order}";
+            $attribute = "\"{$attribute}\" {$order}";
         }
 
         return $this->getPDO()
@@ -271,46 +279,70 @@ class Postgres extends MariaDB
     }
 
     /**
-     * Get Document
+     * Rename Index
      *
      * @param string $collection
-     * @param string $id
-     *
-     * @return Document
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $name = $this->filter($collection);
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $schemaName = $this->getDefaultDatabase();
 
-        $stmt = $this->getPDO()->prepare("SELECT *
-            FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-            WHERE _uid = :_uid
-            LIMIT 1;
-        ");
-
-        $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-
-        $stmt->execute();
-
-        /** @var array $document */
-        $document = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if(empty($document)) {
-            return new Document([]);
-        }
-
-        $document['$id'] = $document['_uid'];
-        $document['$internalId'] = strval($document['_id']);
-        $document['$read'] = (isset($document['_read'])) ? $this->encodeArray($document['_read']) : [];
-        $document['$write'] = (isset($document['_write'])) ? $this->encodeArray($document['_write']) : [];
-
-        unset($document['_id']);
-        unset($document['_uid']);
-        unset($document['_read']);
-        unset($document['_write']);
-
-        return new Document($document);
+        //
+        return $this->getPDO()
+            ->prepare("ALTER INDEX \"{$schemaName}\".{$old} RENAME TO {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
+            ->execute();
     }
+
+    // /**
+    //  * Get Document
+    //  *
+    //  * @param string $collection
+    //  * @param string $id
+    //  * @return Document
+    //  */
+    // public function getDocument(string $collection, string $id): Document
+    // {
+    //     $name = $this->filter($collection);
+
+    //     $stmt = $this->getPDO()->prepare("
+    //         SELECT * 
+    //         FROM {$this->getSQLTable($name)}
+    //         WHERE _uid = :_uid;
+    //     ");
+
+    //     $stmt->bindValue(':_uid', $id);
+
+    //     $stmt->execute();
+
+    //     /** @var array $document */
+    //     $document = $stmt->fetch();
+        
+    //     if (empty($document)) {
+    //         return new Document([]);
+    //     }
+
+    //     $document['$id'] = $document['_uid'];
+    //     $document['$internalId'] = $document['_id'];
+    //     $document['$createdAt'] = $document['_createdAt'];
+    //     $document['$updatedAt'] = $document['_updatedAt'];
+    //     $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+
+    //     unset($document['_id']);
+    //     unset($document['_uid']);
+    //     unset($document['_createdAt']);
+    //     unset($document['_updatedAt']);
+    //     unset($document['_permissions']);
+
+    //     return new Document($document);
+    // }
 
      /**
      * Create Document
@@ -323,44 +355,48 @@ class Postgres extends MariaDB
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+        $attributes['_createdAt'] = $document->getCreatedAt();
+        $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_permissions'] = json_encode($document->getPermissions());
+
         $name = $this->filter($collection);
-        $columnNames = '';
         $columns = '';
+        $columnNames = '';
 
         $this->getPDO()->beginTransaction();
 
         /**
          * Insert Attributes
          */
+        $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columnNames .= "\"{$column}\"" . ', ';
-            $columns .= ":" . $column . ', ';
+            $bindKey = 'key_' . $bindIndex;
+            $columnNames .= "\"{$column}\", ";
+            $columns .= ':' . $bindKey . ', ';
+            $bindIndex++;
         }
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-                ({$columnNames} _uid, _read, _write)
-                VALUES ({$columns} :_uid, :_read, :_write)");
+                ({$columnNames}\"_uid\")
+                VALUES ({$columns}:_uid)");
 
-        $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
-        \var_dump("here", $document->getRead());
-        $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
-        $stmt->bindValue(':_write', $this->decodeArray($write), PDO::PARAM_STR);
 
+        $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if(is_array($value)) { // arrays & objects should be saved as strings
+            if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
+            $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
         }
 
-        \var_dump($stmt->queryString);
         try {
             $stmt->execute();
         } catch (Throwable $e) {
@@ -395,6 +431,9 @@ class Postgres extends MariaDB
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+        $attributes['_createdAt'] = $document->getCreatedAt();
+        $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_permissions'] = json_encode($document->getPermissions());
         $name = $this->filter($collection);
         $columns = '';
 
@@ -403,30 +442,31 @@ class Postgres extends MariaDB
         /**
          * Update Attributes
          */
+        $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $columns .= "\"{$column}\"" . '=:' . $column . ',';
+            $bindKey = 'key_' . $bindIndex;
+            $columns .= "\"{$column}\"=:{$bindKey}, ";
+            $bindIndex++;
         }
 
         $stmt = $this->getPDO()
             ->prepare("UPDATE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-                SET {$columns} _uid = :_uid, _read = :_read, _write = :_write WHERE _uid = :_uid");
+                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
 
-        $read = array_map(fn($role) => '"'.$role.'"', $document->getRead());
-        var_dump($document->getRead());
-        $write = array_map(fn($role) => '"'.$role.'"', $document->getWrite());
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-        $stmt->bindValue(':_read', $this->decodeArray($read), PDO::PARAM_STR);
-        $stmt->bindValue(':_write', $this->decodeArray($write), PDO::PARAM_STR);
 
+        $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if(is_array($value)) { // arrays & objects should be saved as strings
+            if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
+            $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
-            $stmt->bindValue(':' . $attribute, $value, $this->getPDOType($value));
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
         }
 
         if(!empty($attributes)) {
@@ -486,7 +526,7 @@ class Postgres extends MariaDB
         return true;
     }
 
-         /**
+    /**
      * Find Documents
      *
      * Find data sets using chosen queries
@@ -574,7 +614,7 @@ class Postgres extends MariaDB
             }
         }
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
@@ -614,7 +654,7 @@ class Postgres extends MariaDB
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $results = $stmt->fetchAll();
 
         foreach ($results as &$value) {
             $value['$id'] = $value['_uid'];
@@ -656,7 +696,7 @@ class Postgres extends MariaDB
         $where = ['1=1'];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
@@ -690,7 +730,7 @@ class Postgres extends MariaDB
         $stmt->execute();
 
         /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -714,7 +754,7 @@ class Postgres extends MariaDB
         $where = ['1=1'];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissions($roles) : '1=1'; // Disable join when no authorization required
+        $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
         foreach($queries as $i => $query) {
             if($query->getAttribute() === '$id') {
@@ -750,7 +790,7 @@ class Postgres extends MariaDB
         $stmt->execute();
 
         /** @var array $result */
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
     }
@@ -796,8 +836,12 @@ class Postgres extends MariaDB
                 return 'VARCHAR';
             break;
 
+            case Database::VAR_DATETIME:
+                return 'TIMESTAMP';
+                break;
+
             default:
-                throw new Exception('Unknown Type');
+                throw new Exception('Unknown Type: '. $type);
             break;
         }
     }
@@ -837,7 +881,7 @@ class Postgres extends MariaDB
      * 
      * @return string
      */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         switch ($type) {
             case Database::INDEX_KEY:
@@ -862,19 +906,44 @@ class Postgres extends MariaDB
     }
 
     /**
-     * Get SQL Permissions
-     * 
-     * @param array $roles
-     * @param string $operator
-     * @param string $placeholder
-     * @param mixed $value
-     * 
-     * @return string
+     * Get SQL schema
+     *
+     * @return string 
      */
-    protected function getSQLPermissions(array $roles): string
+    protected function getSQLSchema(): string
     {
-        $roles = array_map(fn($role) => "'".$role."'", $roles);
-        return "(table_main._read && ARRAY[".implode(',', $roles)."])";
+        if(!$this->getSupportForSchemas()) {
+            return '';
+        }
+
+        return "\"{$this->getDefaultDatabase()}\".";
+    }
+
+    /**
+     * Get SQL table
+     *
+     * @param string $name 
+     * @return string 
+     */
+    protected function getSQLTable(string $name): string
+    {
+        return "\"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
+    }
+
+    /**
+     * Get SQL Quote
+     */
+    protected function getSQLQuote(): string
+    {
+        return '"';
+    }
+
+    /**
+     * Get SQL Schema Keyword
+     */
+    protected function getSQLSchemaKeyword(): string
+    {
+        return "SCHEMA";
     }
 
     /**
@@ -942,6 +1011,11 @@ class Postgres extends MariaDB
     {
         if(empty($value))
             return '{}';
+
+        foreach($value as &$item) {
+            $item = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
+        }
+
         return '{'.implode(",", $value).'}';
     }
 }

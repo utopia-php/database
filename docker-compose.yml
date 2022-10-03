@@ -52,7 +52,7 @@ services:
       - "8701:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
-  
+
   mongo:
     image: mongo:4.4
     container_name: utopia-mongo
@@ -79,6 +79,17 @@ services:
       MYSQL_TCP_PORT: 3307
     cap_add:
       - SYS_NICE
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2019-CU18-ubuntu-20.04
+    container_name: utopia-mssql
+    networks:
+      - database
+    ports:
+      - "8706:1433"
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: ExamplePassword123
 
   redis:
     image: redis:6.0-alpine

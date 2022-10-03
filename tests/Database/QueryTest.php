@@ -148,6 +148,21 @@ class QueryTest extends TestCase
         $this->assertEquals("attr", $query->getAttribute());
         $this->assertEquals([1], $query->getValues());
 
+        $query = Query::parse('equal("attr", [0])');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("attr", $query->getAttribute());
+        $this->assertEquals([0], $query->getValues());
+
+        $query = Query::parse('equal("attr", 0,)');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("attr", $query->getAttribute());
+        $this->assertEquals([0], $query->getValues());
+
+        $query = Query::parse('equal("attr", ["0"])');
+        $this->assertCount(1, $query->getValues());
+        $this->assertEquals("attr", $query->getAttribute());
+        $this->assertEquals(["0"], $query->getValues());
+
         $query = Query::parse('equal(1, ["[Hello] World"])');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals(1, $query->getAttribute());
@@ -247,7 +262,7 @@ class QueryTest extends TestCase
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("value", $query->getAttribute());
         $this->assertEquals('{"type":"json","somekey":"someval"}', $query->getValue());
-        
+
         $query = Query::parse('equal("value", "{ NormalStringInBraces }")');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("value", $query->getAttribute());
@@ -282,7 +297,7 @@ class QueryTest extends TestCase
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("value", $query->getAttribute());
         $this->assertEquals('DoubleQuote"InMiddle', $query->getValue());
-        
+
         $query = Query::parse('equal("value", "Slash/InMiddle")');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("value", $query->getAttribute());

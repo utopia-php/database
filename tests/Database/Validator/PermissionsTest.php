@@ -9,6 +9,7 @@ use Utopia\Database\Permission;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Permissions;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Validator\Roles;
 
 class PermissionsTest extends TestCase
 {
@@ -238,11 +239,11 @@ class PermissionsTest extends TestCase
 
         // Permission role:$value must be one of: all, guest, member
         $this->assertFalse($object->isValid(['read("anyy")']));
-        $this->assertEquals('Role "anyy" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "anyy" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("gguest")']));
-        $this->assertEquals('Role "gguest" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "gguest" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['read("memer:123abc")']));
-        $this->assertEquals('Role "memer" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "memer" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
 
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading special chars
@@ -268,11 +269,11 @@ class PermissionsTest extends TestCase
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertFalse($object->isValid(['update("memmber:1234")']));
-        $this->assertEquals('Role "memmber" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "memmber" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("tteam:1234")']));
-        $this->assertEquals('Role "tteam" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "tteam" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
         $this->assertFalse($object->isValid(['update("userr:1234")']));
-        $this->assertEquals('Role "userr" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.', $object->getDescription());
+        $this->assertEquals('Role "userr" is not allowed. Must be one of: ' . \implode(', ', Roles::ROLES) . '.', $object->getDescription());
 
         // Team permission
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));

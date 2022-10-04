@@ -7,7 +7,6 @@ use Throwable;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -53,99 +52,8 @@ class Database
         self::PERMISSION_DELETE,
     ];
 
-    // Roles
-    const ROLE_ANY = 'any';
-    const ROLE_GUESTS = 'guests';
-    const ROLE_USERS = 'users';
-    const ROLE_USER = 'user';
-    const ROLE_TEAM = 'team';
-    const ROLE_MEMBER = 'member';
-
-    const ROLES = [
-        self::ROLE_ANY,
-        self::ROLE_GUESTS,
-        self::ROLE_USERS,
-        self::ROLE_USER,
-        self::ROLE_TEAM,
-        self::ROLE_MEMBER,
-    ];
-
-    const ROLE_CONFIGURATION = [
-        Database::ROLE_ANY => [
-            'identifier' => [
-                'allowed' => false,
-                'required' => false,
-            ],
-            'dimension' =>[
-                'allowed' => false,
-                'required' => false,
-            ],
-        ],
-        Database::ROLE_GUESTS => [
-            'identifier' => [
-                'allowed' => false,
-                'required' => false,
-            ],
-            'dimension' =>[
-                'allowed' => false,
-                'required' => false,
-            ],
-        ],
-        Database::ROLE_USERS => [
-            'identifier' => [
-                'allowed' => false,
-                'required' => false,
-            ],
-            'dimension' =>[
-                'allowed' => true,
-                'required' => false,
-                'options' => Database::USER_DIMENSIONS
-            ],
-        ],
-        Database::ROLE_USER => [
-            'identifier' => [
-                'allowed' => true,
-                'required' => true,
-            ],
-            'dimension' =>[
-                'allowed' => true,
-                'required' => false,
-                'options' => Database::USER_DIMENSIONS
-            ],
-        ],
-        Database::ROLE_TEAM => [
-            'identifier' => [
-                'allowed' => true,
-                'required' => true,
-            ],
-            'dimension' =>[
-                'allowed' => true,
-                'required' => false,
-            ],
-        ],
-        Database::ROLE_MEMBER => [
-            'identifier' => [
-                'allowed' => true,
-                'required' => true,
-            ],
-            'dimension' =>[
-                'allowed' => false,
-                'required' => false,
-            ],
-        ],
-    ];
-
-    // Dimensions
-    const DIMENSION_VERIFIED = 'verified';
-    const DIMENSION_UNVERIFIED = 'unverified';
-
-    const USER_DIMENSIONS = [
-        self::DIMENSION_VERIFIED,
-        self::DIMENSION_UNVERIFIED,
-    ];
-
     // Collections
-    const METADATA = '_metadata';
+    const METADATA = 'metadata';
 
     // Cursor
     const CURSOR_BEFORE = 'before';
@@ -536,17 +444,17 @@ class Database
         ]);
 
         // Check index limits, if given
-        if ($indexes && $this->adapter->getIndexCount($collection) > $this->adapter->getIndexLimit()) {
-            throw new LimitException('Index limit of ' . $this->adapter->getIndexLimit() . ' exceeded. Cannot create collection.');
+        if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
+            throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
 
         // check attribute limits, if given
         if ($attributes) {
             if (
-                $this->adapter->getAttributeLimit() > 0 &&
-                $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
+                $this->adapter->getLimitForAttributes() > 0 &&
+                $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
             ) {
-                throw new LimitException('Column limit of ' . $this->adapter->getAttributeLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
             }
 
             if (
@@ -647,8 +555,8 @@ class Database
         }
 
         if (
-            $this->adapter->getAttributeLimit() > 0 &&
-            $this->adapter->getAttributeCount($collection) >= $this->adapter->getAttributeLimit()
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
@@ -682,13 +590,13 @@ class Database
 
         switch ($type) {
             case self::VAR_STRING:
-                if ($size > $this->adapter->getStringLimit()) {
-                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
+                if ($size > $this->adapter->getLimitForString()) {
+                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
 
             case self::VAR_INTEGER:
-                $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
+                $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
                     throw new Exception('Max size allowed for int is: ' . number_format($limit));
                 }
@@ -936,13 +844,13 @@ class Database
 
                 switch ($type) {
                     case self::VAR_STRING:
-                        if ($size > $this->adapter->getStringLimit()) {
-                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getStringLimit()));
+                        if ($size > $this->adapter->getLimitForString()) {
+                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                         }
                         break;
 
                     case self::VAR_INTEGER:
-                        $limit = ($signed) ? $this->adapter->getIntLimit() / 2 : $this->adapter->getIntLimit();
+                        $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                         if ($size > $limit) {
                             throw new Exception('Max size allowed for int is: ' . number_format($limit));
                         }
@@ -998,8 +906,8 @@ class Database
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
         if (
-            $this->adapter->getAttributeLimit() > 0 &&
-            $this->adapter->getAttributeCount($collection) > $this->adapter->getAttributeLimit()
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
             return false;
@@ -1135,11 +1043,13 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
+        $this->adapter->renameIndex($collection->getId(), $old, $new);
+
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
 
-        return $this->adapter->renameIndex($collection->getId(), $old, $new);
+        return true;
     }
 
     /**
@@ -1171,7 +1081,7 @@ class Database
             }
         }
 
-        if ($this->adapter->getIndexCount($collection) >= $this->adapter->getIndexLimit()) {
+        if ($this->adapter->getCountOfIndexes($collection) >= $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
@@ -1464,7 +1374,7 @@ class Database
             throw new Exception("cursor Document must be from the same Collection.");
         }
 
-        $cursor = empty($cursor) ? [] : $cursor->getArrayCopy();
+        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         $queries = self::convertQueries($collection, $filters);
 
@@ -1520,6 +1430,7 @@ class Database
             throw new Exception("Collection not found");
         }
 
+        $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
         return $this->adapter->count($collection->getId(), $queries, $max);
@@ -1792,11 +1703,11 @@ class Database
      *
      * @return int
      */
-    public function getAttributeLimit()
+    public function getLimitForAttributes()
     {
         // If negative, return 0
         // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getAttributeLimit() - $this->adapter->getNumberOfDefaultAttributes() - 1, 0);
+        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
     }
 
     /**
@@ -1804,9 +1715,29 @@ class Database
      *
      * @return int
      */
-    public function getIndexLimit()
+    public function getLimitForIndexes()
     {
-        return $this->adapter->getIndexLimit() - $this->adapter->getNumberOfDefaultIndexes();
+        return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     * 
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return $this->adapter->getKeywords();
+    }
+
+    /**
+     * Get Database Adapter
+     * 
+     * @return Adapter
+     */
+    public function getAdapter(): Adapter
+    {
+        return $this->adapter;
     }
 
     /**

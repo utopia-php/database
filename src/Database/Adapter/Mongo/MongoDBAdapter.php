@@ -398,7 +398,7 @@ class MongoDBAdapter extends Adapter
 
         $result = $this->replaceChars('_', '$', $result);
         $result = $this->timeToDocument($result);
-        
+
         return new Document($result);
     }
 
@@ -573,7 +573,7 @@ class MongoDBAdapter extends Adapter
                     $attribute => [
                         $this->getQueryOperator($orderOperator) => $cursor[$attribute]
                     ]
-                ], 
+                ],
                 [
                     $attribute => $cursor[$attribute],
                     '_id' => [
@@ -619,10 +619,12 @@ class MongoDBAdapter extends Adapter
             if($k === '_createdAt' || $k == '_updatedAt') {
                 if(is_array($v)) {
                     foreach($v as $sk=>$sv) {
-                        $results[$k][$sk] = new \MongoDB\BSON\UTCDateTime((new \DateTime($sv))->format('YmdHisv'));
+                        $a = new \DateTime($sv);
+                        $results[$k][$sk] = new \MongoDB\BSON\UTCDateTime($a->getTimestamp() . $a->format('v'));
                     }
                 } else {
-                    $results[$k] = new \MongoDB\BSON\UTCDateTime((new \DateTime($v))->format('YmdHisv'));
+                    $b = new \DateTime($v);
+                    $results[$k] = new \MongoDB\BSON\UTCDateTime($b->getTimestamp() . $b->format('v'));
                 }
             } else {
                 if(is_array($v)) {
@@ -650,12 +652,12 @@ class MongoDBAdapter extends Adapter
         $createdAt = $record['_createdAt'];
         $createdAt = new \DateTime($createdAt);
 
-        $record['_createdAt'] = new \MongoDB\BSON\UTCDateTime($createdAt->format('YmdHisv'));
+        $record['_createdAt'] = new \MongoDB\BSON\UTCDateTime($createdAt->getTimestamp() . $createdAt->format('v'));
 
         $updatedAt = $record['_updatedAt'];
         $updatedAt = new \DateTime($updatedAt);
 
-        $record['_updatedAt'] = new \MongoDB\BSON\UTCDateTime($updatedAt->format('YmdHisv'));
+        $record['_updatedAt'] = new \MongoDB\BSON\UTCDateTime($updatedAt->getTimestamp() . $updatedAt->format('v'));
 
         return $record;
     }

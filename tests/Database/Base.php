@@ -1697,16 +1697,6 @@ abstract class Base extends TestCase
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        var_dump("########### 1700");
-        var_dump(array_map(function ($document) {
-            return 'DTs- ' . $document['name'] . ' / ' . $document['$internalId'] . ' - ' . $document['$createdAt'];
-        }, $documentsTest));
-
-        var_dump(array_map(function ($document) {
-            return 'Ds- ' . $document['name'] . ' / ' . $document['$internalId'] . ' - ' . $document['$createdAt'];
-        }, $documents));
-        var_dump("########### 1700");
-
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
@@ -1724,7 +1714,7 @@ abstract class Base extends TestCase
             Query::cursorAfter($documentsTest[0])
         ]);
 
-        // $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
+        $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
 
         /**
          * Limit

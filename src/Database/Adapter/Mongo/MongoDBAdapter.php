@@ -391,6 +391,7 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $document->removeAttribute('$internalId');
+
         $record = $this->replaceChars('$', '_', $document);
         $record = $this->timeToMongo($record);        
 
@@ -566,8 +567,6 @@ class MongoDBAdapter extends Adapter
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
-            $mongoId = new \MongoDB\BSON\ObjectId($cursor['$internalId']);
-
             $filter_ext = [
                 [
                     $attribute => [
@@ -577,7 +576,7 @@ class MongoDBAdapter extends Adapter
                 [
                     $attribute => $cursor[$attribute],
                     '_id' => [
-                        $this->getQueryOperator($orderOperatorInternalId) => $mongoId
+                        $this->getQueryOperator($orderOperatorInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
                     ]
 
                 ],
@@ -611,7 +610,15 @@ class MongoDBAdapter extends Adapter
         return $found;
     }
 
-    private function timeFilter($filters):array 
+    /**
+     * Recusirve function to convert timestamps/datetime 
+     * to BSON based UTCDatetime type for Mongo filter/query.
+     * 
+     * @param array $filters
+     * 
+     * @return array
+     */
+    private function timeFilter(array $filters):array 
     {
         $results = $filters;
 
@@ -619,12 +626,10 @@ class MongoDBAdapter extends Adapter
             if($k === '_createdAt' || $k == '_updatedAt') {
                 if(is_array($v)) {
                     foreach($v as $sk=>$sv) {
-                        $a = new \DateTime($sv);
-                        $results[$k][$sk] = new \MongoDB\BSON\UTCDateTime($a->getTimestamp() . $a->format('v'));
+                        $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
                 } else {
-                    $b = new \DateTime($v);
-                    $results[$k] = new \MongoDB\BSON\UTCDateTime($b->getTimestamp() . $b->format('v'));
+                    $results[$k] = $this->toMongoDatetime($v);
                 }
             } else {
                 if(is_array($v)) {
@@ -636,32 +641,58 @@ class MongoDBAdapter extends Adapter
         return $results;
     }
 
-    private function timeToDocument($record):array
+    /**
+     * Converts timestamp base fields to Utopia\Document format.
+     * 
+     * @param array $record
+     * 
+     * @return array
+     */
+    private function timeToDocument(array $record):array
     {
-        $createdAt = \Utopia\Database\DateTime::format($record['$createdAt']->toDateTime());
-        $updatedAt = \Utopia\Database\DateTime::format($record['$updatedAt']->toDateTime());
-
-        $record['$createdAt'] = (string) $createdAt;
-        $record['$updatedAt'] = (string) $updatedAt;
+        $record['$createdAt'] = \Utopia\Database\DateTime::format($record['$createdAt']->toDateTime());
+        $record['$updatedAt'] = \Utopia\Database\DateTime::format($record['$updatedAt']->toDateTime());
 
         return $record;
     }
 
+    /**
+     * Converts timestamp base fields to Mongo\BSON datetime format.
+     * 
+     * @param array $record
+     * 
+     * @return array
+     */
     private function timeToMongo($record):array
     {
-        $createdAt = $record['_createdAt'];
-        $createdAt = new \DateTime($createdAt);
-
-        $record['_createdAt'] = new \MongoDB\BSON\UTCDateTime($createdAt->getTimestamp() . $createdAt->format('v'));
-
-        $updatedAt = $record['_updatedAt'];
-        $updatedAt = new \DateTime($updatedAt);
-
-        $record['_updatedAt'] = new \MongoDB\BSON\UTCDateTime($updatedAt->getTimestamp() . $updatedAt->format('v'));
+        $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
+        $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
 
         return $record;
     }
 
+    /**
+     * Converts timestamp to Mongo\BSON datetime format.
+     * 
+     * @param string $value
+     * 
+     * @return \MongoDB\BSON\UTCDateTime
+     */
+    private function toMongoDatetime(string $dt):\MongoDB\BSON\UTCDateTime {
+        $dt = new \DateTime($dt);
+
+        return new \MongoDB\BSON\UTCDateTime($dt->getTimestamp() . $dt->format('v'));
+    }
+
+    /**
+     * Recusirve function to replace chars in array keys, while
+     * skipping any that are explicitly excluded.
+     * 
+     * @param string $array
+     * @param string $from
+     * @param string $to
+     * @param array $exclude
+     */
     private function recursiveReplace(array $array, string $from, string $to, array $exclude = []):array {
         $result = [];
 

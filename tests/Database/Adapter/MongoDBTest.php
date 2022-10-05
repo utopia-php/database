@@ -76,6 +76,8 @@ class MongoDBTest extends Base
 
     public function testCreateExistsDelete()
     {
+        // Mongo creates databases on the fly, so exists would always pass. So we
+        // overide this test to remove the exists check.
         $this->assertNotNull(static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
 

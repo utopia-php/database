@@ -16,23 +16,6 @@ use Utopia\Database\Validator\Authorization;
 class MSSQL extends MariaDB
 {
     /**
-     * @var PDO
-     */
-    protected $pdo;
-
-    /**
-     * Constructor.
-     *
-     * Set connection and settings
-     *
-     * @param PDO $pdo
-     */
-    public function __construct($pdo)
-    {
-        $this->pdo = $pdo;
-    }
-
-    /**
      * Create Database
      *
      * @param string $name
@@ -45,7 +28,7 @@ class MSSQL extends MariaDB
         $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
+            ->prepare("IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = '{$name}') CREATE DATABASE \"{$name}\" COLLATE Latin1_General_100_CI_AI_SC_UTF8")
             ->execute();
     }
 
@@ -68,16 +51,16 @@ class MSSQL extends MariaDB
 
             $select = 'TABLE_NAME';
             $from = 'INFORMATION_SCHEMA.TABLES';
-            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
+            $where = 'TABLE_NAME = :table';
             $match = "{$this->getNamespace()}_{$collection}";
         } else {
-            $select = 'SCHEMA_NAME';
-            $from = 'INFORMATION_SCHEMA.SCHEMATA';
-            $where = 'SCHEMA_NAME = :schema';
+            $select = 'name';
+            $from = 'sys.databases';
+            $where = 'name = :schema';
             $match = $database;
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT {$select} FROM {$from} WHERE {$where}");
+        $stmt = $this->getPDO()->prepare("USE {$database}; SELECT {$select} FROM {$from} WHERE {$where}");
 
         $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
 
@@ -99,6 +82,7 @@ class MSSQL extends MariaDB
      */
     public function list(): array
     {
+        // why is it this way?
         return [];
     }
 
@@ -115,7 +99,7 @@ class MSSQL extends MariaDB
         $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("DROP DATABASE `{$name}`;")
+            ->prepare("DROP DATABASE \"{$name}\";")
             ->execute();
     }
 
@@ -143,7 +127,7 @@ class MSSQL extends MariaDB
                 $attrType = 'LONGTEXT';
             }
 
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
+            $attributes[$key] = "\"{$attrId}\" {$attrType}, ";
         }
 
         foreach ($indexes as $key => $index) {
@@ -161,43 +145,56 @@ class MSSQL extends MariaDB
                     $indexOrder = '';
                 }
 
-                $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                $indexAttributes[$nested] = "\"{$indexAttribute}\"{$indexLength} {$indexOrder}";
             }
 
-            $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+            $indexes[$key] = "{$indexType} \"{$indexId}\" (" . \implode(", ", $indexAttributes) . " ),";
         }
 
         try {
+            $this->getPDO()->exec("USE {$database}");
+
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_uid` CHAR(255) NOT NULL,
-                        `_createdAt` datetime(3) DEFAULT NULL,
-                        `_updatedAt` datetime(3) DEFAULT NULL,
-                        `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributes) . "
-                        PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexes) . "
-                        UNIQUE KEY `_uid` (`_uid`),
-                        KEY `_created_at` (`_createdAt`),
-                        KEY `_updated_at` (`_updatedAt`)
-                    )")
+                ->prepare(
+                    "IF NOT EXISTS (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{$namespace}_{$id}')
+                        CREATE TABLE \"{$namespace}_{$id}\" (
+                            \"_id\" int NOT NULL IDENTITY(1,1),
+                            \"_uid\" CHAR(255) NOT NULL UNIQUE,
+                            \"_createdAt\" datetime DEFAULT NULL,
+                            \"_updatedAt\" datetime DEFAULT NULL,
+                            \"_permissions\" TEXT DEFAULT NULL,
+                            " . \implode(' ', $attributes) . "
+                            PRIMARY KEY (\"_id\"),
+                            " . \implode(' ', $indexes) . "
+                        )
+                    "
+                )
                 ->execute();
 
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_type` VARCHAR(12) NOT NULL,
-                        `_permission` VARCHAR(255) NOT NULL,
-                        `_document` VARCHAR(255) NOT NULL,
-                        PRIMARY KEY (`_id`),
-                        UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`)
-                    )")
+                ->prepare("
+                IF NOT EXISTS (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{$namespace}_{$id}_perms')
+                    CREATE TABLE \"{$namespace}_{$id}_perms\" (
+                        \"_id\" int NOT NULL IDENTITY(1,1),
+                        \"_type\" VARCHAR(12) NOT NULL,
+                        \"_permission\" VARCHAR(255) NOT NULL,
+                        \"_document\" VARCHAR(255) NOT NULL,
+                        PRIMARY KEY (\"_id\"),
+                        INDEX \"_permission\" (\"_permission\")
+                    )
+                    CREATE UNIQUE INDEX \"_index1\" ON \"{$namespace}_{$id}_perms\" (\"_document\",\"_type\",\"_permission\")
+                ")
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id.'_perms')};")
+                ->prepare("IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE
+                    TABLE_NAME = '{$this->getSQLTable($id)}' AND TABLE_SCHEMA = 'dbo')
+                    DROP TABLE {$this->getSQLTable($id)};")
+                ->execute();
+            $this->getPDO()
+                ->prepare("IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE
+                    TABLE_NAME = '{$this->getSQLTable($id.'_perms')}' AND TABLE_SCHEMA = 'dbo')
+                    DROP TABLE {$this->getSQLTable($id.'_perms')};")
                 ->execute();
             throw $th;
         }
@@ -247,7 +244,7 @@ class MSSQL extends MariaDB
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                ADD COLUMN `{$id}` {$type};")
+                ADD COLUMN \"{$id}\" {$type};")
             ->execute();
     }
 
@@ -271,12 +268,12 @@ class MSSQL extends MariaDB
         $type = $this->getSQLType($type, $size, $signed);
 
         if ($array) {
-            $type = 'LONGTEXT';
+            $type = 'TEXT';
         }
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                MODIFY `{$id}` {$type};")
+                MODIFY \"{$id}\" {$type};")
             ->execute();
     }
 
@@ -297,7 +294,7 @@ class MSSQL extends MariaDB
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN \"{$old}\" TO \"{$new}\";")
             ->execute();
     }
 
@@ -318,7 +315,7 @@ class MSSQL extends MariaDB
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX \"{$old}\" TO \"{$new}\";")
             ->execute();
     }
 
@@ -339,7 +336,7 @@ class MSSQL extends MariaDB
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP COLUMN `{$id}`;")
+                DROP COLUMN \"{$id}\";")
             ->execute();
     }
 
@@ -378,7 +375,7 @@ class MSSQL extends MariaDB
                 $order = '';
             }
 
-            $attributes[$key] = "`{$attribute}`{$length} {$order}";
+            $attributes[$key] = "\"{$attribute}\"{$length} {$order}";
         }
 
         return $this->getPDO()
@@ -402,7 +399,7 @@ class MSSQL extends MariaDB
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP INDEX `{$id}`;")
+                DROP INDEX \"{$id}\";")
             ->execute();
     }
 
@@ -478,7 +475,7 @@ class MSSQL extends MariaDB
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
             $bindIndex++;
         }
 
@@ -680,7 +677,7 @@ class MSSQL extends MariaDB
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
             $bindIndex++;
         }
 
@@ -830,7 +827,7 @@ class MSSQL extends MariaDB
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "`${attribute}` ${orderType}";
+            $orders[] = "\"${attribute}\" ${orderType}";
         }
 
         // Allow after pagination without any order
@@ -866,7 +863,7 @@ class MSSQL extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.\"' . $query->getAttribute().'\"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -970,7 +967,7 @@ class MSSQL extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.\"' . $query->getAttribute().'\"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -1040,7 +1037,7 @@ class MSSQL extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.\"' . $query->getAttribute().'\"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1232,8 +1229,8 @@ class MSSQL extends MariaDB
     public function getAttributeWidth(Document $collection): int
     {
         // Default collection has:
-        // `_id` int(11) => 4 bytes
-        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
+        // \"_id\" int(11) => 4 bytes
+        // \"_uid\" char(255) => 1020 (255 bytes * 4 for utf8mb4)
         // but this number seems to vary, so we give a +500 byte buffer
         $total = 1500;
 
@@ -1616,14 +1613,6 @@ class MSSQL extends MariaDB
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
-                    return 'LONGTEXT';
-                }
-
-                if ($size > 65535) {
-                    return 'MEDIUMTEXT';
-                }
-
                 if ($size > 16383) {
                     return 'TEXT';
                 }
@@ -1684,7 +1673,7 @@ class MSSQL extends MariaDB
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             default:
-                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using \"attrubute_\" to avoid conflicts with custom names;
                 break;
         }
     }
@@ -1779,7 +1768,7 @@ class MSSQL extends MariaDB
                 break;
         }
 
-        return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
+        return "CREATE {$type} \"{$id}\" ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
     }
 
     /**
@@ -1812,7 +1801,7 @@ class MSSQL extends MariaDB
             return '';
         }
 
-        return "`{$this->getDefaultDatabase()}`.";
+        return "\"{$this->getDefaultDatabase()}\".";
     }
 
     /**
@@ -1823,7 +1812,7 @@ class MSSQL extends MariaDB
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
+        return "{$this->getSQLSchema()}\"{$this->getNamespace()}_{$name}\"";
     }
 
     /**
@@ -1877,4 +1866,5 @@ class MSSQL extends MariaDB
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
 }

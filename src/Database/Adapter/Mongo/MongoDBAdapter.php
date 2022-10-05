@@ -63,7 +63,6 @@ class MongoDBAdapter extends Adapter
      */
     public function create(string $name): bool
     {
-        $name = $this->filter($name);
         $this->getClient()->selectDatabase($name);
 
         return true;
@@ -83,6 +82,8 @@ class MongoDBAdapter extends Adapter
         if (!\is_null($collection)) {
             $collection = "{$this->getNamespace()}_{$collection}";
             $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
+
+            
 
             foreach ($list as $obj) {
                 if (\is_object($obj)) {
@@ -493,7 +494,7 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $filters = [];
+        $filters = $this->buildFilters($queries);
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -590,22 +591,11 @@ class MongoDBAdapter extends Adapter
         $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
         $filters = $this->timeFilter($filters);
 
-// var_dump("######## SORT");
-// var_dump($options['sort']);
-// var_dump("######## END SORT");
-
-var_dump("######## FILTER");
-var_dump($filters);
-var_dump("######## END FILTER");
         /**
          * @var Document[]
          */
         $found = [];
-
-        $results = $this->client->find($name, $filters, $options);
-
-        $results = $results->cursor->firstBatch ?? [];
-
+        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
 
         foreach ($this->client->toArray($results) as $i => $result) {
             $record = $this->replaceChars('_', '$', $result);
@@ -847,14 +837,9 @@ var_dump("######## END FILTER");
 
                 unset($result['$internalId']);
             }
-        } else if ($from === '$') {
-            if (array_key_exists('$id', $array)) {
-                $result['_uid'] = $array['$id'];
+        }
 
-                unset($result['$id']);
-            }
-
-        return $result;
+        return $result;        
     }
 
     /**
@@ -1200,7 +1185,7 @@ var_dump("######## END FILTER");
         return $new_array;
     }
 
-    function removeNullKeys(array|Document $target): array
+    protected function removeNullKeys(array|Document $target): array
     {
         $target = is_array($target) ? $target : $target->getArrayCopy();
         $cleaned = [];
@@ -1213,5 +1198,10 @@ var_dump("######## END FILTER");
 
 
         return $cleaned;
+    }
+
+    public function getKeywords(): array 
+    {
+        return [];
     }
 }

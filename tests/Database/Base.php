@@ -260,7 +260,7 @@ abstract class Base extends TestCase
 
     /**
      * @depends testCreateDeleteAttribute
-     * @expectedException Exception
+     *
      */
     public function testUnknownFormat()
     {

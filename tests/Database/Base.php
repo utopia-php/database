@@ -691,45 +691,45 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testListDocumentSearch(Document $document)
-    {
-        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
-        if(!$fulltextSupport) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
+    // /**
+    //  * @depends testCreateDocument
+    //  */
+    // public function testListDocumentSearch(Document $document)
+    // {
+    //     $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+    //     if(!$fulltextSupport) {
+    //         $this->expectNotToPerformAssertions();
+    //         return;
+    //     }
 
-        static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
-        static::getDatabase()->createDocument('documents', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'string' => '*test+alias@email-provider.com',
-            'integer' => 0,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-            'empty' => [],
-        ]));
+    //     static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
+    //     static::getDatabase()->createDocument('documents', new Document([
+    //         '$permissions' => [
+    //             Permission::read(Role::any()),
+    //             Permission::create(Role::any()),
+    //             Permission::update(Role::any()),
+    //             Permission::delete(Role::any()),
+    //         ],
+    //         'string' => '*test+alias@email-provider.com',
+    //         'integer' => 0,
+    //         'bigint' => 8589934592, // 2^33
+    //         'float' => 5.55,
+    //         'boolean' => true,
+    //         'colors' => ['pink', 'green', 'blue'],
+    //         'empty' => [],
+    //     ]));
 
-        /**
-         * Allow reserved keywords for search
-         */
-        $documents = static::getDatabase()->find('documents', [
-            Query::search('string', '*test+alias@email-provider.com'),
-        ]);
+    //     /**
+    //      * Allow reserved keywords for search
+    //      */
+    //     $documents = static::getDatabase()->find('documents', [
+    //         Query::search('string', '*test+alias@email-provider.com'),
+    //     ]);
 
-        $this->assertEquals(1, count($documents));
+    //     $this->assertEquals(1, count($documents));
 
-        return $document;
-    }
+    //     return $document;
+    // }
 
     /**
      * @depends testGetDocument
@@ -2622,90 +2622,90 @@ abstract class Base extends TestCase
         $this->assertNotEquals(ID::unique(10), ID::unique(10));
     }
 
-    public function testRenameIndex()
-    {
-        $database = static::getDatabase();
+    // public function testRenameIndex()
+    // {
+    //     $database = static::getDatabase();
 
-        $numbers = $database->createCollection('numbers');
-        $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
-        $database->createAttribute('numbers', 'symbol', Database::VAR_INTEGER, 0, true);
+    //     $numbers = $database->createCollection('numbers');
+    //     $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
+    //     $database->createAttribute('numbers', 'symbol', Database::VAR_INTEGER, 0, true);
 
-        $database->createIndex('numbers', 'index1', Database::INDEX_KEY, ['verbose'], [128], [Database::ORDER_ASC]);
-        $database->createIndex('numbers', 'index2', Database::INDEX_KEY, ['symbol'], [0], [Database::ORDER_ASC]);
+    //     $database->createIndex('numbers', 'index1', Database::INDEX_KEY, ['verbose'], [128], [Database::ORDER_ASC]);
+    //     $database->createIndex('numbers', 'index2', Database::INDEX_KEY, ['symbol'], [0], [Database::ORDER_ASC]);
 
-        $index = $database->renameIndex('numbers', 'index1', 'index3');
+    //     $index = $database->renameIndex('numbers', 'index1', 'index3');
 
-        $this->assertTrue($index);
+    //     $this->assertTrue($index);
 
-        $numbers = $database->getCollection('numbers');
+    //     $numbers = $database->getCollection('numbers');
 
-        $this->assertEquals('index2', $numbers->getAttribute('indexes')[1]['$id']);
-        $this->assertEquals('index3', $numbers->getAttribute('indexes')[0]['$id']);
-        $this->assertCount(2, $numbers->getAttribute('indexes'));
-    }
+    //     $this->assertEquals('index2', $numbers->getAttribute('indexes')[1]['$id']);
+    //     $this->assertEquals('index3', $numbers->getAttribute('indexes')[0]['$id']);
+    //     $this->assertCount(2, $numbers->getAttribute('indexes'));
+    // }
 
-    /**
-     * @depends testRenameIndex
-     * @expectedException Exception
-     */
-    public function testRenameIndexMissing()
-    {
-        $database = static::getDatabase();
-        $this->expectExceptionMessage('Index not found');
-        $index = $database->renameIndex('numbers', 'index1', 'index4');
-    }
+    // /**
+    //  * @depends testRenameIndex
+    //  * @expectedException Exception
+    //  */
+    // public function testRenameIndexMissing()
+    // {
+    //     $database = static::getDatabase();
+    //     $this->expectExceptionMessage('Index not found');
+    //     $index = $database->renameIndex('numbers', 'index1', 'index4');
+    // }
 
-    /**
-     * @depends testRenameIndex
-     * @expectedException Exception
-     */
-    public function testRenameIndexExisting()
-    {
-        $database = static::getDatabase();
-        $this->expectExceptionMessage('Index name already used');
-        $index = $database->renameIndex('numbers', 'index3', 'index2');
-    }
+    // /**
+    //  * @depends testRenameIndex
+    //  * @expectedException Exception
+    //  */
+    // public function testRenameIndexExisting()
+    // {
+    //     $database = static::getDatabase();
+    //     $this->expectExceptionMessage('Index name already used');
+    //     $index = $database->renameIndex('numbers', 'index3', 'index2');
+    // }
 
-    public function testRenameAttribute()
-    {
-        $database = static::getDatabase();
+    // public function testRenameAttribute()
+    // {
+    //     $database = static::getDatabase();
 
-        $colors = $database->createCollection('colors');
-        $database->createAttribute('colors', 'name', Database::VAR_STRING, 128, true);
-        $database->createAttribute('colors', 'hex', Database::VAR_STRING, 128, true);
+    //     $colors = $database->createCollection('colors');
+    //     $database->createAttribute('colors', 'name', Database::VAR_STRING, 128, true);
+    //     $database->createAttribute('colors', 'hex', Database::VAR_STRING, 128, true);
 
-        $database->createIndex('colors', 'index1', Database::INDEX_KEY, ['name'], [128], [Database::ORDER_ASC]);
+    //     $database->createIndex('colors', 'index1', Database::INDEX_KEY, ['name'], [128], [Database::ORDER_ASC]);
 
-        $database->createDocument('colors', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'black',
-            'hex' => '#000000'
-        ]));
+    //     $database->createDocument('colors', new Document([
+    //         '$permissions' => [
+    //             Permission::read(Role::any()),
+    //             Permission::create(Role::any()),
+    //             Permission::update(Role::any()),
+    //             Permission::delete(Role::any()),
+    //         ],
+    //         'name' => 'black',
+    //         'hex' => '#000000'
+    //     ]));
 
-        $attribute = $database->renameAttribute('colors', 'name', 'verbose');
+    //     $attribute = $database->renameAttribute('colors', 'name', 'verbose');
 
-        $this->assertTrue($attribute);
+    //     $this->assertTrue($attribute);
 
-        $colors = $database->getCollection('colors');
-        $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
-        $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
-        $this->assertCount(2, $colors->getAttribute('attributes'));
+    //     $colors = $database->getCollection('colors');
+    //     $this->assertEquals('hex', $colors->getAttribute('attributes')[1]['$id']);
+    //     $this->assertEquals('verbose', $colors->getAttribute('attributes')[0]['$id']);
+    //     $this->assertCount(2, $colors->getAttribute('attributes'));
 
-        // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
-        $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
-        $this->assertCount(1, $colors->getAttribute('indexes'));
+    //     // Attribute in index is renamed automatically on adapter-level. What we need to check is if metadata is properly updated
+    //     $this->assertEquals('verbose', $colors->getAttribute('indexes')[0]->getAttribute("attributes")[0]);
+    //     $this->assertCount(1, $colors->getAttribute('indexes'));
 
-        // Document should be there if adapter migrated properly
-        $document = $database->findOne('colors', []);
-        $this->assertEquals('black', $document->getAttribute('verbose'));
-        $this->assertEquals('#000000', $document->getAttribute('hex'));
-        $this->assertEquals(null, $document->getAttribute('name'));
-    }
+    //     // Document should be there if adapter migrated properly
+    //     $document = $database->findOne('colors', []);
+    //     $this->assertEquals('black', $document->getAttribute('verbose'));
+    //     $this->assertEquals('#000000', $document->getAttribute('hex'));
+    //     $this->assertEquals(null, $document->getAttribute('name'));
+    // }
 
     /**
      * @depends testRenameAttribute
@@ -2888,36 +2888,36 @@ abstract class Base extends TestCase
         ]));
     }
 
-    /**
-     * @depends testUpdateAttributeDefault
-     * @depends testUpdateAttributeFormat
-     */
-    public function testUpdateAttributeStructure()
-    {
-        // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
+    // /**
+    //  * @depends testUpdateAttributeDefault
+    //  * @depends testUpdateAttributeFormat
+    //  */
+    // public function testUpdateAttributeStructure()
+    // {
+    //     // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
 
-        $database = static::getDatabase();
+    //     $database = static::getDatabase();
 
-        $doc = $database->getDocument('flowers', 'LiliPriced');
-        $this->assertIsNumeric($doc->getAttribute('price'));
-        $this->assertEquals(500, $doc->getAttribute('price'));
+    //     $doc = $database->getDocument('flowers', 'LiliPriced');
+    //     $this->assertIsNumeric($doc->getAttribute('price'));
+    //     $this->assertEquals(500, $doc->getAttribute('price'));
 
-        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
-        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
+    //     $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
+    //     $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
 
-        // Delete cache to force read from database with new schema
-        $database->deleteCachedDocument('flowers', 'LiliPriced');
+    //     // Delete cache to force read from database with new schema
+    //     $database->deleteCachedDocument('flowers', 'LiliPriced');
 
-        $doc = $database->getDocument('flowers', 'LiliPriced');
+    //     $doc = $database->getDocument('flowers', 'LiliPriced');
 
-        $this->assertIsString($doc->getAttribute('price'));
-        $this->assertEquals('500', $doc->getAttribute('price'));
+    //     $this->assertIsString($doc->getAttribute('price'));
+    //     $this->assertEquals('500', $doc->getAttribute('price'));
 
-        // String to Datetime
-        $database->deleteCachedDocument('flowers', 'flowerWithDate');
-        $doc = $database->getDocument('flowers', 'flowerWithDate');
-        $this->assertEquals('2000-06-12 14:12:55.000', $doc->getAttribute('date'));
-    }
+    //     // String to Datetime
+    //     $database->deleteCachedDocument('flowers', 'flowerWithDate');
+    //     $doc = $database->getDocument('flowers', 'flowerWithDate');
+    //     $this->assertEquals('2000-06-12 14:12:55.000', $doc->getAttribute('date'));
+    // }
 
     /**
      * @depends testCreatedAtUpdatedAt

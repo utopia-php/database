@@ -336,20 +336,7 @@ class Database
     {
         $this->adapter->create($name);
         $this->setDefaultDatabase($name);
-        $this->createMetadata();
-
-        return true;
-    }
-
-    /**
-     * Create Metadata collection.
-     * @return bool
-     * @throws LimitException
-     * @throws AuthorizationException
-     * @throws StructureException
-     */
-    public function createMetadata(): bool
-    {
+        
         /**
          * Create array of attribute documents
          * @var Document[] $attributes

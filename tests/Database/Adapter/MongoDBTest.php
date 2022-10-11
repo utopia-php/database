@@ -5,11 +5,10 @@ namespace Utopia\Tests\Adapter;
 use Redis;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\Mongo\MongoClient;
-use Utopia\Database\Adapter\Mongo\MongoClientOptions;
-use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
-
+use Utopia\Mongo\MongoClient;
+use Utopia\Mongo\MongoClientOptions;
 use Utopia\Tests\Base;
 
 class MongoDBTest extends Base
@@ -44,6 +43,7 @@ class MongoDBTest extends Base
 
     /**
      * @return Database
+     * @throws \Exception
      */
     static function getDatabase(): Database
     {
@@ -56,8 +56,10 @@ class MongoDBTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
+        $schema = 'utopiaTests'; // same as $this->testDatabase
+
         $options = new MongoClientOptions(
-            'utopia_testing',
+            $schema,
             'mongo',
             27017,
             'root',
@@ -66,8 +68,8 @@ class MongoDBTest extends Base
 
         $client = new MongoClient($options, false);
 
-        $database = new Database(new MongoDBAdapter($client), $cache);
-        $database->setDefaultDatabase('utopiaTests');
+        $database = new Database(new Mongo($client), $cache);
+        $database->setDefaultDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
 
 

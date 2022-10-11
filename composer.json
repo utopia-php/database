@@ -31,6 +31,7 @@
         "ext-mongodb": "*"
     },
     "require-dev": {
+        "laravel/pint": "1.2.*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
         "swoole/ide-helper": "4.8.0",

@@ -2,17 +2,107 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Database;
 use Utopia\Database\Role;
 use Utopia\Validator;
 
 class Roles extends Validator
 {
+    // Roles
+    const ROLE_ANY = 'any';
+    const ROLE_GUESTS = 'guests';
+    const ROLE_USERS = 'users';
+    const ROLE_USER = 'user';
+    const ROLE_TEAM = 'team';
+    const ROLE_MEMBER = 'member';
+
+    const ROLES = [
+        self::ROLE_ANY,
+        self::ROLE_GUESTS,
+        self::ROLE_USERS,
+        self::ROLE_USER,
+        self::ROLE_TEAM,
+        self::ROLE_MEMBER,
+    ];
+
     protected string $message = 'Roles Error';
 
     protected array $allowed;
 
     protected int $length;
+
+    const CONFIG = [
+        self::ROLE_ANY => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        self::ROLE_GUESTS => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        self::ROLE_USERS => [
+            'identifier' => [
+                'allowed' => false,
+                'required' => false,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+                'options' => self::USER_DIMENSIONS
+            ],
+        ],
+        self::ROLE_USER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+                'options' => self::USER_DIMENSIONS
+            ],
+        ],
+        self::ROLE_TEAM => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => true,
+                'required' => false,
+            ],
+        ],
+        self::ROLE_MEMBER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+    ];
+
+    // Dimensions
+    const DIMENSION_VERIFIED = 'verified';
+    const DIMENSION_UNVERIFIED = 'unverified';
+
+    const USER_DIMENSIONS = [
+        self::DIMENSION_VERIFIED,
+        self::DIMENSION_UNVERIFIED,
+    ];
 
     /**
      * Roles constructor.
@@ -20,7 +110,7 @@ class Roles extends Validator
      * @param int $length maximum amount of role. 0 means unlimited.
      * @param array $allowed allowed roles. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowed = Database::ROLES)
+    public function __construct(int $length = 0, array $allowed = self::ROLES)
     {
         $this->length = $length;
         $this->allowed = $allowed;
@@ -135,10 +225,10 @@ class Roles extends Validator
     {
         $key = new Key();
 
-        $config = Database::ROLE_CONFIGURATION[$role] ?? null;
+        $config = self::CONFIG[$role] ?? null;
 
         if (empty($config)) {
-            $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', Database::ROLES) . '.';
+            $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', self::ROLES) . '.';
             return false;
         }
 

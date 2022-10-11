@@ -141,7 +141,7 @@ Below is a list of supported adapters, and their compatibly tested versions alon
 | MySQL | ✅ | 8.0 |
 | Postgres | 🛠 | 13.0 |
 | MongoDB | ✅ | 3.6 |
-| SQLlite | 🛠 | 3.35 |
+| SQLlite | ✅ | 3.38 |
 
 ` ✅  - supported, 🛠  - work in progress`
 

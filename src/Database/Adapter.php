@@ -352,15 +352,35 @@ abstract class Adapter
      * 
      * @return int
      */
-    abstract public function getStringLimit(): int;
+    abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
      * 
      * @return int
      */
-    abstract public function getIntLimit(): int;
+    abstract public function getLimitForInt(): int;
 
+    /**
+     * Get maximum attributes limit.
+     * 
+     * @return int
+     */
+    abstract public function getLimitForAttributes(): int;
+
+    /**
+     * Get maximum index limit.
+     * 
+     * @return int
+     */
+    abstract public function getLimitForIndexes(): int;
+
+    /**
+     * Is schemas supported?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForSchemas(): bool;
     /**
      * Is index supported?
      * 
@@ -383,19 +403,41 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
+     * Does the adapter handle casting?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForCasting(): bool;
+
+    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection
      * @return int
      */
-    abstract public function getAttributeCount(Document $collection): int;
+    abstract public function getCountOfAttributes(Document $collection): int;
 
     /**
-     * Get maximum column limit.
+     * Get current index count from collection document
      * 
+     * @param Document $collection
      * @return int
      */
-    abstract public function getAttributeLimit(): int;
+    abstract public function getCountOfIndexes(Document $collection): int;
+
+    /**
+     * Returns number of attributes used by default.
+     *
+     * @return int
+     */
+    abstract public static function getCountOfDefaultAttributes(): int;
+
+    /**
+     * Returns number of indexes used by default.
+     *
+     * @return int
+     */
+    abstract public static function getCountOfDefaultIndexes(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row
@@ -404,20 +446,6 @@ abstract class Adapter
      * @return int
      */
     abstract public static function getRowLimit(): int;
-
-    /**
-     * Returns number of attributes used by default.
-     *
-     * @return int
-     */
-    abstract static public function getNumberOfDefaultAttributes(): int;
-
-    /**
-     * Returns number of indexes used by default.
-     *
-     * @return int
-     */
-    abstract static public function getNumberOfDefaultIndexes(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.
@@ -431,26 +459,11 @@ abstract class Adapter
     abstract public function getAttributeWidth(Document $collection): int;
 
     /**
-     * Get current index count from collection document
+     * Get list of keywords that cannot be used
      * 
-     * @param Document $collection
-     * @return int
+     * @return string[]
      */
-    abstract public function getIndexCount(Document $collection): int;
-
-    /**
-     * Get maximum index limit.
-     * 
-     * @return int
-     */
-    abstract public function getIndexLimit(): int;
-
-    /**
-     * Does the adapter handle casting?
-     * 
-     * @return bool
-     */
-    abstract public function getSupportForCasting(): bool;
+    abstract public function getKeywords(): array;
 
     /**
      * Filter Keys

@@ -88,8 +88,5 @@ class DateTime
         } catch (\Throwable $th) {
             return $dbFormat;
         }
-
     }
-
-
 }

@@ -234,7 +234,7 @@ class Query
                     \array_pop($stack);
                     $stackCount--;
 
-                    if (!empty($currentParam)) {
+                    if (strlen($currentParam)) {
                         $currentArrayParam[] = $currentParam;
                     }
 
@@ -251,7 +251,7 @@ class Query
                     } else {
                         // Append from parap builder. Either value, or array
                         if (empty($currentArrayParam)) {
-                            if (!empty($currentParam)) {
+                            if (strlen($currentParam)) {
                                 $params[] = $currentParam;
                             }
 
@@ -650,7 +650,7 @@ class Query
      * 
      * @return Query[]
      */
-    public static function parseQueries(array $queries) : array
+    public static function parseQueries(array $queries): array
     {
         $parsed = [];
         foreach ($queries as $query) {

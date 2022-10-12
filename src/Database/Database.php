@@ -66,13 +66,14 @@ class Database
     const TTL = 60 * 60 * 24; // 24 hours
 
     // Events
+    const EVENT_ALL = '*';
     const EVENT_DATABASE_CREATE = 'database_create';
-    const EVENT_DELETE_DATABASE = 'delete_database';
-    const EVENT_CREATE_COLLECTION = 'create_collection';
-    const EVENT_DELETE_COLLECTION = 'delete_collection';
-    const EVENT_CREATE_DOCUMENT = 'create_document';
-    const EVENT_UPDATE_DOCUMENT = 'update_document';
-    const EVENT_DELETE_DOCUMENT = 'delete_document';
+    const EVENT_DATABASE_DELETE = 'database_delete';
+    const EVENT_COLLECTION_CREATE = 'collection_delete';
+    const EVENT_COLLECTION_DELETE = 'collection_delete';
+    const EVENT_DOCUMENT_CREATE = 'document_create';
+    const EVENT_DOCUMENT_UPDATE = 'document_update';
+    const EVENT_DOCUMENT_DELETE = 'document_delete';
 
     /**
      * @var Adapter
@@ -306,7 +307,7 @@ class Database
      */
     protected function trigger(string $event, mixed $args = null): void
     {
-        foreach ($this->listeners['*'] as $callback) {
+        foreach ($this->listeners[self::EVENT_ALL] as $callback) {
             call_user_func($event, $args);
         }
 
@@ -406,7 +407,7 @@ class Database
 
         $this->createCollection(self::METADATA, $attributes);
 
-        $this->trigger(self::EVENT_CREATE_DATABASE, $name);
+        $this->trigger(self::EVENT_DATABASE_CREATE, $name);
         return true;
     }
 
@@ -444,7 +445,7 @@ class Database
     public function delete(string $name): bool
     {
         $deleted = $this->adapter->delete($name);
-        $this->trigger(self::EVENT_DELETE_DATABASE, ['name' => $name, 'deleted' => $deleted]);
+        $this->trigger(self::EVENT_DATABASE_DELETE, ['name' => $name, 'deleted' => $deleted]);
         return $deleted;
     }
 
@@ -506,7 +507,7 @@ class Database
         }
 
         $createdCollection = $this->createDocument(self::METADATA, $collection);
-        $this->trigger(self::EVENT_CREATE_COLLECTION, $createdCollection);
+        $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
         return $createdCollection;
     }
 
@@ -558,7 +559,7 @@ class Database
         $this->adapter->deleteCollection($id);
 
         $deleted = $this->deleteDocument(self::METADATA, $id);
-        $this->trigger(self::EVENT_DELETE_COLLECTION, ['id' => $id, 'deleted' => $deleted]);
+        $this->trigger(self::EVENT_COLLECTION_DELETE, ['id' => $id, 'deleted' => $deleted]);
         return $deleted;
     }
 
@@ -1292,7 +1293,7 @@ class Database
 
         $document = $this->decode($collection, $document);
         
-        $this->trigger(self::EVENT_CREATE_DOCUMENT, $document);
+        $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
         return $document;
     }
 
@@ -1338,7 +1339,7 @@ class Database
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
-        $this->trigger(self::EVENT_UPDATE_DOCUMENT, $document);
+        $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
         return $document;
     }
 
@@ -1367,7 +1368,7 @@ class Database
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
-        $this->trigger(self::EVENT_DELETE_DOCUMENT, ['id' => $id, 'collection' => $collection, 'deleted' => $deleted]);
+        $this->trigger(self::EVENT_DOCUMENT_DELETE, ['id' => $id, 'collection' => $collection, 'deleted' => $deleted]);
         return $deleted;
     }
 

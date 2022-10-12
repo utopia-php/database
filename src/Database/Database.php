@@ -65,6 +65,15 @@ class Database
     // Cache
     const TTL = 60 * 60 * 24; // 24 hours
 
+    // Events
+    const EVENT_CREATE_DATABASE = 'create_database';
+    const EVENT_DELETE_DATABASE = 'delete_database';
+    const EVENT_CREATE_COLLECTION = 'create_collection';
+    const EVENT_DELETE_COLLECTION = 'delete_collection';
+    const EVENT_CREATE_DOCUMENT = 'create_document';
+    const EVENT_UPDATE_DOCUMENT = 'update_document';
+    const EVENT_DELETE_DOCUMENT = 'delete_document';
+
     /**
      * @var Adapter
      */
@@ -188,6 +197,13 @@ class Database
     private array $instanceFilters = [];
 
     /**
+     * @var array
+     */
+    protected array $listeners = [
+        '*' => [],
+    ];
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
@@ -263,6 +279,40 @@ class Database
                 return DateTime::formatTz($value);
             }
         );
+    }
+
+    /**
+     * Add listener to events
+     *
+     * @param string $event
+     * @param callable $callback
+     * @return self
+     */
+    public function on(string $event, callable $callback): self
+    {
+        if(!isset($this->listeners[$event])) {
+            $this->listeners[$event] = [];
+        }
+        $this->listeners[$event][] = $callback;
+        return $this;
+    }
+
+    /**
+     * Trigger callback for events
+     *
+     * @param string $event
+     * @param array|null $args
+     * @return void
+     */
+    protected function trigger(string $event, mixed $args = null): void
+    {
+        foreach ($this->listeners['*'] as $callback) {
+            call_user_func($event, $args);
+        }
+
+        foreach(($this->listeners[$event] ?? []) as $callback) {
+            call_user_func($event, $args);
+        }
     }
 
     /**
@@ -356,6 +406,7 @@ class Database
 
         $this->createCollection(self::METADATA, $attributes);
 
+        $this->trigger(self::EVENT_CREATE_DATABASE, $name);
         return true;
     }
 
@@ -392,7 +443,9 @@ class Database
      */
     public function delete(string $name): bool
     {
-        return $this->adapter->delete($name);
+        $deleted = $this->adapter->delete($name);
+        $this->trigger(self::EVENT_DELETE_DATABASE, ['name' => $name, 'deleted' => $deleted]);
+        return $deleted;
     }
 
     /**
@@ -452,7 +505,9 @@ class Database
             }
         }
 
-        return $this->createDocument(self::METADATA, $collection);
+        $createdCollection = $this->createDocument(self::METADATA, $collection);
+        $this->trigger(self::EVENT_CREATE_COLLECTION, $createdCollection);
+        return $createdCollection;
     }
 
     /**
@@ -502,7 +557,9 @@ class Database
     {
         $this->adapter->deleteCollection($id);
 
-        return $this->deleteDocument(self::METADATA, $id);
+        $deleted = $this->deleteDocument(self::METADATA, $id);
+        $this->trigger(self::EVENT_DELETE_COLLECTION, ['id' => $id, 'deleted' => $deleted]);
+        return $deleted;
     }
 
     /**
@@ -1234,7 +1291,8 @@ class Database
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         $document = $this->decode($collection, $document);
-
+        
+        $this->trigger(self::EVENT_CREATE_DOCUMENT, $document);
         return $document;
     }
 
@@ -1280,6 +1338,7 @@ class Database
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
+        $this->trigger(self::EVENT_UPDATE_DOCUMENT, $document);
         return $document;
     }
 
@@ -1307,7 +1366,9 @@ class Database
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
-        return $this->adapter->deleteDocument($collection->getId(), $id);
+        $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
+        $this->trigger(self::EVENT_DELETE_DOCUMENT, ['id' => $id, 'collection' => $collection, 'deleted' => $deleted]);
+        return $deleted;
     }
 
     /**

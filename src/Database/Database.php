@@ -66,7 +66,7 @@ class Database
     const TTL = 60 * 60 * 24; // 24 hours
 
     // Events
-    const EVENT_CREATE_DATABASE = 'create_database';
+    const EVENT_DATABASE_CREATE = 'database_create';
     const EVENT_DELETE_DATABASE = 'delete_database';
     const EVENT_CREATE_COLLECTION = 'create_collection';
     const EVENT_DELETE_COLLECTION = 'delete_collection';

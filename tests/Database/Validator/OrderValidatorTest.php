@@ -2,11 +2,11 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Validator\OrderAttributes;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\OrderAttributes;
 
 class OrderValidatorTest extends TestCase
 {
@@ -120,8 +120,8 @@ class OrderValidatorTest extends TestCase
             $this->schema[] = new Document($attribute);
         }
 
-           // Query validator expects Document[]
-           foreach ($this->indexes as $index) {
+        // Query validator expects Document[]
+        foreach ($this->indexes as $index) {
             $this->indexesSchema[] = new Document($index);
         }
     }

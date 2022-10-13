@@ -4,12 +4,9 @@ namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
 
 class IDTest extends TestCase
 {
-
     public function testCustomID()
     {
         $id = ID::custom('test');

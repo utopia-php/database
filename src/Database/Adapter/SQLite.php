@@ -2,17 +2,17 @@
 
 namespace Utopia\Database\Adapter;
 
-use PDO;
 use Exception;
+use PDO;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\ID;
 
 /**
  * Main differences from MariaDB and MySQL:
- * 
+ *
  * 1. No concept of a schema. All tables are in the same schema.
  * 2. AUTO_INCREMENT is AUTOINCREAMENT.
  * 3. Can't create indexes in the same statement as creating a table.
@@ -30,9 +30,10 @@ class SQLite extends MySQL
      * Check if Database exists
      * Optionally check if collection exists in Database
      *
-     * @param string $database
-     * @param string $collection
+     * @param  string  $database
+     * @param  string  $collection
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -54,14 +55,15 @@ class SQLite extends MySQL
 
         $document = $stmt->fetch();
 
-        return (($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}");
+        return ($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}";
     }
 
     /**
      * Create Database
      *
-     * @param string $name
+     * @param  string  $name
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -73,8 +75,9 @@ class SQLite extends MySQL
     /**
      * Delete Database
      *
-     * @param string $name
+     * @param  string  $name
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -86,10 +89,11 @@ class SQLite extends MySQL
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param  string  $name
+     * @param  Document[]  $attributes
+     * @param  Document[]  $indexes
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -117,9 +121,9 @@ class SQLite extends MySQL
                     `_uid` CHAR(255) NOT NULL,
                     `_createdAt` datetime(3) DEFAULT NULL,
                     `_updatedAt` datetime(3) DEFAULT NULL,
-                    `_permissions` MEDIUMTEXT DEFAULT NULL".((!empty($attributes)) ? ',' : '')."
-                    " . substr(\implode(' ', $attributes), 0, -2) . "
-                )")
+                    `_permissions` MEDIUMTEXT DEFAULT NULL".((! empty($attributes)) ? ',' : '').'
+                    '.substr(\implode(' ', $attributes), 0, -2).'
+                )')
             ->execute();
 
         $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
@@ -148,10 +152,10 @@ class SQLite extends MySQL
         } catch (\Throwable $th) {
             var_dump($th->getMessage());
         }
-        
+
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
         $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission'], [], []);
-        
+
         $this->getPDO()->commit();
 
         // Update $this->getCountOfIndexes when adding another default index
@@ -160,8 +164,10 @@ class SQLite extends MySQL
 
     /**
      * Delete Collection
-     * @param string $id
+     *
+     * @param  string  $id
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -187,13 +193,14 @@ class SQLite extends MySQL
     /**
      * Update Attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size
+     * @param  bool  $signed
+     * @param  bool  $array
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -205,10 +212,11 @@ class SQLite extends MySQL
     /**
      * Rename Index
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
+     * @param  string  $collection
+     * @param  string  $old
+     * @param  string  $new
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -221,8 +229,8 @@ class SQLite extends MySQL
         $indexs = json_decode($collectionDocument['indexes'], true);
         $index = null;
 
-        foreach($indexs as $node) {
-            if($node['key'] === $old) {
+        foreach ($indexs as $node) {
+            if ($node['key'] === $old) {
                 $index = $node;
                 break;
             }
@@ -246,13 +254,14 @@ class SQLite extends MySQL
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  array  $attributes
+     * @param  array  $lengths
+     * @param  array  $orders
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -269,9 +278,10 @@ class SQLite extends MySQL
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
+     *
      * @throws Exception
      * @throws PDOException
      */
@@ -288,9 +298,10 @@ class SQLite extends MySQL
     /**
      * Create Document
      *
-     * @param string $collection
-     * @param Document $document
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
+     *
      * @throws Exception
      * @throws PDOException
      * @throws Duplicate
@@ -314,14 +325,14 @@ class SQLite extends MySQL
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
-            $values[] = 'value_' . $bindIndex;
+            $values[] = 'value_'.$bindIndex;
             $columns[] = "`{$column}`";
             $bindIndex++;
         }
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO `{$this->getNamespace()}_{$name}`
-                (".implode(', ', $columns).") VALUES (:".implode(', :', $values).");");
+                (".implode(', ', $columns).') VALUES (:'.implode(', :', $values).');');
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -331,10 +342,10 @@ class SQLite extends MySQL
                 $value = json_encode($value);
             }
 
-            $bindKey = 'value_' . $attributeIndex;
+            $bindKey = 'value_'.$attributeIndex;
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $value = (is_bool($value)) ? (int) $value : $value;
+            $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
 
@@ -346,15 +357,15 @@ class SQLite extends MySQL
             }
         }
 
-        if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+        if (! empty($permissions)) {
+            $queryPermissions = "INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES ".implode(', ', $permissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
 
         try {
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("select last_insert_rowid() as id");
+            $statment = $this->getPDO()->prepare('select last_insert_rowid() as id');
             $statment->execute();
             $last = $statment->fetch();
             $document['$internalId'] = $last['id'];
@@ -365,16 +376,16 @@ class SQLite extends MySQL
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
             switch ($e->getCode()) {
-                case "1062":
-                case "23000":
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                break;
+                case '1062':
+                case '23000':
+                    throw new Duplicate('Duplicated document: '.$e->getMessage());
+                    break;
                 default:
                     throw $e;
             }
         }
 
-        if (!$this->getPDO()->commit()) {
+        if (! $this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
 
@@ -384,9 +395,10 @@ class SQLite extends MySQL
     /**
      * Update Document
      *
-     * @param string $collection
-     * @param Document $document
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
+     *
      * @throws Exception
      * @throws PDOException
      * @throws Duplicate
@@ -430,9 +442,9 @@ class SQLite extends MySQL
          * Get removed Permissions
          */
         $removals = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-            if (!empty($diff)) {
+            if (! empty($diff)) {
                 $removals[$type] = $diff;
             }
         }
@@ -441,9 +453,9 @@ class SQLite extends MySQL
          * Get added Permissions
          */
         $additions = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-            if (!empty($diff)) {
+            if (! empty($diff)) {
                 $additions[$type] = $diff;
             }
         }
@@ -452,19 +464,19 @@ class SQLite extends MySQL
          * Query to remove permissions
          */
         $removeQuery = '';
-        if (!empty($removals)) {
+        if (! empty($removals)) {
             $removeQuery = 'AND (';
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
+                    AND _permission IN (".implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))).')
+                )';
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
                 }
             }
         }
-        if (!empty($removeQuery)) {
+        if (! empty($removeQuery)) {
             $removeQuery .= ')';
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
@@ -486,7 +498,7 @@ class SQLite extends MySQL
         /**
          * Query to add permissions
          */
-        if (!empty($additions)) {
+        if (! empty($additions)) {
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
@@ -498,10 +510,10 @@ class SQLite extends MySQL
                 ->prepare(
                     "
                     INSERT INTO `{$this->getNamespace()}_{$name}_perms`
-                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
+                    (_document, _type, _permission) VALUES ".\implode(', ', $values)
                 );
 
-            $stmtAddPermissions->bindValue(":_uid", $document->getId());
+            $stmtAddPermissions->bindValue(':_uid', $document->getId());
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
                     $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
@@ -512,12 +524,11 @@ class SQLite extends MySQL
         /**
          * Update Attributes
          */
-
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $bindKey = 'key_'.$bindIndex;
+            $columns .= "`{$column}`".'=:'.$bindKey.',';
             $bindIndex++;
         }
 
@@ -533,14 +544,14 @@ class SQLite extends MySQL
                 $value = json_encode($value);
             }
 
-            $bindKey = 'key_' . $attributeIndex;
+            $bindKey = 'key_'.$attributeIndex;
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $value = (is_bool($value)) ? (int) $value : $value;
+            $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
 
-        if (!empty($attributes)) {
+        if (! empty($attributes)) {
             try {
                 $stmt->execute();
                 if (isset($stmtRemovePermissions)) {
@@ -554,15 +565,14 @@ class SQLite extends MySQL
                 switch ($e->getCode()) {
                     case '1062':
                     case '23000':
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
-
+                        throw new Duplicate('Duplicated document: '.$e->getMessage());
                     default:
                         throw $e;
                 }
             }
         }
 
-        if (!$this->getPDO()->commit()) {
+        if (! $this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
 
@@ -592,8 +602,9 @@ class SQLite extends MySQL
     /**
      * Get SQL Index Type
      *
-     * @param string $type
+     * @param  string  $type
      * @return string
+     *
      * @throws Exception
      */
     protected function getSQLIndexType(string $type): string
@@ -607,21 +618,22 @@ class SQLite extends MySQL
                 return 'UNIQUE INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new Exception('Unknown Index Type:'.$type);
         }
     }
 
     /**
      * Get SQL Index
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  array  $attributes
      * @return string
+     *
      * @throws Exception
      */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $postfix = '';
 
@@ -638,7 +650,7 @@ class SQLite extends MySQL
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new Exception('Unknown Index Type:'.$type);
                 break;
         }
 
@@ -651,31 +663,33 @@ class SQLite extends MySQL
 
         foreach ($attributes as $key => $attribute) {
             $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
+            $length = (empty($length)) ? '' : '('.(int) $length.')';
             $order = $orders[$key] ?? '';
             $attribute = $this->filter($attribute);
 
             $attributes[$key] = "`{$attribute}`{$postfix} {$order}";
         }
 
-        return "CREATE {$type} `{$this->getNamespace()}_{$collection}_{$id}` ON `{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . ")";
+        return "CREATE {$type} `{$this->getNamespace()}_{$collection}_{$id}` ON `{$this->getNamespace()}_{$collection}` ( ".implode(', ', $attributes).')';
     }
 
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param  string  $collection
+     * @param  array  $roles
+     * @return string
+     *
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
+
         return "table_main._uid IN (
                     SELECT distinct(_document)
                     FROM `{$this->getNamespace()}_{$collection}_perms`
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
+                    WHERE _permission IN (".implode(', ', $roles).")
                     AND _type = 'read'
                 )";
     }
@@ -683,7 +697,7 @@ class SQLite extends MySQL
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://www.sqlite.org/lang_keywords.html
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array

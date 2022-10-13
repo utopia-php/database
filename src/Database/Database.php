@@ -4,22 +4,26 @@ namespace Utopia\Database;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Structure;
+use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Cache\Cache;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Structure;
 
 class Database
 {
     const VAR_STRING = 'string';
+
     // Simple Types
     const VAR_INTEGER = 'integer';
+
     const VAR_FLOAT = 'double';
+
     const VAR_BOOLEAN = 'boolean';
+
     const VAR_DATETIME = 'datetime';
 
     // Relationships Types
@@ -27,19 +31,27 @@ class Database
 
     // Index Types
     const INDEX_KEY = 'key';
+
     const INDEX_FULLTEXT = 'fulltext';
+
     const INDEX_UNIQUE = 'unique';
+
     const INDEX_SPATIAL = 'spatial';
+
     const INDEX_ARRAY = 'array';
 
     // Orders
     const ORDER_ASC = 'ASC';
+
     const ORDER_DESC = 'DESC';
 
     // Permissions
-    const PERMISSION_CREATE= 'create';
+    const PERMISSION_CREATE = 'create';
+
     const PERMISSION_READ = 'read';
+
     const PERMISSION_UPDATE = 'update';
+
     const PERMISSION_DELETE = 'delete';
 
     // Aggregate permissions
@@ -57,6 +69,7 @@ class Database
 
     // Cursor
     const CURSOR_BEFORE = 'before';
+
     const CURSOR_AFTER = 'after';
 
     // Lengths
@@ -87,6 +100,7 @@ class Database
 
     /**
      * List of Internal Ids
+     *
      * @var array
      */
     protected array $attributes = [
@@ -117,7 +131,7 @@ class Database
             'required' => false,
             'default' => null,
             'array' => false,
-            'filters' => ['datetime']
+            'filters' => ['datetime'],
         ],
         [
             '$id' => '$updatedAt',
@@ -128,8 +142,8 @@ class Database
             'required' => false,
             'default' => null,
             'array' => false,
-            'filters' => ['datetime']
-        ]
+            'filters' => ['datetime'],
+        ],
     ];
 
     /**
@@ -180,7 +194,7 @@ class Database
     /**
      * @var array
      */
-    static protected array $filters = [];
+    protected static array $filters = [];
 
     /**
      * @var array
@@ -188,8 +202,8 @@ class Database
     private array $instanceFilters = [];
 
     /**
-     * @param Adapter $adapter
-     * @param Cache $cache
+     * @param  Adapter  $adapter
+     * @param  Cache  $cache
      */
     public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
@@ -200,24 +214,24 @@ class Database
         self::addFilter(
             'json',
             /**
-             * @param mixed $value
+             * @param  mixed  $value
              * @return mixed
              */
             function ($value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
-                if (!is_array($value) && !$value instanceof \stdClass) {
+                if (! is_array($value) && ! $value instanceof \stdClass) {
                     return $value;
                 }
 
                 return json_encode($value);
             },
             /**
-             * @param mixed $value
+             * @param  mixed  $value
              * @return mixed
              */
             function ($value) {
-                if (!is_string($value)) {
+                if (! is_string($value)) {
                     return $value;
                 }
 
@@ -230,6 +244,7 @@ class Database
                         if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
                             return new Document($item);
                         }
+
                         return $item;
                     }, $value);
                 }
@@ -241,22 +256,26 @@ class Database
         self::addFilter(
             'datetime',
             /**
-             * @param string|null $value
+             * @param  string|null  $value
              * @return string|null
+             *
              * @throws Exception
              */
             function (?string $value) {
-                if (is_null($value)) return null;
+                if (is_null($value)) {
+                    return null;
+                }
                 try {
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+
                     return DateTime::format($value);
                 } catch (\Throwable $th) {
                     return $value;
                 }
             },
             /**
-             * @param string|null $value
+             * @param  string|null  $value
              * @return string|null
              */
             function (?string $value) {
@@ -270,8 +289,7 @@ class Database
      *
      * Set namespace to divide different scope of data sets
      *
-     * @param string $namespace
-     *
+     * @param  string  $namespace
      * @return $this
      *
      * @throws Exception
@@ -300,10 +318,10 @@ class Database
     /**
      * Set database to use for current scope
      *
-     * @param string $name
-     * @param bool $reset
-     *
+     * @param  string  $name
+     * @param  bool  $reset
      * @return bool
+     *
      * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
@@ -316,9 +334,9 @@ class Database
      *
      * Get Database from current scope
      *
-     * @throws Exception
-     *
      * @return string
+     *
+     * @throws Exception
      */
     public function getDefaultDatabase(): string
     {
@@ -328,17 +346,17 @@ class Database
     /**
      * Create Database
      *
-     * @param string $name
-     *
+     * @param  string  $name
      * @return bool
      */
     public function create(string $name): bool
     {
         $this->adapter->create($name);
         $this->setDefaultDatabase($name);
-        
+
         /**
          * Create array of attribute documents
+         *
          * @var Document[] $attributes
          */
         $attributes = array_map(function ($attribute) {
@@ -363,9 +381,8 @@ class Database
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
-     * @param string $collection (optional) collection name
-     *
+     * @param  string  $database database name
+     * @param  string  $collection (optional) collection name
      * @return bool
      */
     public function exists(string $database, string $collection = null): bool
@@ -386,8 +403,7 @@ class Database
     /**
      * Delete Database
      *
-     * @param string $name
-     *
+     * @param  string  $name
      * @return bool
      */
     public function delete(string $name): bool
@@ -398,17 +414,16 @@ class Database
     /**
      * Create Collection
      *
-     * @param string $id
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
-     *
+     * @param  string  $id
+     * @param  Document[]  $attributes (optional)
+     * @param  Document[]  $indexes (optional)
      * @return Document
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
+    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
         $collection = $this->getCollection($id);
-        if (!$collection->isEmpty() && $id !== self::METADATA){
-            throw new Duplicate('Collection ' . $id . ' Exists!');
+        if (! $collection->isEmpty() && $id !== self::METADATA) {
+            throw new Duplicate('Collection '.$id.' Exists!');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -432,7 +447,7 @@ class Database
 
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
-            throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
+            throw new LimitException('Index limit of '.$this->adapter->getLimitForIndexes().' exceeded. Cannot create collection.');
         }
 
         // check attribute limits, if given
@@ -441,14 +456,14 @@ class Database
                 $this->adapter->getLimitForAttributes() > 0 &&
                 $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
             ) {
-                throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Column limit of '.$this->adapter->getLimitForAttributes().' exceeded. Cannot create collection.');
             }
 
             if (
                 $this->adapter->getRowLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit()
             ) {
-                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Row width limit of '.$this->adapter->getRowLimit().' exceeded. Cannot create collection.');
             }
         }
 
@@ -458,9 +473,9 @@ class Database
     /**
      * Get Collection
      *
-     * @param string $id
-     *
+     * @param  string  $id
      * @return Document
+     *
      * @throws Exception
      */
     public function getCollection(string $id): Document
@@ -471,10 +486,10 @@ class Database
     /**
      * List Collections
      *
-     * @param int $offset
-     * @param int $limit
-     *
+     * @param  int  $offset
+     * @param  int  $limit
      * @return array
+     *
      * @throws Exception
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
@@ -483,7 +498,7 @@ class Database
 
         $result = $this->find(self::METADATA, [
             Query::limit($limit),
-            Query::offset($offset)
+            Query::offset($offset),
         ]);
 
         Authorization::reset();
@@ -494,8 +509,7 @@ class Database
     /**
      * Delete Collection
      *
-     * @param string $id
-     *
+     * @param  string  $id
      * @return bool
      */
     public function deleteCollection(string $id): bool
@@ -508,18 +522,17 @@ class Database
     /**
      * Create Attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
-     * @param bool $required
-     * @param array|bool|callable|int|float|object|resource|string|null $default
-     * @param bool $signed
-     * @param bool $array
-     * @param string $format optional validation format of attribute
-     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
-     * @param array $filters
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size utf8mb4 chars length
+     * @param  bool  $required
+     * @param  array|bool|callable|int|float|object|resource|string|null  $default
+     * @param  bool  $signed
+     * @param  bool  $array
+     * @param  string  $format optional validation format of attribute
+     * @param  string  $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param  array  $filters
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
@@ -537,8 +550,8 @@ class Database
 
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(array_diff($requiredFilters, $filters))) {
-            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        if (! empty(array_diff($requiredFilters, $filters))) {
+            throw new Exception("Attribute of type: $type requires the following filters: ".implode(',', $requiredFilters));
         }
 
         if (
@@ -549,8 +562,8 @@ class Database
         }
 
         if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+            if (! Structure::hasFormat($format, $type)) {
+                throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
             }
         }
 
@@ -578,14 +591,14 @@ class Database
         switch ($type) {
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
-                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                    throw new Exception('Max size allowed for string is: '.number_format($this->adapter->getLimitForString()));
                 }
                 break;
 
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
-                    throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                    throw new Exception('Max size allowed for int is: '.number_format($limit));
                 }
                 break;
             case self::VAR_FLOAT:
@@ -593,12 +606,12 @@ class Database
             case self::VAR_DATETIME:
                 break;
             default:
-                throw new Exception('Unknown attribute type: ' . $type);
+                throw new Exception('Unknown attribute type: '.$type);
                 break;
         }
 
         // only execute when $default is given
-        if (!\is_null($default)) {
+        if (! \is_null($default)) {
             if ($required === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
@@ -618,11 +631,10 @@ class Database
     /**
      * Get the list of required filters for each data type
      *
-     * @param string $type Type of the attribute
-     *
+     * @param  string  $type Type of the attribute
      * @return array
      */
-    protected function getRequiredFilters(string $type): array 
+    protected function getRequiredFilters(string $type): array
     {
         switch ($type) {
             case self::VAR_STRING:
@@ -640,11 +652,11 @@ class Database
     /**
      * Function to validate if the default value of an attribute matches its attribute type
      *
-     * @param string $type Type of the attribute
-     * @param mixed $default Default value of the attribute
+     * @param  string  $type Type of the attribute
+     * @param  mixed  $default Default value of the attribute
+     * @return void
      *
      * @throws Exception
-     * @return void
      */
     protected function validateDefaultTypes(string $type, mixed $default): void
     {
@@ -659,6 +671,7 @@ class Database
             foreach ($default as $value) {
                 $this->validateDefaultTypes($type, $value);
             }
+
             return;
         }
 
@@ -668,16 +681,16 @@ class Database
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
-                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new Exception('Default value '.$default.' does not match given type '.$type);
                 }
                 break;
             case self::VAR_DATETIME:
                 if ($defaultType !== self::VAR_STRING) {
-                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new Exception('Default value '.$default.' does not match given type '.$type);
                 }
                 break;
             default:
-                throw new Exception('Unknown attribute type: ' . $type);
+                throw new Exception('Unknown attribute type: '.$type);
                 break;
         }
     }
@@ -685,11 +698,10 @@ class Database
     /**
      * Update attribute metadata. Utility method for update attribute methods.
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $key Metadata key to update
-     * @param callable $updateCallback method that recieves document, and returns it with changes applied
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $key Metadata key to update
+     * @param  callable  $updateCallback method that recieves document, and returns it with changes applied
      * @return Document
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
@@ -719,10 +731,9 @@ class Database
     /**
      * Update required status of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param bool $required
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  bool  $required
      * @return void
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): void
@@ -735,17 +746,16 @@ class Database
     /**
      * Update format of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $format validation format of attribute
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $format validation format of attribute
      * @return void
      */
     public function updateAttributeFormat(string $collection, string $id, string $format): void
     {
         $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
-            if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
+            if (! Structure::hasFormat($format, $attribute->getAttribute('type'))) {
+                throw new Exception('Format ("'.$format.'") not available for this attribute type ("'.$attribute->getAttribute('type').'")');
             }
 
             $attribute->setAttribute('format', $format);
@@ -755,10 +765,9 @@ class Database
     /**
      * Update format options of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  array  $formatOptions assoc array with custom options that can be passed for the format validation
      * @return void
      */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): void
@@ -771,10 +780,9 @@ class Database
     /**
      * Update filters of attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param array $filters
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  array  $filters
      * @return void
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): void
@@ -787,10 +795,9 @@ class Database
     /**
      * Update default value of attribute
      *
-     * @param string $collection
-     * @param string $id
-     * @param array|bool|callable|int|float|object|resource|string|null $default
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  array|bool|callable|int|float|object|resource|string|null  $default
      * @return void
      */
     public function updateAttributeDefault(string $collection, string $id, $default = null): void
@@ -809,15 +816,14 @@ class Database
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
-     * @param bool $signed
-     * @param bool $array
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size utf8mb4 chars length
+     * @param  bool  $signed
+     * @param  bool  $array
      *
      * To update attribute key (ID), use renameAttribute instead.
-     *
      * @return bool
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
@@ -832,14 +838,14 @@ class Database
                 switch ($type) {
                     case self::VAR_STRING:
                         if ($size > $this->adapter->getLimitForString()) {
-                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                            throw new Exception('Max size allowed for string is: '.number_format($this->adapter->getLimitForString()));
                         }
                         break;
 
                     case self::VAR_INTEGER:
                         $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                         if ($size > $limit) {
-                            throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                            throw new Exception('Max size allowed for int is: '.number_format($limit));
                         }
                         break;
                     case self::VAR_FLOAT:
@@ -847,7 +853,7 @@ class Database
                     case self::VAR_DATETIME:
                         break;
                     default:
-                        throw new Exception('Unknown attribute type: ' . $type);
+                        throw new Exception('Unknown attribute type: '.$type);
                         break;
                 }
 
@@ -880,11 +886,11 @@ class Database
      * Used to check attribute limits without asking the database
      * Returns true if attribute can be added to collection, throws exception otherwise
      *
-     * @param Document $collection
-     * @param Document $attribute
+     * @param  Document  $collection
+     * @param  Document  $attribute
+     * @return bool
      *
      * @throws LimitException
-     * @return bool
      */
     public function checkAttribute(Document $collection, Document $attribute): bool
     {
@@ -897,6 +903,7 @@ class Database
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
+
             return false;
         }
 
@@ -905,6 +912,7 @@ class Database
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
+
             return false;
         }
 
@@ -914,9 +922,8 @@ class Database
     /**
      * Delete Attribute
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
@@ -943,10 +950,9 @@ class Database
     /**
      * Rename Attribute
      *
-     * @param string $collection
-     * @param string $old Current attribute ID
-     * @param string $name New attribute ID
-     *
+     * @param  string  $collection
+     * @param  string  $old Current attribute ID
+     * @param  string  $name New attribute ID
      * @return bool
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
@@ -996,10 +1002,9 @@ class Database
     /**
      * Rename Index
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     *
+     * @param  string  $collection
+     * @param  string  $old
+     * @param  string  $new
      * @return bool
      */
     public function renameIndex(string $collection, string $old, string $new): bool
@@ -1042,13 +1047,12 @@ class Database
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  array  $attributes
+     * @param  array  $lengths
+     * @param  array  $orders
      * @return bool
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
@@ -1074,25 +1078,25 @@ class Database
 
         switch ($type) {
             case self::INDEX_KEY:
-                if (!$this->adapter->getSupportForIndex()) {
+                if (! $this->adapter->getSupportForIndex()) {
                     throw new Exception('Key index is not supported');
                 }
                 break;
 
             case self::INDEX_UNIQUE:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
+                if (! $this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Unique index is not supported');
                 }
                 break;
 
             case self::INDEX_FULLTEXT:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
+                if (! $this->adapter->getSupportForUniqueIndex()) {
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;
 
             default:
-                throw new Exception('Unknown index type: ' . $type);
+                throw new Exception('Unknown index type: '.$type);
                 break;
         }
 
@@ -1117,9 +1121,8 @@ class Database
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     public function deleteIndex(string $collection, string $id): bool
@@ -1146,9 +1149,8 @@ class Database
     /**
      * Get Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return Document
      */
     public function getDocument(string $collection, string $id): Document
@@ -1158,7 +1160,7 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new Exception('test exception: ' . $collection . ':' . $id);
+            throw new Exception('test exception: '.$collection.':'.$id);
         }
 
         $collection = $this->getCollection($collection);
@@ -1168,11 +1170,11 @@ class Database
         $validator = new Authorization(self::PERMISSION_READ);
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
+        if ($cache = $this->cache->load('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, self::TTL)) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA
-                && !$validator->isValid($document->getRead())) {
+                && ! $validator->isValid($document->getRead())) {
                 return new Document();
             }
 
@@ -1187,14 +1189,14 @@ class Database
         }
 
         if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getRead())) {
+            && ! $validator->isValid($document->getRead())) {
             return new Document();
         }
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id, $document->getArrayCopy()); // save to cache after fetching from db
 
         return $document;
     }
@@ -1202,9 +1204,8 @@ class Database
     /**
      * Create Document
      *
-     * @param string $collection
-     * @param Document $document
-     *
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
      *
      * @throws AuthorizationException
@@ -1227,7 +1228,7 @@ class Database
 
         $validator = new Structure($collection);
 
-        if (!$validator->isValid($document)) {
+        if (! $validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
         }
 
@@ -1241,29 +1242,28 @@ class Database
     /**
      * Update Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return Document
      *
      * @throws Exception
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if (!$document->getId() || !$id) {
+        if (! $document->getId() || ! $id) {
             throw new Exception('Must define $id attribute');
         }
 
         $time = DateTime::now();
         $document->setAttribute('$updatedAt', $time);
 
-        $old = Authorization::skip(fn() => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
+        $old = Authorization::skip(fn () => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
         $collection = $this->getCollection($collection);
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
         if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($old->getUpdate())) {
+            && ! $validator->isValid($old->getUpdate())) {
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -1271,14 +1271,14 @@ class Database
 
         $validator = new Structure($collection);
 
-        if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+        if (! $validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
             throw new StructureException($validator->getDescription());
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id);
 
         return $document;
     }
@@ -1286,9 +1286,8 @@ class Database
     /**
      * Delete Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      *
      * @throws AuthorizationException
@@ -1297,15 +1296,15 @@ class Database
     {
         $validator = new Authorization(self::PERMISSION_DELETE);
 
-        $document = Authorization::skip(fn() => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
+        $document = Authorization::skip(fn () => $this->getDocument($collection, $id)); // Skip ensures user does not need read permission for this
         $collection = $this->getCollection($collection);
 
         if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getDelete())) {
+            && ! $validator->isValid($document->getDelete())) {
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-'.$this->getNamespace().':'.$collection->getId().':'.$id);
 
         return $this->adapter->deleteDocument($collection->getId(), $id);
     }
@@ -1313,35 +1312,33 @@ class Database
     /**
      * Cleans the all the collection's documents from the cache
      *
-     * @param string $collection
-     *
+     * @param  string  $collection
      * @return bool
      */
     public function deleteCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
+        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':*');
     }
 
     /**
      * Cleans a specific document from cache
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
+        return $this->cache->purge('cache-'.$this->getNamespace().':'.$collection.':'.$id);
     }
 
     /**
      * Find Documents
      *
-     * @param string $collection
-     * @param Query[] $queries
-     *
+     * @param  string  $collection
+     * @param  Query[]  $queries
      * @return Document[]
+     *
      * @throws Exception
      */
     public function find(string $collection, array $queries = []): array
@@ -1349,16 +1346,16 @@ class Database
         $collection = $this->getCollection($collection);
 
         $grouped = Query::groupByType($queries);
-        /** @var Query[] */ $filters = $grouped['filters'];
-        /** @var int */ $limit = $grouped['limit'];
-        /** @var int */ $offset = $grouped['offset'];
-        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
-        /** @var string[] */ $orderTypes = $grouped['orderTypes'];
-        /** @var Document */ $cursor = $grouped['cursor'];
-        /** @var string */ $cursorDirection = $grouped['cursorDirection'];
+/** @var Query[] */ $filters = $grouped['filters'];
+/** @var int */ $limit = $grouped['limit'];
+/** @var int */ $offset = $grouped['offset'];
+/** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
+/** @var string[] */ $orderTypes = $grouped['orderTypes'];
+/** @var Document */ $cursor = $grouped['cursor'];
+/** @var string */ $cursorDirection = $grouped['cursorDirection'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new Exception("cursor Document must be from the same Collection.");
+        if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new Exception('cursor Document must be from the same Collection.');
         }
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
@@ -1386,14 +1383,16 @@ class Database
     }
 
     /**
-     * @param string $collection
-     * @param array $queries
+     * @param  string  $collection
+     * @param  array  $queries
      * @return bool|Document
+     *
      * @throws Exception
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
         $results = $this->find($collection, \array_merge([Query::limit(1)], $queries));
+
         return \reset($results);
     }
 
@@ -1402,11 +1401,11 @@ class Database
      *
      * Count the number of documents. Pass $max=0 for unlimited count
      *
-     * @param string $collection
-     * @param Query[] $queries
-     * @param int $max
-     *
+     * @param  string  $collection
+     * @param  Query[]  $queries
+     * @param  int  $max
      * @return int
+     *
      * @throws Exception
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
@@ -1414,7 +1413,7 @@ class Database
         $collection = $this->getCollection($collection);
 
         if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+            throw new Exception('Collection not found');
         }
 
         $queries = Query::groupByType($queries)['filters'];
@@ -1428,12 +1427,12 @@ class Database
      *
      * Sum an attribute for all the documents. Pass $max=0 for unlimited count
      *
-     * @param string $collection
-     * @param string $attribute
-     * @param Query[] $queries
-     * @param int $max
-     *
+     * @param  string  $collection
+     * @param  string  $attribute
+     * @param  Query[]  $queries
+     * @param  int  $max
      * @return int|float
+     *
      * @throws Exception
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
@@ -1441,23 +1440,23 @@ class Database
         $collection = $this->getCollection($collection);
 
         if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+            throw new Exception('Collection not found');
         }
 
         $queries = self::convertQueries($collection, $queries);
+
         return $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
     }
 
     /**
      * Add Attribute Filter
      *
-     * @param string $name
-     * @param callable $encode
-     * @param callable $decode
-     *
+     * @param  string  $name
+     * @param  callable  $encode
+     * @param  callable  $decode
      * @return void
      */
-    static public function addFilter(string $name, callable $encode, callable $decode): void
+    public static function addFilter(string $name, callable $encode, callable $decode): void
     {
         self::$filters[$name] = [
             'encode' => $encode,
@@ -1467,24 +1466,26 @@ class Database
 
     /**
      * @return array Document
+     *
      * @throws Exception
      */
     public function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach ($this->attributes as $internal){
+        foreach ($this->attributes as $internal) {
             $attributes[] = new Document($internal);
         }
+
         return $attributes;
     }
 
     /**
      * Encode Document
      *
-     * @param Document $collection
-     * @param Document $document
-     *
+     * @param  Document  $collection
+     * @param  Document  $document
      * @return Document
+     *
      * @throws Exception|Throwable
      */
     public function encode(Document $collection, Document $document): Document
@@ -1504,7 +1505,7 @@ class Database
             }
 
             // assign default only if no no value provided
-            if (is_null($value) && !is_null($default)) {
+            if (is_null($value) && ! is_null($default)) {
                 $value = ($array) ? $default : [$default];
             } else {
                 $value = ($array) ? $value : [$value];
@@ -1518,7 +1519,7 @@ class Database
                 }
             }
 
-            if (!$array) {
+            if (! $array) {
                 $value = $value[0];
             }
 
@@ -1531,10 +1532,10 @@ class Database
     /**
      * Decode Document
      *
-     * @param Document $collection
-     * @param Document $document
-     *
+     * @param  Document  $collection
+     * @param  Document  $document
      * @return Document
+     *
      * @throws Throwable|Exception
      */
     public function decode(Document $collection, Document $document): Document
@@ -1565,9 +1566,8 @@ class Database
     /**
      * Casting
      *
-     * @param Document $collection
-     * @param Document $document
-     *
+     * @param  Document  $collection
+     * @param  Document  $document
      * @return Document
      */
     public function casting(Document $collection, Document $document): Document
@@ -1588,7 +1588,7 @@ class Database
             }
 
             if ($array) {
-                $value = (!is_string($value)) ? ($value ?? []) : json_decode($value, true);
+                $value = (! is_string($value)) ? ($value ?? []) : json_decode($value, true);
             } else {
                 $value = [$value];
             }
@@ -1599,18 +1599,18 @@ class Database
                 }
                 switch ($type) {
                     case self::VAR_BOOLEAN:
-                        $node = (bool)$node;
+                        $node = (bool) $node;
                         break;
                     case self::VAR_INTEGER:
-                        $node = (int)$node;
+                        $node = (int) $node;
                         break;
                     case self::VAR_FLOAT:
-                        $node = (float)$node;
+                        $node = (float) $node;
                         break;
                     case self::VAR_DATETIME:
                         break;
                     default:
-                        # code...
+                        // code...
                         break;
                 }
             }
@@ -1627,16 +1627,16 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the input format of the given attribute.
      *
-     * @param string $name
-     * @param mixed $value
-     * @param Document $document
-     *
+     * @param  string  $name
+     * @param  mixed  $value
+     * @param  Document  $document
      * @return mixed
+     *
      * @throws Throwable
      */
     protected function encodeAttribute(string $name, $value, Document $document)
     {
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
+        if (! array_key_exists($name, self::$filters) && ! array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
@@ -1659,15 +1659,14 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
      *
-     * @param string $name
-     * @param mixed $value
-     * @param Document $document
-     *
+     * @param  string  $name
+     * @param  mixed  $value
+     * @param  Document  $document
      * @return mixed
      */
     protected function decodeAttribute(string $name, $value, Document $document)
     {
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
+        if (! array_key_exists($name, self::$filters) && ! array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
@@ -1709,7 +1708,7 @@ class Database
 
     /**
      * Get list of keywords that cannot be used
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array
@@ -1719,7 +1718,7 @@ class Database
 
     /**
      * Get Database Adapter
-     * 
+     *
      * @return Adapter
      */
     public function getAdapter(): Adapter
@@ -1728,9 +1727,10 @@ class Database
     }
 
     /**
-     * @param Document $collection
-     * @param Query[] $queries
+     * @param  Document  $collection
+     * @param  Query[]  $queries
      * @return Query[]
+     *
      * @throws Exception
      */
     public static function convertQueries(Document $collection, array $queries): array
@@ -1754,6 +1754,7 @@ class Database
                     break;
             }
         }
+
         return $queries;
     }
 }

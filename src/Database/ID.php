@@ -4,7 +4,6 @@ namespace Utopia\Database;
 
 class ID
 {
-
     /**
      * Create a new unique ID
      *

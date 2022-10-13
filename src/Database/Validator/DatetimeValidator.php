@@ -13,11 +13,11 @@ class DatetimeValidator extends Validator
 
     public function __construct()
     {
-
     }
 
     /**
      * Validator Description.
+     *
      * @return string
      */
     public function getDescription(): string
@@ -28,7 +28,8 @@ class DatetimeValidator extends Validator
     /**
      * Is valid.
      * Returns true if valid or false if not.
-     * @param mixed $value
+     *
+     * @param  mixed  $value
      * @return bool
      */
     public function isValid($value): bool
@@ -39,9 +40,9 @@ class DatetimeValidator extends Validator
 
         try {
             new \DateTime($value);
-        }
-        catch(\Exception $e) {
+        } catch(\Exception $e) {
             $this->message = $e->getMessage();
+
             return false;
         }
 

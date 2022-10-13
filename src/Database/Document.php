@@ -8,7 +8,9 @@ use Exception;
 class Document extends ArrayObject
 {
     const SET_TYPE_ASSIGN = 'assign';
+
     const SET_TYPE_PREPEND = 'prepend';
+
     const SET_TYPE_APPEND = 'append';
 
     /**
@@ -16,27 +18,29 @@ class Document extends ArrayObject
      *
      * Construct a new fields object
      *
-     * @param array $input
-     * @throws Exception
-     * @see ArrayObject::__construct
+     * @param  array  $input
      *
+     * @throws Exception
+     *
+     * @see ArrayObject::__construct
      */
     public function __construct(array $input = [])
     {
-        if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
+        if (isset($input['$permissions']) && ! is_array($input['$permissions'])) {
             throw new Exception('$permissions must be of type array');
         }
 
         foreach ($input as $key => &$value) {
-            if (!\is_array($value)) {
+            if (! \is_array($value)) {
                 continue;
             }
             if ((isset($value['$id']) || isset($value['$collection']))) {
                 $input[$key] = new self($value);
+
                 continue;
             }
             foreach ($value as $childKey => $child) {
-                if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
+                if ((isset($child['$id']) || isset($child['$collection'])) && (! $child instanceof self)) {
                     $value[$childKey] = new self($child);
                 }
             }
@@ -114,10 +118,10 @@ class Document extends ArrayObject
         $typePermissions = [];
 
         foreach ($this->getPermissions() as $permission) {
-            if (!\str_starts_with($permission, $type)) {
+            if (! \str_starts_with($permission, $type)) {
                 continue;
             }
-            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
+            $typePermissions[] = \str_replace([$type.'(', ')', '"', ' '], '', $permission);
         }
 
         return \array_unique($typePermissions);
@@ -171,9 +175,8 @@ class Document extends ArrayObject
      *
      * Method for getting a specific fields attribute. If $name is not found $default value will be returned.
      *
-     * @param string $name
-     * @param mixed $default
-     *
+     * @param  string  $name
+     * @param  mixed  $default
      * @return mixed
      */
     public function getAttribute(string $name, $default = null)
@@ -190,10 +193,9 @@ class Document extends ArrayObject
      *
      * Method for setting a specific field attribute
      *
-     * @param string $key
-     * @param mixed $value
-     * @param string $type
-     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @param  string  $type
      * @return self
      */
     public function setAttribute(string $key, $value, string $type = self::SET_TYPE_ASSIGN): self
@@ -203,11 +205,11 @@ class Document extends ArrayObject
                 $this[$key] = $value;
                 break;
             case self::SET_TYPE_APPEND:
-                $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
+                $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
                 \array_push($this[$key], $value);
                 break;
             case self::SET_TYPE_PREPEND:
-                $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
+                $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
                 \array_unshift($this[$key], $value);
                 break;
         }
@@ -220,8 +222,7 @@ class Document extends ArrayObject
      *
      * Method for removing a specific field attribute
      *
-     * @param string $key
-     *
+     * @param  string  $key
      * @return self
      */
     public function removeAttribute(string $key): self
@@ -236,10 +237,9 @@ class Document extends ArrayObject
     /**
      * Find.
      *
-     * @param string $key
-     * @param mixed $find
-     * @param string $subject
-     *
+     * @param  string  $key
+     * @param  mixed  $find
+     * @param  string  $subject
      * @return mixed
      */
     public function find(string $key, $find, string $subject = '')
@@ -253,12 +253,14 @@ class Document extends ArrayObject
                     return $value;
                 }
             }
+
             return false;
         }
 
         if (isset($subject[$key]) && $subject[$key] === $find) {
             return $subject;
         }
+
         return false;
     }
 
@@ -267,11 +269,10 @@ class Document extends ArrayObject
      *
      * Get array child by key and value match
      *
-     * @param string $key
-     * @param mixed $find
-     * @param mixed $replace
-     * @param string $subject
-     *
+     * @param  string  $key
+     * @param  mixed  $find
+     * @param  mixed  $replace
+     * @param  string  $subject
      * @return bool
      */
     public function findAndReplace(string $key, $find, $replace, string $subject = ''): bool
@@ -283,16 +284,20 @@ class Document extends ArrayObject
             foreach ($subject as $i => &$value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     $value = $replace;
+
                     return true;
                 }
             }
+
             return false;
         }
 
         if (isset($subject[$key]) && $subject[$key] === $find) {
             $subject[$key] = $replace;
+
             return true;
         }
+
         return false;
     }
 
@@ -301,10 +306,9 @@ class Document extends ArrayObject
      *
      * Get array child by key and value match
      *
-     * @param string $key
-     * @param mixed $find
-     * @param string $subject
-     *
+     * @param  string  $key
+     * @param  mixed  $find
+     * @param  string  $subject
      * @return bool
      */
     public function findAndRemove(string $key, $find, string $subject = ''): bool
@@ -316,16 +320,20 @@ class Document extends ArrayObject
             foreach ($subject as $i => &$value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     unset($subject[$i]);
+
                     return true;
                 }
             }
+
             return false;
         }
 
         if (isset($subject[$key]) && $subject[$key] === $find) {
             unset($subject[$key]);
+
             return true;
         }
+
         return false;
     }
 
@@ -342,8 +350,7 @@ class Document extends ArrayObject
     /**
      * Checks if a document key is set.
      *
-     * @param string $key
-     *
+     * @param  string  $key
      * @return bool
      */
     public function isSet($key): bool
@@ -356,9 +363,8 @@ class Document extends ArrayObject
      *
      * Outputs entity as a PHP array
      *
-     * @param array $allow
-     * @param array $disallow
-     *
+     * @param  array  $allow
+     * @param  array  $disallow
      * @return array
      */
     public function getArrayCopy(array $allow = [], array $disallow = []): array
@@ -368,11 +374,11 @@ class Document extends ArrayObject
         $output = [];
 
         foreach ($array as $key => &$value) {
-            if (!empty($allow) && !\in_array($key, $allow)) { // Export only allow fields
+            if (! empty($allow) && ! \in_array($key, $allow)) { // Export only allow fields
                 continue;
             }
 
-            if (!empty($disallow) && \in_array($key, $disallow)) { // Don't export disallowed fields
+            if (! empty($disallow) && \in_array($key, $disallow)) { // Don't export disallowed fields
                 continue;
             }
 

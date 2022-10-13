@@ -25,10 +25,10 @@
 //     {
 //         $this->pdo = $pdo;
 //     }
-    
+
 //     /**
 //      * Create Database
-//      * 
+//      *
 //      * @return bool
 //      */
 //     public function create(): bool
@@ -42,7 +42,7 @@
 
 //     /**
 //      * List Databases
-//      * 
+//      *
 //      * @return array
 //      */
 //     public function list(): array
@@ -51,7 +51,7 @@
 //             ->prepare("SELECT datname FROM pg_database;");
 
 //         $stmt->execute();
-        
+
 //         $list = [];
 
 //         foreach ($stmt->fetchAll() as $key => $value) {
@@ -63,7 +63,7 @@
 
 //     /**
 //      * Delete Database
-//      * 
+//      *
 //      * @return bool
 //      */
 //     public function delete(): bool
@@ -77,7 +77,7 @@
 
 //     /**
 //      * Create Collection
-//      * 
+//      *
 //      * @param string $id
 //      * @return bool
 //      */
@@ -95,7 +95,7 @@
 
 //     /**
 //      * List Collections
-//      * 
+//      *
 //      * @return array
 //      */
 //     public function listCollections(): array
@@ -104,7 +104,7 @@
 
 //     /**
 //      * Delete Collection
-//      * 
+//      *
 //      * @param string $id
 //      * @return bool
 //      */

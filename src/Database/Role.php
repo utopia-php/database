@@ -8,8 +8,7 @@ class Role
         private string $role,
         private string $identifier = '',
         private string $dimension = '',
-    )
-    {
+    ) {
     }
 
     /**
@@ -21,11 +20,12 @@ class Role
     {
         $str = $this->role;
         if ($this->identifier) {
-            $str .= ':' . $this->identifier;
+            $str .= ':'.$this->identifier;
         }
         if ($this->dimension) {
-            $str .= '/' . $this->dimension;
+            $str .= '/'.$this->dimension;
         }
+
         return $str;
     }
 
@@ -56,8 +56,9 @@ class Role
     /**
      * Parse a role string into a Role object
      *
-     * @param string $role
+     * @param  string  $role
      * @return Role
+     *
      * @throws \Exception
      */
     public static function parse(string $role): Role
@@ -67,16 +68,17 @@ class Role
         $hasDimension = \str_contains($role, '/');
         $role = $roleParts[0];
 
-        if (!$hasIdentifier && !$hasDimension) {
+        if (! $hasIdentifier && ! $hasDimension) {
             return new Role($role);
         }
 
-        if ($hasIdentifier && !$hasDimension) {
+        if ($hasIdentifier && ! $hasDimension) {
             $identifier = $roleParts[1];
+
             return new Role($role, $identifier);
         }
 
-        if (!$hasIdentifier && $hasDimension) {
+        if (! $hasIdentifier && $hasDimension) {
             $dimensionParts = \explode('/', $role);
             if (\count($dimensionParts) !== 2) {
                 throw new \Exception('Only one dimension can be provided.');
@@ -88,6 +90,7 @@ class Role
             if (empty($dimension)) {
                 throw new \Exception('Dimension must not be empty.');
             }
+
             return new Role($role, '', $dimension);
         }
 
@@ -103,14 +106,15 @@ class Role
         if (empty($dimension)) {
             throw new \Exception('Dimension must not be empty.');
         }
+
         return new Role($role, $identifier, $dimension);
     }
 
     /**
      * Create a user role from the given ID
      *
-     * @param string $identifier
-     * @param string $status
+     * @param  string  $identifier
+     * @param  string  $status
      * @return Role
      */
     public static function user(string $identifier, string $status = ''): Role
@@ -121,7 +125,7 @@ class Role
     /**
      * Create a users role
      *
-     * @param string $status
+     * @param  string  $status
      * @return Role
      */
     public static function users(string $status = ''): Role
@@ -132,8 +136,8 @@ class Role
     /**
      * Create a team role from the given ID and dimension
      *
-     * @param string $identifier
-     * @param string $dimension
+     * @param  string  $identifier
+     * @param  string  $dimension
      * @return Role
      */
     public static function team(string $identifier, string $dimension = ''): Role
@@ -165,5 +169,4 @@ class Role
     {
         return new Role('member', $identifier);
     }
-
 }

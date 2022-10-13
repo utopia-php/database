@@ -9,12 +9,11 @@ class MySQL extends MariaDB
 {
     /**
      * Get SQL Index
-     * 
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * 
+     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  array  $attributes
      * @return string
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
@@ -28,7 +27,7 @@ class MySQL extends MariaDB
                 $type = 'INDEX';
 
                 foreach ($attributes as $key => $value) {
-                    $attributes[$key] = '(CAST(' . $value . ' AS char(255) ARRAY))';
+                    $attributes[$key] = '(CAST('.$value.' AS char(255) ARRAY))';
                 }
                 break;
 
@@ -41,11 +40,10 @@ class MySQL extends MariaDB
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new Exception('Unknown Index Type:'.$type);
                 break;
         }
 
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
-
 }

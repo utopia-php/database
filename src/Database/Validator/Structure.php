@@ -75,13 +75,13 @@ class Structure extends Validator
             'signed' => false,
             'array' => false,
             'filters' => [],
-        ]
+        ],
     ];
 
     /**
      * @var array
      */
-    static protected array $formats = [];
+    protected static array $formats = [];
 
     /**
      * @var string
@@ -90,7 +90,6 @@ class Structure extends Validator
 
     /**
      * Structure constructor.
-     *
      */
     public function __construct(Document $collection)
     {
@@ -102,7 +101,7 @@ class Structure extends Validator
      *
      * @return array
      */
-    static public function getFormats(): array
+    public static function getFormats(): array
     {
         return self::$formats;
     }
@@ -110,12 +109,12 @@ class Structure extends Validator
     /**
      * Add a new Validator
      * Stores a callback and required params to create Validator
-     * 
-     * @param string $name
-     * @param \Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
-     * @param string $type Primitive data type for validation
+     *
+     * @param  string  $name
+     * @param  \Closure  $callback Callback that accepts $params in order and returns \Utopia\Validator
+     * @param  string  $type Primitive data type for validation
      */
-    static public function addFormat(string $name, \Closure $callback, string $type): void
+    public static function addFormat(string $name, \Closure $callback, string $type): void
     {
         self::$formats[$name] = [
             'callback' => $callback,
@@ -126,11 +125,10 @@ class Structure extends Validator
     /**
      * Check if validator has been added
      *
-     * @param string $name
-     *
+     * @param  string  $name
      * @return bool
      */
-    static public function hasFormat(string $name, string $type): bool
+    public static function hasFormat(string $name, string $type): bool
     {
         if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type) {
             return true;
@@ -141,16 +139,15 @@ class Structure extends Validator
 
     /**
      * Get a Format array to create Validator
-     * 
-     * @param string $name
-     * @param string $type
-     * 
+     *
+     * @param  string  $name
+     * @param  string  $type
      * @return array
      */
-    static public function getFormat(string $name, string $type): array
+    public static function getFormat(string $name, string $type): array
     {
-        if(isset(self::$formats[$name])) {
-            if(self::$formats[$name]['type'] !== $type) {
+        if (isset(self::$formats[$name])) {
+            if (self::$formats[$name]['type'] !== $type) {
                 throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
             }
 
@@ -162,10 +159,10 @@ class Structure extends Validator
 
     /**
      * Remove a Validator
-     * 
-     * @param string $name
+     *
+     * @param  string  $name
      */
-    static public function removeFormat(string $name): void
+    public static function removeFormat(string $name): void
     {
         unset(self::$formats[$name]);
     }
@@ -187,24 +184,26 @@ class Structure extends Validator
      *
      * Returns true if valid or false if not.
      *
-     * @param mixed $document
-     *
+     * @param  mixed  $document
      * @return bool
      */
     public function isValid($document): bool
     {
-        if(!$document instanceof Document) {
+        if (! $document instanceof Document) {
             $this->message = 'Value must be an instance of Document';
+
             return false;
         }
 
         if (empty($document->getCollection())) {
             $this->message = 'Missing collection attribute $collection';
+
             return false;
         }
 
         if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
             $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
+
             return false;
         }
 
@@ -213,21 +212,22 @@ class Structure extends Validator
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
-
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
             $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
 
-            if($required && !isset($structure[$name])) {
+            if ($required && ! isset($structure[$name])) {
                 $this->message = 'Missing required attribute "'.$name.'"';
+
                 return false;
             }
         }
 
         foreach ($structure as $key => $value) {
-            if(!array_key_exists($key, $keys)) { // Check no unknown attributes are set
+            if (! array_key_exists($key, $keys)) { // Check no unknown attributes are set
                 $this->message = 'Unknown attribute: "'.$key.'"';
+
                 return false;
             }
 
@@ -265,6 +265,7 @@ class Structure extends Validator
 
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
+
                     return false;
             }
 
@@ -277,29 +278,31 @@ class Structure extends Validator
                 $validator = $format['callback']($attribute);
             }
 
-            if($array) { // Validate attribute type for arrays - format for arrays handled separately
-                if($required == false && empty($value)) { // Allow both null and [] for optional arrays
+            if ($array) { // Validate attribute type for arrays - format for arrays handled separately
+                if ($required == false && empty($value)) { // Allow both null and [] for optional arrays
                     continue;
                 }
-                if(!is_array($value)) {
+                if (! is_array($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
+
                     return false;
                 }
 
                 foreach ($value as $x => $child) {
-                    if($required == false && is_null($child)) { // Allow null value to optional params
+                    if ($required == false && is_null($child)) { // Allow null value to optional params
                         continue;
                     }
 
-                    if(!$validator->isValid($child)) {
+                    if (! $validator->isValid($child)) {
                         $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
+
                         return false;
                     }
                 }
-            }
-            else {
-                if(!$validator->isValid($value)) {
+            } else {
+                if (! $validator->isValid($value)) {
                     $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
+
                     return false;
                 }
             }

@@ -2,11 +2,11 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query as DatabaseQuery;
+use Utopia\Database\Validator\Query;
 
 class QueryTest extends TestCase
 {

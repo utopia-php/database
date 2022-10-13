@@ -2,8 +2,8 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Validator\Key;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Validator\Key;
 
 class KeyTest extends TestCase
 {
@@ -79,6 +79,5 @@ class KeyTest extends TestCase
 
         $this->assertEquals(false, $validator->isValid('$appwrite'));
         $this->assertEquals(false, $validator->isValid('$permissions'));
-
     }
 }

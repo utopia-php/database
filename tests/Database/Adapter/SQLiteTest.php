@@ -4,10 +4,10 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Redis;
-use Utopia\Cache\Cache;
-use Utopia\Database\Database;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Database;
 use Utopia\Tests\Base;
 
 class SQLiteTest extends Base
@@ -15,7 +15,7 @@ class SQLiteTest extends Base
     /**
      * @var Database
      */
-    static $database = null;
+    public static $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -24,9 +24,9 @@ class SQLiteTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
-        return "sqlite";
+        return 'sqlite';
     }
 
     /**
@@ -34,16 +34,15 @@ class SQLiteTest extends Base
      *
      * @return int
      */
-    static function getAdapterRowLimit(): int
+    public static function getAdapterRowLimit(): int
     {
         return SQLite::getRowLimit();
     }
 
     /**
-     *
      * @return int
      */
-    static function getUsedIndexes(): int
+    public static function getUsedIndexes(): int
     {
         return SQLite::getCountOfDefaultIndexes();
     }
@@ -51,19 +50,19 @@ class SQLiteTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
-        $sqliteDir = __DIR__."/database.sql";
+        $sqliteDir = __DIR__.'/database.sql';
 
-        if(file_exists($sqliteDir)) {
+        if (file_exists($sqliteDir)) {
             unlink($sqliteDir);
         }
 
-        $pdo = new PDO("sqlite:".$sqliteDir, null, null, SQLite::getPDOAttributes());
+        $pdo = new PDO('sqlite:'.$sqliteDir, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);

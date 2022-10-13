@@ -5,19 +5,14 @@
  */
 global $cli;
 
-use Faker\Factory;
 use MongoDB\Client;
-use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
-use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Validator\Numeric;
+use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Database;
 use Utopia\Validator\Text;
 
 $cli
@@ -30,7 +25,7 @@ $cli
 
         switch ($adapter) {
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                $options = ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
                 $client = new Client('mongodb://mongo/',
                     [
                         'username' => 'root',
@@ -78,6 +73,7 @@ $cli
 
             default:
                 Console::error('Adapter not supported');
+
                 return;
         }
 
@@ -90,7 +86,6 @@ $cli
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
-
         Console::info("For query: genre.equal('fashion', 'finance', 'sports')");
 
         $start = microtime(true);
@@ -98,14 +93,12 @@ $cli
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
-
-        Console::info("For query: views.greater(100000)");
+        Console::info('For query: views.greater(100000)');
 
         $start = microtime(true);
         $success = $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
-
 
         Console::info("For query: text.search('Alice')");
         $start = microtime(true);
@@ -113,4 +106,3 @@ $cli
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
     });
-

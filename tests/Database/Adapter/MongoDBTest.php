@@ -3,30 +3,28 @@
 namespace Utopia\Tests\Adapter;
 
 use Redis;
-use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
-use Utopia\Database\Database;
-use Utopia\Database\Document;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo\MongoClient;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Adapter\Mongo\MongoDBAdapter;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
-
 use Utopia\Tests\Base;
 
 class MongoDBTest extends Base
 {
-    static $pool = null;
+    public static $pool = null;
 
     /**
      * @var Database
      */
-    static $database = null;
-
+    public static $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -35,9 +33,9 @@ class MongoDBTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
-        return "mongodb";
+        return 'mongodb';
     }
 
     /**
@@ -45,7 +43,7 @@ class MongoDBTest extends Base
      *
      * @return int
      */
-    static function getAdapterRowLimit(): int
+    public static function getAdapterRowLimit(): int
     {
         return 0;
     }
@@ -53,9 +51,9 @@ class MongoDBTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
@@ -76,8 +74,7 @@ class MongoDBTest extends Base
 
         $database = new Database(new MongoDBAdapter($client), $cache);
         $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_' . uniqid());
-
+        $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;
     }
@@ -119,7 +116,7 @@ class MongoDBTest extends Base
         ]));
 
         $documents = static::getDatabase()->find('documents', [
-            Query::search('string', '*test+alias@email-provider.com')
+            Query::search('string', '*test+alias@email-provider.com'),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -322,7 +319,7 @@ class MongoDBTest extends Base
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(5, $count);
 
-        $count = static::getDatabase()->count('movies', [new Query(Query::TYPE_EQUAL, 'year', [2019]),]);
+        $count = static::getDatabase()->count('movies', [new Query(Query::TYPE_EQUAL, 'year', [2019])]);
         $this->assertEquals(2, $count);
 
         Authorization::unsetRole('userx');

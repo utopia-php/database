@@ -22,9 +22,8 @@ abstract class Adapter
     protected array $debug = [];
 
     /**
-     * @param string $key
-     * @param mixed $value
-     *
+     * @param  string  $key
+     * @param  mixed  $value
      * @return $this
      */
     public function setDebug(string $key, mixed $value): self
@@ -57,11 +56,10 @@ abstract class Adapter
      *
      * Set namespace to divide different scope of data sets
      *
-     * @param string $namespace
+     * @param  string  $namespace
+     * @return bool
      *
      * @throws Exception
-     *
-     * @return bool
      */
     public function setNamespace(string $namespace): bool
     {
@@ -79,9 +77,9 @@ abstract class Adapter
      *
      * Get namespace of current set scope
      *
-     * @throws Exception
-     *
      * @return string
+     *
+     * @throws Exception
      */
     public function getNamespace(): string
     {
@@ -97,8 +95,8 @@ abstract class Adapter
      *
      * Set database to use for current scope
      *
-     * @param string $name
-     * @param bool $reset
+     * @param  string  $name
+     * @param  bool  $reset
      *
      * @throws Exception
      */
@@ -118,9 +116,9 @@ abstract class Adapter
      *
      * Get Database from current scope
      *
-     * @throws Exception
-     *
      * @return string
+     *
+     * @throws Exception
      */
     public function getDefaultDatabase(): string
     {
@@ -134,8 +132,7 @@ abstract class Adapter
     /**
      * Create Database
      *
-     * @param string $name
-     *
+     * @param  string  $name
      * @return bool
      */
     abstract public function create(string $name): bool;
@@ -144,9 +141,8 @@ abstract class Adapter
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
-     * @param string $collection (optional) collection name
-     *
+     * @param  string  $database database name
+     * @param  string  $collection (optional) collection name
      * @return bool
      */
     abstract public function exists(string $database, ?string $collection): bool;
@@ -161,8 +157,7 @@ abstract class Adapter
     /**
      * Delete Database
      *
-     * @param string $name
-     *
+     * @param  string  $name
      * @return bool
      */
     abstract public function delete(string $name): bool;
@@ -170,54 +165,50 @@ abstract class Adapter
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param  string  $name
+     * @param  Document[]  $attributes (optional)
+     * @param  Document[]  $indexes (optional)
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
      * Delete Collection
-     * 
-     * @param string $name
-     * 
+     *
+     * @param  string  $name
      * @return bool
      */
     abstract public function deleteCollection(string $name): bool;
 
     /**
      * Create Attribute
-     * 
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $array
-     * 
+     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size
+     * @param  bool  $array
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Update Attribute
-     * 
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $array
-     * 
+     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size
+     * @param  bool  $array
      * @return bool
      */
     abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Delete Attribute
-     * 
-     * @param string $collection
-     * @param string $id
-     * 
+     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;
@@ -225,9 +216,9 @@ abstract class Adapter
     /**
      * Rename Attribute
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
+     * @param  string  $collection
+     * @param  string  $old
+     * @param  string  $new
      * @return bool
      */
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
@@ -235,9 +226,9 @@ abstract class Adapter
     /**
      * Rename Index
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
+     * @param  string  $collection
+     * @param  string  $old
+     * @param  string  $new
      * @return bool
      */
     abstract public function renameIndex(string $collection, string $old, string $new): bool;
@@ -245,13 +236,12 @@ abstract class Adapter
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  array  $attributes
+     * @param  array  $lengths
+     * @param  array  $orders
      * @return bool
      */
     abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool;
@@ -259,9 +249,8 @@ abstract class Adapter
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     abstract public function deleteIndex(string $collection, string $id): bool;
@@ -269,9 +258,8 @@ abstract class Adapter
     /**
      * Get Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return Document
      */
     abstract public function getDocument(string $collection, string $id): Document;
@@ -279,9 +267,8 @@ abstract class Adapter
     /**
      * Create Document
      *
-     * @param string $collection
-     * @param Document $document
-     *
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
      */
     abstract public function createDocument(string $collection, Document $document): Document;
@@ -289,9 +276,8 @@ abstract class Adapter
     /**
      * Update Document
      *
-     * @param string $collection
-     * @param Document $document
-     *
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
      */
     abstract public function updateDocument(string $collection, Document $document): Document;
@@ -299,9 +285,8 @@ abstract class Adapter
     /**
      * Delete Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
@@ -311,116 +296,114 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
-     * @param int $limit
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
-     * @param string $cursorDirection
-     *
+     * @param  string  $collection
+     * @param  \Utopia\Database\Query[]  $queries
+     * @param  int  $limit
+     * @param  int  $offset
+     * @param  array  $orderAttributes
+     * @param  array  $orderTypes
+     * @param  array  $cursor
+     * @param  string  $cursorDirection
      * @return Document[]
      */
     abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
     /**
      * Sum an attribute
-     * 
-     * @param string $collection
-     * @param string $attribute
-     * @param Query[] $queries
-     * @param int $max
      *
+     * @param  string  $collection
+     * @param  string  $attribute
+     * @param  Query[]  $queries
+     * @param  int  $max
      * @return int|float
      */
     abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0);
 
     /**
      * Count Documents
-     * 
-     * @param string $collection
-     * @param Query[] $queries
-     * @param int $max
      *
+     * @param  string  $collection
+     * @param  Query[]  $queries
+     * @param  int  $max
      * @return int
      */
     abstract public function count(string $collection, array $queries = [], int $max = 0): int;
 
     /**
      * Get max STRING limit
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForInt(): int;
 
     /**
      * Get maximum attributes limit.
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForAttributes(): int;
 
     /**
      * Get maximum index limit.
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForIndexes(): int;
 
     /**
      * Is schemas supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForSchemas(): bool;
+
     /**
      * Is index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForIndex(): bool;
 
     /**
      * Is unique index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForUniqueIndex(): bool;
 
     /**
      * Is fulltext index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
      * Does the adapter handle casting?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForCasting(): bool;
 
     /**
      * Get current attribute count from collection document
-     * 
-     * @param Document $collection
+     *
+     * @param  Document  $collection
      * @return int
      */
     abstract public function getCountOfAttributes(Document $collection): int;
 
     /**
      * Get current index count from collection document
-     * 
-     * @param Document $collection
+     *
+     * @param  Document  $collection
      * @return int
      */
     abstract public function getCountOfIndexes(Document $collection): int;
@@ -452,24 +435,25 @@ abstract class Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     * 
-     * @param Document $collection
+     *
+     * @param  Document  $collection
      * @return int
      */
     abstract public function getAttributeWidth(Document $collection): int;
 
     /**
      * Get list of keywords that cannot be used
-     * 
+     *
      * @return string[]
      */
     abstract public function getKeywords(): array;
 
     /**
      * Filter Keys
-     * 
-     * @throws Exception
+     *
      * @return string
+     *
+     * @throws Exception
      */
     public function filter(string $value): string
     {

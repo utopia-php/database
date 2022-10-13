@@ -3,9 +3,9 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
-use Utopia\Validator;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Validator;
 
 class OrderAttributes extends Validator
 {
@@ -32,9 +32,9 @@ class OrderAttributes extends Validator
     /**
      * Expression constructor
      *
-     * @param Document[] $attributes
-     * @param Document[] $indexes
-     * @param bool $strict
+     * @param  Document[]  $attributes
+     * @param  Document[]  $indexes
+     * @param  bool  $strict
      */
     public function __construct($attributes, $indexes, $strict = true)
     {
@@ -42,21 +42,21 @@ class OrderAttributes extends Validator
             'key' => '$id',
             'array' => false,
             'type' => Database::VAR_STRING,
-            'size' => 512
+            'size' => 512,
         ];
 
         $this->schema[] = [
             'key' => '$createdAt',
             'array' => false,
             'type' => Database::VAR_INTEGER,
-            'size' => 0
+            'size' => 0,
         ];
 
         $this->schema[] = [
             'key' => '$updatedAt',
             'array' => false,
             'type' => Database::VAR_INTEGER,
-            'size' => 0
+            'size' => 0,
         ];
 
         foreach ($attributes as $attribute) {
@@ -65,17 +65,17 @@ class OrderAttributes extends Validator
 
         $this->indexes[] = [
             'type' => Database::INDEX_UNIQUE,
-            'attributes' => ['$id']
+            'attributes' => ['$id'],
         ];
 
         $this->indexes[] = [
             'type' => Database::INDEX_KEY,
-            'attributes' => ['$createdAt']
+            'attributes' => ['$createdAt'],
         ];
 
         $this->indexes[] = [
             'type' => Database::INDEX_KEY,
-            'attributes' => ['$updatedAt']
+            'attributes' => ['$updatedAt'],
         ];
 
         foreach ($indexes as $index) {
@@ -102,8 +102,7 @@ class OrderAttributes extends Validator
      *
      * Returns true if query typed according to schema.
      *
-     * @param string[] $attributes
-     *
+     * @param  string[]  $attributes
      * @return bool
      */
     public function isValid($attributes): bool
@@ -113,7 +112,8 @@ class OrderAttributes extends Validator
             $attributeInSchema = \in_array($attribute, \array_column($this->schema, 'key'));
 
             if ($attributeInSchema === false) {
-                $this->message = 'Order attribute not found in schema: ' . $attribute;
+                $this->message = 'Order attribute not found in schema: '.$attribute;
+
                 return false;
             }
         }
@@ -124,25 +124,28 @@ class OrderAttributes extends Validator
         if ($this->strict) {
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  $attributes)) {
+                if ($this->arrayMatch($index['attributes'], $attributes)) {
                     $found = $index;
                 }
             }
 
-            if (!$found) {
-                $this->message = 'Index not found: ' . implode(",", $attributes);
+            if (! $found) {
+                $this->message = 'Index not found: '.implode(',', $attributes);
+
                 return false;
             }
 
             // search method requires fulltext index
             if (in_array(Query::TYPE_SEARCH, $attributes) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search method requires fulltext index: ' . implode(",", $attributes);
+                $this->message = 'Search method requires fulltext index: '.implode(',', $attributes);
+
                 return false;
             }
         }
 
         return true;
     }
+
     /**
      * Is array
      *
@@ -170,9 +173,8 @@ class OrderAttributes extends Validator
     /**
      * Check if indexed array $indexes matches $queries
      *
-     * @param array $indexes
-     * @param array $queries
-     *
+     * @param  array  $indexes
+     * @param  array  $queries
      * @return bool
      */
     protected function arrayMatch($indexes, $queries): bool

@@ -4,10 +4,10 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Redis;
-use Utopia\Database\Database;
-use Utopia\Database\Adapter\MariaDB;
-use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Database;
 use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
@@ -15,7 +15,7 @@ class MariaDBTest extends Base
     /**
      * @var Database
      */
-    static $database = null;
+    public static $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -24,9 +24,9 @@ class MariaDBTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
-        return "mariadb";
+        return 'mariadb';
     }
 
     /**
@@ -34,7 +34,7 @@ class MariaDBTest extends Base
      *
      * @return int
      */
-    static function getAdapterRowLimit(): int
+    public static function getAdapterRowLimit(): int
     {
         return MariaDB::getRowLimit();
     }
@@ -42,9 +42,9 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 

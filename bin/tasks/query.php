@@ -6,15 +6,14 @@
 
 use Faker\Factory;
 use MongoDB\Client;
-use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
-use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Database;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
@@ -30,7 +29,7 @@ $cli
 
         switch ($adapter) {
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                $options = ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
                 $client = new Client(
                     'mongodb://mongo/',
                     [
@@ -79,6 +78,7 @@ $cli
 
             default:
                 Console::error('Adapter not supported');
+
                 return;
         }
 
@@ -92,38 +92,38 @@ $cli
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = addRoles($faker, 100);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = addRoles($faker, 400);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = addRoles($faker, 500);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
         $count = addRoles($faker, 1000);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
-            'results' => runQueries($database, $limit)
+            'results' => runQueries($database, $limit),
         ];
 
-        if (!file_exists('bin/view/results')) {
+        if (! file_exists('bin/view/results')) {
             mkdir('bin/view/results', 0777, true);
         }
 
@@ -137,7 +137,7 @@ function runQueries(Database $database, int $limit)
 {
     $results = [];
     // Recent travel blogs
-    $query = ["created.greater(1262322000)", "genre.equal('travel')"];
+    $query = ['created.greater(1262322000)', "genre.equal('travel')"];
     $results[] = runQuery($query, $database, $limit);
 
     // Favorite genres
@@ -145,7 +145,7 @@ function runQueries(Database $database, int $limit)
     $results[] = runQuery($query, $database, $limit);
 
     // Popular posts
-    $query = ["views.greater(100000)"];
+    $query = ['views.greater(100000)'];
     $results[] = runQuery($query, $database, $limit);
 
     // Fulltext search
@@ -160,12 +160,13 @@ function addRoles($faker, $count)
     for ($i = 0; $i < $count; $i++) {
         Authorization::setRole($faker->numerify('user####'));
     }
+
     return count(Authorization::getRoles());
 }
 
 function runQuery(array $query, Database $database, int $limit)
 {
-    Console::log('Running query: [' . implode(', ', $query) . ']');
+    Console::log('Running query: ['.implode(', ', $query).']');
     $query = array_map(function ($q) {
         return Query::parse($q);
     }, $query);
@@ -174,5 +175,6 @@ function runQuery(array $query, Database $database, int $limit)
     $database->find('articles', array_merge($query, [Query::limit($limit)]));
     $time = microtime(true) - $start;
     Console::success("{$time} s");
+
     return $time;
 }

@@ -7,12 +7,19 @@ use MongoDB\BSON;
 class Auth
 {
     private string $authcid;
+
     private string $secret;
+
     private string $authzid;
+
     private string $gs2Header;
+
     private string $cnonce;
+
     private string $firstMessageBare;
+
     private string $saltedPassword;
+
     private string $authMessage;
 
     public function __construct(array $options)
@@ -32,18 +39,18 @@ class Auth
 
         return [
             [
-                "saslStart" => 1,
-                "mechanism" => "SCRAM-SHA-1",
-                "payload" => $payload,
-                "autoAuthorize" => 1,
-                "options" => ["skipEmptyExchange" => true],
+                'saslStart' => 1,
+                'mechanism' => 'SCRAM-SHA-1',
+                'payload' => $payload,
+                'autoAuthorize' => 1,
+                'options' => ['skipEmptyExchange' => true],
             ],
-            'admin'
+            'admin',
         ];
     }
 
     /**
-     * @param mixed $data
+     * @param  mixed  $data
      * @return array
      */
     public function continue($data): array
@@ -56,16 +63,16 @@ class Auth
 
         return [
             [
-                "saslContinue" => 1,
-                "conversationId" => $cid,
-                "payload" => $payload,
+                'saslContinue' => 1,
+                'conversationId' => $cid,
+                'payload' => $payload,
             ],
-            'admin'
+            'admin',
         ];
     }
 
     /**
-     * @param mixed $challenge
+     * @param  mixed  $challenge
      * @return string
      */
     public function createResponse($challenge = null): string
@@ -77,7 +84,7 @@ class Auth
 
         $authzid = $this->authzid;
 
-        if (!empty($authzid)) {
+        if (! empty($authzid)) {
             $authzid = $this->formatName($authzid);
         }
 
@@ -91,7 +98,7 @@ class Auth
     /**
      * Prepare a name for inclusion in a SCRAM response.
      *
-     * @param string $username a name to be prepared.
+     * @param  string  $username a name to be prepared.
      * @return string the reformated name.
      */
     private function formatName(string $username): string
@@ -103,28 +110,28 @@ class Auth
      * Generate the initial response which can be either sent directly in the first message or as a response to an empty
      * server challenge.
      *
-     * @param string $authcid Prepared authentication identity.
-     * @param string $authzid Prepared authorization identity.
+     * @param  string  $authcid Prepared authentication identity.
+     * @param  string  $authzid Prepared authorization identity.
      * @return string The SCRAM response to send.
      */
     private function generateInitialResponse(string $authcid, string $authzid): string
     {
-        $gs2CbindFlag   = 'n,';
-        $this->gs2Header = $gs2CbindFlag . (!empty($authzid) ? 'a=' . $authzid : '') . ',';
+        $gs2CbindFlag = 'n,';
+        $this->gs2Header = $gs2CbindFlag.(! empty($authzid) ? 'a='.$authzid : '').',';
 
         // I must generate a client nonce and "save" it for later comparison on second response.
         $this->cnonce = $this->generateCnonce();
 
-        $this->firstMessageBare = 'n=' . $authcid . ',r=' . $this->cnonce;
+        $this->firstMessageBare = 'n='.$authcid.',r='.$this->cnonce;
 
-        return $this->gs2Header . $this->firstMessageBare;
+        return $this->gs2Header.$this->firstMessageBare;
     }
 
     /**
      * Parses and verifies a non-empty SCRAM challenge.
      *
-     * @param  string $challenge    The SCRAM challenge
-     * @param  string $password     The password challenge
+     * @param  string  $challenge    The SCRAM challenge
+     * @param  string  $password     The password challenge
      * @return string|false The response to send; false in case of wrong challenge or if an initial response has not
      * been generated first.
      */
@@ -133,16 +140,16 @@ class Auth
         $matches = [];
 
         $serverMessageRegexp = "#^r=([\x21-\x2B\x2D-\x7E/]+)"
-            . ",s=((?:[A-Za-z0-9/+]{4})*(?:[A-Za-z0-9/+]{3}=|[A-Za-z0-9/+]{2}==)?)"
-            . ",i=([0-9]*)(,[A-Za-z]=[^,])*$#";
+            .',s=((?:[A-Za-z0-9/+]{4})*(?:[A-Za-z0-9/+]{3}=|[A-Za-z0-9/+]{2}==)?)'
+            .',i=([0-9]*)(,[A-Za-z]=[^,])*$#';
 
-        if (!isset($this->cnonce, $this->gs2Header) || !preg_match($serverMessageRegexp, $challenge, $matches)) {
+        if (! isset($this->cnonce, $this->gs2Header) || ! preg_match($serverMessageRegexp, $challenge, $matches)) {
             return false;
         }
         $nonce = $matches[1];
-        $salt  = base64_decode($matches[2]);
+        $salt = base64_decode($matches[2]);
 
-        if (!$salt) {
+        if (! $salt) {
             return false;
         }
         $i = intval($matches[3]);
@@ -152,38 +159,39 @@ class Auth
             return false;
         }
 
-        $channelBinding       = 'c=' . base64_encode($this->gs2Header);
-        $finalMessage         = $channelBinding . ',r=' . $nonce;
-        $saltedPassword       = $this->hi($password, $salt, $i);
+        $channelBinding = 'c='.base64_encode($this->gs2Header);
+        $finalMessage = $channelBinding.',r='.$nonce;
+        $saltedPassword = $this->hi($password, $salt, $i);
         $this->saltedPassword = $saltedPassword;
-        $clientKey            = $this->hmac($saltedPassword, "Client Key", true);
-        $storedKey            = $this->hash($clientKey, true);
-        $authMessage          = $this->firstMessageBare . ',' . $challenge . ',' . $finalMessage;
-        $this->authMessage    = $authMessage;
-        $clientSignature      = $this->hmac($storedKey, $authMessage, true);
-        $clientProof          = $clientKey ^ $clientSignature;
-        $proof                = ',p=' . base64_encode($clientProof);
+        $clientKey = $this->hmac($saltedPassword, 'Client Key', true);
+        $storedKey = $this->hash($clientKey, true);
+        $authMessage = $this->firstMessageBare.','.$challenge.','.$finalMessage;
+        $this->authMessage = $authMessage;
+        $clientSignature = $this->hmac($storedKey, $authMessage, true);
+        $clientProof = $clientKey ^ $clientSignature;
+        $proof = ',p='.base64_encode($clientProof);
 
-        return $finalMessage . $proof;
+        return $finalMessage.$proof;
     }
 
     /**
      * Hi() call, which is essentially PBKDF2 (RFC-2898) with HMAC-H() as the pseudorandom function.
      *
-     * @param string $str  The string to hash.
-     * @param string $salt The salt value.
-     * @param int $i The   iteration count.
+     * @param  string  $str  The string to hash.
+     * @param  string  $salt The salt value.
+     * @param  int  $i The   iteration count.
      * @return string The hashed string.
      */
     private function hi(string $str, string $salt, int $i): string
     {
-        $int1   = "\0\0\0\1";
-        $ui     = $this->hmac($str, $salt . $int1, true);
+        $int1 = "\0\0\0\1";
+        $ui = $this->hmac($str, $salt.$int1, true);
         $result = $ui;
         for ($k = 1; $k < $i; $k++) {
-            $ui     = $this->hmac($str, $ui, true);
+            $ui = $this->hmac($str, $ui, true);
             $result = $result ^ $ui;
         }
+
         return $result;
     }
 
@@ -192,7 +200,7 @@ class Auth
      * absolutely be checked against this function. If this fails, the entity which we are communicating with is probably
      * not the server as it has not access to your ServerKey.
      *
-     * @param string $data The additional data sent along a successful outcome.
+     * @param  string  $data The additional data sent along a successful outcome.
      * @return bool Whether the server has been authenticated.
      * If false, the client must close the connection and consider to be under a MITM attack.
      */
@@ -201,15 +209,15 @@ class Auth
         $verifierRegexp = '#^v=((?:[A-Za-z0-9/+]{4})*(?:[A-Za-z0-9/+]{3}=|[A-Za-z0-9/+]{2}==)?)$#';
 
         $matches = [];
-        if (!isset($this->saltedPassword, $this->authMessage) || !preg_match($verifierRegexp, $data, $matches)) {
+        if (! isset($this->saltedPassword, $this->authMessage) || ! preg_match($verifierRegexp, $data, $matches)) {
             // This cannot be an outcome, you never sent the challenge's response.
             return false;
         }
 
-        $verifier                = $matches[1];
+        $verifier = $matches[1];
         $proposedServerSignature = base64_decode($verifier);
-        $serverKey               = $this->hmac($this->saltedPassword, "Server Key", true);
-        $serverSignature         = $this->hmac($serverKey, $this->authMessage, true);
+        $serverKey = $this->hmac($this->saltedPassword, 'Server Key', true);
+        $serverSignature = $this->hmac($serverKey, $this->authMessage, true);
 
         return $proposedServerSignature === $serverSignature;
     }
@@ -285,8 +293,8 @@ class Auth
     /**
      * @return string
      */
-    static function encodeCredentials($username, $password): string
+    public static function encodeCredentials($username, $password): string
     {
-        return \md5(\utf8_encode($username . ':mongo:' . $password));
+        return \md5(\utf8_encode($username.':mongo:'.$password));
     }
 }

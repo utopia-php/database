@@ -21,6 +21,10 @@
     "autoload-dev": {
         "psr-4": {"Utopia\\Tests\\": "tests/Database"}
     },
+    "scripts": {
+        "lint": "./vendor/bin/pint --test",
+        "format": "./vendor/bin/pint"
+    },
     "require": {
         "php": ">=8.0",
         "ext-pdo": "*",
@@ -35,6 +39,7 @@
         "phpunit/phpunit": "^9.4",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",
-        "vimeo/psalm": "4.0.1"
+        "vimeo/psalm": "4.0.1",
+        "laravel/pint": "dev-main"
     }
 }

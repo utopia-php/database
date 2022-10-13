@@ -4,10 +4,10 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Redis;
-use Utopia\Cache\Cache;
-use Utopia\Database\Database;
-use Utopia\Database\Adapter\MySQL;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Database;
 use Utopia\Tests\Base;
 
 class MySQLTest extends Base
@@ -15,7 +15,7 @@ class MySQLTest extends Base
     /**
      * @var Database
      */
-    static $database = null;
+    public static $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -24,9 +24,9 @@ class MySQLTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
-        return "mysql";
+        return 'mysql';
     }
 
     /**
@@ -34,16 +34,15 @@ class MySQLTest extends Base
      *
      * @return int
      */
-    static function getAdapterRowLimit(): int
+    public static function getAdapterRowLimit(): int
     {
         return MySQL::getRowLimit();
     }
 
     /**
-     *
      * @return int
      */
-    static function getUsedIndexes(): int
+    public static function getUsedIndexes(): int
     {
         return MySQL::getCountOfDefaultIndexes();
     }
@@ -51,9 +50,9 @@ class MySQLTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 

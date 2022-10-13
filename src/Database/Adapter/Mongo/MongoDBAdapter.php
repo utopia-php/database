@@ -3,13 +3,12 @@
 namespace Utopia\Database\Adapter\Mongo;
 
 use Exception;
-
 use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
-use Utopia\Database\Document;
 use Utopia\Database\Database;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class MongoDBAdapter extends Adapter
 {
@@ -23,7 +22,7 @@ class MongoDBAdapter extends Adapter
      *
      * Set connection and settings
      *
-     * @param MongoClient $client
+     * @param  MongoClient  $client
      */
     public function __construct(MongoClient $client)
     {
@@ -39,8 +38,7 @@ class MongoDBAdapter extends Adapter
     /**
      * Create Database
      *
-     * @param string $name
-     * 
+     * @param  string  $name
      * @return bool
      */
     public function create(string $name): bool
@@ -55,14 +53,13 @@ class MongoDBAdapter extends Adapter
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
-     * @param string $collection (optional) collection name
-     *
+     * @param  string  $database database name
+     * @param  string  $collection (optional) collection name
      * @return bool
      */
     public function exists(string $database, string $collection = null): bool
     {
-        if (!\is_null($collection)) {
+        if (! \is_null($collection)) {
             $list = $this->flattenArray($this->list());
 
             foreach ($list as $obj) {
@@ -76,12 +73,12 @@ class MongoDBAdapter extends Adapter
             return false;
         }
 
-        return !\is_null($this->getClient()->selectDatabase($database));
+        return ! \is_null($this->getClient()->selectDatabase($database));
     }
 
     /**
      * List Databases
-     * 
+     *
      * @return array
      */
     public function list(): array
@@ -98,8 +95,7 @@ class MongoDBAdapter extends Adapter
     /**
      * Delete Database
      *
-     * @param string $name
-     *
+     * @param  string  $name
      * @return bool
      */
     public function delete(string $name): bool
@@ -112,15 +108,16 @@ class MongoDBAdapter extends Adapter
     /**
      * Create Collection
      *
-     * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param  string  $name
+     * @param  Document[]  $attributes (optional)
+     * @param  Document[]  $indexes (optional)
      * @return bool
+     *
      * @throws Exception
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $id = $this->getNamespace() . '_' . $this->filter($name);
+        $id = $this->getNamespace().'_'.$this->filter($name);
 
         // Returns an array/object with the result document
         if (empty($this->getClient()->createCollection($id))) {
@@ -135,23 +132,24 @@ class MongoDBAdapter extends Adapter
                 'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
                     'locale' => 'en',
                     'strength' => 1,
-                ]
+                ],
             ],
             [
                 'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
                 'name' => '_permissions',
-            ]
+            ],
         ]);
 
-        if (!$indexesCreated) {
+        if (! $indexesCreated) {
             return false;
         }
 
         // Since attributes are not used by this adapter
         // Only act when $indexes is provided
-        if (!empty($indexes)) {
+        if (! empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
+             *
              * @var array
              */
             $newIndexes = [];
@@ -192,7 +190,7 @@ class MongoDBAdapter extends Adapter
                 $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
             }
 
-            if (!$this->getClient()->createIndexes($name, $newIndexes)) {
+            if (! $this->getClient()->createIndexes($name, $newIndexes)) {
                 return false;
             }
         }
@@ -202,7 +200,7 @@ class MongoDBAdapter extends Adapter
 
     /**
      * List Collections
-     * 
+     *
      * @return array
      */
     public function listCollections(): array
@@ -218,26 +216,25 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Delete Collection
-     * 
-     * @param string $id
+     *
+     * @param  string  $id
      * @return bool
      */
     public function deleteCollection(string $id): bool
     {
-        $id = $this->getNamespace() . '_' . $this->filter($id);
+        $id = $this->getNamespace().'_'.$this->filter($id);
 
-        return (!!$this->getClient()->dropCollection($id));
+        return (bool) $this->getClient()->dropCollection($id);
     }
 
     /**
      * Create Attribute
-     * 
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $array
-     * 
+     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size
+     * @param  bool  $array
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
@@ -247,10 +244,9 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Delete Attribute
-     * 
-     * @param string $collection
-     * @param string $id
-     * 
+     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
@@ -261,9 +257,9 @@ class MongoDBAdapter extends Adapter
     /**
      * Rename Attribute.
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $name
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $name
      * @return bool
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
@@ -274,18 +270,17 @@ class MongoDBAdapter extends Adapter
     /**
      * Create Index
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  array  $attributes
+     * @param  array  $lengths
+     * @param  array  $orders
      * @return bool
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
         $id = $this->filter($id);
 
         $indexes = [];
@@ -314,7 +309,7 @@ class MongoDBAdapter extends Adapter
             }
         }
 
-        if (!empty($collation)) {
+        if (! empty($collation)) {
             $options['collation'] = $collation;
         }
 
@@ -324,31 +319,29 @@ class MongoDBAdapter extends Adapter
     /**
      * Delete Index
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
         $id = $this->filter($id);
         $collection = $this->getDatabase();
 
-        return (!!$collection->dropIndexes($name, [$id]));
+        return (bool) $collection->dropIndexes($name, [$id]);
     }
 
     /**
      * Get Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return Document
      */
     public function getDocument(string $collection, string $id): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $result = $this->client->find($name, ['_uid' => $id])->cursor->firstBatch ?? [];
 
@@ -365,16 +358,15 @@ class MongoDBAdapter extends Adapter
     /**
      * Create Document
      *
-     * @param string $collection
-     * @param Document $document
-     *
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
-        $record =  $this->replaceChars('$', '_', $document->getArrayCopy());
+        $record = $this->replaceChars('$', '_', $document->getArrayCopy());
 
         $this->client->insert($name, $record);
 
@@ -384,15 +376,13 @@ class MongoDBAdapter extends Adapter
     /**
      * Update Document
      *
-     * @param string $collection
-     * @param Document $document
-     *
+     * @param  string  $collection
+     * @param  Document  $document
      * @return Document
      */
     public function updateDocument(string $collection, Document $document): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
-
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $this->client->update(
             $name,
@@ -409,27 +399,25 @@ class MongoDBAdapter extends Adapter
     /**
      * Delete Document
      *
-     * @param string $collection
-     * @param string $id
-     *
+     * @param  string  $collection
+     * @param  string  $id
      * @return bool
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $result = $this->client->delete($name, ['_uid' => $id]);
 
-        return (!!$result);
+        return (bool) $result;
     }
 
     /**
      * Rename Index.
      *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     *
+     * @param  string  $collection
+     * @param  string  $old
+     * @param  string  $new
      * @return bool
      */
     public function renameIndex(string $collection, string $old, string $new): bool
@@ -439,13 +427,13 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Update Attribute.
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
      *
+     * @param  string  $collection
+     * @param  string  $id
+     * @param  string  $type
+     * @param  int  $size
+     * @param  bool  $signed
+     * @param  bool  $array
      * @return bool
      */
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
@@ -458,20 +446,19 @@ class MongoDBAdapter extends Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param string $collection
-     * @param array $queries
-     * @param int $limit
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
-     * @param string $cursorDirection
-     *
+     * @param  string  $collection
+     * @param  array  $queries
+     * @param  int  $limit
+     * @param  int  $offset
+     * @param  array  $orderAttributes
+     * @param  array  $orderTypes
+     * @param  array  $cursor
+     * @param  string  $cursorDirection
      * @return Document[]
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = [];
 
@@ -494,7 +481,7 @@ class MongoDBAdapter extends Adapter
 
         if (empty($orderAttributes)) {
             // Allow after pagination without any order
-            if (!empty($cursor)) {
+            if (! empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
                 $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
                 ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
@@ -502,12 +489,12 @@ class MongoDBAdapter extends Adapter
 
                 $filters = array_merge($filters, [
                     '_id' => [
-                        $this->getQueryOperator($orderMethod) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
-                    ]
+                        $this->getQueryOperator($orderMethod) => new \MongoDB\BSON\ObjectId($cursor['$internalId']),
+                    ],
                 ]);
             }
             // Allow order type without any order attribute, fallback to the natural order (_id)
-            if (!empty($orderTypes)) {
+            if (! empty($orderTypes)) {
                 $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
@@ -516,7 +503,7 @@ class MongoDBAdapter extends Adapter
             }
         }
 
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (! empty($cursor) && ! empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
@@ -536,16 +523,16 @@ class MongoDBAdapter extends Adapter
                 '$or' => [
                     [
                         $attribute => [
-                            $this->getQueryOperator($orderMethod) => $cursor[$attribute]
-                        ]
+                            $this->getQueryOperator($orderMethod) => $cursor[$attribute],
+                        ],
                     ], [
                         $attribute => $cursor[$attribute],
                         '_id' => [
-                            $this->getQueryOperator($orderMethodInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
-                        ]
+                            $this->getQueryOperator($orderMethodInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId']),
+                        ],
 
-                    ]
-                ]
+                    ],
+                ],
             ]);
         }
 
@@ -571,16 +558,15 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Count Documents
-     * 
-     * @param string $collection
-     * @param Query[] $queries
-     * @param int $max
      *
+     * @param  string  $collection
+     * @param  Query[]  $queries
+     * @param  int  $max
      * @return int
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
 
         $filters = [];
@@ -607,17 +593,16 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Sum an attribute
-     * 
-     * @param string $collection
-     * @param string $attribute
-     * @param Query[] $queries
-     * @param int $max
      *
+     * @param  string  $collection
+     * @param  string  $attribute
+     * @param  Query[]  $queries
+     * @param  int  $max
      * @return int|float
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace().'_'.$this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
 
         $filters = [];
@@ -641,16 +626,16 @@ class MongoDBAdapter extends Adapter
         // We pass the $pipeline to the aggregate method, which returns a cursor, then we get
         // the array of results from the cursor and we return the total sum of the attribute
         $pipeline = [];
-        if (!empty($filters)) {
+        if (! empty($filters)) {
             $pipeline[] = ['$match' => $filters];
         }
-        if (!empty($max)) {
+        if (! empty($max)) {
             $pipeline[] = ['$limit' => $max];
         }
         $pipeline[] = [
             '$group' => [
                 '_id' => null,
-                'total' => ['$sum' => '$' . $attribute],
+                'total' => ['$sum' => '$'.$attribute],
             ],
         ];
 
@@ -684,45 +669,49 @@ class MongoDBAdapter extends Adapter
      * Keys cannot begin with $ in MongoDB
      * Convert $ prefix to _ on $id, $permissions, and $collection
      *
-     * @param string $from
-     * @param string $to
-     * @param array $array
+     * @param  string  $from
+     * @param  string  $to
+     * @param  array  $array
      * @return array
      */
     protected function replaceChars($from, $to, $array): array
     {
         $array = (array) $array;
 
-        if (array_key_exists($from . 'permissions', $array))
-            $array[$to . 'permissions'] = $array[$from . 'permissions'];
+        if (array_key_exists($from.'permissions', $array)) {
+            $array[$to.'permissions'] = $array[$from.'permissions'];
+        }
 
-        if (array_key_exists($from . 'createdAt', $array))
-            $array[$to . 'createdAt'] = $array[$from . 'createdAt'];
+        if (array_key_exists($from.'createdAt', $array)) {
+            $array[$to.'createdAt'] = $array[$from.'createdAt'];
+        }
 
-        if (array_key_exists($from . 'updatedAt', $array))
-            $array[$to . 'updatedAt'] = $array[$from . 'updatedAt'];
+        if (array_key_exists($from.'updatedAt', $array)) {
+            $array[$to.'updatedAt'] = $array[$from.'updatedAt'];
+        }
 
-        if (array_key_exists($from . 'collection', $array))
-            $array[$to . 'collection'] = $array[$from . 'collection'];
+        if (array_key_exists($from.'collection', $array)) {
+            $array[$to.'collection'] = $array[$from.'collection'];
+        }
 
-        if ($from === '_' && array_key_exists($from . 'uid', $array)) { // convert internal to document ID
-            $array[$to . 'id'] = $array[$from . 'uid'];
-            $array[$to . 'internalId'] = (string) $array[$from . 'id'];
+        if ($from === '_' && array_key_exists($from.'uid', $array)) { // convert internal to document ID
+            $array[$to.'id'] = $array[$from.'uid'];
+            $array[$to.'internalId'] = (string) $array[$from.'id'];
 
-            unset($array[$from . 'uid']);
-        } else if ($from === '$' && array_key_exists($from . 'id', $array)) { // convert document to internal ID
-            $array[$to . 'uid'] = $array[$from . 'id'];
+            unset($array[$from.'uid']);
+        } elseif ($from === '$' && array_key_exists($from.'id', $array)) { // convert document to internal ID
+            $array[$to.'uid'] = $array[$from.'id'];
 
-            if (array_key_exists($from . 'internalId', $array)) {
-                unset($array[$from . 'internalId']); // remove unnecessary internal ID
+            if (array_key_exists($from.'internalId', $array)) {
+                unset($array[$from.'internalId']); // remove unnecessary internal ID
             }
         }
 
-        unset($array[$from . 'id']);
-        unset($array[$from . 'permissions']);
-        unset($array[$from . 'collection']);
-        unset($array[$from . 'createdAt']);
-        unset($array[$from . 'updatedAt']);
+        unset($array[$from.'id']);
+        unset($array[$from.'permissions']);
+        unset($array[$from.'collection']);
+        unset($array[$from.'createdAt']);
+        unset($array[$from.'updatedAt']);
 
         return $array;
     }
@@ -730,8 +719,7 @@ class MongoDBAdapter extends Adapter
     /**
      * Build mongo filters from array of $queries
      *
-     * @param Query[] $queries
-     *
+     * @param  Query[]  $queries
      * @return array
      */
     protected function buildFilters($queries): array
@@ -764,9 +752,8 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Get Query Operator
-     * 
-     * @param string $method
-     * 
+     *
+     * @param  string  $method
      * @return string
      */
     protected function getQueryOperator(string $method): string
@@ -805,7 +792,7 @@ class MongoDBAdapter extends Adapter
                 break;
 
             default:
-                throw new Exception('Unknown method:' . $method);
+                throw new Exception('Unknown method:'.$method);
                 break;
         }
     }
@@ -813,8 +800,7 @@ class MongoDBAdapter extends Adapter
     /**
      * Get Mongo Order
      *
-     * @param string $order
-     *
+     * @param  string  $order
      * @return int
      */
     protected function getOrder(string $order): int
@@ -827,7 +813,7 @@ class MongoDBAdapter extends Adapter
                 return -1;
                 break;
             default:
-                throw new Exception('Unknown sort order:' . $order);
+                throw new Exception('Unknown sort order:'.$order);
                 break;
         }
     }
@@ -918,7 +904,7 @@ class MongoDBAdapter extends Adapter
     /**
      * Get current attribute count from collection document
      *
-     * @param Document $collection
+     * @param  Document  $collection
      * @return int
      */
     public function getCountOfAttributes(Document $collection): int
@@ -930,8 +916,8 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Get current index count from collection document
-     * 
-     * @param Document $collection
+     *
+     * @param  Document  $collection
      * @return int
      */
     public function getCountOfIndexes(Document $collection): int
@@ -950,7 +936,7 @@ class MongoDBAdapter extends Adapter
     {
         return 6;
     }
-    
+
     /**
      * Returns number of indexes used by default.
      *
@@ -977,8 +963,8 @@ class MongoDBAdapter extends Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     * 
-     * @param Document $collection
+     *
+     * @param  Document  $collection
      * @return int
      */
     public function getAttributeWidth(Document $collection): int
@@ -988,7 +974,7 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Is casting supported?
-     * 
+     *
      * @return bool
      */
     public function getSupportForCasting(): bool
@@ -1000,6 +986,7 @@ class MongoDBAdapter extends Adapter
      * Return set namespace.
      *
      * @return string
+     *
      * @throws \Exception
      */
     public function getNamespace(): string
@@ -1014,9 +1001,10 @@ class MongoDBAdapter extends Adapter
     /**
      * Set's default database.
      *
-     * @param string $name
-     * @param bool $reset
+     * @param  string  $name
+     * @param  bool  $reset
      * @return bool
+     *
      * @throws \Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
@@ -1033,8 +1021,9 @@ class MongoDBAdapter extends Adapter
     /**
      * Set's the namespace.
      *
-     * @param string $namespace
+     * @param  string  $namespace
      * @return bool
+     *
      * @throws \Exception
      */
     public function setNamespace(string $namespace): bool
@@ -1051,14 +1040,14 @@ class MongoDBAdapter extends Adapter
     /**
      * Flattens the array.
      *
-     * @param mixed $list
+     * @param  mixed  $list
      * @return array
      */
     protected function flattenArray(mixed $list): array
     {
-        if (!is_array($list)) {
+        if (! is_array($list)) {
             // make sure the input is an array
-            return array($list);
+            return [$list];
         }
 
         $new_array = [];
@@ -1072,10 +1061,10 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Get list of keywords that cannot be used
-     * 
+     *
      * Mongo does not have concept of reserverd words.
      *  We put something here just to run the rests for this adapter too
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array

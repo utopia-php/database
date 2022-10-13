@@ -9,10 +9,15 @@ class Roles extends Validator
 {
     // Roles
     const ROLE_ANY = 'any';
+
     const ROLE_GUESTS = 'guests';
+
     const ROLE_USERS = 'users';
+
     const ROLE_USER = 'user';
+
     const ROLE_TEAM = 'team';
+
     const ROLE_MEMBER = 'member';
 
     const ROLES = [
@@ -36,7 +41,7 @@ class Roles extends Validator
                 'allowed' => false,
                 'required' => false,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],
@@ -46,7 +51,7 @@ class Roles extends Validator
                 'allowed' => false,
                 'required' => false,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],
@@ -56,10 +61,10 @@ class Roles extends Validator
                 'allowed' => false,
                 'required' => false,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => true,
                 'required' => false,
-                'options' => self::USER_DIMENSIONS
+                'options' => self::USER_DIMENSIONS,
             ],
         ],
         self::ROLE_USER => [
@@ -67,10 +72,10 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => true,
                 'required' => false,
-                'options' => self::USER_DIMENSIONS
+                'options' => self::USER_DIMENSIONS,
             ],
         ],
         self::ROLE_TEAM => [
@@ -78,7 +83,7 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => true,
                 'required' => false,
             ],
@@ -88,7 +93,7 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],
@@ -97,6 +102,7 @@ class Roles extends Validator
 
     // Dimensions
     const DIMENSION_VERIFIED = 'verified';
+
     const DIMENSION_UNVERIFIED = 'unverified';
 
     const USER_DIMENSIONS = [
@@ -107,8 +113,8 @@ class Roles extends Validator
     /**
      * Roles constructor.
      *
-     * @param int $length maximum amount of role. 0 means unlimited.
-     * @param array $allowed allowed roles. Defaults to all available.
+     * @param  int  $length maximum amount of role. 0 means unlimited.
+     * @param  array  $allowed allowed roles. Defaults to all available.
      */
     public function __construct(int $length = 0, array $allowed = self::ROLES)
     {
@@ -133,33 +139,37 @@ class Roles extends Validator
      *
      * Returns true if valid or false if not.
      *
-     * @param mixed $roles
-     *
+     * @param  mixed  $roles
      * @return bool
      */
     public function isValid($roles): bool
     {
-        if (!\is_array($roles)) {
+        if (! \is_array($roles)) {
             $this->message = 'Roles must be an array of strings.';
+
             return false;
         }
 
         if ($this->length && \count($roles) > $this->length) {
-            $this->message = 'You can only provide up to ' . $this->length . ' roles.';
+            $this->message = 'You can only provide up to '.$this->length.' roles.';
+
             return false;
         }
 
         foreach ($roles as $role) {
-            if (!\is_string($role)) {
+            if (! \is_string($role)) {
                 $this->message = 'Every role must be of type string.';
+
                 return false;
             }
             if ($role === '*') {
                 $this->message = 'Wildcard role "*" has been replaced. Use "any" instead.';
+
                 return false;
             }
             if (\str_contains($role, 'role:')) {
                 $this->message = 'Roles using the "role:" prefix have been removed. Use "users", "guests", or "any" instead.';
+
                 return false;
             }
 
@@ -170,8 +180,9 @@ class Roles extends Validator
                     break;
                 }
             }
-            if (!$isAllowed) {
-                $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', $this->allowed) . '.';
+            if (! $isAllowed) {
+                $this->message = 'Role "'.$role.'" is not allowed. Must be one of: '.\implode(', ', $this->allowed).'.';
+
                 return false;
             }
 
@@ -179,6 +190,7 @@ class Roles extends Validator
                 $role = Role::parse($role);
             } catch (\Exception $e) {
                 $this->message = $e->getMessage();
+
                 return false;
             }
 
@@ -186,10 +198,11 @@ class Roles extends Validator
             $identifier = $role->getIdentifier();
             $dimension = $role->getDimension();
 
-            if (!$this->isValidRole($roleName, $identifier, $dimension)) {
+            if (! $this->isValidRole($roleName, $identifier, $dimension)) {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -221,24 +234,26 @@ class Roles extends Validator
         string $role,
         string $identifier,
         string $dimension
-    ): bool
-    {
+    ): bool {
         $key = new Key();
 
         $config = self::CONFIG[$role] ?? null;
 
         if (empty($config)) {
-            $this->message = 'Role "' . $role . '" is not allowed. Must be one of: ' . \implode(', ', self::ROLES) . '.';
+            $this->message = 'Role "'.$role.'" is not allowed. Must be one of: '.\implode(', ', self::ROLES).'.';
+
             return false;
         }
 
-        if (!isset($config['identifier'])) {
-            $this->message = 'Role "' . $role . '" missing identifier configuration.';
+        if (! isset($config['identifier'])) {
+            $this->message = 'Role "'.$role.'" missing identifier configuration.';
+
             return false;
         }
 
-        if (!isset($config['dimension'])) {
-            $this->message = 'Role "' . $role . '" missing dimension configuration.';
+        if (! isset($config['dimension'])) {
+            $this->message = 'Role "'.$role.'" missing dimension configuration.';
+
             return false;
         }
 
@@ -247,22 +262,25 @@ class Roles extends Validator
         $required = $config['identifier']['required'] ?? false;
 
         // Not allowed and has an identifier
-        if (!$allowed && !empty($identifier)) {
-            $this->message = 'Role "' . $role . '"' . ' can not have an ID value.';
+        if (! $allowed && ! empty($identifier)) {
+            $this->message = 'Role "'.$role.'"'.' can not have an ID value.';
+
             return false;
         }
 
         // Required and has no identifier
         if ($allowed && $required && empty($identifier)) {
-            $this->message = 'Role "' . $role . '"' . ' must have an ID value.';
+            $this->message = 'Role "'.$role.'"'.' must have an ID value.';
+
             return false;
         }
 
         // Allowed and has an invalid identifier
         if ($allowed
-            && !empty($identifier)
-            && !$key->isValid($identifier)) {
-            $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
+            && ! empty($identifier)
+            && ! $key->isValid($identifier)) {
+            $this->message = 'Role "'.$role.'"'.' identifier value is invalid: '.$key->getDescription();
+
             return false;
         }
 
@@ -272,26 +290,30 @@ class Roles extends Validator
         $options = $config['dimension']['options'] ?? [$dimension];
 
         // Not allowed and has a dimension
-        if (!$allowed && !empty($dimension)) {
-            $this->message = 'Role "' . $role . '"' . ' can not have a dimension value.';
+        if (! $allowed && ! empty($dimension)) {
+            $this->message = 'Role "'.$role.'"'.' can not have a dimension value.';
+
             return false;
         }
 
         // Required and has no dimension
         if ($allowed && $required && empty($dimension)) {
-            $this->message = 'Role "' . $role . '"' . ' must have a dimension value.';
+            $this->message = 'Role "'.$role.'"'.' must have a dimension value.';
+
             return false;
         }
 
-        if ($allowed && !empty($dimension)) {
+        if ($allowed && ! empty($dimension)) {
             // Allowed and dimension is not an allowed option
-            if (!\in_array($dimension, $options)) {
-                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid. Must be one of: ' . \implode(', ', $options) . '.';
+            if (! \in_array($dimension, $options)) {
+                $this->message = 'Role "'.$role.'"'.' dimension value is invalid. Must be one of: '.\implode(', ', $options).'.';
+
                 return false;
             }
             // Allowed and dimension is not a valid key
-            if (!$key->isValid($dimension)) {
-                $this->message = 'Role "' . $role . '"' . ' dimension value is invalid: ' . $key->getDescription();
+            if (! $key->isValid($dimension)) {
+                $this->message = 'Role "'.$role.'"'.' dimension value is invalid: '.$key->getDescription();
+
                 return false;
             }
         }

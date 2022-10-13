@@ -2,13 +2,13 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\ID;
-use Utopia\Database\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\ID;
 use Utopia\Database\Query as DatabaseQuery;
 use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Query;
 
 class QueriesTest extends TestCase
 {
@@ -18,7 +18,7 @@ class QueriesTest extends TestCase
     protected $collection = [];
 
     /**
-     * @var DatabaseQuery[] $queries
+     * @var DatabaseQuery[]
      */
     protected $queries = [];
 
@@ -113,11 +113,11 @@ class QueriesTest extends TestCase
             'type' => 'key',
             'attributes' => [
                 'title',
-                'description'
+                'description',
             ],
             'orders' => [
                 'ASC',
-                'DESC'
+                'DESC',
             ],
         ]);
 
@@ -127,11 +127,11 @@ class QueriesTest extends TestCase
             'attributes' => [
                 'title',
                 'description',
-                'price'
+                'price',
             ],
             'orders' => [
                 'ASC',
-                'DESC'
+                'DESC',
             ],
         ]);
 
@@ -139,18 +139,18 @@ class QueriesTest extends TestCase
             '$id' => ID::custom('testindex3'),
             'type' => 'fulltext',
             'attributes' => [
-                'title'
+                'title',
             ],
-            'orders' => []
+            'orders' => [],
         ]);
 
         $index4 = new Document([
             '$id' => 'testindex4',
             'type' => 'key',
             'attributes' => [
-                'description'
+                'description',
             ],
-            'orders' => []
+            'orders' => [],
         ]);
 
         $this->collection['indexes'] = [$index1, $index2, $index3, $index4];
@@ -179,7 +179,7 @@ class QueriesTest extends TestCase
         $this->queries[] = 'greaterThan("rating", 4)';
 
         $this->assertFalse($validator->isValid($this->queries));
-        $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
+        $this->assertEquals('Index not found: title,description,price,rating', $validator->getDescription());
 
         // test for queued index
         $query1 = 'lessThan("price", 6.50)';
@@ -187,20 +187,20 @@ class QueriesTest extends TestCase
 
         $this->queries = [$query1, $query2];
         $this->assertEquals(false, $validator->isValid($this->queries));
-        $this->assertEquals("Index not found: price,title", $validator->getDescription());
+        $this->assertEquals('Index not found: price,title', $validator->getDescription());
 
         // test fulltext
 
         $query3 = 'search("description", "iron")';
         $this->queries = [$query3];
         $this->assertEquals(false, $validator->isValid($this->queries));
-        $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
+        $this->assertEquals('Search method requires fulltext index: description', $validator->getDescription());
     }
 
     public function testLooseOrderQueries()
     {
         $validator = new Queries(
-            $this->queryValidator, 
+            $this->queryValidator,
             [
                 new Document([
                     '$id' => 'title',
@@ -240,11 +240,11 @@ class QueriesTest extends TestCase
                     'attributes' => [
                         'title',
                         'price',
-                        'rating'
+                        'rating',
                     ],
-                    'orders' => []
-                ])
-            ], 
+                    'orders' => [],
+                ]),
+            ],
             true,
         );
 
@@ -301,6 +301,5 @@ class QueriesTest extends TestCase
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes'], false);
 
         $this->assertEquals(false, $validator->isStrict());
-
     }
 }

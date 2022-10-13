@@ -3,10 +3,10 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
-use Utopia\Validator;
-use Utopia\Validator\Range;
 use Utopia\Database\Document;
 use Utopia\Database\Query as DatabaseQuery;
+use Utopia\Validator;
+use Utopia\Validator\Range;
 
 class Query extends Validator
 {
@@ -21,16 +21,18 @@ class Query extends Validator
     protected $schema = [];
 
     protected int $maxLimit;
+
     protected int $maxOffset;
+
     protected int $maxValuesCount;
 
     /**
      * Query constructor
      *
-     * @param Document[] $attributes
-     * @param int $maxLimit
-     * @param int $maxOffset
-     * @param int $maxValuesCount
+     * @param  Document[]  $attributes
+     * @param  int  $maxLimit
+     * @param  int  $maxOffset
+     * @param  int  $maxValuesCount
      */
     public function __construct(array $attributes, int $maxLimit = 100, int $maxOffset = 5000, int $maxValuesCount = 100)
     {
@@ -38,21 +40,21 @@ class Query extends Validator
             'key' => '$id',
             'array' => false,
             'type' => Database::VAR_STRING,
-            'size' => 512
+            'size' => 512,
         ];
 
         $this->schema['$createdAt'] = [
             'key' => '$createdAt',
             'array' => false,
             'type' => Database::VAR_DATETIME,
-            'size' => 0
+            'size' => 0,
         ];
 
         $this->schema['$updatedAt'] = [
             'key' => '$updatedAt',
             'array' => false,
             'type' => Database::VAR_DATETIME,
-            'size' => 0
+            'size' => 0,
         ];
 
         foreach ($attributes as $attribute) {
@@ -76,47 +78,64 @@ class Query extends Validator
         return $this->message;
     }
 
-    protected function isValidLimit($limit): bool {
+    protected function isValidLimit($limit): bool
+    {
         $validator = new Range(0, $this->maxLimit);
-        if ($validator->isValid($limit)) return true;
+        if ($validator->isValid($limit)) {
+            return true;
+        }
 
-        $this->message = 'Invalid limit: ' . $validator->getDescription();
+        $this->message = 'Invalid limit: '.$validator->getDescription();
+
         return false;
     }
 
-    protected function isValidOffset($offset): bool {
+    protected function isValidOffset($offset): bool
+    {
         $validator = new Range(0, $this->maxOffset);
-        if ($validator->isValid($offset)) return true;
+        if ($validator->isValid($offset)) {
+            return true;
+        }
 
-        $this->message = 'Invalid offset: ' . $validator->getDescription();
+        $this->message = 'Invalid offset: '.$validator->getDescription();
+
         return false;
     }
 
-    protected function isValidCursor($cursor): bool {
+    protected function isValidCursor($cursor): bool
+    {
         if ($cursor === null) {
             $this->message = 'Cursor must not be null';
+
             return false;
         }
+
         return true;
     }
 
-    protected function isValidAttribute($attribute): bool {
+    protected function isValidAttribute($attribute): bool
+    {
         // Search for attribute in schema
-        if (!isset($this->schema[$attribute])) {
-            $this->message = 'Attribute not found in schema: ' . $attribute;
+        if (! isset($this->schema[$attribute])) {
+            $this->message = 'Attribute not found in schema: '.$attribute;
+
             return false;
         }
 
         return true;
     }
 
-    protected function isValidAttributeAndValues(string $attribute, array $values): bool {
-        if (!$this->isValidAttribute($attribute)) return false;
+    protected function isValidAttributeAndValues(string $attribute, array $values): bool
+    {
+        if (! $this->isValidAttribute($attribute)) {
+            return false;
+        }
 
         $attributeSchema = $this->schema[$attribute];
-        
+
         if (count($values) > $this->maxValuesCount) {
-            $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+            $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+
             return false;
         }
 
@@ -129,23 +148,28 @@ class Query extends Validator
                 default => gettype($value) === $attributeType
             };
 
-            if (!$condition) {
-                $this->message = 'Query type does not match expected: ' . $attributeType;
+            if (! $condition) {
+                $this->message = 'Query type does not match expected: '.$attributeType;
+
                 return false;
             }
         }
-        
+
         return true;
     }
 
-    protected function isValidContains(string $attribute, array $values): bool {
-        if (!$this->isValidAttributeAndValues($attribute, $values)) return false;
+    protected function isValidContains(string $attribute, array $values): bool
+    {
+        if (! $this->isValidAttributeAndValues($attribute, $values)) {
+            return false;
+        }
 
         $attributeSchema = $this->schema[$attribute];
 
         // Contains method only supports array attributes
-        if (!$attributeSchema['array']) {
-            $this->message = 'Query method only supported on array attributes: ' . DatabaseQuery::TYPE_CONTAINS;
+        if (! $attributeSchema['array']) {
+            $this->message = 'Query method only supported on array attributes: '.DatabaseQuery::TYPE_CONTAINS;
+
             return false;
         }
 
@@ -163,19 +187,19 @@ class Query extends Validator
      * 5. count of values is greater than $maxValuesCount
      * 6. value type does not match attribute type
      * 6. contains method is used on non-array attribute
-     * 
+     *
      * Otherwise, returns true.
      *
-     * @param DatabaseQuery $query
-     *
+     * @param  DatabaseQuery  $query
      * @return bool
      */
     public function isValid($query): bool
     {
         // Validate method
         $method = $query->getMethod();
-        if (!DatabaseQuery::isMethod($method)) {
-            $this->message = 'Query method invalid: ' . $method;
+        if (! DatabaseQuery::isMethod($method)) {
+            $this->message = 'Query method invalid: '.$method;
+
             return false;
         }
 
@@ -184,34 +208,42 @@ class Query extends Validator
         switch ($method) {
             case DatabaseQuery::TYPE_LIMIT:
                 $limit = $query->getValue();
+
                 return $this->isValidLimit($limit);
 
             case DatabaseQuery::TYPE_OFFSET:
                 $offset = $query->getValue();
+
                 return $this->isValidOffset($offset);
 
             case DatabaseQuery::TYPE_CURSORAFTER:
             case DatabaseQuery::TYPE_CURSORBEFORE:
                 $cursor = $query->getValue();
+
                 return $this->isValidCursor($cursor);
 
             case DatabaseQuery::TYPE_ORDERASC:
             case DatabaseQuery::TYPE_ORDERDESC:
                 // Allow empty string for order attribute so we can order by natural order
-                if ($attribute === '') return true;
+                if ($attribute === '') {
+                    return true;
+                }
+
                 return $this->isValidAttribute($attribute);
-            
+
             case DatabaseQuery::TYPE_CONTAINS:
                 $values = $query->getValues();
+
                 return $this->isValidContains($attribute, $values);
 
             default:
                 // other filter queries
                 $values = $query->getValues();
+
                 return $this->isValidAttributeAndValues($attribute, $values);
         }
-
     }
+
     /**
      * Is array
      *

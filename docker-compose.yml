@@ -79,6 +79,15 @@ services:
       MYSQL_TCP_PORT: 3307
     cap_add:
       - SYS_NICE
+      
+      
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    container_name: utopia-clickhouse
+    networks:
+      - database
+    ports:
+      - "18123:8123"
 
   redis:
     image: redis:6.0-alpine

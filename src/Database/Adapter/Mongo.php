@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use Mongo\Exception\Duplicate;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -13,6 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
+use Utopia\Mongo\Exception\Duplicate;
 use Utopia\Mongo\MongoClient;
 
 class Mongo extends Adapter
@@ -148,11 +148,7 @@ class Mongo extends Adapter
 
         // Returns an array/object with the result document
 
-        $res = $this->getClient()->createCollection($id);
-
-        if ($res) {
-            return false;
-        }
+        $this->getClient()->createCollection($id);
 
         $indexesCreated = $this->client->createIndexes($id, [
             [
@@ -408,9 +404,13 @@ class Mongo extends Adapter
         $document->removeAttribute('$internalId');
 
         $record = $this->replaceChars('$', '_', (array)$document);
-        $record = $this->timeToMongo($record);        
+        $record = $this->timeToMongo($record);
 
-        $result = $this->client->insert($name, $this->removeNullKeys($record));
+        try {
+            $result = $this->client->insert($name, $this->removeNullKeys($record));
+        } catch (Duplicate $e) {
+            throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
+        }
 
         $result = $this->replaceChars('_', '$', $result);
         $result = $this->timeToDocument($result);
@@ -435,11 +435,11 @@ class Mongo extends Adapter
         $record = $this->replaceChars('$', '_', $record);
         $record = $this->timeToMongo($record);
 
-        $this->client->update(
-            $name,
-            ['_uid' => $document->getId()],
-            $record,
-        );
+        try {
+            $this->client->update($name, ['_uid' => $document->getId()], $record);
+        } catch (Duplicate $e) {
+            throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
+        }
 
         return $document;
     }

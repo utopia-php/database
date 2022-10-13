@@ -21,6 +21,9 @@
     "autoload-dev": {
         "psr-4": {"Utopia\\Tests\\": "tests/Database"}
     },
+    "scripts": {
+        "check": "./vendor/bin/phpstan analyse --level max src tests"
+    },
     "require": {
         "php": ">=8.0",
         "ext-pdo": "*",
@@ -32,6 +35,7 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.14",
+        "phpstan/phpstan": "1.9.x-dev",
         "phpunit/phpunit": "^9.4",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",

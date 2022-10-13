@@ -83,6 +83,8 @@ class Database
     const EVENT_DOCUMENT_READ = 'document_read';
     const EVENT_DOCUMENT_UPDATE = 'document_update';
     const EVENT_DOCUMENT_DELETE = 'document_delete';
+    const EVENT_DOCUMENT_COUNT = 'document_count';
+    const EVENT_DOCUMENT_SUM = 'document_sum';
 
     const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -1527,7 +1529,9 @@ class Database
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
-        return $this->adapter->count($collection->getId(), $queries, $max);
+        $count = $this->adapter->count($collection->getId(), $queries, $max);
+        $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
+        return $count;
     }
 
     /**
@@ -1552,7 +1556,9 @@ class Database
         }
 
         $queries = self::convertQueries($collection, $queries);
-        return $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
+        return $sum;
     }
 
     /**

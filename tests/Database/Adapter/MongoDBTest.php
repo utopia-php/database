@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Adapter;
 
+use Exception;
 use Redis;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
@@ -43,7 +44,7 @@ class MongoDBTest extends Base
 
     /**
      * @return Database
-     * @throws \Exception
+     * @throws Exception
      */
     static function getDatabase(): Database
     {
@@ -76,13 +77,15 @@ class MongoDBTest extends Base
         return self::$database = $database;
     }
 
+    /**
+     * @throws Exception
+     */
     public function testCreateExistsDelete()
     {
         // Mongo creates databases on the fly, so exists would always pass. So we
         // overide this test to remove the exists check.
         $this->assertNotNull(static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
-
         $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }

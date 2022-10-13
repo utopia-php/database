@@ -80,6 +80,15 @@ services:
     cap_add:
       - SYS_NICE
 
+  tigris:
+    image: tigrisdata/tigris-local
+    container_name: utopia-tigris
+    networks:
+      - database
+    ports:
+      - "8709:8081"
+
+
   redis:
     image: redis:6.0-alpine
     container_name: utopia-redis

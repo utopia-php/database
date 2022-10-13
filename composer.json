@@ -28,7 +28,8 @@
         "ext-mongodb": "*",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.6.*",
-        "mongodb/mongodb": "1.8.0"
+        "mongodb/mongodb": "1.8.0",
+        "guzzlehttp/guzzle": "^7.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.14",

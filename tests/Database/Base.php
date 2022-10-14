@@ -3229,7 +3229,12 @@ abstract class Base extends TestCase
             $database->renameIndex($collectionId, 'index1', 'index2');
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
-                'attr2' => 10
+                'attr2' => 10,
+                '$permissions' => [
+                    Permission::delete(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
             ]));
             $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr2', 15));
             $database->getDocument($collectionId, 'doc1');

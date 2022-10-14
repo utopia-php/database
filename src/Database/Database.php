@@ -495,7 +495,7 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
-        $collection = $this->silent(fn () => $this->getCollection($id));
+        $collection = $this->silent(fn() => $this->getCollection($id));
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
@@ -556,7 +556,7 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
         return $collection;
     }
@@ -574,7 +574,7 @@ class Database
     {
         Authorization::disable();
 
-        $result = $this->silent(fn() =>$this->find(self::METADATA, [
+        $result = $this->silent(fn() => $this->find(self::METADATA, [
             Query::limit($limit),
             Query::offset($offset)
         ]));
@@ -597,7 +597,7 @@ class Database
         $this->adapter->deleteCollection($id);
         
         $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
-        $deleted = $this->silent(fn()=>$this->deleteDocument(self::METADATA, $id));
+        $deleted = $this->silent(fn() => $this->deleteDocument(self::METADATA, $id));
         $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
         return $deleted;
     }
@@ -706,7 +706,7 @@ class Database
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn()=>$this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
@@ -793,7 +793,7 @@ class Database
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
     {
         // Load
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -810,7 +810,7 @@ class Database
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn()=>$this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
@@ -1037,7 +1037,7 @@ class Database
         $collection->setAttribute('attributes', $attributes);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn()=>$this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
@@ -1056,7 +1056,7 @@ class Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        $collection = $this->silent(fn() =>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1093,7 +1093,7 @@ class Database
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn()=>$this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
@@ -1167,7 +1167,7 @@ class Database
             throw new Exception('Missing attributes');
         }
 
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
@@ -1218,7 +1218,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn()=>$this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
@@ -1235,7 +1235,7 @@ class Database
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1250,7 +1250,7 @@ class Database
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn()=>$this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
@@ -1276,7 +1276,7 @@ class Database
             throw new Exception('test exception: ' . $collection . ':' . $id);
         }
 
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
         $document = null;
         $cache = null;
 
@@ -1330,7 +1330,7 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $time = DateTime::now();
 
@@ -1375,8 +1375,8 @@ class Database
         $time = DateTime::now();
         $document->setAttribute('$updatedAt', $time);
 
-        $old = Authorization::skip(fn() => $this->silent(fn()=>$this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $old = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
@@ -1416,8 +1416,8 @@ class Database
     {
         $validator = new Authorization(self::PERMISSION_DELETE);
 
-        $document = Authorization::skip(fn() => $this->silent(fn()=>$this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA
             && !$validator->isValid($document->getDelete())) {
@@ -1467,7 +1467,7 @@ class Database
      */
     public function find(string $collection, array $queries = []): array
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $grouped = Query::groupByType($queries);
         /** @var Query[] */ $filters = $grouped['filters'];
@@ -1535,7 +1535,7 @@ class Database
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
             throw new Exception("Collection not found");
@@ -1564,7 +1564,7 @@ class Database
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
             throw new Exception("Collection not found");

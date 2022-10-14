@@ -3180,4 +3180,71 @@ abstract class Base extends TestCase
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
     }
+
+    public function testEvents()
+    {
+        Authorization::disable();
+        Authorization::setDefaultStatus(false);
+        $events = [
+            Database::EVENT_DATABASE_CREATE,
+            Database::EVENT_DATABASE_LIST,
+            Database::EVENT_COLLECTION_CREATE,
+            Database::EVENT_COLLECTION_LIST,
+            Database::EVENT_COLLECTION_READ,
+            Database::EVENT_ATTRIBUTE_CREATE,
+            Database::EVENT_ATTRIBUTE_UPDATE,
+            Database::EVENT_ATTRIBUTE_UPDATE,
+            Database::EVENT_INDEX_CREATE,
+            Database::EVENT_INDEX_RENAME,
+            Database::EVENT_DOCUMENT_CREATE,
+            Database::EVENT_DOCUMENT_UPDATE,
+            Database::EVENT_DOCUMENT_READ,
+            Database::EVENT_DOCUMENT_FIND,
+            Database::EVENT_DOCUMENT_FIND,
+            Database::EVENT_DOCUMENT_COUNT,
+            Database::EVENT_DOCUMENT_SUM,
+            Database::EVENT_INDEX_DELETE,
+            Database::EVENT_DOCUMENT_DELETE,
+            Database::EVENT_ATTRIBUTE_DELETE,
+            Database::EVENT_COLLECTION_DELETE,
+            Database::EVENT_DATABASE_DELETE,
+        ];
+
+        $database = static::getDatabase();
+        $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
+            $this->assertEquals(array_shift($events), $event);
+        });
+
+        $database->create('hellodb');
+        $database->list();
+
+        $database->setDefaultDatabase($this->testDatabase);
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+        $database->listCollections();
+        $database->getCollection($collectionId);
+        $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+        $database->updateAttributeRequired($collectionId, 'attr1', true);
+        $database->renameAttribute($collectionId, 'attr1', 'attr2');
+        $database->createIndex($collectionId, 'index1', Database::INDEX_KEY, ['attr2']);
+        $database->renameIndex($collectionId, 'index1', 'index2');
+        $document = $database->createDocument($collectionId, new Document([
+            '$id' => 'doc1',
+            'attr2' => 10
+        ]));
+        $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr2', 15));
+        $database->getDocument($collectionId, 'doc1');
+        $database->find($collectionId);
+        $database->findOne($collectionId);
+        $database->count($collectionId);
+        $database->sum($collectionId, 'attr2');
+        
+        $database->deleteIndex($collectionId, 'index2');
+        $database->deleteDocument($collectionId, 'doc1');
+        $database->deleteAttribute($collectionId, 'attr2');
+        $database->deleteCollection($collectionId);
+        $database->delete('hellodb');
+
+    }
 }

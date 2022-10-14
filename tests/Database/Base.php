@@ -3225,8 +3225,11 @@ abstract class Base extends TestCase
             $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $database->renameAttribute($collectionId, 'attr1', 'attr2');
-            $database->createIndex($collectionId, 'index1', Database::INDEX_KEY, ['attr2']);
-            $database->renameIndex($collectionId, 'index1', 'index2');
+            
+            $indexId1 = 'index1_' . uniqid();
+            $indexId2 = 'index2_' . uniqid();
+            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr2']);
+            $database->renameIndex($collectionId, $indexId1, $indexId2);
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
                 'attr2' => 10,
@@ -3243,7 +3246,7 @@ abstract class Base extends TestCase
             $database->count($collectionId);
             $database->sum($collectionId, 'attr2');
             
-            $database->deleteIndex($collectionId, 'index2');
+            $database->deleteIndex($collectionId, $indexId2);
             $database->deleteDocument($collectionId, 'doc1');
             $database->deleteAttribute($collectionId, 'attr2');
             $database->deleteCollection($collectionId);

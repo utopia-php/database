@@ -70,7 +70,6 @@ class Database
     
     const EVENT_DATABASE_LIST = 'database_list';
     const EVENT_DATABASE_CREATE = 'database_create';
-    const EVENT_DATABASE_READ = 'database_read';
     const EVENT_DATABASE_DELETE = 'database_delete';
     
     const EVENT_COLLECTION_LIST = 'collection_list';
@@ -328,11 +327,11 @@ class Database
     protected function trigger(string $event, mixed $args = null): void
     {
         foreach ($this->listeners[self::EVENT_ALL] as $callback) {
-            call_user_func($event, $args);
+            call_user_func($callback, $event, $args);
         }
 
         foreach(($this->listeners[$event] ?? []) as $callback) {
-            call_user_func($event, $args);
+            call_user_func($callback, $event, $args);
         }
     }
 
@@ -799,6 +798,7 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
         }
+
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
     }
 

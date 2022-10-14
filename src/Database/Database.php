@@ -1515,7 +1515,7 @@ class Database
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
-        $results = $this->find($collection, \array_merge([Query::limit(1)], $queries));
+        $results = $this->silent(fn() => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
         $found = \reset($results);
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
         return $found;

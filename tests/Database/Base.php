@@ -49,6 +49,11 @@ abstract class Base extends TestCase
 
     protected string $testDatabase = 'utopiaTests';
 
+    public function testPing()
+    {
+        $this->assertEquals(true, static::getDatabase()->ping());
+    }
+
     public function testCreateExistsDelete()
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();

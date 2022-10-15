@@ -326,6 +326,16 @@ class Database
     }
 
     /**
+     * Ping Database
+     *
+     * @return bool
+     */
+    public function ping(): bool
+    {
+        return $this->adapter->ping();
+    }
+
+    /**
      * Create Database
      *
      * @param string $name

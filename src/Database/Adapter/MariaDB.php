@@ -33,6 +33,20 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Ping Database
+     *
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function ping(): bool
+    {
+        return $this->getPDO()
+            ->prepare("SELECT 1;")
+            ->execute();
+    }
+
+    /**
      * Create Database
      *
      * @param string $name

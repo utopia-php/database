@@ -41,9 +41,9 @@ class MongoDBAdapter extends Adapter
      *
      * @return bool
      */
-    public function ping():bool
+    public function ping(): bool
     {
-        return $this->getClient()->query(['ping' => 1]);
+        return $this->getClient()->query(['ping' => 1])->ok ?? false;
     }
 
     /**

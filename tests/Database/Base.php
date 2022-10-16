@@ -3184,6 +3184,8 @@ abstract class Base extends TestCase
     public function testEvents()
     {
         Authorization::skip(function() {
+            $database = static::getDatabase();
+
             $events = [
                 Database::EVENT_DATABASE_CREATE,
                 Database::EVENT_DATABASE_LIST,
@@ -3206,12 +3208,15 @@ abstract class Base extends TestCase
                 Database::EVENT_COLLECTION_DELETE,
                 Database::EVENT_DATABASE_DELETE,
             ];
-            $database = static::getDatabase();
             $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
                 $this->assertEquals(array_shift($events), $event);
             });
     
-            $database->create('hellodb');
+            if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+                $database->create('hellodb');
+            } else {
+                array_shift($events);
+            }
             $database->list();
     
             $database->setDefaultDatabase($this->testDatabase);
@@ -3222,7 +3227,7 @@ abstract class Base extends TestCase
             $database->getCollection($collectionId);
             $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
             $database->updateAttributeRequired($collectionId, 'attr1', true);
-            $indexId1 = 'index10_' . uniqid();
+            $indexId1 = 'index2_' . uniqid();
             $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',

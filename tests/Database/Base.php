@@ -3192,9 +3192,7 @@ abstract class Base extends TestCase
                 Database::EVENT_COLLECTION_READ,
                 Database::EVENT_ATTRIBUTE_CREATE,
                 Database::EVENT_ATTRIBUTE_UPDATE,
-                Database::EVENT_ATTRIBUTE_UPDATE,
                 Database::EVENT_INDEX_CREATE,
-                Database::EVENT_INDEX_RENAME,
                 Database::EVENT_DOCUMENT_CREATE,
                 Database::EVENT_DOCUMENT_UPDATE,
                 Database::EVENT_DOCUMENT_READ,
@@ -3224,15 +3222,11 @@ abstract class Base extends TestCase
             $database->getCollection($collectionId);
             $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
             $database->updateAttributeRequired($collectionId, 'attr1', true);
-            $database->renameAttribute($collectionId, 'attr1', 'attr2');
-            
-            $indexId1 = 'index1_' . uniqid();
-            $indexId2 = 'index2_' . uniqid();
+            $indexId1 = 'index10_' . uniqid();
             $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr2']);
-            $database->renameIndex($collectionId, $indexId1, $indexId2);
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
-                'attr2' => 10,
+                'attr1' => 10,
                 '$permissions' => [
                     Permission::delete(Role::any()),
                     Permission::update(Role::any()),
@@ -3246,7 +3240,7 @@ abstract class Base extends TestCase
             $database->count($collectionId);
             $database->sum($collectionId, 'attr2');
             
-            $database->deleteIndex($collectionId, $indexId2);
+            $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
             $database->deleteAttribute($collectionId, 'attr2');
             $database->deleteCollection($collectionId);

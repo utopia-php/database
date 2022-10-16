@@ -1561,9 +1561,9 @@ class MariaDB extends Adapter
             PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
             PDO::ATTR_PERSISTENT => true, // Create a persistent connection
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on srrors
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on errors
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
-            PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
+            PDO::ATTR_STRINGIFY_FETCHES => true, // Returns all fetched data as Strings
         ];
     }
 }

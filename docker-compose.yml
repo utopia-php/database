@@ -86,8 +86,20 @@ services:
     container_name: utopia-clickhouse
     networks:
       - database
+    volumes:
+      - ./config/users.xml:/etc/clickhouse-server/users.xml
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    cap_add:
+      - SYS_NICE
+      - NET_ADMIN
+      - IPC_LOCK
+      - SYS_PTRACE
     ports:
       - "18123:8123"
+      - "18124:9004"
 
   redis:
     image: redis:6.0-alpine

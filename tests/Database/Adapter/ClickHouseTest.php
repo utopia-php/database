@@ -49,9 +49,9 @@ class ClickHouseTest extends MariaDBTest
         }
 
         $dbHost = 'clickhouse';
-        $dbPort = '8123';
+        $dbPort = '9004';
         $dbUser = 'default';
-        $dbPass = '';
+        $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, ClickHouse::getPdoAttributes());
         $redis = new Redis();

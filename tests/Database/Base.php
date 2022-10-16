@@ -3223,7 +3223,7 @@ abstract class Base extends TestCase
             $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $indexId1 = 'index10_' . uniqid();
-            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr2']);
+            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
                 'attr1' => 10,
@@ -3233,16 +3233,16 @@ abstract class Base extends TestCase
                     Permission::read(Role::any()),
                 ],
             ]));
-            $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr2', 15));
+            $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
             $database->getDocument($collectionId, 'doc1');
             $database->find($collectionId);
             $database->findOne($collectionId);
             $database->count($collectionId);
-            $database->sum($collectionId, 'attr2');
+            $database->sum($collectionId, 'attr1');
             
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
-            $database->deleteAttribute($collectionId, 'attr2');
+            $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });

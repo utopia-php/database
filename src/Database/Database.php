@@ -322,7 +322,13 @@ class Database
         return $this;
     }
 
-    public function silent(callable $callback) {
+    /**
+     * Silent event generation for all the calls inside the callback
+     *
+     * @param callable $callback
+     * @return mixed
+     */
+    public function silent(callable $callback): mixed {
         $previous = $this->silentEvents;
         $this->silentEvents = true;
         $result = $callback();

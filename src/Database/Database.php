@@ -53,7 +53,7 @@ class Database
     ];
 
     // Collections
-    const METADATA = 'metadata';
+    const METADATA = '_metadata';
 
     // Cursor
     const CURSOR_BEFORE = 'before';

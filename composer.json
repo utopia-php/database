@@ -25,16 +25,23 @@
         "php": ">=8.0",
         "ext-pdo": "*",
         "ext-redis": "*",
-        "ext-mongodb": "*",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.6.*",
-        "mongodb/mongodb": "1.8.0"
+        "utopia-php/mongo": "dev-shmuel.1 as 0.0.1",
+        "ext-mongodb": "*"
     },
     "require-dev": {
+        "laravel/pint": "1.2.*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",
         "vimeo/psalm": "4.0.1"
-    }
+    },
+    "repositories": [
+        {
+            "type": "git",
+            "url": "https://github.com/utopia-php/mongo"
+        }
+    ]
 }

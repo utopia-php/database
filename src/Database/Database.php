@@ -1222,7 +1222,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws StructureException
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {

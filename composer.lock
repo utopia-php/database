@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d960db719a704a1cbd556d510e3708d4",
+    "content-hash": "f655c3a2ecc883f15ba34b0ea421f22a",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -340,24 +340,24 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.21.1",
+            "version": "0.22.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "c81789b87a917da2daf336738170ebe01f50ea18"
+                "reference": "9f35d36ed4b8fa1c92962c77ef02b49c2f5919df"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/c81789b87a917da2daf336738170ebe01f50ea18",
-                "reference": "c81789b87a917da2daf336738170ebe01f50ea18",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/9f35d36ed4b8fa1c92962c77ef02b49c2f5919df",
+                "reference": "9f35d36ed4b8fa1c92962c77ef02b49c2f5919df",
                 "shasum": ""
             },
             "require": {
                 "php": ">=8.0.0"
             },
             "require-dev": {
-                "phpunit/phpunit": "^9.5.10",
-                "vimeo/psalm": "4.13.1"
+                "phpunit/phpunit": "^9.5.25",
+                "vimeo/psalm": "^4.27.0"
             },
             "type": "library",
             "autoload": {
@@ -383,9 +383,61 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/framework/issues",
-                "source": "https://github.com/utopia-php/framework/tree/0.21.1"
+                "source": "https://github.com/utopia-php/framework/tree/0.22.1"
             },
-            "time": "2022-09-07T09:56:28+00:00"
+            "time": "2022-10-07T14:51:40+00:00"
+        },
+        {
+            "name": "utopia-php/mongo",
+            "version": "dev-shmuel.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/mongo",
+                "reference": "e106e5a017befcace3f78d19f93a2898e14c4063"
+            },
+            "require": {
+                "ext-mongodb": "*",
+                "mongodb/mongodb": "1.8.0",
+                "php": ">=8.0"
+            },
+            "require-dev": {
+                "fakerphp/faker": "^1.14",
+                "phpunit/phpunit": "^9.4",
+                "swoole/ide-helper": "4.8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Mongo\\": "src"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Utopia\\Tests\\": "tests"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Eldad Fux",
+                    "email": "eldad@appwrite.io"
+                },
+                {
+                    "name": "Wess",
+                    "email": "wess@appwrite.io"
+                }
+            ],
+            "description": "A simple library to manage Mongo database",
+            "keywords": [
+                "database",
+                "mongo",
+                "php",
+                "upf",
+                "utopia"
+            ],
+            "time": "2022-10-13T07:31:04+00:00"
         }
     ],
     "packages-dev": [
@@ -974,6 +1026,72 @@
                 "source": "https://github.com/felixfbecker/php-language-server-protocol/tree/v1.5.2"
             },
             "time": "2022-03-02T22:36:06+00:00"
+        },
+        {
+            "name": "laravel/pint",
+            "version": "v1.2.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/laravel/pint.git",
+                "reference": "1d276e4c803397a26cc337df908f55c2a4e90d86"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/laravel/pint/zipball/1d276e4c803397a26cc337df908f55c2a4e90d86",
+                "reference": "1d276e4c803397a26cc337df908f55c2a4e90d86",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "ext-tokenizer": "*",
+                "ext-xml": "*",
+                "php": "^8.0"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.11.0",
+                "illuminate/view": "^9.27",
+                "laravel-zero/framework": "^9.1.3",
+                "mockery/mockery": "^1.5.0",
+                "nunomaduro/larastan": "^2.2",
+                "nunomaduro/termwind": "^1.14.0",
+                "pestphp/pest": "^1.22.1"
+            },
+            "bin": [
+                "builds/pint"
+            ],
+            "type": "project",
+            "autoload": {
+                "psr-4": {
+                    "App\\": "app/",
+                    "Database\\Seeders\\": "database/seeders/",
+                    "Database\\Factories\\": "database/factories/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Nuno Maduro",
+                    "email": "enunomaduro@gmail.com"
+                }
+            ],
+            "description": "An opinionated code formatter for PHP.",
+            "homepage": "https://laravel.com",
+            "keywords": [
+                "format",
+                "formatter",
+                "lint",
+                "linter",
+                "php"
+            ],
+            "support": {
+                "issues": "https://github.com/laravel/pint/issues",
+                "source": "https://github.com/laravel/pint"
+            },
+            "time": "2022-09-13T15:07:15+00:00"
         },
         {
             "name": "myclabs/deep-copy",
@@ -2996,16 +3114,16 @@
         },
         {
             "name": "symfony/console",
-            "version": "v5.4.13",
+            "version": "v5.4.14",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/console.git",
-                "reference": "3f97f6c7b7e26848a90c0c0cfb91eeb2bb8618be"
+                "reference": "984ea2c0f45f42dfed01d2f3987b187467c4b16d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/console/zipball/3f97f6c7b7e26848a90c0c0cfb91eeb2bb8618be",
-                "reference": "3f97f6c7b7e26848a90c0c0cfb91eeb2bb8618be",
+                "url": "https://api.github.com/repos/symfony/console/zipball/984ea2c0f45f42dfed01d2f3987b187467c4b16d",
+                "reference": "984ea2c0f45f42dfed01d2f3987b187467c4b16d",
                 "shasum": ""
             },
             "require": {
@@ -3075,7 +3193,7 @@
                 "terminal"
             ],
             "support": {
-                "source": "https://github.com/symfony/console/tree/v5.4.13"
+                "source": "https://github.com/symfony/console/tree/v5.4.14"
             },
             "funding": [
                 {
@@ -3091,7 +3209,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2022-08-26T13:50:20+00:00"
+            "time": "2022-10-07T08:01:20+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -3656,16 +3774,16 @@
         },
         {
             "name": "symfony/string",
-            "version": "v6.1.5",
+            "version": "v6.1.6",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/string.git",
-                "reference": "17c08b068176996a1d7db8d00ffae3c248267016"
+                "reference": "7e7e0ff180d4c5a6636eaad57b65092014b61864"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/string/zipball/17c08b068176996a1d7db8d00ffae3c248267016",
-                "reference": "17c08b068176996a1d7db8d00ffae3c248267016",
+                "url": "https://api.github.com/repos/symfony/string/zipball/7e7e0ff180d4c5a6636eaad57b65092014b61864",
+                "reference": "7e7e0ff180d4c5a6636eaad57b65092014b61864",
                 "shasum": ""
             },
             "require": {
@@ -3721,7 +3839,7 @@
                 "utf8"
             ],
             "support": {
-                "source": "https://github.com/symfony/string/tree/v6.1.5"
+                "source": "https://github.com/symfony/string/tree/v6.1.6"
             },
             "funding": [
                 {
@@ -3737,7 +3855,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2022-09-02T08:05:20+00:00"
+            "time": "2022-10-10T09:34:31+00:00"
         },
         {
             "name": "theseer/tokenizer",
@@ -4101,9 +4219,18 @@
             "time": "2015-12-17T08:42:14+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/mongo",
+            "version": "dev-shmuel.1",
+            "alias": "0.0.1",
+            "alias_normalized": "0.0.1.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "utopia-php/mongo": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4113,5 +4240,5 @@
         "ext-mongodb": "*"
     },
     "platform-dev": [],
-    "plugin-api-version": "2.3.0"
+    "plugin-api-version": "2.2.0"
 }

@@ -218,23 +218,6 @@ docker-compose exec tests bin/compare
 
 Navigate to `localhost:8708` to visualize query results.
 
-## Authors
-
-**Eldad Fux**
-
-+ [https://twitter.com/eldadfux](https://twitter.com/eldadfux)
-+ [https://github.com/eldadfux](https://github.com/eldadfux)
-
-**Brandon Leckemby**
-
-+ [https://github.com/kodumbeats](https://github.com/kodumbeats)
-+ [https://blog.kodumbeats.dev](https://blog.kodumbeats.dev)
-
-**Torsten Dittmann**
-
-+ [https://twitter.com/dittmanntorsten](https://twitter.com/dittmanntorsten)
-+ [https://github.com/torstendittmann](https://github.com/torstendittmann)
-
 ## Copyright and license
 
 The MIT License (MIT) [http://www.opensource.org/licenses/mit-license.php](http://www.opensource.org/licenses/mit-license.php)

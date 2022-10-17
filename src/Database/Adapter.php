@@ -132,6 +132,15 @@ abstract class Adapter
     }
 
     /**
+     * Ping Database
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    abstract public function ping(): bool;
+
+    /**
      * Create Database
      *
      * @param string $name

@@ -49,6 +49,11 @@ abstract class Base extends TestCase
 
     protected string $testDatabase = 'utopiaTests';
 
+    public function testPing()
+    {
+        $this->assertEquals(true, static::getDatabase()->ping());
+    }
+
     public function testCreateExistsDelete()
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
@@ -3179,5 +3184,78 @@ abstract class Base extends TestCase
         $this->assertCount(1, $docs);
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
+    }
+
+    public function testEvents()
+    {
+        Authorization::skip(function() {
+            $database = static::getDatabase();
+
+            $events = [
+                Database::EVENT_DATABASE_CREATE,
+                Database::EVENT_DATABASE_LIST,
+                Database::EVENT_COLLECTION_CREATE,
+                Database::EVENT_COLLECTION_LIST,
+                Database::EVENT_COLLECTION_READ,
+                Database::EVENT_ATTRIBUTE_CREATE,
+                Database::EVENT_ATTRIBUTE_UPDATE,
+                Database::EVENT_INDEX_CREATE,
+                Database::EVENT_DOCUMENT_CREATE,
+                Database::EVENT_DOCUMENT_UPDATE,
+                Database::EVENT_DOCUMENT_READ,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_COUNT,
+                Database::EVENT_DOCUMENT_SUM,
+                Database::EVENT_INDEX_DELETE,
+                Database::EVENT_DOCUMENT_DELETE,
+                Database::EVENT_ATTRIBUTE_DELETE,
+                Database::EVENT_COLLECTION_DELETE,
+                Database::EVENT_DATABASE_DELETE,
+            ];
+            $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
+                $this->assertEquals(array_shift($events), $event);
+            });
+    
+            if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+                $database->create('hellodb');
+            } else {
+                array_shift($events);
+            }
+            $database->list();
+    
+            $database->setDefaultDatabase($this->testDatabase);
+    
+            $collectionId = ID::unique();
+            $database->createCollection($collectionId);
+            $database->listCollections();
+            $database->getCollection($collectionId);
+            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+            $database->updateAttributeRequired($collectionId, 'attr1', true);
+            $indexId1 = 'index2_' . uniqid();
+            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+            $document = $database->createDocument($collectionId, new Document([
+                '$id' => 'doc1',
+                'attr1' => 10,
+                '$permissions' => [
+                    Permission::delete(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]));
+            $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
+            $database->getDocument($collectionId, 'doc1');
+            $database->find($collectionId);
+            $database->findOne($collectionId);
+            $database->count($collectionId);
+            $database->sum($collectionId, 'attr1');
+            
+            $database->deleteIndex($collectionId, $indexId1);
+            $database->deleteDocument($collectionId, 'doc1');
+            $database->deleteAttribute($collectionId, 'attr1');
+            $database->deleteCollection($collectionId);
+            $database->delete('hellodb');
+        });
+
     }
 }

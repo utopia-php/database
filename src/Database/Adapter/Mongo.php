@@ -59,6 +59,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Ping Database
+     *
+     * @return bool
+     */
+    public function ping(): bool
+    {
+        return $this->getClient()->query(['ping' => 1])->ok ?? false;
+    }
+
+    /**
      * Create Database
      *
      * @param string $name

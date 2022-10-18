@@ -93,7 +93,7 @@ class AuthorizationTest extends TestCase
         // Test skip method
         $this->assertEquals($object->isValid($document->getRead()), false);
         $this->assertEquals(Authorization::skip(function () use ($object, $document) {
-        return $object->isValid($document->getRead());
+            return $object->isValid($document->getRead());
         }), true);
     }
 

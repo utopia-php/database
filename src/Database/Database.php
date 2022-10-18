@@ -512,6 +512,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
+
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }

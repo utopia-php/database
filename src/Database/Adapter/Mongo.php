@@ -77,8 +77,6 @@ class Mongo extends Adapter
      */
     public function create(string $name): bool
     {
-        //$this->getClient()->selectDatabase($name);
-
         return true;
     }
 
@@ -156,9 +154,16 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
+        if($name === '_metadata' && $this->exists($this->getNamespace(), $name)) {
+            return true;
+        }
+        
         // Returns an array/object with the result document
-
-        $this->getClient()->createCollection($id);
+        try {
+            $this->getClient()->createCollection($id);
+        } catch (Duplicate $e) {
+            throw $e;
+        }
 
         $indexesCreated = $this->client->createIndexes($id, [
             [

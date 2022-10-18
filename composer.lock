@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "67ea03e1ed9b1b84a60ea3c58ee1cdda",
+    "content-hash": "eb01baf91ecf13506d7b696c957bd1d7",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -382,6 +382,58 @@
                 "source": "https://github.com/utopia-php/framework/tree/0.22.1"
             },
             "time": "2022-10-07T14:51:40+00:00"
+        },
+        {
+            "name": "utopia-php/mongo",
+            "version": "dev-fix-driver-gen-objectid",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/mongo",
+                "reference": "cf5a3d2f63acebf628a34d938d17ec7cc6646dac"
+            },
+            "require": {
+                "ext-mongodb": "*",
+                "mongodb/mongodb": "1.8.0",
+                "php": ">=8.0"
+            },
+            "require-dev": {
+                "fakerphp/faker": "^1.14",
+                "phpunit/phpunit": "^9.4",
+                "swoole/ide-helper": "4.8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Mongo\\": "src"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Utopia\\Tests\\": "tests"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Eldad Fux",
+                    "email": "eldad@appwrite.io"
+                },
+                {
+                    "name": "Wess",
+                    "email": "wess@appwrite.io"
+                }
+            ],
+            "description": "A simple library to manage Mongo database",
+            "keywords": [
+                "database",
+                "mongo",
+                "php",
+                "upf",
+                "utopia"
+            ],
+            "time": "2022-10-13T15:47:48+00:00"
         }
     ],
     "packages-dev": [
@@ -4168,9 +4220,18 @@
             "time": "2015-12-17T08:42:14+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/mongo",
+            "version": "dev-fix-driver-gen-objectid",
+            "alias": "0.1111111111",
+            "alias_normalized": "0.1111111111.0.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "utopia-php/mongo": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

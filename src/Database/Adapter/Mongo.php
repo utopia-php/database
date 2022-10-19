@@ -154,7 +154,7 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        if($name === '_metadata' && $this->exists($this->getNamespace(), $name)) {
+        if($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
         

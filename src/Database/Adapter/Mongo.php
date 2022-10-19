@@ -422,7 +422,7 @@ class Mongo extends Adapter
         $record = $this->timeToMongo($record);
 
         try {
-            $result = $this->client->insert($name, $this->removeNullKeys($record));
+            $result = $this->insertDocument($name, $this->removeNullKeys($record));
         } catch (Duplicate $e) {
             throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
         }
@@ -431,6 +431,24 @@ class Mongo extends Adapter
         $result = $this->timeToDocument($result);
 
         return new Document($result);
+    }
+
+    private function insertDocument(string $name, array $document): array
+    {
+        try {
+            $this->client->insert($name, $document);
+
+            $result = $this->client->find(
+                $name,
+                ['_uid' => $document['_uid']],
+                ['limit' => 1]
+            )->cursor->firstBatch[0];
+
+            return $this->client->toArray($result);
+
+        } catch (Duplicate $e) {
+            throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
+        }
     }
 
     /**

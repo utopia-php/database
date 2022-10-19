@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "eb01baf91ecf13506d7b696c957bd1d7",
+    "content-hash": "c135a278e49fa7da29239f38f96b68f6",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -287,26 +287,24 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.7.0",
+            "version": "0.6.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "cd53431242c88299daea2589e21322abe97682cc"
+                "reference": "9889235a6d3da6cbb1f435201529da4d27c30e79"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/cd53431242c88299daea2589e21322abe97682cc",
-                "reference": "cd53431242c88299daea2589e21322abe97682cc",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/9889235a6d3da6cbb1f435201529da4d27c30e79",
+                "reference": "9889235a6d3da6cbb1f435201529da4d27c30e79",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
-                "ext-memcached": "*",
                 "ext-redis": "*",
                 "php": ">=8.0"
             },
             "require-dev": {
-                "laravel/pint": "1.2.*",
                 "phpunit/phpunit": "^9.3",
                 "vimeo/psalm": "4.13.1"
             },
@@ -320,6 +318,12 @@
             "license": [
                 "MIT"
             ],
+            "authors": [
+                {
+                    "name": "Eldad Fux",
+                    "email": "eldad@appwrite.io"
+                }
+            ],
             "description": "A simple cache library to manage application cache storing, loading and purging",
             "keywords": [
                 "cache",
@@ -330,22 +334,22 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.7.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.6.1"
             },
-            "time": "2022-10-16T06:04:12+00:00"
+            "time": "2022-08-10T08:12:46+00:00"
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.22.1",
+            "version": "0.23.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "9f35d36ed4b8fa1c92962c77ef02b49c2f5919df"
+                "reference": "f58bd087f72b0740d597b27f93c1d33fe7f6267f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/9f35d36ed4b8fa1c92962c77ef02b49c2f5919df",
-                "reference": "9f35d36ed4b8fa1c92962c77ef02b49c2f5919df",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/f58bd087f72b0740d597b27f93c1d33fe7f6267f",
+                "reference": "f58bd087f72b0740d597b27f93c1d33fe7f6267f",
                 "shasum": ""
             },
             "require": {
@@ -365,12 +369,6 @@
             "license": [
                 "MIT"
             ],
-            "authors": [
-                {
-                    "name": "Eldad Fux",
-                    "email": "eldad@appwrite.io"
-                }
-            ],
             "description": "A simple, light and advanced PHP framework",
             "keywords": [
                 "framework",
@@ -379,9 +377,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/framework/issues",
-                "source": "https://github.com/utopia-php/framework/tree/0.22.1"
+                "source": "https://github.com/utopia-php/framework/tree/0.23.0"
             },
-            "time": "2022-10-07T14:51:40+00:00"
+            "time": "2022-10-19T07:26:19+00:00"
         },
         {
             "name": "utopia-php/mongo",
@@ -389,7 +387,7 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo",
-                "reference": "cf5a3d2f63acebf628a34d938d17ec7cc6646dac"
+                "reference": "ef7b04a1548aa13756604902e2bfa5b9b51ed38e"
             },
             "require": {
                 "ext-mongodb": "*",
@@ -433,7 +431,7 @@
                 "upf",
                 "utopia"
             ],
-            "time": "2022-10-13T15:47:48+00:00"
+            "time": "2022-10-18T14:20:33+00:00"
         }
     ],
     "packages-dev": [

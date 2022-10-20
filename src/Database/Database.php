@@ -1176,6 +1176,7 @@ class Database
      * @param array $orders
      *
      * @return bool
+     * @throws Exception
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -1184,7 +1185,10 @@ class Database
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
-
+        if($collection->isEmpty()){
+            throw new Exception('Not found');
+        }
+        
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
         /** @var Document[] $indexes */
@@ -1219,7 +1223,6 @@ class Database
 
             default:
                 throw new Exception('Unknown index type: ' . $type);
-                break;
         }
 
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);

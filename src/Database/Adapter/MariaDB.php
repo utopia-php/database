@@ -148,34 +148,48 @@ class MariaDB extends Adapter
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
+        $collectionAttributes = [];
 
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
+            $size = $attribute->getAttribute('size', 0);
+            $type = $attribute->getAttribute('type');
+            $signed = $attribute->getAttribute('signed', false);
+            $attrType = $this->getSQLType($type, $size, $signed);
 
             if ($attribute->getAttribute('array')) {
                 $attrType = 'LONGTEXT';
             }
 
             $attributes[$key] = "`{$attrId}` {$attrType}, ";
+            $collectionAttributes[$attrId] = $attribute;
         }
 
         foreach ($indexes as $key => $index) {
             $indexId = $this->filter($index->getId());
             $indexType = $index->getAttribute('type');
-
             $indexAttributes = $index->getAttribute('attributes');
+
             foreach ($indexAttributes as $nested => $attribute) {
-                $indexLength = $index->getAttribute('lengths')[$key] ?? '';
-                $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
-                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
                 $indexAttribute = $this->filter($attribute);
+
+                //$collectionAttributes[$indexAttribute]['size'] = $collectionAttributes[$indexAttribute]['size'] ?? 0;
+                $size = isset($index['lengths'][$key]) ? $index['lengths'][$key]:0 ;
+
+                if($collectionAttributes[$indexAttribute]['type'] === Database::VAR_STRING){
+                    if($collectionAttributes[$indexAttribute]['size'] > 700){
+                        $size = $size === 0 || $size > 700 ? 700 : $size;
+                    }
+                }
+
+                $length = $size === 0 ? '' : '(' . $size . ')';
+                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
 
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';
                 }
 
-                $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+                $indexAttributes[$nested] = "`{$indexAttribute}`{$length} {$indexOrder}";
             }
 
             $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
@@ -368,7 +382,6 @@ class MariaDB extends Adapter
      * @param array $orders
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
@@ -383,6 +396,18 @@ class MariaDB extends Adapter
         }, $attributes);
 
         foreach ($attributes as $key => $attribute) {
+
+//            $size = (int)($lengths[$key] ?? 0);
+//            foreach ($collectionAttributes as $ca){
+//                if($attribute === $ca['key']){
+//                    if($ca['type'] == Database::VAR_STRING){
+//                        if($ca['size'] > 700){
+//                            $size = $size === 0 || $size > 700 ? 700 : $size;
+//                        }
+//                    }
+//                }
+//            }
+
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';
             $order = $orders[$key] ?? '';
@@ -1790,7 +1815,6 @@ class MariaDB extends Adapter
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";

@@ -254,10 +254,10 @@ class SQLite extends MySQL
      * @param array $orders
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
+        // $name = $this->filter($collection->getId());
         $name = $this->filter($collection);
         $id = $this->filter($id);
 

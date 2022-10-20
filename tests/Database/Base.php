@@ -4,6 +4,7 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -2799,6 +2800,7 @@ abstract class Base extends TestCase
 
     /**
      * @depends testUpdateAttributeDefault
+     * @throws Throwable
      */
     public function testUpdateAttributeRequired()
     {

@@ -1055,34 +1055,41 @@ class Database
      * Update attribute metadata. Utility method for update attribute methods.
      *
      * @param string $collection
-     * @param string $id
+     * @param string $key
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
      *
      * @return void
-     * @throws Exception
+     * @throws Throwable
      */
-    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
+    private function updateAttributeMeta(string $collection, string $key, mixed $value): void
     {
-        // Load
+        if (in_array($collection, [self::METADATA, self::METADATA_ATTRIBUTE])) {
+            Throw new Exception('Can not update internal collections');
+        }
+
         $collection = $this->getCollection($collection);
-
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $attributeIndex = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
-
-        if ($attributeIndex === false) {
-            throw new Exception('Attribute not found');
+        if ($collection->isEmpty()) {
+            Throw new Exception('Collection Not found');
         }
 
-        // Execute update from callback
-        call_user_func($updateCallback, $attributes[$attributeIndex], $collection, $attributeIndex);
+        $attribute = $this->findOne(self::METADATA_ATTRIBUTE, [
+            Query::equal('collectionInternalId', [$collection->getInternalId()]),
+            Query::equal('key', [$key])
+        ]);
 
-        // Save
-        $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+        if ($attribute === false) {
+            throw new Exception('Attribute ' . $key . ' not found');
         }
+
+        var_dump($attribute);
+
+        $attribute->setAttribute($key, $value);
+       // $this->updateDocument(self::METADATA_ATTRIBUTE, $attribute->getId(), $attribute);
+
+        // Check this please
+        $this->deleteCachedDocument(self::METADATA, $collection->getId());
+        $this->deleteCachedCollection($collection->getId());
+
     }
 
     /**
@@ -1093,12 +1100,11 @@ class Database
      * @param bool $required
      *
      * @return void
+     * @throws Throwable
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): void
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($required) {
-            $attribute->setAttribute('required', $required);
-        });
+        $this->updateAttributeMeta($collection, $id, $required);
     }
 
     /**
@@ -1324,9 +1330,9 @@ class Database
      *
      * @param string $collection
      * @param string $old Current attribute ID
-     * @param string $name New attribute ID
-     *
+     * @param string $new
      * @return bool
+     * @throws Throwable
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
@@ -1339,7 +1345,7 @@ class Database
             throw new Exception('Collection not found');
         }
 
-        Authorization::disable(); // todo: please check me with Authorization :)
+        Authorization::disable();
 
         $attribute = $this->findOne(self::METADATA_ATTRIBUTE, [
             Query::equal('collectionId', [$collection->getId()]),
@@ -1366,6 +1372,8 @@ class Database
 
         $this->deleteCachedDocument(self::METADATA, $collection->getId());
         $this->deleteCachedCollection($collection->getId());
+
+        Authorization::enable();
 
         return $res;
     }
@@ -1571,7 +1579,6 @@ class Database
 //        if($collection->getId() === self::METADATA){
 //            var_dump("getDocument " . $collection->getId() . " id = " . $id);
 //        }
-        var_dump($document);
 
         $document = $this->casting($collection, $document);
 
@@ -1776,7 +1783,7 @@ class Database
      * @param string $collection
      * @param array $queries
      * @return bool|Document
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {

@@ -31,6 +31,6 @@
         "ext-mongodb": "Needed to support MongoDB Database Adapter",
         "ext-redis": "Needed to support Redis Cache Adapter",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
-        "mongodb/mongodb": "Needed to support Mongo Adapter"
+        "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
     }
 }

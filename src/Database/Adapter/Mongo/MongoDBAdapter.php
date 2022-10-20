@@ -284,19 +284,18 @@ class MongoDBAdapter extends Adapter
     /**
      * Create Index
      *
-     * @param Document $collection
+     * @param string $collection
      * @param string $id
      * @param string $type
      * @param array $attributes
      * @param array $lengths
      * @param array $orders
-     * @param array $collation
+     *
      * @return bool
-     * @throws Exception
      */
-    public function createIndex(Document $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
 
         $indexes = [];

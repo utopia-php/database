@@ -490,4 +490,30 @@ abstract class Adapter
 
         return $value;
     }
+
+
+    /**
+     * Returns attribute from List of Document $attributes[]
+     * @param string $attributeKey
+     * @param array $attributes Document[]
+     * returns Document
+     * @return Document|null
+     * @throws Exception
+     */
+    public function findAttributeInList(string $attributeKey, array $attributes): ?Document
+    {
+        $attributeKey = $this->filter($attributeKey);
+
+        /**
+         * @var Document $attribute
+         */
+
+        foreach ($attributes as $attribute){
+            if($attributeKey === $this->filter($attribute->getId())){
+                return $attribute;
+            }
+        }
+
+        return null;
+    }
 }

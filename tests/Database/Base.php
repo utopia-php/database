@@ -47,9 +47,9 @@ abstract class Base extends TestCase
     }
 
 
-    public function atestCreatedAtUpdatedAt()
+    public function testCreatedAtUpdatedAt()
     {
-        Console::error('option 1');
+        Console::error('option all in one');
         $start = microtime(true);
         Console::error('start creating collections: ' . $start);
 
@@ -94,13 +94,13 @@ abstract class Base extends TestCase
 
 
 
-    public function testCreatedAtUpdatedAt()
+    public function testCreatedAtUpdatedAt2()
     {
 
         static::getDatabase()->setNamespace('myapp_'.uniqid());
         $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
 
-        Console::error('option 2');
+        Console::error('option step by step');
         $start = microtime(true);
         Console::error('start creating collections: ' . $start);
 

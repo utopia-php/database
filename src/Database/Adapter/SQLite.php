@@ -257,7 +257,6 @@ class SQLite extends MySQL
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        // $name = $this->filter($collection->getId());
         $name = $this->filter($collection);
         $id = $this->filter($id);
 

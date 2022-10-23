@@ -638,9 +638,12 @@ class Database
      *
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collectionName, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' . $collectionName . ' Not found');
+        }
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
@@ -809,10 +812,13 @@ class Database
      *
      * @return Document
      */
-    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
+    private function updateAttributeMeta(string $collectionName, string $id, callable $updateCallback): void
     {
         // Load
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' . $collectionName . ' Not found');
+        }
 
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1067,15 +1073,19 @@ class Database
     /**
      * Rename Attribute
      *
-     * @param string $collection
+     * @param string $collectionName
      * @param string $old Current attribute ID
-     * @param string $name New attribute ID
-     *
+     * @param string $new
      * @return bool
+     * @throws DuplicateException
+     * @throws Throwable
      */
-    public function renameAttribute(string $collection, string $old, string $new): bool
+    public function renameAttribute(string $collectionName, string $old, string $new): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' . $collectionName . ' Not found');
+        }
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1128,10 +1138,14 @@ class Database
      * @param string $new
      *
      * @return bool
+     * @throws Exception|Throwable
      */
-    public function renameIndex(string $collection, string $old, string $new): bool
+    public function renameIndex(string $collectionName, string $old, string $new): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' . $collectionName . ' Not found');
+        }
 
         $indexes = $collection->getAttribute('indexes', []);
 

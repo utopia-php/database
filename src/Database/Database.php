@@ -345,6 +345,9 @@ class Database
      */
     protected function trigger(string $event, mixed $args = null): void
     {
+
+        return;
+
         if($this->silentEvents) return;
         foreach ($this->listeners[self::EVENT_ALL] as $callback) {
             call_user_func($callback, $event, $args);

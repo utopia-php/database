@@ -4,6 +4,7 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Redis;
+use Utopia\Cache\Adapter\None;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
@@ -54,10 +55,12 @@ class MariaDBTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+
+       // $redis = new Redis();
+   //     $redis->connect('redis', 6379);
+    //    $redis->flushAll();
+      //  $cache = new Cache(new RedisAdapter($redis));
+        $cache = new Cache(new None());
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');

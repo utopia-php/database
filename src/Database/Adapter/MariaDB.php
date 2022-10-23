@@ -148,7 +148,7 @@ class MariaDB extends Adapter
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
-        $collectionAttributes = [];
+        $attributesArray = [];
 
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
@@ -161,8 +161,7 @@ class MariaDB extends Adapter
                 $attrType = 'LONGTEXT';
             }
 
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
-            $collectionAttributes[$attrId] = $attribute;
+            $attributesArray[$key] = "`{$attrId}` {$attrType}, ";
         }
 
         foreach ($indexes as $key => $index) {
@@ -172,19 +171,13 @@ class MariaDB extends Adapter
 
             foreach ($indexAttributes as $nested => $attribute) {
                 $indexAttribute = $this->filter($attribute);
+                $attr = $this->findAttributeInList($indexAttribute, $attributes);
 
-                //$collectionAttributes[$indexAttribute]['size'] = $collectionAttributes[$indexAttribute]['size'] ?? 0;
-                $size = isset($index['lengths'][$key]) ? $index['lengths'][$key]:0 ;
-
-                if($collectionAttributes[$indexAttribute]['type'] === Database::VAR_STRING){
-                    if($collectionAttributes[$indexAttribute]['size'] > 700){
-                        $size = $size === 0 || $size > 700 ? 700 : $size;
-                    }
-                }
-
+                $size = $index['lengths'][$key] ?? 0;
+                $size = $this->getDefaultIndexSize($size, $attr);
                 $length = $size === 0 ? '' : '(' . $size . ')';
-                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
 
+                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';
                 }
@@ -203,7 +196,7 @@ class MariaDB extends Adapter
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributes) . "
+                        " . \implode(' ', $attributesArray) . "
                         PRIMARY KEY (`_id`),
                         " . \implode(' ', $indexes) . "
                         UNIQUE KEY `_uid` (`_uid`),
@@ -1915,4 +1908,52 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
+
+    /**
+     * Returns attribute from List of Document $attributes[]
+     * @param string $attributeKey
+     * @param array $attributes Document[]
+     * returns Document
+     * @return Document|null
+     * @throws Exception
+     */
+    public function findAttributeInList(string $attributeKey, array $attributes): ?Document
+    {
+        $attributeKey = $this->filter($attributeKey);
+
+        /**
+         * @var Document $attribute
+         */
+
+        foreach ($attributes as $attribute){
+            if($attributeKey === $this->filter($attribute->getId())){
+                return $attribute;
+            }
+        }
+
+        return null;
+    }
+
+
+    /**
+     * Return the maximum index length per attribute type
+     * @param int $size
+     * @param Document $attribute
+     * @return int
+     */
+    public function getDefaultIndexSize(int $size, Document $attribute): int
+    {
+        $maxIndexLength = 760;
+
+        if($attribute['type'] === Database::VAR_STRING){
+            if($attribute['size'] > $maxIndexLength){
+                $size = $size === 0 || $size > $maxIndexLength ? $maxIndexLength : $size;
+            }
+        }
+
+        return $size;
+    }
+
+
 }

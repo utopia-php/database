@@ -566,12 +566,15 @@ class Database
      * Get Collection
      *
      * @param string $id
-     *
      * @return Document
-     * @throws Exception
+     * @throws Throwable
      */
     public function getCollection(string $id): Document
     {
+        if(empty($id)){
+            throw new Exception("getCollection requires a parameter");
+        }
+
         $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
         return $collection;
@@ -1178,15 +1181,15 @@ class Database
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
+    public function createIndex(string $collectionName, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
         if (empty($attributes)) {
             throw new Exception('Missing attributes');
         }
 
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
         if($collection->isEmpty()){
-            throw new Exception('Not found');
+            throw new Exception('Collection ' . $collectionName . ' Not found');
         }
         
         // index IDs are case insensitive
@@ -1251,10 +1254,14 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collectionName, string $id): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collectionName . ' Not found');
+        }
 
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1284,20 +1291,18 @@ class Database
      * @param string $id
      *
      * @return Document
+     * @throws Exception|Throwable
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collectionName, string $id): Document
     {
-        if ($collection === self::METADATA && $id === self::METADATA) {
+        if ($collectionName === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
         }
 
-        if (empty($collection)) {
-            throw new Exception('test exception: ' . $collection . ':' . $id);
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collectionName . ' Not found');
         }
-
-        $collection = $this->silent(fn() => $this->getCollection($collection));
-        $document = null;
-        $cache = null;
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -1345,11 +1350,14 @@ class Database
      *
      * @throws AuthorizationException
      * @throws StructureException
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collection->getId() . ' Not found');
+        }
 
         $time = DateTime::now();
 
@@ -1396,6 +1404,9 @@ class Database
 
         $old = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collection->getId() . ' Not found');
+        }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
@@ -1430,6 +1441,7 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
+     * @throws Exception
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -1437,6 +1449,9 @@ class Database
 
         $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collection->getId() . ' Not found');
+        }
 
         if ($collection->getId() !== self::METADATA
             && !$validator->isValid($document->getDelete())) {
@@ -1487,6 +1502,9 @@ class Database
     public function find(string $collection, array $queries = []): array
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collection->getId() . ' Not found');
+        }
 
         $grouped = Query::groupByType($queries);
         /** @var Query[] */ $filters = $grouped['filters'];
@@ -1555,9 +1573,8 @@ class Database
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collection->getId() . ' Not found');
         }
 
         $queries = Query::groupByType($queries)['filters'];
@@ -1581,12 +1598,11 @@ class Database
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    public function sum(string $collectionName, string $attribute, array $queries = [], int $max = 0)
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+        $collection = $this->silent(fn() => $this->getCollection($collectionName));
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' .$collectionName . ' Not found');
         }
 
         $queries = self::convertQueries($collection, $queries);

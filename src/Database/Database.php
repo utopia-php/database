@@ -1179,7 +1179,7 @@ class Database
      * @param array $orders
      *
      * @return bool
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function createIndex(string $collectionName, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {

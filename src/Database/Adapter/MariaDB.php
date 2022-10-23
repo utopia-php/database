@@ -148,9 +148,9 @@ class MariaDB extends Adapter
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
-        $attributesArray = [];
+        $schemaAttributes = [];
 
-        foreach ($attributes as $key => $attribute) {
+        foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
             $size = $attribute->getAttribute('size', 0);
             $type = $attribute->getAttribute('type');
@@ -161,15 +161,16 @@ class MariaDB extends Adapter
                 $attrType = 'LONGTEXT';
             }
 
-            $attributesArray[$key] = "`{$attrId}` {$attrType}, ";
+            $schemaAttributes[] = "`{$attrId}` {$attrType}, ";
         }
 
+        $schemaIndexes = [];
         foreach ($indexes as $key => $index) {
             $indexId = $this->filter($index->getId());
             $indexType = $index->getAttribute('type');
-            $indexAttributes = $index->getAttribute('attributes');
+            $indexAttributes = [];
 
-            foreach ($indexAttributes as $nested => $attribute) {
+            foreach ($index->getAttribute('attributes') as $attribute) {
                 $indexAttribute = $this->filter($attribute);
                 $attr = $this->findAttributeInList($indexAttribute, $attributes);
 
@@ -182,10 +183,10 @@ class MariaDB extends Adapter
                     $indexOrder = '';
                 }
 
-                $indexAttributes[$nested] = "`{$indexAttribute}`{$length} {$indexOrder}";
+                $indexAttributes[] = "`{$indexAttribute}`{$length} {$indexOrder}";
             }
 
-            $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+            $schemaIndexes[] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
         }
 
         try {
@@ -196,9 +197,9 @@ class MariaDB extends Adapter
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributesArray) . "
+                        " . \implode(' ', $schemaAttributes) . "
                         PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexes) . "
+                        " . \implode(' ', $schemaIndexes) . "
                         UNIQUE KEY `_uid` (`_uid`),
                         KEY `_created_at` (`_createdAt`),
                         KEY `_updated_at` (`_updatedAt`)

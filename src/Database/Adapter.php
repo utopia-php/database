@@ -497,23 +497,44 @@ abstract class Adapter
      * @param string $attributeKey
      * @param array $attributes Document[]
      * returns Document
-     * @return Document|null
+     * @return Document
      * @throws Exception
      */
-    public function findAttributeInList(string $attributeKey, array $attributes): ?Document
+    protected function findAttributeInList(string $attributeKey, array $attributes): Document
     {
-        $attributeKey = $this->filter($attributeKey);
-
-        /**
-         * @var Document $attribute
-         */
-
+        /** @var Document $attribute */
         foreach ($attributes as $attribute){
-            if($attributeKey === $this->filter($attribute->getId())){
+           if($this->filter($attributeKey) === $this->filter($attribute->getId())){
                 return $attribute;
             }
         }
 
-        return null;
+        throw new \Exception('Attribute ' . $attributeKey . ' not found');
     }
+//
+//    /**
+//     * This function fixes indexes which has exceed default limits
+//     *
+//     * @param Document $index
+//     * @param Document[] $attributes
+//     * @return Document
+//     */
+//    abstract public function fixIndex(Document $index, array $attributes): Document;
+//
+
+
+    /**
+     * This function fixes indexes which has exceeded max default limits
+     * with comparing the length of the string length of the collection attribute.
+     * We can overwrite other index behaviour
+     *
+     * @param Document $index
+     * @param Document[] $attributes
+     * @return Document
+     * @throws Exception
+     */
+    public function fixIndex(Document $index, array $attributes): Document {
+        return $index;
+    }
+
 }

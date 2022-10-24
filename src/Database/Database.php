@@ -508,12 +508,18 @@ class Database
      * @param Document[] $indexes (optional)
      *
      * @return Document
+     * @throws DuplicateException
+     * @throws Exception|Throwable
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new Duplicate('Collection ' . $id . ' Exists!');
+        }
+
+        foreach ($indexes as $key => $index){
+            $indexes[$key] = $this->adapter->fixIndex($index, $attributes);
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -1185,7 +1191,7 @@ class Database
     /**
      * Create Index
      *
-     * @param string $collection
+     * @param string $collectionName
      * @param string $id
      * @param string $type
      * @param array $attributes
@@ -1193,7 +1199,9 @@ class Database
      * @param array $orders
      *
      * @return bool
-     * @throws Exception|Throwable
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Throwable
      */
     public function createIndex(string $collectionName, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -1242,23 +1250,34 @@ class Database
                 throw new Exception('Unknown index type: ' . $type);
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
-
-        $collection->setAttribute('indexes', new Document([
+        $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
             'lengths' => $lengths,
             'orders' => $orders,
-        ]), Document::SET_TYPE_APPEND);
+        ]);
+
+        $index = $this->adapter->fixIndex($index, $collection->getAttribute('attributes', []));
+
+        $result = $this->adapter->createIndex(
+            $collection->getId(),
+            $id,
+            $type,
+            $attributes,
+            $index->getAttribute('lengths'),
+            $orders
+        );
+
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
-        $this->trigger(self::EVENT_INDEX_CREATE, $index);
-        return $index;
+        $this->trigger(self::EVENT_INDEX_CREATE, $result);
+        return $result;
     }
 
     /**

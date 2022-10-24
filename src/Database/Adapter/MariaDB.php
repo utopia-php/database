@@ -169,13 +169,12 @@ class MariaDB extends Adapter
             $indexId = $this->filter($index->getId());
             $indexType = $index->getAttribute('type');
             $indexAttributes = [];
-
             foreach ($index->getAttribute('attributes') as $attribute) {
                 $indexAttribute = $this->filter($attribute);
-                $attr = $this->findAttributeInList($indexAttribute, $attributes);
+                //$attr = $this->findAttributeInList($indexAttribute, $attributes);
 
                 $size = $index['lengths'][$key] ?? 0;
-                $size = $this->getDefaultIndexSize($size, $attr);
+                //$size = $this->getDefaultIndexSize($size, $attr);
                 $length = $size === 0 ? '' : '(' . $size . ')';
 
                 $indexOrder = $index->getAttribute('orders')[$key] ?? '';
@@ -390,18 +389,6 @@ class MariaDB extends Adapter
         }, $attributes);
 
         foreach ($attributes as $key => $attribute) {
-
-//            $size = (int)($lengths[$key] ?? 0);
-//            foreach ($collectionAttributes as $ca){
-//                if($attribute === $ca['key']){
-//                    if($ca['type'] == Database::VAR_STRING){
-//                        if($ca['size'] > 700){
-//                            $size = $size === 0 || $size > 700 ? 700 : $size;
-//                        }
-//                    }
-//                }
-//            }
-
             $length = $lengths[$key] ?? '';
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';
             $order = $orders[$key] ?? '';
@@ -1930,4 +1917,36 @@ class MariaDB extends Adapter
     }
 
 
+    /**
+     * This function fixes indexes which has exceeded max default limits
+     * with comparing the length of the string length of the collection attribute
+     *
+     * @param Document $index
+     * @param Document[] $attributes
+     * @return Document
+     * @throws Exception
+     */
+    public function fixIndex(Document $index, array $attributes): Document {
+        foreach ($index->getAttribute('attributes') as $key => $indexAttribute) {
+
+            //Internal attributes do not have a real attribute
+            if(in_array($indexAttribute, ['$id', '$createdAt', '$updatedAt'])){
+                continue;
+            }
+
+            $attribute = $this->findAttributeInList($indexAttribute, $attributes);
+
+            $size = $index['lengths'][$key] ?? 0;
+            $max = 768; // 3072 divided by utf8mb4
+            if($attribute['type'] === Database::VAR_STRING){
+                if($attribute['size'] > $max){
+                    $index['lengths'][$key] = $size === 0 || $size > $max ? $max : $size;
+                }
+            }
+        }
+
+        return $index;
+    }
+
+    
 }

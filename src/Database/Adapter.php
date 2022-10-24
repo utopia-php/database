@@ -513,9 +513,9 @@ abstract class Adapter
     }
 
     /**
-     * This function fixes indexes which has exceeded max default limits
-     * with comparing the length of the string length of the collection attribute.
-     * We can overwrite other index behaviour
+     * This function fixes indexes which have exceeded max default limits
+     * by comparing the length of the collection attribute string with index max length
+     * We can overwrite other index behaviour here.
      *
      * @param Document $index
      * @param Document[] $attributes

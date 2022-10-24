@@ -476,9 +476,9 @@ abstract class Adapter
 
     /**
      * Filter Keys
-     *
-     * @throws Exception
+     * @param string $value
      * @return string
+     * @throws Exception
      */
     public function filter(string $value): string
     {

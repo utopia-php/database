@@ -385,6 +385,10 @@ abstract class Base extends TestCase
 
         static::getDatabase()->deleteCollection('withSchema');
 
+        if (static::getAdapterName() === 'tigris') {
+            return;
+        }
+
         // Test collection with dash (+attribute +index)
         $collection2 = static::getDatabase()->createCollection('with-dash', [
             new Document([
@@ -421,6 +425,11 @@ abstract class Base extends TestCase
 
     public function testCreateCollectionValidator()
     {
+        if (static::getAdapterName() === 'tigris') {
+            $this->assertTrue(true);
+            return;
+        }
+
         $collections = [
             "validatorTest",
             "validator-test",

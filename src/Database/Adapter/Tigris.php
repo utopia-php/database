@@ -11,7 +11,6 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -57,6 +56,21 @@ class Tigris extends Adapter
         return $response->getStatusCode() === 200;
     }
 
+    protected function request(string $method = 'POST', string $path, array $payload = []): array
+    {
+        $response = empty($payload) ? $this->client->request($method, $path) : $this->client->request($method, $path, [
+            'body' => json_encode($payload)
+        ]);
+
+        $body = json_decode((string) $response->getBody(), true);
+
+        if (array_key_exists('error', $body)) {
+            throw new Exception($body['error']['message'], $response->getStatusCode());
+        }
+
+        return $body;
+    }
+
     /**
      * Check if Database exists
      * Optionally check if collection exists in Database
@@ -70,11 +84,14 @@ class Tigris extends Adapter
     {
         $database = $this->filter($database);
 
-        $response = \is_null($collection) ?
-            $this->client->post("/v1/databases/{$database}/describe") :
-            $this->client->post("/v1/databases/{$database}/collections/{$this->getNamespace()}_{$this->filter($collection)}/describe");
-
-        return $response->getStatusCode() === 200;
+        try {
+            \is_null($collection) ?
+                $this->request(path: "/v1/databases/{$database}/describe") :
+                $this->request(path: "/v1/databases/{$database}/collections/{$this->getNamespace()}_{$this->filter($collection)}/describe");
+            return true;
+        } catch (\Throwable $th) {
+            return false;
+        }
     }
 
     /**
@@ -84,9 +101,9 @@ class Tigris extends Adapter
      */
     public function list(): array
     {
-        $response = $this->client->post("/v1/databases/list");
+        $response = $this->request(path: "/v1/databases/list");
 
-        return json_decode((string) $response->getBody(), true)['databases'];
+        return $response['databases'];
     }
 
     /**
@@ -100,9 +117,9 @@ class Tigris extends Adapter
     {
         $name = $this->filter($name);
 
-        $response = $this->client->delete("/v1/databases/{$name}/drop");
+        $this->request(method: 'delete', path: "/v1/databases/{$name}/drop");
 
-        return $response->getStatusCode() === 200;
+        return true;
     }
 
     /**
@@ -143,6 +160,10 @@ class Tigris extends Adapter
             $attrType = $this->getType($attribute->getAttribute('type'));
             $attrFormat = $this->getFormat($attribute->getAttribute('type'));
 
+            if (in_array($attrId, $this->getKeywords())) {
+                $attrId = "\$reserved_{$attrId}";
+            }
+
             $properties[$attrId] = [
                 'type' => $attrType
             ];
@@ -152,18 +173,16 @@ class Tigris extends Adapter
             }
         }
 
-        $response = $this->client->post("/v1/databases/{$database}/collections/{$namespace}_{$id}/createOrUpdate", [
-            'body' => json_encode([
-                'only_create' => true,
-                'schema' => [
-                    'title' => "{$namespace}_{$id}",
-                    'properties' => $properties,
-                    'primary_key' => ['$id', '$internalId']
-                ]
-            ])
+        $this->request(path: "/v1/databases/{$database}/collections/{$namespace}_{$id}/createOrUpdate", payload: [
+            'only_create' => true,
+            'schema' => [
+                'title' => "{$namespace}_{$id}",
+                'properties' => $properties,
+                'primary_key' => ['$id', '$internalId']
+            ]
         ]);
 
-        return $response->getStatusCode() === 200;
+        return true;
     }
 
     /**
@@ -171,14 +190,14 @@ class Tigris extends Adapter
      * @param string $id
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);
-        $response = $this->client->delete("/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$id}/drop");
 
-        return $response->getStatusCode() === 200;
+        $this->request(method: 'delete', path: "/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$id}/drop");
+
+        return true;
     }
 
     /**
@@ -192,7 +211,6 @@ class Tigris extends Adapter
      * @param bool $array
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
@@ -200,6 +218,8 @@ class Tigris extends Adapter
         $id = $this->filter($id);
         $type = $this->getType($type);
         $format = $this->getFormat($type);
+
+        $id = $this->removeKeyword($id);
 
         if ($array) {
             $attribute = [
@@ -220,16 +240,13 @@ class Tigris extends Adapter
             }
         }
 
-        $response = $this->client->post("/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/describe");
-        $data = json_decode((string) $response->getBody(), true);
+        $response = $this->request(path: "/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/describe");
 
-        $data['schema']['properties'][$id] = $attribute;
+        $response['schema']['properties'][$id] = $attribute;
 
-        $response = $this->client->post("/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/createOrUpdate", [
-            'body' => json_encode($data)
-        ]);
+        $response = $this->request(path: "/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/createOrUpdate", payload: $response);
 
-        return $response->getStatusCode() === 200;
+        return true;
     }
 
     /**
@@ -389,6 +406,7 @@ class Tigris extends Adapter
         $document = json_decode((string) $response->getBody(), true);
         $document = new Document($document['result']['data'] ?? []);
         $document->setAttribute('$internalId', (string) $document->getAttribute('$internalId'));
+        $document = $this->revertRemovingDocumentKeywordsFromDocument($document);
 
         return $document;
     }
@@ -406,23 +424,21 @@ class Tigris extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->filter($collection);
-        $document = $document->getArrayCopy(disallow: [
+
+        $new = $this->removeDocumentKeywordsFromDocument(clone $document);
+        $new = $new->getArrayCopy(disallow: [
             '$createdAt', '$updatedAt', '$collection'
         ]);
 
-        $response = $this->client->post("/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/documents/insert", [
-            'body' => json_encode([
-                'documents' => [
-                    $document
-                ]
-            ])
+        $data = $this->request(path: "/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/documents/insert", payload: [
+            'documents' => [
+                $new
+            ]
         ]);
 
-        $data = json_decode((string) $response->getBody(), true);
+        $document->setAttribute('$internalId', (string) $data['keys'][0]['$internalId']);
 
-        $document['$internalId'] = (string) $data['keys'][0]['$internalId'];
-
-        return new Document($document);
+        return $document;
     }
 
     /**
@@ -438,24 +454,18 @@ class Tigris extends Adapter
     public function updateDocument(string $collection, Document $document): Document
     {
         $name = $this->filter($collection);
-        $document = $document->getArrayCopy(disallow: [
+        $new = $this->removeDocumentKeywordsFromDocument(clone $document);
+        $new = $new->getArrayCopy(disallow: [
             '$createdAt', '$updatedAt', '$collection'
         ]);
 
         $response = $this->client->put("/v1/databases/{$this->getDefaultDatabase()}/collections/{$this->getNamespace()}_{$name}/documents/replace", [
             'body' => json_encode([
                 'documents' => [
-                    $document
+                    $new
                 ]
             ])
         ]);
-
-        $data = json_decode((string) $response->getBody(), true);
-
-        $document['$internalId'] = (string) $data['keys'][0]['$internalId'];
-
-        return new Document($document);
-
 
         return $document;
     }
@@ -514,7 +524,6 @@ class Tigris extends Adapter
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
@@ -579,18 +588,30 @@ class Tigris extends Adapter
             //     ]
             // ]);
         }
+
+        if (Authorization::$status) { // skip if authorization is disabled
+            $roles = Authorization::getRoles();
+            $count = count($roles);
+            if ($count > 1) {
+                $filter['$or'] = array_map(fn ($role) => ['$permissions' => "read({$role})"], $roles);
+            } else if ($count === 1) {
+                $filter['$permissions'] = "read({$roles[0]})";
+            }
+        }
+
         if (empty($filter)) {
             $filter = new stdClass;
         }
-        $response = $this->client->post("/v1/databases/{$this->getDefaultDatabase()}/collections/{$name}/documents/search", [
-            'body' => json_encode([
-                'filter' => $filter,
-                'options' => $options,
-                'sort' => $sort
-            ])
+        var_dump([
+            'filter' => $filter,
+            'options' => $options,
+            'sort' => $sort
         ]);
-
-        $response = json_decode((string) $response->getBody(), true);
+        $response = $this->request(path: "/v1/databases/{$this->getDefaultDatabase()}/collections/{$name}/documents/search", payload: [
+            'filter' => $filter,
+            'options' => $options,
+            'sort' => $sort
+        ]);
 
         $found = array_map(function ($n) {
             $n = new Document($n['data']);
@@ -781,7 +802,7 @@ class Tigris extends Adapter
 
     public function getSupportForFulltextIndex(): bool
     {
-        return true;
+        return false;
     }
 
     public function getCountOfAttributes(Document $collection): int
@@ -821,287 +842,31 @@ class Tigris extends Adapter
 
     /**
      * Get list of keywords that cannot be used
-     *  Refference: https://mariadb.com/kb/en/reserved-words/
+     *  Refference: https://docs.tigrisdata.com/documents/restrictions
      * 
      * @return string[]
      */
     public function getKeywords(): array
     {
         return [
-            'ACCESSIBLE',
-            'ADD',
-            'ALL',
-            'ALTER',
-            'ANALYZE',
-            'AND',
-            'AS',
-            'ASC',
-            'ASENSITIVE',
-            'BEFORE',
-            'BETWEEN',
-            'BIGINT',
-            'BINARY',
-            'BLOB',
-            'BOTH',
-            'BY',
-            'CALL',
-            'CASCADE',
-            'CASE',
-            'CHANGE',
-            'CHAR',
-            'CHARACTER',
-            'CHECK',
-            'COLLATE',
-            'COLUMN',
-            'CONDITION',
-            'CONSTRAINT',
-            'CONTINUE',
-            'CONVERT',
-            'CREATE',
-            'CROSS',
-            'CURRENT_DATE',
-            'CURRENT_ROLE',
-            'CURRENT_TIME',
-            'CURRENT_TIMESTAMP',
-            'CURRENT_USER',
-            'CURSOR',
-            'DATABASE',
-            'DATABASES',
-            'DAY_HOUR',
-            'DAY_MICROSECOND',
-            'DAY_MINUTE',
-            'DAY_SECOND',
-            'DEC',
-            'DECIMAL',
-            'DECLARE',
-            'DEFAULT',
-            'DELAYED',
-            'DELETE',
-            'DELETE_DOMAIN_ID',
-            'DESC',
-            'DESCRIBE',
-            'DETERMINISTIC',
-            'DISTINCT',
-            'DISTINCTROW',
-            'DIV',
-            'DO_DOMAIN_IDS',
-            'DOUBLE',
-            'DROP',
-            'DUAL',
-            'EACH',
-            'ELSE',
-            'ELSEIF',
-            'ENCLOSED',
-            'ESCAPED',
-            'EXCEPT',
-            'EXISTS',
-            'EXIT',
-            'EXPLAIN',
-            'FALSE',
-            'FETCH',
-            'FLOAT',
-            'FLOAT4',
-            'FLOAT8',
-            'FOR',
-            'FORCE',
-            'FOREIGN',
-            'FROM',
-            'FULLTEXT',
-            'GENERAL',
-            'GRANT',
-            'GROUP',
-            'HAVING',
-            'HIGH_PRIORITY',
-            'HOUR_MICROSECOND',
-            'HOUR_MINUTE',
-            'HOUR_SECOND',
-            'IF',
-            'IGNORE',
-            'IGNORE_DOMAIN_IDS',
-            'IGNORE_SERVER_IDS',
-            'IN',
-            'INDEX',
-            'INFILE',
-            'INNER',
-            'INOUT',
-            'INSENSITIVE',
-            'INSERT',
-            'INT',
-            'INT1',
-            'INT2',
-            'INT3',
-            'INT4',
-            'INT8',
-            'INTEGER',
-            'INTERSECT',
-            'INTERVAL',
-            'INTO',
-            'IS',
-            'ITERATE',
-            'JOIN',
-            'KEY',
-            'KEYS',
-            'KILL',
-            'LEADING',
-            'LEAVE',
-            'LEFT',
-            'LIKE',
-            'LIMIT',
-            'LINEAR',
-            'LINES',
-            'LOAD',
-            'LOCALTIME',
-            'LOCALTIMESTAMP',
-            'LOCK',
-            'LONG',
-            'LONGBLOB',
-            'LONGTEXT',
-            'LOOP',
-            'LOW_PRIORITY',
-            'MASTER_HEARTBEAT_PERIOD',
-            'MASTER_SSL_VERIFY_SERVER_CERT',
-            'MATCH',
-            'MAXVALUE',
-            'MEDIUMBLOB',
-            'MEDIUMINT',
-            'MEDIUMTEXT',
-            'MIDDLEINT',
-            'MINUTE_MICROSECOND',
-            'MINUTE_SECOND',
-            'MOD',
-            'MODIFIES',
-            'NATURAL',
-            'NOT',
-            'NO_WRITE_TO_BINLOG',
-            'NULL',
-            'NUMERIC',
-            'OFFSET',
-            'ON',
-            'OPTIMIZE',
-            'OPTION',
-            'OPTIONALLY',
-            'OR',
-            'ORDER',
-            'OUT',
-            'OUTER',
-            'OUTFILE',
-            'OVER',
-            'PAGE_CHECKSUM',
-            'PARSE_VCOL_EXPR',
-            'PARTITION',
-            'POSITION',
-            'PRECISION',
-            'PRIMARY',
-            'PROCEDURE',
-            'PURGE',
-            'RANGE',
-            'READ',
-            'READS',
-            'READ_WRITE',
-            'REAL',
-            'RECURSIVE',
-            'REF_SYSTEM_ID',
-            'REFERENCES',
-            'REGEXP',
-            'RELEASE',
-            'RENAME',
-            'REPEAT',
-            'REPLACE',
-            'REQUIRE',
-            'RESIGNAL',
-            'RESTRICT',
-            'RETURN',
-            'RETURNING',
-            'REVOKE',
-            'RIGHT',
-            'RLIKE',
-            'ROWS',
-            'SCHEMA',
-            'SCHEMAS',
-            'SECOND_MICROSECOND',
-            'SELECT',
-            'SENSITIVE',
-            'SEPARATOR',
-            'SET',
-            'SHOW',
-            'SIGNAL',
-            'SLOW',
-            'SMALLINT',
-            'SPATIAL',
-            'SPECIFIC',
-            'SQL',
-            'SQLEXCEPTION',
-            'SQLSTATE',
-            'SQLWARNING',
-            'SQL_BIG_RESULT',
-            'SQL_CALC_FOUND_ROWS',
-            'SQL_SMALL_RESULT',
-            'SSL',
-            'STARTING',
-            'STATS_AUTO_RECALC',
-            'STATS_PERSISTENT',
-            'STATS_SAMPLE_PAGES',
-            'STRAIGHT_JOIN',
-            'TABLE',
-            'TERMINATED',
-            'THEN',
-            'TINYBLOB',
-            'TINYINT',
-            'TINYTEXT',
-            'TO',
-            'TRAILING',
-            'TRIGGER',
-            'TRUE',
-            'UNDO',
-            'UNION',
-            'UNIQUE',
-            'UNLOCK',
-            'UNSIGNED',
-            'UPDATE',
-            'USAGE',
-            'USE',
-            'USING',
-            'UTC_DATE',
-            'UTC_TIME',
-            'UTC_TIMESTAMP',
-            'VALUES',
-            'VARBINARY',
-            'VARCHAR',
-            'VARCHARACTER',
-            'VARYING',
-            'WHEN',
-            'WHERE',
-            'WHILE',
-            'WINDOW',
-            'WITH',
-            'WRITE',
-            'XOR',
-            'YEAR_MONTH',
-            'ZEROFILL',
-            'ACTION',
-            'BIT',
-            'DATE',
-            'ENUM',
-            'NO',
-            'TEXT',
-            'TIME',
-            'TIMESTAMP',
-            'BODY',
-            'ELSIF',
-            'GOTO',
-            'HISTORY',
-            'MINUS',
-            'OTHERS',
-            'PACKAGE',
-            'PERIOD',
-            'RAISE',
-            'ROWNUM',
-            'ROWTYPE',
-            'SYSDATE',
-            'SYSTEM',
-            'SYSTEM_TIME',
-            'VERSIONING',
-            'WITHOUT'
+            "abstract", "add", "alias", "and", "any", "args", "arguments", "array",
+            "as", "as?", "ascending", "assert", "async", "await", "base", "bool", "boolean", "break", "by", "byte",
+            "callable", "case", "catch", "chan", "char", "checked", "class", "clone", "const", "constructor", "continue",
+            "debugger", "decimal", "declare", "def", "default", "defer", "del", "delegate", "delete", "descending", "die",
+            "do", "double", "dynamic", "echo", "elif", "else", "elseif", "empty", "enddeclare", "endfor", "endforeach",
+            "endif", "endswitch", "endwhile", "enum", "equals", "eval", "event", "except", "exception", "exit", "explicit",
+            "export", "extends", "extern", "fallthrough", "false", "final", "finally", "fixed", "float", "fn", "for",
+            "foreach", "from", "fun", "func", "function", "get", "global", "go", "goto", "group", "if", "implements",
+            "implicit", "import", "in", "include", "include_once", "init", "instanceof", "insteadof", "int", "integer",
+            "interface", "internal", "into", "is", "isset", "join", "lambda", "let", "list", "lock", "long", "managed",
+            "map", "match", "module", "nameof", "namespace", "native", "new", "nint", "none", "nonlocal", "not", "notnull",
+            "nuint", "null", "number", "object", "of", "on", "operator", "or", "orderby", "out", "override", "package",
+            "params", "partial", "pass", "print", "private", "protected", "public", "raise", "range", "readonly", "record",
+            "ref", "remove", "require", "require_once", "return", "sbyte", "sealed", "select", "set", "short", "sizeof",
+            "stackalloc", "static", "strictfp", "string", "struct", "super", "switch", "symbol", "synchronized", "this",
+            "throw", "throws", "trait", "transient", "true", "try", "type", "typealias", "typeof", "uint", "ulong",
+            "unchecked", "unmanaged", "unsafe", "unset", "use", "ushort", "using", "val", "value", "var", "virtual", "void",
+            "volatile", "when", "where", "while", "with", "xor", "yield"
         ];
     }
 
@@ -1158,5 +923,64 @@ class Tigris extends Adapter
             Database::ORDER_DESC => '$desc',
             default => throw new Exception('Unknown sort order:' . $order)
         };
+    }
+
+    protected function removeDocumentKeywordsFromDocument(Document $document): Document
+    {
+        foreach (array_keys($document->getAttributes()) as $attribute) {
+            if (in_array($attribute, $this->getKeywords())) {
+                $new = $this->removeKeyword($attribute);
+                $document->setAttribute($new, $document->getAttribute($attribute))->removeAttribute($attribute);
+            } elseif (str_contains($attribute, '-')) {
+                $new = $this->removeKeyword($attribute);
+                $document->setAttribute($new, $document->getAttribute($attribute))->removeAttribute($attribute);
+            }
+        }
+
+        return $document;
+    }
+
+    protected function revertRemovingDocumentKeywordsFromDocument(Document $document): Document
+    {
+        foreach (array_keys($document->getAttributes()) as $attribute) {
+            if (str_starts_with($attribute, '$reserved_')) {
+                $new = $this->revertRemovingKeyword($attribute);
+                $document->setAttribute($new, $document->getAttribute($attribute))->removeAttribute($attribute);
+            } elseif (str_starts_with($attribute, '$dash')) {
+                $new = $this->revertRemovingKeyword($attribute);
+                $document->setAttribute($new, $document->getAttribute($attribute))->removeAttribute($attribute);
+            }
+        }
+
+        return $document;
+    }
+
+    protected function removeKeyword(string $value): string
+    {
+        if (in_array($value, $this->getKeywords())) {
+            return "\$reserved_{$value}";
+        } elseif (str_contains($value, '-')) {
+            $new = str_replace('-', '__dash__', $value);
+            return "\$dash_{$new}";
+        } elseif (is_numeric($value[0])) {
+            return "\$number_{$value}";
+        }
+        return $value;
+    }
+
+    protected function revertRemovingKeyword(string $value): string
+    {
+        if (str_starts_with($value, '$reserved_')) {
+            return str_replace('$reserved_', '', $value);
+        } elseif (str_starts_with($value, '$dash')) {
+            $new = str_replace('$dash_', '', $value);
+            $new = str_replace('__dash__', '-', $new);
+
+            return $new;
+        } elseif (str_starts_with($value, '$number')) {
+            return str_replace('$number_', '', $value);
+        }
+
+        return $value;
     }
 }

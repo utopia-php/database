@@ -22,7 +22,7 @@ class TigrisTest extends Base
 
     static function getAdapterRowLimit(): int
     {
-        return MariaDB::getRowLimit();
+        return 265;
     }
 
     static function getDatabase(): Database
@@ -31,12 +31,6 @@ class TigrisTest extends Base
             return self::$database;
         }
 
-        $dbHost = 'mariadb';
-        $dbPort = '3306';
-        $dbUser = 'root';
-        $dbPass = 'password';
-
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();

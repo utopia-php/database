@@ -81,7 +81,7 @@ services:
       - SYS_NICE
 
   tigris:
-    image: tigrisdata/tigris-local
+    image: tigrisdata/tigris-local:1.0.0-beta.12
     container_name: utopia-tigris
     networks:
       - database

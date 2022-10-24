@@ -171,13 +171,10 @@ class MariaDB extends Adapter
             $indexAttributes = [];
             foreach ($index->getAttribute('attributes') as $attribute) {
                 $indexAttribute = $this->filter($attribute);
-                //$attr = $this->findAttributeInList($indexAttribute, $attributes);
-
                 $size = $index['lengths'][$key] ?? 0;
-                //$size = $this->getDefaultIndexSize($size, $attr);
                 $length = $size === 0 ? '' : '(' . $size . ')';
-
                 $indexOrder = $index->getAttribute('orders')[$key] ?? '';
+
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';
                 }

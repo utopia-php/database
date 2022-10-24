@@ -511,17 +511,6 @@ abstract class Adapter
 
         throw new \Exception('Attribute ' . $attributeKey . ' not found');
     }
-//
-//    /**
-//     * This function fixes indexes which has exceed default limits
-//     *
-//     * @param Document $index
-//     * @param Document[] $attributes
-//     * @return Document
-//     */
-//    abstract public function fixIndex(Document $index, array $attributes): Document;
-//
-
 
     /**
      * This function fixes indexes which has exceeded max default limits

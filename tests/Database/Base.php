@@ -310,7 +310,7 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->deleteCollection('indexes');
+        //static::getDatabase()->deleteCollection('indexes');
     }
 
     public function testCreateCollectionWithSchema()

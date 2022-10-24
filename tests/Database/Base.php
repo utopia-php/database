@@ -319,7 +319,7 @@ abstract class Base extends TestCase
             new Document([
                 '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
-                'size' => 2500,
+                'size' => 2500, // more than 768 index max
                 'required' => false,
                 'signed' => true,
                 'array' => false,

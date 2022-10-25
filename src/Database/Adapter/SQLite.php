@@ -26,6 +26,43 @@ use Utopia\Database\Exception\Duplicate;
  */
 class SQLite extends MySQL
 {
+
+    /**
+     * List of permission attributes
+     * @var array
+     */
+
+
+    protected static array $permissionAttributes = [
+        [
+            '$id' => '_document',
+            'type' => Database::VAR_STRING,
+            'size' => 12,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '_type',
+            'type' => Database::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '_permission',
+            'type' => Database::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]
+    ];
+
     /**
      * Check if Database exists
      * Optionally check if collection exists in Database
@@ -99,8 +136,9 @@ class SQLite extends MySQL
         $id = $this->filter($name);
 
         $this->getPDO()->beginTransaction();
+        $schemaAttributes = [];
 
-        foreach ($attributes as $key => $attribute) {
+        foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
@@ -108,7 +146,7 @@ class SQLite extends MySQL
                 $attrType = 'LONGTEXT';
             }
 
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
+            $schemaAttributes[] = "`{$attrId}` {$attrType}, ";
         }
 
         $this->getPDO()
@@ -117,19 +155,24 @@ class SQLite extends MySQL
                     `_uid` CHAR(255) NOT NULL,
                     `_createdAt` datetime(3) DEFAULT NULL,
                     `_updatedAt` datetime(3) DEFAULT NULL,
-                    `_permissions` MEDIUMTEXT DEFAULT NULL".((!empty($attributes)) ? ',' : '')."
-                    " . substr(\implode(' ', $attributes), 0, -2) . "
+                    `_permissions` MEDIUMTEXT DEFAULT NULL".((!empty($schemaAttributes)) ? ',' : '')."
+                    " . substr(\implode(' ', $schemaAttributes), 0, -2) . "
                 )")
             ->execute();
 
-        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
-        $this->createIndex($id, '_created_at', Database::INDEX_KEY, ['_createdAt'], [], []);
-        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, ['_updatedAt'], [], []);
+        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, Database::filterIndexAttributes(['$id'], $attributes), [], []);
+        $this->createIndex($id, '_created_at', Database::INDEX_KEY, Database::filterIndexAttributes(['$createdAt'], $attributes), [], []);
+        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, Database::filterIndexAttributes(['$updatedAt'], $attributes), [], []);
 
-        foreach ($indexes as $key => $index) {
+        foreach ($indexes as $index) {
             $indexId = $this->filter($index->getId());
             $indexType = $index->getAttribute('type');
-            $indexAttributes = $index->getAttribute('attributes', []);
+
+            $indexAttributes = Database::filterIndexAttributes(
+                $index->getAttribute('attributes'),
+                $attributes
+            );
+
             $indexLengths = $index->getAttribute('lengths', []);
             $indexOrders = $index->getAttribute('orders', []);
 
@@ -148,9 +191,17 @@ class SQLite extends MySQL
         } catch (\Throwable $th) {
             var_dump($th->getMessage());
         }
-        
-        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
-        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission'], [], []);
+
+        $permissionAttributes = array_map(
+            fn ($attribute) => new Document($attribute),
+            self::$permissionAttributes
+        );
+
+        $attributes = Database::filterIndexAttributes(['_document', '_type', '_permission'], $permissionAttributes);
+        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, $attributes, [], []);
+
+        $attributes = Database::filterIndexAttributes(['_permission'], $permissionAttributes);
+        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, $attributes, [], []);
         
         $this->getPDO()->commit();
 
@@ -212,9 +263,17 @@ class SQLite extends MySQL
      * @throws Exception
      * @throws PDOException
      */
-    public function renameIndex(string $collection, string $old, string $new): bool
+    public function renameIndex(string $collectionName, string $old, string $new): bool
     {
-        $collection = $this->filter($collection);
+        $collection = $this->getCollection($collectionName);
+        if($collection->isEmpty()){
+            throw new Exception('Collection ' . $collectionName . ' Not found');
+        }
+
+        // attribute IDs are case insensitive
+        $attributes = $collection->getAttribute('attributes', []);
+
+
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
@@ -228,12 +287,17 @@ class SQLite extends MySQL
             }
         }
 
+        $attributes = Database::filterIndexAttributes(
+            $index['attributes'],
+            $collection->getAttribute('attributes', [])
+        );
+
         if ($index && $this->deleteIndex($collection, $old)
             && $this->createIndex(
                 $collection,
                 $new,
                 $index['type'],
-                $index['attributes'],
+                $attributes,
                 $index['lengths'],
                 $index['orders'],
             )) {
@@ -638,23 +702,25 @@ class SQLite extends MySQL
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
-
         foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
+            $length = $index['lengths'][$key] ?? '';
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
+            $order = $index['orders'][$key] ?? '';
 
-            $attributes[$key] = "`{$attribute}`{$postfix} {$order}";
+            $attributeName = $attribute->getId();
+            if($attributeName === '$id')$attributeName = '_uid';
+            if($attributeName === '$createdAt')$attributeName = '_createdAt';
+            if($attributeName === '$updatedAt')$attributeName = '_updatedAt';
+
+            $attributeName = $this->filter($attributeName);
+
+            if (Database::INDEX_FULLTEXT === $type) {
+                $order = '';
+            }
+
+            $attributes[$key] = "`{$attributeName}`{$postfix} {$order}";
         }
 
         return "CREATE {$type} `{$this->getNamespace()}_{$collection}_{$id}` ON `{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . ")";

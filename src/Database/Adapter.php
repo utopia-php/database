@@ -385,14 +385,6 @@ abstract class Adapter
     abstract public function getLimitForIndexes(): int;
 
     /**
-     * Get Maximum Length for index
-     *
-     * @return int
-     */
-    abstract function getLimitForIndexLength(): int;
-
-
-    /**
      * Is schemas supported?
      * 
      * @return bool
@@ -518,20 +510,6 @@ abstract class Adapter
         }
 
         throw new \Exception('Attribute ' . $attributeKey . ' not found');
-    }
-
-    /**
-     * This function fixes indexes which have exceeded max default limits
-     * by comparing the length of the collection attribute string with index max length
-     * We can overwrite other index behaviour here.
-     *
-     * @param Document $index
-     * @param Document[] $attributes
-     * @return Document
-     * @throws Exception
-     */
-    public function fixIndex(Document $index, array $attributes): Document {
-        return $index;
     }
 
 }

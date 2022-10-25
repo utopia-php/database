@@ -166,6 +166,15 @@ class MariaDB extends Adapter
 
         $schemaIndexes = [];
         foreach ($indexes as $key => $index) {
+
+            $index = $this->fixIndex(
+                $index,
+                Database::filterIndexAttributes(
+                    $index->getAttribute('attributes'),
+                    $attributes
+                )
+            );
+
             $indexId = $this->filter($index->getId());
             $indexType = $index->getAttribute('type');
             $indexAttributes = [];
@@ -378,24 +387,34 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
+        $index = new Document([
+            '$id' => ID::custom($id),
+            'key' => $id,
+            'type' => $type,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders,
+        ]);
+
+        $index = $this->fixIndex($index, $attributes);
 
         foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
+            $length = $index['lengths'][$key] ?? '';
             $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
+            $order = $index['orders'][$key] ?? '';
+
+            $attributeName = $attribute->getId();
+            if($attributeName === '$id')$attributeName = '_uid';
+            if($attributeName === '$createdAt')$attributeName = '_createdAt';
+            if($attributeName === '$updatedAt')$attributeName = '_updatedAt';
+
+            $attributeName = $this->filter($attributeName);
 
             if (Database::INDEX_FULLTEXT === $type) {
                 $order = '';
             }
 
-            $attributes[$key] = "`{$attribute}`{$length} {$order}";
+            $attributes[$key] = "`{$attributeName}`{$length} {$order}";
         }
 
         return $this->getPDO()
@@ -1861,23 +1880,12 @@ class MariaDB extends Adapter
      */
     protected function getPDOType(mixed $value): int
     {
-        switch (gettype($value)) {
-            case 'double':
-            case 'string':
-                return PDO::PARAM_STR;
-
-            case 'integer':
-            case 'boolean':
-                return PDO::PARAM_INT;
-
-                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
-
-            case 'NULL':
-                return PDO::PARAM_NULL;
-
-            default:
-                throw new Exception('Unknown PDO Type for ' . gettype($value));
-        }
+        return match (gettype($value)) {
+            'double', 'string' => PDO::PARAM_STR,
+            'integer', 'boolean' => PDO::PARAM_INT,
+            'NULL' => PDO::PARAM_NULL,
+            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+        };
     }
 
     /**
@@ -1905,26 +1913,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Return the maximum index length per attribute type
-     * @param int $size
-     * @param Document $attribute
-     * @return int
-     */
-    public function getDefaultIndexSize(int $size, Document $attribute): int
-    {
-        $maxIndexLength = 760;
-
-        if($attribute['type'] === Database::VAR_STRING){
-            if($attribute['size'] > $maxIndexLength){
-                $size = $size === 0 || $size > $maxIndexLength ? $maxIndexLength : $size;
-            }
-        }
-
-        return $size;
-    }
-
-
-    /**
      * This function fixes indexes which has exceeded max default limits
      * with comparing the length of the string length of the collection attribute
      *
@@ -1934,24 +1922,6 @@ class MariaDB extends Adapter
      * @throws Exception
      */
     public function fixIndex(Document $index, array $attributes): Document {
-        foreach ($index->getAttribute('attributes') as $key => $indexAttribute) {
-
-            //Internal attributes do not have a real attribute
-            if(in_array($indexAttribute, ['$id', '$createdAt', '$updatedAt'])){
-                continue;
-            }
-
-            $attribute = $this->findAttributeInList($indexAttribute, $attributes);
-
-            $size = $index['lengths'][$key] ?? 0;
-            $max = 768; // 3072 divided by utf8mb4
-            if($attribute['type'] === Database::VAR_STRING){
-                if($attribute['size'] > $max){
-                    $index['lengths'][$key] = $size === 0 || $size > $max ? $max : $size;
-                }
-            }
-        }
-
         return $index;
     }
 

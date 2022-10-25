@@ -5,10 +5,10 @@ namespace Utopia\Database;
 use Exception;
 use Throwable;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
@@ -118,7 +118,7 @@ class Database
      * List of Internal Ids
      * @var array
      */
-    protected array $attributes = [
+    protected static array $attributes = [
         [
             '$id' => '$id',
             'type' => self::VAR_STRING,
@@ -431,6 +431,7 @@ class Database
      * @param string $name
      *
      * @return bool
+     * @throws Exception|Throwable
      */
     public function create(string $name): bool
     {
@@ -439,7 +440,6 @@ class Database
         
         /**
          * Create array of attribute documents
-         * @var Document[] $attributes
          */
         $attributes = array_map(function ($attribute) {
             return new Document([
@@ -518,9 +518,9 @@ class Database
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
 
-        foreach ($indexes as $key => $index){
-            $indexes[$key] = $this->adapter->fixIndex($index, $attributes);
-        }
+//        foreach ($indexes as $key => $index){
+//            $indexes[$key] = $this->adapter->fixIndex($index, $attributes);
+//        }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
 
@@ -630,19 +630,22 @@ class Database
     /**
      * Create Attribute
      *
-     * @param string $collection
+     * @param string $collectionName
      * @param string $id
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param null $default
      * @param bool $signed
      * @param bool $array
-     * @param string $format optional validation format of attribute
-     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param string|null $format optional validation format of attribute
+     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
      *
      * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Throwable
      */
     public function createAttribute(string $collectionName, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -1259,7 +1262,10 @@ class Database
             'orders' => $orders,
         ]);
 
-        $index = $this->adapter->fixIndex($index, $collection->getAttribute('attributes', []));
+        $attributes = $this->filterIndexAttributes(
+            $attributes,
+            $collection->getAttribute('attributes', [])
+        );
 
         $result = $this->adapter->createIndex(
             $collection->getId(),
@@ -1279,6 +1285,31 @@ class Database
         $this->trigger(self::EVENT_INDEX_CREATE, $result);
         return $result;
     }
+
+
+    /**
+     * Filter collection attributes by index attributes names
+     *
+     * @param array $indexAttributes
+     * @param array $attributes Documents[]
+     * @return array
+     * @throws Exception
+     */
+    public static function filterIndexAttributes(array $indexAttributes, array $attributes): array
+    {
+        $internals = array_map(
+            fn ($attribute) => new Document($attribute),
+            self::$attributes
+        );
+
+        $attributes = array_filter(
+                array_merge($internals, $attributes),
+                fn ($attribute) => in_array($attribute->getId(), $indexAttributes)
+        );
+
+        return array_values($attributes);
+    }
+
 
     /**
      * Delete Index
@@ -1668,7 +1699,7 @@ class Database
     public function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach ($this->attributes as $internal){
+        foreach (self::$attributes as $internal){
             $attributes[] = new Document($internal);
         }
         return $attributes;

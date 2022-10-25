@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 
 class MySQL extends MariaDB
 {
@@ -49,13 +50,36 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Get Maximum Length permitted for index
+     * This function fixes indexes which has exceeded max default limits
+     * with comparing the length of the string length of the collection attribute
      *
-     * @return int
+     * @param Document $index
+     * @param Document[] $attributes
+     * @return Document
+     * @throws Exception
      */
-    public function getLimitForIndexLength(): int
-    {
-        return 768;
+    public function fixIndex(Document $index, array $attributes): Document {
+
+        $max =  768; // 3072 divided by utf8mb4
+
+        foreach ($attributes as $key => $attribute){
+
+            //Internal attributes do not have a real attribute
+//            if(in_array($attribute->getId(), ['$id', '$createdAt', '$updatedAt'])){
+//                continue;
+//            }
+
+            $size = $index['lengths'][$key] ?? 0;
+
+            if($attribute['type'] === Database::VAR_STRING){
+                if($attribute['size'] > $max){
+                    $index['lengths'][$key] = $size === 0 || $size > $max ? $max : $size;
+                }
+            }
+
+        }
+
+        return $index;
     }
 
 }

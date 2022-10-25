@@ -385,6 +385,14 @@ abstract class Adapter
     abstract public function getLimitForIndexes(): int;
 
     /**
+     * Get Maximum Length for index
+     *
+     * @return int
+     */
+    abstract function getLimitForIndexLength(): int;
+
+
+    /**
      * Is schemas supported?
      * 
      * @return bool

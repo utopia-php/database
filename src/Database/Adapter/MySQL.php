@@ -48,4 +48,14 @@ class MySQL extends MariaDB
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
 
+    /**
+     * Get Maximum Length permitted for index
+     *
+     * @return int
+     */
+    public function getLimitForIndexLength(): int
+    {
+        return 768;
+    }
+
 }

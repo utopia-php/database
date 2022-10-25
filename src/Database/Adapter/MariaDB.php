@@ -1142,6 +1142,16 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Get Maximum Length for index
+     *
+     * @return int
+     */
+    public function getLimitForIndexLength(): int
+    {
+        return 0;
+    }
+
+    /**
      * Is schemas supported?
      *
      * @return bool

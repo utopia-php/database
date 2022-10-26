@@ -283,7 +283,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0, true));
-
+        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'long_varchar', Database::VAR_STRING, 2048, true));
+        
         // Indexes
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
@@ -304,7 +305,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index5'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'order'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'long_varchar'));
-        
+
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
 

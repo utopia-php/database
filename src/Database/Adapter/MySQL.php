@@ -10,13 +10,14 @@ class MySQL extends MariaDB
 {
     /**
      * Get SQL Index
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param array $attributes
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
@@ -63,12 +64,6 @@ class MySQL extends MariaDB
         $max =  768; // 3072 divided by utf8mb4
 
         foreach ($attributes as $key => $attribute){
-
-            //Internal attributes do not have a real attribute
-//            if(in_array($attribute->getId(), ['$id', '$createdAt', '$updatedAt'])){
-//                continue;
-//            }
-
             $size = $index['lengths'][$key] ?? 0;
 
             if($attribute['type'] === Database::VAR_STRING){

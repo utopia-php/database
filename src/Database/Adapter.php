@@ -257,7 +257,7 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array $attributes Document[]
      * @param array $lengths
      * @param array $orders
      *

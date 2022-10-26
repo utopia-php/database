@@ -426,17 +426,17 @@ class Database
     }
 
     /**
-     * Create Database
+     * Create the Default Database
      *
-     * @param string $name
-     *
+     * @throws Exception
+     * 
      * @return bool
      */
-    public function create(string $name): bool
+    public function create(): bool
     {
+        $name = $this->adapter->getDefaultDatabase();
         $this->adapter->create($name);
-        $this->setDefaultDatabase($name);
-        
+
         /**
          * Create array of attribute documents
          * @var Document[] $attributes

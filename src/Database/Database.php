@@ -518,10 +518,6 @@ class Database
             throw new Duplicate('Collection ' . $id . ' Exists!');
         }
 
-//        foreach ($indexes as $key => $index){
-//            $indexes[$key] = $this->adapter->fixIndex($index, $attributes);
-//        }
-
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
@@ -1068,6 +1064,7 @@ class Database
             }
         }
 
+        $attributes = array_values($attributes);
         $collection->setAttribute('attributes', $attributes);
 
         if ($collection->getId() !== self::METADATA) {
@@ -1337,6 +1334,7 @@ class Database
             }
         }
 
+        $indexes = array_values($indexes);
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
@@ -1698,11 +1696,7 @@ class Database
      */
     public function getInternalAttributes(): array
     {
-        $attributes = [];
-        foreach (self::$attributes as $internal){
-            $attributes[] = new Document($internal);
-        }
-        return $attributes;
+        return self::changeArrayToDocuments(self::$attributes);
     }
 
     /**
@@ -1983,4 +1977,19 @@ class Database
         }
         return $queries;
     }
+
+
+    /**
+     * @param array $array
+     * @return Document[]
+     * @throws Exception
+     */
+    public static function changeArrayToDocuments(array $array): array
+    {
+        return array_map(
+            fn ($attribute) => new Document($attribute),
+            $array
+        );
+    }
+
 }

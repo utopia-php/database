@@ -108,7 +108,7 @@ class MariaDB extends Adapter
 
     /**
      * List Databases
-     * 
+     *
      * @return array
      */
     public function list(): array
@@ -150,6 +150,9 @@ class MariaDB extends Adapter
         $id = $this->filter($name);
         $schemaAttributes = [];
 
+        /*
+         * Loop though the collection attributes for creation of attributes in schema
+         * */
         foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
             $size = $attribute->getAttribute('size', 0);
@@ -164,6 +167,9 @@ class MariaDB extends Adapter
             $schemaAttributes[] = "`{$attrId}` {$attrType}, ";
         }
 
+        /*
+         * Loop though the collection indexes for creation of indexes in schema
+         * */
         $schemaIndexes = [];
         foreach ($indexes as $key => $index) {
 
@@ -376,7 +382,7 @@ class MariaDB extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array $attributes Document[]
      * @param array $lengths
      * @param array $orders
      * @return bool
@@ -404,6 +410,7 @@ class MariaDB extends Adapter
             $order = $index['orders'][$key] ?? '';
 
             $attributeName = $attribute->getId();
+            // todo : make a function for this...
             if($attributeName === '$id')$attributeName = '_uid';
             if($attributeName === '$createdAt')$attributeName = '_createdAt';
             if($attributeName === '$updatedAt')$attributeName = '_updatedAt';
@@ -1179,7 +1186,7 @@ class MariaDB extends Adapter
     {
         return true;
     }
-    
+
     /**
      * Is index supported?
      *
@@ -1245,7 +1252,7 @@ class MariaDB extends Adapter
     {
         return 4;
     }
-    
+
     /**
      * Returns number of indexes used by default.
      *
@@ -1355,7 +1362,7 @@ class MariaDB extends Adapter
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array
@@ -1830,10 +1837,10 @@ class MariaDB extends Adapter
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -1849,7 +1856,7 @@ class MariaDB extends Adapter
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -1863,8 +1870,8 @@ class MariaDB extends Adapter
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -1876,7 +1883,7 @@ class MariaDB extends Adapter
      *
      * @param mixed $value
      * @return int
-     * @throws Exception 
+     * @throws Exception
      */
     protected function getPDOType(mixed $value): int
     {
@@ -1890,7 +1897,7 @@ class MariaDB extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return PDO
      */
     protected function getPDO()
     {
@@ -1925,5 +1932,5 @@ class MariaDB extends Adapter
         return $index;
     }
 
-    
+
 }

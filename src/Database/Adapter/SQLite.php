@@ -7,7 +7,6 @@ use Exception;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
 
 /**
@@ -24,7 +23,7 @@ use Utopia\Database\Exception\Duplicate;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends MySQL
+class SQLite extends MariaDB
 {
 
     /**
@@ -192,10 +191,7 @@ class SQLite extends MySQL
             var_dump($th->getMessage());
         }
 
-        $permissionAttributes = array_map(
-            fn ($attribute) => new Document($attribute),
-            self::$permissionAttributes
-        );
+        $permissionAttributes = Database::changeArrayToDocuments(self::$permissionAttributes);
 
         $attributes = Database::filterIndexAttributes(['_document', '_type', '_permission'], $permissionAttributes);
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, $attributes, [], []);
@@ -263,18 +259,10 @@ class SQLite extends MySQL
      * @throws Exception
      * @throws PDOException
      */
-    public function renameIndex(string $collectionName, string $old, string $new): bool
+    public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->getCollection($collectionName);
-        if($collection->isEmpty()){
-            throw new Exception('Collection ' . $collectionName . ' Not found');
-        }
-
-        // attribute IDs are case insensitive
-        $attributes = $collection->getAttribute('attributes', []);
-
-
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+
         $old = $this->filter($old);
         $new = $this->filter($new);
         $indexs = json_decode($collectionDocument['indexes'], true);
@@ -287,9 +275,11 @@ class SQLite extends MySQL
             }
         }
 
+        $attributes = json_decode($collectionDocument['attributes'], true);
+        $attributes = Database::changeArrayToDocuments($attributes);
         $attributes = Database::filterIndexAttributes(
             $index['attributes'],
-            $collection->getAttribute('attributes', [])
+            $attributes
         );
 
         if ($index && $this->deleteIndex($collection, $old)
@@ -313,7 +303,7 @@ class SQLite extends MySQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array $attributes Document[]
      * @param array $lengths
      * @param array $orders
      * @return bool
@@ -710,6 +700,7 @@ class SQLite extends MySQL
             $order = $index['orders'][$key] ?? '';
 
             $attributeName = $attribute->getId();
+            // todo : make a function for this...
             if($attributeName === '$id')$attributeName = '_uid';
             if($attributeName === '$createdAt')$attributeName = '_createdAt';
             if($attributeName === '$updatedAt')$attributeName = '_updatedAt';

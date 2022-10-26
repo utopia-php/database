@@ -14,7 +14,7 @@
     "require": {
         "php": ">=8.0",
         "utopia-php/framework": "0.*.*",
-        "utopia-php/cache": "0.7.*"
+        "utopia-php/cache": "0.8.*"
     },
     "require-dev": {
         "ext-pdo": "*",

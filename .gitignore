@@ -8,6 +8,7 @@ loader.php
 /bin/view/results/
 .vscode
 .vscode/*
+database.sql
 
 ## - Oh Wess!
 Makefile

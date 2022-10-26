@@ -235,6 +235,9 @@ class Document extends ArrayObject
 
     /**
      * Find.
+     * 
+     * Example:
+     * $user->find('teamId', $project->getAttribute('teamId'), 'memberships')
      *
      * @param string $key
      * @param mixed $find

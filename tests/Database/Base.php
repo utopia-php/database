@@ -291,6 +291,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'long_varchar', Database::INDEX_KEY, ['long_varchar'], [], [Database::ORDER_ASC]));
 
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
@@ -302,7 +303,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index4'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index5'));
         $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'order'));
-
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'long_varchar'));
+        
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
@@ -315,7 +317,7 @@ abstract class Base extends TestCase
             new Document([
                 '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
-                'size' => 256,
+                'size' => 2500,
                 'required' => false,
                 'signed' => true,
                 'array' => false,
@@ -346,7 +348,7 @@ abstract class Base extends TestCase
                 '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
-                'lengths' => [256],
+                'lengths' => [],
                 'orders' => ['ASC'],
             ]),
             new Document([

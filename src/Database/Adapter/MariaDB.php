@@ -166,9 +166,9 @@ class MariaDB extends Adapter
 
             $indexAttributes = $index->getAttribute('attributes');
             foreach ($indexAttributes as $nested => $attribute) {
-                $indexLength = $index->getAttribute('lengths')[$key] ?? '';
+                $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
-                $indexOrder = $index->getAttribute('orders')[$key] ?? '';
+                $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
                 $indexAttribute = $this->filter($attribute);
 
                 if ($indexType === Database::INDEX_FULLTEXT) {

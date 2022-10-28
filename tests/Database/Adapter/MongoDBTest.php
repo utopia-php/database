@@ -84,7 +84,8 @@ class MongoDBTest extends Base
 
     public function testCreateExistsDelete()
     {
-        $this->assertNotNull(static::getDatabase()->create($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        $this->assertNotNull(static::getDatabase()->create());
 
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
@@ -92,8 +93,8 @@ class MongoDBTest extends Base
         // Mongo creates on the fly, so this will never be true, do we want to try to make it pass
         // by doing something else?
         // $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        // $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         // $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        // $this->assertEquals(true, static::getDatabase()->create());
     }
 
     /**

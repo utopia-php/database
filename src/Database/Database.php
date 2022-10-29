@@ -1289,7 +1289,11 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new Exception('test exception: ' . $collection . ':' . $id);
+            throw new Exception('Missing collection: ' . $collection);
+        }
+
+        if (empty($id)) {
+            return new Document();
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));

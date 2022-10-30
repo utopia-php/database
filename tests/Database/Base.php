@@ -689,7 +689,34 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('defaults');
     }
 
-    /**
+
+
+    public function testIncrementDecrement()
+    {
+        static::getDatabase()->createCollection('increment_decrement');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('increment_decrement', 'integer', Database::VAR_INTEGER, 0, true   ));
+
+        $document = static::getDatabase()->createDocument('increment_decrement', new Document([
+            'integer' => 10,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increment_decrement', $document->getId(), 'integer', -2));
+
+
+        exit;
+
+
+    }
+
+
+        /**
      * @depends testCreateDocument
      */
     public function testGetDocument(Document $document)

@@ -84,6 +84,8 @@ class Database
     const EVENT_DOCUMENT_DELETE = 'document_delete';
     const EVENT_DOCUMENT_COUNT = 'document_count';
     const EVENT_DOCUMENT_SUM = 'document_sum';
+    const EVENT_DOCUMENT_INCREMENT = 'document_increment';
+    const EVENT_DOCUMENT_DECREMENT = 'document_DECREMENT';
 
     const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -1900,4 +1902,45 @@ class Database
         }
         return $queries;
     }
+
+
+    /**
+     * Delete Document
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int $value
+     * @param null $min
+     * @param null $max
+     * @return bool
+     *
+     * @throws AuthorizationException
+     * @throws Exception
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null, $max = null): bool
+    {
+        if($value < 1){
+            throw new Exception("Value must be greater than 1");
+        }
+
+        // todo get and check attribute in collecgtion
+
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+
+        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($document->getUpdate())) {
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $result = $this->adapter->incrementDecrementAttribute($collection->getId(), $id, $attribute, $value);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->trigger(self::EVENT_DOCUMENT_INCREMENT, $document);
+
+        return $result;
+    }
+
 }

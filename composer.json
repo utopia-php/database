@@ -14,11 +14,11 @@
     "require": {
         "php": ">=8.0",
         "utopia-php/framework": "0.*.*",
-        "utopia-php/cache": "0.7.*"
+        "utopia-php/cache": "0.7.*",
+        "ext-pdo": "*"
     },
     "require-dev": {
-        "ext-pdo": "*",
-        "ext-redis": "*",
+      "ext-redis": "*",
         "ext-mongodb": "*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",

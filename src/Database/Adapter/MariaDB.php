@@ -108,7 +108,7 @@ class MariaDB extends Adapter
 
     /**
      * List Databases
-     * 
+     *
      * @return array
      */
     public function list(): array
@@ -1147,7 +1147,7 @@ class MariaDB extends Adapter
     {
         return true;
     }
-    
+
     /**
      * Is index supported?
      *
@@ -1213,7 +1213,7 @@ class MariaDB extends Adapter
     {
         return 4;
     }
-    
+
     /**
      * Returns number of indexes used by default.
      *
@@ -1323,7 +1323,7 @@ class MariaDB extends Adapter
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array
@@ -1799,10 +1799,10 @@ class MariaDB extends Adapter
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -1818,7 +1818,7 @@ class MariaDB extends Adapter
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -1832,8 +1832,8 @@ class MariaDB extends Adapter
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -1845,7 +1845,7 @@ class MariaDB extends Adapter
      *
      * @param mixed $value
      * @return int
-     * @throws Exception 
+     * @throws Exception
      */
     protected function getPDOType(mixed $value): int
     {
@@ -1870,7 +1870,7 @@ class MariaDB extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return PDO
      */
     protected function getPDO()
     {
@@ -1891,4 +1891,30 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
+
+    /**
+     * Increment and Decrement Attribute Value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int $value
+     * @return bool
+     * @throws Exception
+     */
+    public function incrementDecrementAttribute(string $collection, string $id, string $attribute, int $value): bool
+    {
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+
+        $stmt = $this->getPDO()->prepare("update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid");
+        $stmt->bindValue(':_uid', $id);
+        $stmt->bindValue(':val', $value, PDO::PARAM_INT);
+
+        $stmt->execute() || throw new Exception('Failed to update Attribute');
+
+        return true;
+    }
+
 }

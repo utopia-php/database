@@ -838,4 +838,29 @@ class SQLite extends MySQL
             'WITHOUT',
         ];
     }
+
+
+    /**
+     * Increment and Decrement Attribute Value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int $value
+     * @return bool
+     * @throws Exception
+     */
+    public function incrementDecrementAttribute(string $collection, string $id, string $attribute, int $value): bool
+    {
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+
+        $stmt = $this->getPDO()->prepare("update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid");
+        $stmt->bindValue(':_uid', $id);
+        $stmt->bindValue(':val', $value, PDO::PARAM_INT);
+
+        $stmt->execute() || throw new Exception('Failed to update Attribute');
+
+        return true;
+    }
 }

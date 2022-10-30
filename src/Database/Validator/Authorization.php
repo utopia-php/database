@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Document;
 use Utopia\Validator;
 
 class Authorization extends Validator
@@ -10,24 +9,24 @@ class Authorization extends Validator
     /**
      * @var array
      */
-    static $roles = [
+    static array $roles = [
         'any' => true
     ];
 
     /**
      * @var string
      */
-    protected $action = '';
+    protected string $action = '';
 
     /**
      * @var string
      */
-    protected $message = 'Authorization Error';
+    protected string $message = 'Authorization Error';
 
     /**
      * @param string $action
      */
-    public function __construct($action)
+    public function __construct(string $action)
     {
         $this->action = $action;
     }
@@ -125,7 +124,7 @@ class Authorization extends Validator
     /**
      * @var bool
      */
-    public static $status = true;
+    public static bool $status = true;
     
     /**
      * Default value in case we need
@@ -133,7 +132,7 @@ class Authorization extends Validator
      *
      * @var bool
      */
-    public static $statusDefault = true;
+    public static bool $statusDefault = true;
 
     /**
      * Change default status.
@@ -151,12 +150,13 @@ class Authorization extends Validator
 
     /**
      * Skip Authorization
-     * 
+     *
      * Skips authorization for the code to be executed inside the callback
-     * 
+     *
+     * @param callable $callback
      * @return mixed
      */
-    public static function skip(callable $callback)
+    public static function skip(callable $callback): mixed
     {
         $initialStatus = self::$status;
 

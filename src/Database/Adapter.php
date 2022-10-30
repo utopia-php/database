@@ -476,9 +476,10 @@ abstract class Adapter
 
     /**
      * Filter Keys
-     * 
-     * @throws Exception
+     *
+     * @param string $value
      * @return string
+     * @throws Exception
      */
     public function filter(string $value): string
     {
@@ -490,4 +491,16 @@ abstract class Adapter
 
         return $value;
     }
+
+    /**
+     * Increment and Decrement Attribute Value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int $value
+     * @return bool
+     * @throws Exception
+     */
+    abstract function incrementDecrementAttribute(string $collection, string $id, string $attribute, int $value): bool;
 }

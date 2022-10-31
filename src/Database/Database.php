@@ -457,6 +457,7 @@ class Database
         $this->silent(fn() => $this->createCollection(self::METADATA, $attributes));
 
         $this->trigger(self::EVENT_DATABASE_CREATE, $name);
+
         return true;
     }
 
@@ -482,7 +483,9 @@ class Database
     public function list(): array
     {
         $databases = $this->adapter->list();
+        
         $this->trigger(self::EVENT_DATABASE_LIST, $databases);
+
         return $databases;
     }
 
@@ -496,7 +499,9 @@ class Database
     public function delete(string $name): bool
     {
         $deleted = $this->adapter->delete($name);
+
         $this->trigger(self::EVENT_DATABASE_DELETE, ['name' => $name, 'deleted' => $deleted]);
+        
         return $deleted;
     }
 
@@ -558,7 +563,9 @@ class Database
         }
 
         $createdCollection = $this->silent(fn() => $this->createDocument(self::METADATA, $collection));
+
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+        
         return $createdCollection;
     }
 
@@ -573,7 +580,9 @@ class Database
     public function getCollection(string $id): Document
     {
         $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
+
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
+        
         return $collection;
     }
 
@@ -598,6 +607,7 @@ class Database
         Authorization::reset();
 
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
+
         return $result;
     }
 
@@ -614,7 +624,9 @@ class Database
         
         $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
         $deleted = $this->silent(fn() => $this->deleteDocument(self::METADATA, $id));
+
         $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+        
         return $deleted;
     }
 
@@ -726,6 +738,7 @@ class Database
         }
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
         return $attribute;
     }
 
@@ -1057,7 +1070,9 @@ class Database
         }
 
         $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
+
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
+        
         return $deleted;
     }
 
@@ -1113,7 +1128,9 @@ class Database
         }
 
         $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
+        
         return $renamed;
     }
 
@@ -1162,6 +1179,7 @@ class Database
         }
 
         $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+
         return true;
     }
 
@@ -1238,6 +1256,7 @@ class Database
         }
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
+        
         return $index;
     }
 
@@ -1270,7 +1289,9 @@ class Database
         }
 
         $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+
         $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
+        
         return $deleted;
     }
 
@@ -1289,7 +1310,11 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new Exception('test exception: ' . $collection . ':' . $id);
+            throw new Exception('Missing collection: ' . $collection);
+        }
+
+        if (empty($id)) {
+            return new Document();
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
@@ -1298,7 +1323,6 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
 
-        // TODO@kodumbeats Check if returned cache id matches request
         if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
 
@@ -1308,6 +1332,7 @@ class Database
             }
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
             return $document;
         }
 
@@ -1329,6 +1354,7 @@ class Database
         $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
         return $document;
     }
 
@@ -1369,6 +1395,7 @@ class Database
         $document = $this->decode($collection, $document);
         
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
+
         return $document;
     }
 
@@ -1415,6 +1442,7 @@ class Database
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
+
         return $document;
     }
 
@@ -1443,7 +1471,9 @@ class Database
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
+        
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+
         return $deleted;
     }
 
@@ -1520,6 +1550,7 @@ class Database
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
+
         return $results;
     }
 
@@ -1533,7 +1564,9 @@ class Database
     {
         $results = $this->silent(fn() => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
         $found = \reset($results);
+        
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
+
         return $found;
     }
 
@@ -1561,7 +1594,9 @@ class Database
         $queries = self::convertQueries($collection, $queries);
 
         $count = $this->adapter->count($collection->getId(), $queries, $max);
+        
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
+
         return $count;
     }
 
@@ -1588,7 +1623,9 @@ class Database
 
         $queries = self::convertQueries($collection, $queries);
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
+
         return $sum;
     }
 

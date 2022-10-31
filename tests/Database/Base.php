@@ -715,10 +715,16 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 98, 102));
-       // $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 2));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
+      //  $this->expectException(Exception::class);
+       // $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
 
-        exit;
+
+        $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
+
+       // $this->expectException(Exception::class);
+        //$this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
+
 
     }
 

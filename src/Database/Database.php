@@ -1917,15 +1917,15 @@ class Database
      * @param string $id
      * @param string $attribute
      * @param int $value
-     * @param null $min
      * @param null $max
      * @return bool
      *
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null, $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $max = null): bool
     {
+        var_dump("increaseDocumentAttribute");
 
         if($value < 1){
             throw new Exception("Value must be greater than 1");
@@ -1945,11 +1945,13 @@ class Database
             throw new Exception('Attribute not found');
         }
 
+        // todo: check id the attribute is int / float
+
         if($max && ($document->getAttribute($attribute) + $value >= $max)){
-            throw new Exception('Attribute value Exceeds limit ' . $max);
+            throw new Exception('Attribute value Exceeds maximum limit ' . $max);
         }
 
-        $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, $min, $max);
+        $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
         $this->trigger(self::EVENT_DOCUMENT_INCREMENT, $document);
 
@@ -1965,15 +1967,15 @@ class Database
      * @param string $attribute
      * @param int $value
      * @param null $min
-     * @param null $max
      * @return bool
      *
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null, $max = null): bool
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null): bool
     {
 
+        var_dump("decreaseDocumentAttribute");
         if($value < 1){
             throw new Exception("Value must be greater than 1");
         }
@@ -1992,14 +1994,19 @@ class Database
             throw new Exception('Attribute not found');
         }
 
-        $this->adapter->incrementDecrementAttribute($collection->getId(), $id, $attribute, $value);
+        // todo: check id the attribute is int / float
+
+        if($min && ($document->getAttribute($attribute) - $value <= $min)){
+            throw new Exception('Attribute value Exceeds minimum limit ' . $min);
+        }
+
+        $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
         $this->trigger(self::EVENT_DOCUMENT_DECREMENT, $document);
 
-        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id)));
-        var_dump($document);
         return true;
     }
+
 
 
 

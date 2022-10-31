@@ -1900,15 +1900,26 @@ class MariaDB extends Adapter
      * @param string $id
      * @param string $attribute
      * @param int $value
+     * @param int|null $max
      * @return void
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value)
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value, int $min = null, int $max = null)
     {
+
+        var_dump("max value is = " . $max);
+        var_dump("min value is = " . $min);
+
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $stmt = $this->getPDO()->prepare("update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid");
+        $sqlMax = $max ? ' and `' . $attribute . '` <= ' . ($max - $value) : '';
+        $sqlMin = $min ? ' and `' . $attribute . '` >= ' . ($min + $value) : '';
+
+        $sql = "update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
+        var_dump($sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value, PDO::PARAM_INT);
 

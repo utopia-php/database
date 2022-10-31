@@ -1924,8 +1924,6 @@ class Database
             throw new Exception("Value must be greater than 1");
         }
 
-        // todo get and check attribute in collecgtion
-
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
         $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this

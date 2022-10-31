@@ -707,7 +707,7 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increment_decrement', $document->getId(), 'integer', -2));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increment_decrement', $document->getId(), 'integer', 10.5));
 
 
         exit;

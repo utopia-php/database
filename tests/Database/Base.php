@@ -433,11 +433,12 @@ abstract class Base extends TestCase
             "validator.test",
         ];
 
+
         $attributes = [
             new Document([
                 '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
-                'size' => 2500, // longer than 768
+                'size' => Database::MAX_INDEX_STRING_LENGTH + 2000,
                 'required' => false,
                 'signed' => true,
                 'array' => false,

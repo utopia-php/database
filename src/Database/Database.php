@@ -32,6 +32,8 @@ class Database
     const INDEX_SPATIAL = 'spatial';
     const INDEX_ARRAY = 'array';
 
+    const MAX_INDEX_STRING_LENGTH = 768; // mysql limit
+
     // Orders
     const ORDER_ASC = 'ASC';
     const ORDER_DESC = 'DESC';

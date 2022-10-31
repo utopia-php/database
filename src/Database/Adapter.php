@@ -493,14 +493,13 @@ abstract class Adapter
     }
 
     /**
-     * Increment and Decrement Attribute Value
+     * Increase and Decrease Attribute Value
      *
      * @param string $collection
      * @param string $id
      * @param string $attribute
      * @param int $value
-     * @return bool
      * @throws Exception
      */
-    abstract function incrementDecrementAttribute(string $collection, string $id, string $attribute, int $value): bool;
+    abstract function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value);
 }

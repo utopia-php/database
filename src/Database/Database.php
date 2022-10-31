@@ -5,10 +5,10 @@ namespace Utopia\Database;
 use Exception;
 use Throwable;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Cache\Cache;
@@ -1905,7 +1905,7 @@ class Database
 
 
     /**
-     * Delete Document
+     * Increase Collection Attribute by a value
      *
      * @param string $collection
      * @param string $id
@@ -1920,6 +1920,8 @@ class Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null, $max = null): bool
     {
+        // todo what to do with $min = null, $max ?
+
         if($value < 1){
             throw new Exception("Value must be greater than 1");
         }
@@ -1934,11 +1936,62 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $result = $this->adapter->incrementDecrementAttribute($collection->getId(), $id, $attribute, $value);
+        if (!in_array($attribute, \array_map(fn($a) => $a['$id'], $collection->getAttribute('attributes', [])))) {
+            throw new Exception('Attribute not found');
+        }
+
+        $this->adapter->incrementDecrementAttribute($collection->getId(), $id, $attribute, $value);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
         $this->trigger(self::EVENT_DOCUMENT_INCREMENT, $document);
 
-        return $result;
+        return true;
     }
+
+
+    /**
+     * Decrease Collection Attribute by a value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int $value
+     * @param null $min
+     * @param null $max
+     * @return bool
+     *
+     * @throws AuthorizationException
+     * @throws Exception
+     */
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null, $max = null): bool
+    {
+
+        if($value < 1){
+            throw new Exception("Value must be greater than 1");
+        }
+
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+
+        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($document->getUpdate())) {
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        if (!in_array($attribute, \array_map(fn($a) => $a['$id'], $collection->getAttribute('attributes', [])))) {
+            throw new Exception('Attribute not found');
+        }
+
+        $this->adapter->incrementDecrementAttribute($collection->getId(), $id, $attribute, $value);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->trigger(self::EVENT_DOCUMENT_DECREMENT, $document);
+
+        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id)));
+        var_dump($document);
+        return true;
+    }
+
+
 
 }

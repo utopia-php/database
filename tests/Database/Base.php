@@ -690,12 +690,18 @@ abstract class Base extends TestCase
     }
 
 
-
+    /**
+     * @throws ExceptionAuthorization
+     * @throws LimitException
+     * @throws DuplicateException
+     * @throws StructureException
+     */
     public function testIncrementDecrement()
     {
-        static::getDatabase()->createCollection('increment_decrement');
+        static::getDatabase()->createCollection('increase_decrease');
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute('increment_decrement', 'integer', Database::VAR_INTEGER, 0, true   ));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('increase', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('decrease', 'integer', Database::VAR_INTEGER, 0, true));
 
         $document = static::getDatabase()->createDocument('increment_decrement', new Document([
             'integer' => 10,
@@ -707,11 +713,10 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increment_decrement', $document->getId(), 'integer', 10.5));
-
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 2));
+        $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 2));
 
         exit;
-
 
     }
 

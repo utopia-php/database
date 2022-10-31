@@ -698,13 +698,15 @@ abstract class Base extends TestCase
      */
     public function testIncrementDecrement()
     {
-        static::getDatabase()->createCollection('increase_decrease');
+        $collection = 'increase_decrease';
+        static::getDatabase()->createCollection($collection);
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute('increase', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('decrease', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'decrease', Database::VAR_INTEGER, 0, true));
 
-        $document = static::getDatabase()->createDocument('increment_decrement', new Document([
-            'integer' => 10,
+        $document = static::getDatabase()->createDocument($collection, new Document([
+            'increase' => 100,
+            'decrease' => 100,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -713,8 +715,8 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 2));
-        $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 2));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 98, 102));
+       // $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 2));
 
         exit;
 

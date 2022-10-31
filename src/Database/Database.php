@@ -628,18 +628,24 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param null $default
      * @param bool $signed
      * @param bool $array
-     * @param string $format optional validation format of attribute
-     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param string|null $format optional validation format of attribute
+     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
      *
      * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if($collection->isEmpty()){
+            throw new Exception('Collection not found');
+        }
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
@@ -1920,7 +1926,6 @@ class Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null, $max = null): bool
     {
-        // todo what to do with $min = null, $max ?
 
         if($value < 1){
             throw new Exception("Value must be greater than 1");
@@ -1940,7 +1945,11 @@ class Database
             throw new Exception('Attribute not found');
         }
 
-        $this->adapter->incrementDecrementAttribute($collection->getId(), $id, $attribute, $value);
+        if($max && ($document->getAttribute($attribute) + $value >= $max)){
+            throw new Exception('Attribute value Exceeds limit ' . $max);
+        }
+
+        $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, $min, $max);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
         $this->trigger(self::EVENT_DOCUMENT_INCREMENT, $document);
 

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "bfa913cd86071b4b82150e22db0b0740",
+    "content-hash": "4d13b6ca7bd1225bc9b985d42b492fb2",
     "packages": [
         {
             "name": "utopia-php/cache",
@@ -57,16 +57,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.23.2",
+            "version": "0.23.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "847cfd48fa93f25797dea0be5692f5c3735c9b2f"
+                "reference": "97f64aa1732af92b967c3576f16967dc762ad47b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/847cfd48fa93f25797dea0be5692f5c3735c9b2f",
-                "reference": "847cfd48fa93f25797dea0be5692f5c3735c9b2f",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/97f64aa1732af92b967c3576f16967dc762ad47b",
+                "reference": "97f64aa1732af92b967c3576f16967dc762ad47b",
                 "shasum": ""
             },
             "require": {
@@ -94,9 +94,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/framework/issues",
-                "source": "https://github.com/utopia-php/framework/tree/0.23.2"
+                "source": "https://github.com/utopia-php/framework/tree/0.23.4"
             },
-            "time": "2022-10-25T15:05:52+00:00"
+            "time": "2022-10-31T11:57:14+00:00"
         }
     ],
     "packages-dev": [
@@ -4102,10 +4102,10 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.0"
+        "php": ">=8.0",
+        "ext-pdo": "*"
     },
     "platform-dev": {
-        "ext-pdo": "*",
         "ext-redis": "*",
         "ext-mongodb": "*"
     },

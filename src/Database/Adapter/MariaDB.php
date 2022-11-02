@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
-use phpDocumentor\Reflection\DocBlock\Tags\Reference\Url;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;

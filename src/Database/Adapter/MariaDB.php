@@ -1904,7 +1904,7 @@ class MariaDB extends Adapter
      * @return void
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value, int $min = null, int $max = null)
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value, ?int $min = null, ?int $max = null): void
     {
 
         var_dump("max value is = " . $max);

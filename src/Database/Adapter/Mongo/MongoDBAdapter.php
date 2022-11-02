@@ -1093,7 +1093,6 @@ class MongoDBAdapter extends Adapter
         return ['mongodb'];
     }
 
-
     /**
      * Increase and Decrease Attribute Value
      *

@@ -13,7 +13,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 use Utopia\Mongo\Exception\Duplicate;
-use Utopia\Mongo\MongoClient;
+use Utopia\Mongo\Client;
 
 class Mongo extends Adapter
 {
@@ -35,16 +35,16 @@ class Mongo extends Adapter
         '$match',
     ];
 
-    protected MongoClient $client;
+    protected Client $client;
 
     /**
      * Constructor.
      *
      * Set connection and settings
      *
-     * @param MongoClient $client
+     * @param Client $client
      */
-    public function __construct(MongoClient $client)
+    public function __construct(Client $client)
     {
         $this->client = $client;
         $this->client->connect();
@@ -854,11 +854,11 @@ class Mongo extends Adapter
 
     /**
      * @param string|null $name
-     * @return MongoClient
+     * @return Client
      *
      * @throws Exception
      */
-    protected function getDatabase(string $name = null): MongoClient
+    protected function getDatabase(string $name = null): Client
     {
         $database = is_null($name) ? $this->getDefaultDatabase() : $name;
         $selected = $this->getClient()->selectDatabase($database);
@@ -867,11 +867,11 @@ class Mongo extends Adapter
     }
 
     /**
-     * @return MongoClient
+     * @return Client
      *
      * @throws Exception
      */
-    protected function getClient(): MongoClient
+    protected function getClient(): Client
     {
         return $this->client;
     }

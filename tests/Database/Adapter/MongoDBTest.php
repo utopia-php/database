@@ -8,8 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
-use Utopia\Mongo\MongoClient;
-use Utopia\Mongo\MongoClientOptions;
+use Utopia\Mongo\Client;
 use Utopia\Tests\Base;
 
 class MongoDBTest extends Base
@@ -58,16 +57,14 @@ class MongoDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $schema = 'utopiaTests'; // same as $this->testDatabase
-
-        $options = new MongoClientOptions(
+        $client = new Client(
             $schema,
             'mongo',
             27017,
             'root',
             'example'
+            , false
         );
-
-        $client = new MongoClient($options, false);
 
         $database = new Database(new Mongo($client), $cache);
         $database->setDefaultDatabase($schema);

@@ -2,16 +2,16 @@
 
 namespace Utopia\Database;
 
-use Exception;
 use Throwable;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
+use Utopia\Cache\Cache;
+use Exception;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Cache\Cache;
+
 
 class Database
 {
@@ -515,12 +515,13 @@ class Database
      * @param Document[] $indexes (optional)
      *
      * @return Document
+     * @throws DuplicateException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
         if (!$collection->isEmpty() && $id !== self::METADATA){
-            throw new Duplicate('Collection ' . $id . ' Exists!');
+            throw new DuplicateException('Collection ' . $id . ' Exists!');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);

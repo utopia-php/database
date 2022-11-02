@@ -731,7 +731,6 @@ abstract class Base extends TestCase
      */
     public function testIncreaseLimitMax(Document $document)
     {
-        var_dump("testIncreaseLimitMax");
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1, 102));
     }
@@ -741,7 +740,6 @@ abstract class Base extends TestCase
      */
     public function testDecreaseLimitMin(Document $document)
     {
-        var_dump("testDecreaseLimitMinimum");
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1, 98));
     }
@@ -751,14 +749,11 @@ abstract class Base extends TestCase
      */
     public function testIncreaseTextAttribute(Document $document)
     {
-        var_dump("testIncreaseTextAttribute");
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
     }
 
-
-
-        /**
+    /**
      * @depends testCreateDocument
      */
     public function testGetDocument(Document $document)

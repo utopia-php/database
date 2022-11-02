@@ -643,6 +643,7 @@ class Database
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
+
         if($collection->isEmpty()){
             throw new Exception('Collection not found');
         }

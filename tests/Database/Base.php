@@ -3268,7 +3268,12 @@ abstract class Base extends TestCase
 
     public function testEvents()
     {
-        Authorization::skip(function() {
+        Authorization::skip(/**
+         * @throws ExceptionAuthorization
+         * @throws DuplicateException
+         * @throws LimitException
+         * @throws StructureException
+         */ function() {
             $database = static::getDatabase();
 
             $events = [
@@ -3292,6 +3297,8 @@ abstract class Base extends TestCase
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
                 Database::EVENT_DATABASE_DELETE,
+                Database::EVENT_DOCUMENT_INCREASE,
+                Database::EVENT_DOCUMENT_DECREASE,
             ];
             $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
                 $this->assertEquals(array_shift($events), $event);
@@ -3336,6 +3343,9 @@ abstract class Base extends TestCase
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
+            $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+
         });
 
     }

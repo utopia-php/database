@@ -85,7 +85,7 @@ class Database
     const EVENT_DOCUMENT_COUNT = 'document_count';
     const EVENT_DOCUMENT_SUM = 'document_sum';
     const EVENT_DOCUMENT_INCREMENT = 'document_increment';
-    const EVENT_DOCUMENT_DECREMENT = 'document_DECREMENT';
+    const EVENT_DOCUMENT_DECREMENT = 'document_decrement';
 
     const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';

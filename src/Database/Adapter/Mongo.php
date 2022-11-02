@@ -10,9 +10,10 @@ use Utopia\Database\Adapter;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
-use Utopia\Mongo\Exception\Duplicate;
+use Utopia\Mongo\Exception as MongoException;
 use Utopia\Mongo\Client;
 
 class Mongo extends Adapter
@@ -161,7 +162,7 @@ class Mongo extends Adapter
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
-        } catch (Duplicate $e) {
+        } catch (MongoException $e) {
             throw $e;
         }
 
@@ -421,18 +422,16 @@ class Mongo extends Adapter
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
 
-        try {
-            $result = $this->insertDocument($name, $this->removeNullKeys($record));
-        } catch (Duplicate $e) {
-            throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
-        }
-
+        $result = $this->insertDocument($name, $this->removeNullKeys($record));
         $result = $this->replaceChars('_', '$', $result);
         $result = $this->timeToDocument($result);
 
         return new Document($result);
     }
 
+    /**
+     * @throws Duplicate
+     */
     private function insertDocument(string $name, array $document): array
     {
         try {
@@ -446,8 +445,8 @@ class Mongo extends Adapter
 
             return $this->client->toArray($result);
 
-        } catch (Duplicate $e) {
-            throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
         }
     }
 
@@ -470,8 +469,8 @@ class Mongo extends Adapter
 
         try {
             $this->client->update($name, ['_uid' => $document->getId()], $record);
-        } catch (Duplicate $e) {
-            throw new \Utopia\Database\Exception\Duplicate($e->getMessage());
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
         }
 
         return $document;

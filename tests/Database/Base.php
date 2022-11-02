@@ -58,19 +58,19 @@ abstract class Base extends TestCase
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
         if(!$schemaSupport) {
-            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->create());
             return;
         }
 
         if (!static::getDatabase()->exists($this->testDatabase)) {
-            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->create());
         }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create());
     }
 
     public function testCreatedAtUpdatedAt()
@@ -3298,7 +3298,8 @@ abstract class Base extends TestCase
             });
     
             if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
-                $database->create('hellodb');
+                $database->setDefaultDatabase('hellodb');
+                $database->create();
             } else {
                 array_shift($events);
             }

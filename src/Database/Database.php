@@ -84,8 +84,8 @@ class Database
     const EVENT_DOCUMENT_DELETE = 'document_delete';
     const EVENT_DOCUMENT_COUNT = 'document_count';
     const EVENT_DOCUMENT_SUM = 'document_sum';
-    const EVENT_DOCUMENT_INCREMENT = 'document_increment';
-    const EVENT_DOCUMENT_DECREMENT = 'document_decrement';
+    const EVENT_DOCUMENT_INCREASE = 'document_increase';
+    const EVENT_DOCUMENT_DECREASE = 'document_decrease';
 
     const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -1917,19 +1917,17 @@ class Database
      * @param string $collection
      * @param string $id
      * @param string $attribute
-     * @param int $value
+     * @param int|float $value
      * @param null $max
      * @return bool
      *
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, $max = null): bool
     {
-        var_dump("increaseDocumentAttribute");
-
-        if($value < 1){
-            throw new Exception("Value must be greater than 1");
+        if($value < 1 || !is_numeric($value)){
+            throw new Exception("Value must be numeric and greater than 1");
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -1942,21 +1940,34 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        if (!in_array($attribute, \array_map(fn($a) => $a['$id'], $collection->getAttribute('attributes', [])))) {
+        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute){
+            return $a['$id'] === $attribute;
+        });
+
+        if (empty($attr)) {
             throw new Exception('Attribute not found');
         }
 
-        // todo: check id the attribute is int / float
+        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+
+        /**
+         * @var $attr Document
+         */
+        $attr = end($attr);
+        if(!in_array($attr->getAttribute('type'), $whiteList)){
+            throw new Exception('Attribute type can be ' . implode(',', $whiteList));
+        }
 
         if($max && ($document->getAttribute($attribute) + $value >= $max)){
             throw new Exception('Attribute value Exceeds maximum limit ' . $max);
         }
 
-        $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
+        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
-        $this->trigger(self::EVENT_DOCUMENT_INCREMENT, $document);
 
-        return true;
+        $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
+
+        return $result;
     }
 
 
@@ -1966,19 +1977,17 @@ class Database
      * @param string $collection
      * @param string $id
      * @param string $attribute
-     * @param int $value
+     * @param int|float $value
      * @param null $min
      * @return bool
      *
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int $value = 1, $min = null): bool
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, $min = null): bool
     {
-
-        var_dump("decreaseDocumentAttribute");
-        if($value < 1){
-            throw new Exception("Value must be greater than 1");
+        if($value < 1 || !is_numeric($value)){
+            throw new Exception("Value must be numeric and greater than 1");
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -1991,21 +2000,33 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        if (!in_array($attribute, \array_map(fn($a) => $a['$id'], $collection->getAttribute('attributes', [])))) {
+        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute){
+            return $a['$id'] === $attribute;
+        });
+
+        if (empty($attr)) {
             throw new Exception('Attribute not found');
         }
 
-        // todo: check id the attribute is int / float
+        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+
+        /**
+         * @var $attr Document
+         */
+        $attr = end($attr);
+        if(!in_array($attr->getAttribute('type'), $whiteList)){
+            throw new Exception('Attribute type can be ' . implode(',', $whiteList));
+        }
 
         if($min && ($document->getAttribute($attribute) - $value <= $min)){
             throw new Exception('Attribute value Exceeds minimum limit ' . $min);
         }
 
-        $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
+        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
-        $this->trigger(self::EVENT_DOCUMENT_DECREMENT, $document);
+        $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
-        return true;
+        return $result;
     }
 
 

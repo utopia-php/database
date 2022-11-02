@@ -696,17 +696,21 @@ abstract class Base extends TestCase
      * @throws DuplicateException
      * @throws StructureException
      */
-    public function testIncrementDecrement()
+    public function testIncreaseDecrease()
     {
         $collection = 'increase_decrease';
         static::getDatabase()->createCollection($collection);
 
         $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'decrease', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase_text', Database::VAR_STRING, 255, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase_float', Database::VAR_FLOAT, 0, true));
 
         $document = static::getDatabase()->createDocument($collection, new Document([
             'increase' => 100,
             'decrease' => 100,
+            'increase_float' => 100.6,
+            'increase_text' => "some text",
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -716,17 +720,42 @@ abstract class Base extends TestCase
         ]));
 
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
-      //  $this->expectException(Exception::class);
-       // $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
-
-
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase_float'));
 
-       // $this->expectException(Exception::class);
-        //$this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
-
-
+        return $document;
     }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseLimitMax(Document $document)
+    {
+        var_dump("testIncreaseLimitMax");
+        $this->expectException(Exception::class);
+        $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1, 102));
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testDecreaseLimitMin(Document $document)
+    {
+        var_dump("testDecreaseLimitMinimum");
+        $this->expectException(Exception::class);
+        $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1, 98));
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseTextAttribute(Document $document)
+    {
+        var_dump("testIncreaseTextAttribute");
+        $this->expectException(Exception::class);
+        $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
+    }
+
 
 
         /**

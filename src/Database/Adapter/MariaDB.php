@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
+use phpDocumentor\Reflection\DocBlock\Tags\Reference\Url;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -1899,17 +1900,14 @@ class MariaDB extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $attribute
-     * @param int $value
+     * @param int|float $value
+     * @param int|null $min
      * @param int|null $max
-     * @return void
+     * @return bool
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value, ?int $min = null, ?int $max = null): void
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int $min = null, int $max = null): bool
     {
-
-        var_dump("max value is = " . $max);
-        var_dump("min value is = " . $min);
-
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
@@ -1917,13 +1915,12 @@ class MariaDB extends Adapter
         $sqlMin = $min ? ' and `' . $attribute . '` >= ' . ($min + $value) : '';
 
         $sql = "update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
-        var_dump($sql);
-
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value, PDO::PARAM_INT);
 
         $stmt->execute() || throw new Exception('Failed to update Attribute');
+        return true;
     }
 
 }

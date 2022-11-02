@@ -4,69 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4d13b6ca7bd1225bc9b985d42b492fb2",
+    "content-hash": "f3d2a0956d6d70c111c8f5ee94d9ac97",
     "packages": [
         {
-            "name": "utopia-php/cache",
-            "version": "0.7.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/utopia-php/cache.git",
-                "reference": "cd53431242c88299daea2589e21322abe97682cc"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/cd53431242c88299daea2589e21322abe97682cc",
-                "reference": "cd53431242c88299daea2589e21322abe97682cc",
-                "shasum": ""
-            },
-            "require": {
-                "ext-json": "*",
-                "ext-memcached": "*",
-                "ext-redis": "*",
-                "php": ">=8.0"
-            },
-            "require-dev": {
-                "laravel/pint": "1.2.*",
-                "phpunit/phpunit": "^9.3",
-                "vimeo/psalm": "4.13.1"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Utopia\\Cache\\": "src/Cache"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "description": "A simple cache library to manage application cache storing, loading and purging",
-            "keywords": [
-                "cache",
-                "framework",
-                "php",
-                "upf",
-                "utopia"
-            ],
-            "support": {
-                "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.7.0"
-            },
-            "time": "2022-10-16T06:04:12+00:00"
-        },
-        {
             "name": "utopia-php/framework",
-            "version": "0.23.4",
+            "version": "0.25.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "97f64aa1732af92b967c3576f16967dc762ad47b"
+                "reference": "c524f681254255c8204fbf7919c53bf3b4982636"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/97f64aa1732af92b967c3576f16967dc762ad47b",
-                "reference": "97f64aa1732af92b967c3576f16967dc762ad47b",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/c524f681254255c8204fbf7919c53bf3b4982636",
+                "reference": "c524f681254255c8204fbf7919c53bf3b4982636",
                 "shasum": ""
             },
             "require": {
@@ -94,9 +45,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/framework/issues",
-                "source": "https://github.com/utopia-php/framework/tree/0.23.4"
+                "source": "https://github.com/utopia-php/framework/tree/0.25.0"
             },
-            "time": "2022-10-31T11:57:14+00:00"
+            "time": "2022-11-02T09:49:57+00:00"
         }
     ],
     "packages-dev": [
@@ -3783,6 +3734,55 @@
                 }
             ],
             "time": "2021-07-28T10:34:58+00:00"
+        },
+        {
+            "name": "utopia-php/cache",
+            "version": "0.8.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/cache.git",
+                "reference": "212e66100a1f32e674fca5d9bc317cc998303089"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/212e66100a1f32e674fca5d9bc317cc998303089",
+                "reference": "212e66100a1f32e674fca5d9bc317cc998303089",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-memcached": "*",
+                "ext-redis": "*",
+                "php": ">=8.0"
+            },
+            "require-dev": {
+                "laravel/pint": "1.2.*",
+                "phpunit/phpunit": "^9.3",
+                "vimeo/psalm": "4.13.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Cache\\": "src/Cache"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "A simple cache library to manage application cache storing, loading and purging",
+            "keywords": [
+                "cache",
+                "framework",
+                "php",
+                "upf",
+                "utopia"
+            ],
+            "support": {
+                "issues": "https://github.com/utopia-php/cache/issues",
+                "source": "https://github.com/utopia-php/cache/tree/0.8.0"
+            },
+            "time": "2022-10-16T16:48:09+00:00"
         },
         {
             "name": "utopia-php/cli",

@@ -17,7 +17,7 @@
         "ext-redis": "*",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.6.*",
-        "utopia-php/mongo": "dev-fix-driver-gen-objectid",
+        "utopia-php/mongo": "dev-release",
         "mongodb/mongodb": "1.8.0"
     },
     "require-dev": {

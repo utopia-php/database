@@ -1892,7 +1892,6 @@ class MariaDB extends Adapter
         ];
     }
 
-
     /**
      * Increase and Decrease Attribute Value
      *

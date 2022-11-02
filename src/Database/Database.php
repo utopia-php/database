@@ -1949,7 +1949,7 @@ class Database
         // todo: check id the attribute is int / float
 
         if($max && ($document->getAttribute($attribute) + $value >= $max)){
-            throw new Exception('Attribute value Exceeds maximum limit ' . $max);
+            throw new Exception('Attribute value exceeds maximum limit: ' . $max);
         }
 
         $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f3d2a0956d6d70c111c8f5ee94d9ac97",
+    "content-hash": "e5971108911439f967c89582839bd6cd",
     "packages": [
         {
             "name": "utopia-php/framework",
@@ -4102,10 +4102,10 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.0",
-        "ext-pdo": "*"
+        "php": ">=8.0"
     },
     "platform-dev": {
+        "ext-pdo": "*",
         "ext-redis": "*",
         "ext-mongodb": "*"
     },

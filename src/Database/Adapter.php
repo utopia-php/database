@@ -503,5 +503,5 @@ abstract class Adapter
      * @param int|null $max
      * @throws Exception
      */
-    abstract function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value, int $min = null, int $max = null);
+    abstract function increaseDocumentAttribute(string $collection, string $id, string $attribute, int $value, ?int $min = null, ?int $max = null);
 }

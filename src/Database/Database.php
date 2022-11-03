@@ -4,7 +4,6 @@ namespace Utopia\Database;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -514,7 +513,7 @@ class Database
         $collection = $this->silent(fn() => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA){
-            throw new Duplicate('Collection ' . $id . ' Exists!');
+            throw new DuplicateException('Collection ' . $id . ' Exists!');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);

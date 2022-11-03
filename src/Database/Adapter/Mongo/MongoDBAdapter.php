@@ -1105,7 +1105,7 @@ class MongoDBAdapter extends Adapter
      * @return bool
      * @throws Exception
      */
-    function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int $min = null, int $max = null):bool {
+    function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, ?int $min = null, ?int $max = null):bool {
         return true;
     }
 }

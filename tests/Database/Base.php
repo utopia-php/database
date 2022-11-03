@@ -58,19 +58,19 @@ abstract class Base extends TestCase
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
         if(!$schemaSupport) {
-            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->create());
             return;
         }
 
         if (!static::getDatabase()->exists($this->testDatabase)) {
-            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->create());
         }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create());
     }
 
     public function testCreatedAtUpdatedAt()
@@ -437,7 +437,7 @@ abstract class Base extends TestCase
             new Document([
                 '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
-                'size' => 256,
+                'size' => 2500, // longer than 768
                 'required' => false,
                 'signed' => true,
                 'array' => false,
@@ -470,6 +470,15 @@ abstract class Base extends TestCase
                 'array' => false,
                 'filters' => [],
             ]),
+            new Document([
+                '$id' => ID::custom('attribute5'),
+                'type' => Database::VAR_STRING,
+                'size' => 2500,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
         ];
 
         $indexes = [
@@ -501,6 +510,13 @@ abstract class Base extends TestCase
                 'lengths' => [],
                 'orders' => ['ASC'],
             ]),
+            new Document([
+                '$id' => ID::custom('index_2_attributes'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1', 'attribute5'],
+                'lengths' => [200, 300],
+                'orders' => ['DESC'],
+            ]),
         ];
 
         foreach ($collections as $id) {
@@ -510,7 +526,7 @@ abstract class Base extends TestCase
             $this->assertEquals($id, $collection->getId());
 
             $this->assertIsArray($collection->getAttribute('attributes'));
-            $this->assertCount(4, $collection->getAttribute('attributes'));
+            $this->assertCount(5, $collection->getAttribute('attributes'));
             $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
             $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
             $this->assertEquals('attribute-2', $collection->getAttribute('attributes')[1]['$id']);
@@ -521,7 +537,7 @@ abstract class Base extends TestCase
             $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[3]['type']);
 
             $this->assertIsArray($collection->getAttribute('indexes'));
-            $this->assertCount(4, $collection->getAttribute('indexes'));
+            $this->assertCount(5, $collection->getAttribute('indexes'));
             $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
             $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
             $this->assertEquals('index-2', $collection->getAttribute('indexes')[1]['$id']);
@@ -3223,7 +3239,8 @@ abstract class Base extends TestCase
             });
     
             if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
-                $database->create('hellodb');
+                $database->setDefaultDatabase('hellodb');
+                $database->create();
             } else {
                 array_shift($events);
             }

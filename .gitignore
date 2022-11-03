@@ -9,6 +9,7 @@ loader.php
 .vscode
 .vscode/*
 database.sql
+
 ## - Oh Wess!
 Makefile
 .envrc

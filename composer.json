@@ -13,9 +13,9 @@
     },
     "require": {
         "php": ">=8.0",
+        "utopia-php/cache": "0.8.*",
         "utopia-php/framework": "0.*.*",
-        "ext-pdo": "*",
-        "utopia-php/cache": "0.8.*"
+        "ext-pdo": "*"
     },
     "require-dev": {
         "ext-redis": "*",

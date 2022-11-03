@@ -708,7 +708,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->createDocument($collection, new Document([
             'increase' => 100,
             'decrease' => 100,
-            'increase_float' => 100.6,
+            'increase_float' => 100,
             'increase_text' => "some text",
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -720,7 +720,8 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
-        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase_float'));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110));
+        $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
 
         return $document;
     }
@@ -3291,13 +3292,14 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_FIND,
                 Database::EVENT_DOCUMENT_COUNT,
                 Database::EVENT_DOCUMENT_SUM,
+                Database::EVENT_DOCUMENT_INCREASE,
+                Database::EVENT_DOCUMENT_DECREASE,
                 Database::EVENT_INDEX_DELETE,
                 Database::EVENT_DOCUMENT_DELETE,
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
                 Database::EVENT_DATABASE_DELETE,
-                Database::EVENT_DOCUMENT_INCREASE,
-                Database::EVENT_DOCUMENT_DECREASE,
+
             ];
             $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
                 $this->assertEquals(array_shift($events), $event);
@@ -3336,15 +3338,14 @@ abstract class Base extends TestCase
             $database->findOne($collectionId);
             $database->count($collectionId);
             $database->sum($collectionId, 'attr1');
-            
+            $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
-            $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-
         });
 
     }

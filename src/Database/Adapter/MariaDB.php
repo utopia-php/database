@@ -1915,7 +1915,7 @@ class MariaDB extends Adapter
         $sql = "update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
-        $stmt->bindValue(':val', $value, PDO::PARAM_INT);
+        $stmt->bindValue(':val', $value);
 
         $stmt->execute() || throw new Exception('Failed to update Attribute');
         return true;

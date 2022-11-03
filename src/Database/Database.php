@@ -1956,7 +1956,7 @@ class Database
      * @param string $id
      * @param string $attribute
      * @param int|float $value
-     * @param null $max
+     * @param int|null $max
      * @return bool
      *
      * @throws AuthorizationException

@@ -689,7 +689,6 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('defaults');
     }
 
-
     /**
      * @throws ExceptionAuthorization
      * @throws LimitException

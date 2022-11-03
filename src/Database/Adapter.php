@@ -504,5 +504,5 @@ abstract class Adapter
      * @return bool
      * @throws Exception
      */
-    abstract function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int $min = null, int $max = null):bool;
+    abstract function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, ?int $min = null, ?int $max = null):bool;
 }

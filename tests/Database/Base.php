@@ -694,6 +694,7 @@ abstract class Base extends TestCase
      * @throws LimitException
      * @throws DuplicateException
      * @throws StructureException
+     * @throws Exception
      */
     public function testIncreaseDecrease()
     {
@@ -719,9 +720,26 @@ abstract class Base extends TestCase
         ]));
 
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
+
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(101, $document->getAttribute('increase'));
+
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(99, $document->getAttribute('decrease'));
+
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110));
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(105.5, $document->getAttribute('increase_float'));
+
+
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(104.4, $document->getAttribute('increase_float'));
+
+
+
+
 
         return $document;
     }
@@ -732,7 +750,7 @@ abstract class Base extends TestCase
     public function testIncreaseLimitMax(Document $document)
     {
         $this->expectException(Exception::class);
-        $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1, 102));
+        $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 0.98, 101.99));
     }
 
     /**

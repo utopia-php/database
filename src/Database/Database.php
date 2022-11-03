@@ -1956,15 +1956,14 @@ class Database
      * @param string $id
      * @param string $attribute
      * @param int|float $value
-     * @param int|null $max
+     * @param int|float|null $max
      * @return bool
      *
      * @throws AuthorizationException
-     * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float $max = null): bool
     {
-        if($value < 1 || !is_numeric($value)){
+        if($value < 1){
             throw new Exception("Value must be numeric and greater than 1");
         }
 
@@ -2016,15 +2015,15 @@ class Database
      * @param string $id
      * @param string $attribute
      * @param int|float $value
-     * @param null $min
+     * @param int|float|null $min
      * @return bool
      *
      * @throws AuthorizationException
      * @throws Exception
      */
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, $min = null): bool
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float $min = null): bool
     {
-        if($value < 1 || !is_numeric($value)){
+        if($value < 1){
             throw new Exception("Value must be numeric and greater than 1");
         }
 

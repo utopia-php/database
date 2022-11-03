@@ -1904,7 +1904,7 @@ class MariaDB extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int $min = null, int $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, ?int $min = null, ?int $max = null): bool
     {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);

@@ -4,6 +4,7 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 use Utopia\Database\Permission;
+use Utopia\Database\Exception;
 use Utopia\Validator;
 
 class Permissions extends Roles
@@ -89,7 +90,7 @@ class Permissions extends Roles
 
             try {
                 $permission = Permission::parse($permission);
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $this->message = $e->getMessage();
                 return false;
             }

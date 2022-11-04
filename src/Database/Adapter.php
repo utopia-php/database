@@ -2,7 +2,7 @@
 
 namespace Utopia\Database;
 
-use Exception;
+use Utopia\Database\Exception;
 
 abstract class Adapter
 {

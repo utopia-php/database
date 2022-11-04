@@ -2,8 +2,8 @@
 
 namespace Utopia\Database;
 
-use Exception;
 use Throwable;
+use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;

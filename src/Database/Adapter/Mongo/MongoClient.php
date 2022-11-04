@@ -8,6 +8,7 @@ use Swoole\Coroutine\Client as CoroutineClient;
 use Utopia\Database\Adapter\Mongo\Auth;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 
 class MongoClient
@@ -166,7 +167,7 @@ class MongoClient
 
 
         if (property_exists($result, 'errmsg')) {
-            throw new \Exception($result->errmsg);
+            throw new Exception($result->errmsg);
         }
 
         if ($result->ok == 1) {

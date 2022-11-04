@@ -2,7 +2,7 @@
 
 namespace Utopia\Tests;
 
-use Exception;
+use Utopia\Database\Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -229,7 +229,7 @@ abstract class Base extends TestCase
      */
     public function testInvalidDefaultValues($type, $default)
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_default', $type, 256, true, $default));
     }
 
@@ -270,7 +270,7 @@ abstract class Base extends TestCase
      */
     public function testUnknownFormat()
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
     }
 

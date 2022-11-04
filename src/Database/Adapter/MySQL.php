@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Adapter;
 
-use Exception;
+use Utopia\Database\Exception;
 use Utopia\Database\Database;
 
 class MySQL extends MariaDB

@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
-use Exception;
+use  Utopia\Database\Exception;
 
 use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
@@ -1010,7 +1010,7 @@ class MongoDBAdapter extends Adapter
      * Return set namespace.
      *
      * @return string
-     * @throws \Exception
+     * @throws Exception
      */
     public function getNamespace(): string
     {
@@ -1027,7 +1027,7 @@ class MongoDBAdapter extends Adapter
      * @param string $name
      * @param bool $reset
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
@@ -1045,7 +1045,7 @@ class MongoDBAdapter extends Adapter
      *
      * @param string $namespace
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setNamespace(string $namespace): bool
     {

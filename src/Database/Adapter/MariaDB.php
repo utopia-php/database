@@ -3,8 +3,8 @@
 namespace Utopia\Database\Adapter;
 
 use PDO;
-use Exception;
 use PDOException;
+use Utopia\Database\Exception;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -209,7 +209,7 @@ class MariaDB extends Adapter
                         INDEX `_permission` (`_permission`)
                     )")
                 ->execute();
-        } catch (\Exception $th) {
+        } catch (Exception $th) {
             $this->getPDO()
                 ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id.'_perms')};")
                 ->execute();

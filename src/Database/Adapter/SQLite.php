@@ -3,10 +3,10 @@
 namespace Utopia\Database\Adapter;
 
 use PDO;
-use Exception;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
 

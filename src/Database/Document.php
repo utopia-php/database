@@ -3,7 +3,7 @@
 namespace Utopia\Database;
 
 use ArrayObject;
-use Exception;
+use Utopia\Database\Exception;
 
 class Document extends ArrayObject
 {

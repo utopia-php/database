@@ -178,7 +178,7 @@ class Roles extends Validator
 
             try {
                 $role = Role::parse($role);
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 $this->message = $e->getMessage();
                 return false;
             }

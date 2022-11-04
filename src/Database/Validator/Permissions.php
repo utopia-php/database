@@ -90,7 +90,7 @@ class Permissions extends Roles
 
             try {
                 $permission = Permission::parse($permission);
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 $this->message = $e->getMessage();
                 return false;
             }

@@ -2,7 +2,7 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Exception;
+use Exception;
 
 class DateTime
 {
@@ -26,7 +26,7 @@ class DateTime
         try {
             new \DateTime($datetime);
         }
-        catch(Exception $e) {
+        catch(\Exception $e) {
             return false;
         }
 

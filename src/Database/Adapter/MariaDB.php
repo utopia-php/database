@@ -1909,8 +1909,8 @@ class MariaDB extends Adapter
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? ' and `' . $attribute . '` <= ' . ($max - $value) : '';
-        $sqlMin = $min ? ' and `' . $attribute . '` >= ' . ($min + $value) : '';
+        $sqlMax = $max ? ' and `' . $attribute . '` <= ' . $max : '';
+        $sqlMin = $min ? ' and `' . $attribute . '` >= ' . $min : '';
 
         $sql = "update {$this->getSQLTable($name)} set `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
         $stmt = $this->getPDO()->prepare($sql);

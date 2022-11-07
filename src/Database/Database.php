@@ -1312,6 +1312,7 @@ class Database
      * @param string $id
      *
      * @return Document
+     * @throws Exception|Throwable
      */
     public function getDocument(string $collection, string $id): Document
     {
@@ -1960,11 +1961,12 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
+     * @throws Exception
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float $max = null): bool
     {
-        if($value < 1){
-            throw new Exception("Value must be numeric and greater than 1");
+        if($value <= 0){ // Can be a float
+            throw new Exception("Value must be numeric and greater than 0");
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -1995,10 +1997,11 @@ class Database
             throw new Exception('Attribute type can be ' . implode(',', $whiteList));
         }
 
-        if($max && ($document->getAttribute($attribute) + $value >= $max)){
+        if($max && ($document->getAttribute($attribute) + $value > $max)){
             throw new Exception('Attribute value exceeds maximum limit: ' . $max);
         }
 
+        $max = $max ? $max - $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
@@ -2019,12 +2022,12 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float $min = null): bool
     {
-        if($value < 1){
-            throw new Exception("Value must be numeric and greater than 1");
+        if($value <= 0){ // Can be a float
+            throw new Exception("Value must be numeric and greater than 0");
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -2055,10 +2058,11 @@ class Database
             throw new Exception('Attribute type can be ' . implode(',', $whiteList));
         }
 
-        if($min && ($document->getAttribute($attribute) - $value <= $min)){
+        if($min && ($document->getAttribute($attribute) - $value < $min)){
             throw new Exception('Attribute value Exceeds minimum limit ' . $min);
         }
 
+        $min = $min ? $min + $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);

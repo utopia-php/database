@@ -716,10 +716,10 @@ abstract class Base extends TestCase
                 Permission::create(Role::any()),
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
-            ],
+            ]
         ]));
 
-        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 102));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
 
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(101, $document->getAttribute('increase'));
@@ -732,14 +732,9 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(105.5, $document->getAttribute('increase_float'));
 
-
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
-
-
-
-
 
         return $document;
     }
@@ -750,7 +745,7 @@ abstract class Base extends TestCase
     public function testIncreaseLimitMax(Document $document)
     {
         $this->expectException(Exception::class);
-        $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 0.98, 101.99));
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
     }
 
     /**
@@ -759,7 +754,7 @@ abstract class Base extends TestCase
     public function testDecreaseLimitMin(Document $document)
     {
         $this->expectException(Exception::class);
-        $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1, 98));
+        $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 10, 99));
     }
 
     /**

@@ -1103,8 +1103,27 @@ class MongoDBAdapter extends Adapter
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
+     * @throws Exception
      */
     function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool {
+
+        $attribute = $this->filter($attribute);
+        $where = ['_uid' => $id];
+
+        if($max){
+            $where[$attribute] = ['$lte' => $max];
+        }
+
+        if($min){
+            $where[$attribute] = ['$gte' => $min];
+        }
+
+        $this->client->update(
+            $this->getNamespace() . '_' . $this->filter($collection),
+            $where,
+            ['$inc' => [$attribute => $value]],
+        );
+
         return true;
     }
 }

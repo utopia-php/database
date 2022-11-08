@@ -2,7 +2,8 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Exception;
+use Exception;
+use Utopia\Database\Exception as DatabaseException;
 
 class Query
 {
@@ -153,7 +154,7 @@ class Query
      *
      * @param string $filter
      * @return self
-     * @throws Exception
+     * @throws DatabaseException
      */
     public static function parse(string $filter): self
     {
@@ -171,7 +172,7 @@ class Query
 
         // Check for deprecated query syntax
         if (\str_contains($method, '.')) {
-            throw new Exception("Invalid query method");
+            throw new DatabaseException("Invalid query method");
         }
 
         $currentParam = ""; // We build param here before pushing when it's ended

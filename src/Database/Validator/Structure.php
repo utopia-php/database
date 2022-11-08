@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Exception;
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Validator;

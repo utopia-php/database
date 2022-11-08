@@ -2,7 +2,8 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
-use  Utopia\Database\Exception;
+use Exception;
+use  Utopia\Database\Exception as DatabaseException;
 
 use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
@@ -529,7 +530,7 @@ class MongoDBAdapter extends Adapter
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
             }
 
             $orderMethodInternalId = Query::TYPE_GREATER;
@@ -815,7 +816,7 @@ class MongoDBAdapter extends Adapter
                 break;
 
             default:
-                throw new Exception('Unknown method:' . $method);
+                throw new DatabaseException('Unknown method:' . $method);
                 break;
         }
     }
@@ -837,7 +838,7 @@ class MongoDBAdapter extends Adapter
                 return -1;
                 break;
             default:
-                throw new Exception('Unknown sort order:' . $order);
+                throw new DatabaseException('Unknown sort order:' . $order);
                 break;
         }
     }

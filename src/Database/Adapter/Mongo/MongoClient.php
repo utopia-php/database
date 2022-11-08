@@ -2,13 +2,13 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
+use Exception;
 use MongoDB\BSON;
 use Swoole\Client;
 use Swoole\Coroutine\Client as CoroutineClient;
 use Utopia\Database\Adapter\Mongo\Auth;
 use Utopia\Database\Adapter\Mongo\MongoClientOptions;
 use Utopia\Database\Document;
-use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 
 class MongoClient

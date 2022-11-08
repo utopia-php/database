@@ -4,9 +4,10 @@ namespace Utopia\Database\Adapter;
 
 use PDO;
 use PDOException;
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
 
@@ -375,7 +376,7 @@ class SQLite extends MySQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -563,7 +564,7 @@ class SQLite extends MySQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -607,7 +608,7 @@ class SQLite extends MySQL
                 return 'UNIQUE INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type);
         }
     }
 
@@ -638,7 +639,7 @@ class SQLite extends MySQL
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type);
                 break;
         }
 

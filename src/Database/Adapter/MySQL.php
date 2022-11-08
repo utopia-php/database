@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Adapter;
 
-use Utopia\Database\Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 
 class MySQL extends MariaDB
@@ -41,7 +41,7 @@ class MySQL extends MariaDB
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type);
                 break;
         }
 

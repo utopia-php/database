@@ -3,7 +3,8 @@
 namespace Utopia\Database;
 
 use Throwable;
-use Utopia\Database\Exception;
+use Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
@@ -703,14 +704,14 @@ class Database
         switch ($type) {
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
-                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                    throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
 
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
-                    throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                    throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
                 }
                 break;
             case self::VAR_FLOAT:
@@ -718,14 +719,14 @@ class Database
             case self::VAR_DATETIME:
                 break;
             default:
-                throw new Exception('Unknown attribute type: ' . $type);
+                throw new DatabaseException('Unknown attribute type: ' . $type);
                 break;
         }
 
         // only execute when $default is given
         if (!\is_null($default)) {
             if ($required === true) {
-                throw new Exception('Cannot set a default value on a required attribute');
+                throw new DatabaseException('Cannot set a default value on a required attribute');
             }
 
             $this->validateDefaultTypes($type, $default);
@@ -795,16 +796,16 @@ class Database
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
-                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
             case self::VAR_DATETIME:
                 if ($defaultType !== self::VAR_STRING) {
-                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
             default:
-                throw new Exception('Unknown attribute type: ' . $type);
+                throw new DatabaseException('Unknown attribute type: ' . $type);
                 break;
         }
     }
@@ -829,7 +830,7 @@ class Database
         $attributeIndex = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attributeIndex === false) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         // Execute update from callback
@@ -926,7 +927,7 @@ class Database
     {
         $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
             if ($attribute->getAttribute('required') === true) {
-                throw new Exception('Cannot set a default value on a required attribute');
+                throw new DatabaseException('Cannot set a default value on a required attribute');
             }
 
             $this->validateDefaultTypes($attribute->getAttribute('type'), $default);
@@ -961,14 +962,14 @@ class Database
                 switch ($type) {
                     case self::VAR_STRING:
                         if ($size > $this->adapter->getLimitForString()) {
-                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                            throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                         }
                         break;
 
                     case self::VAR_INTEGER:
                         $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                         if ($size > $limit) {
-                            throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                            throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
                         }
                         break;
                     case self::VAR_FLOAT:
@@ -976,7 +977,7 @@ class Database
                     case self::VAR_DATETIME:
                         break;
                     default:
-                        throw new Exception('Unknown attribute type: ' . $type);
+                        throw new DatabaseException('Unknown attribute type: ' . $type);
                         break;
                 }
 
@@ -1094,7 +1095,7 @@ class Database
         $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attribute === false) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
@@ -1152,7 +1153,7 @@ class Database
         $index = \in_array($old, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new Exception('Index not found');
+            throw new DatabaseException('Index not found');
         }
 
         $indexNew = \in_array($new, \array_map(fn ($index) => $index['$id'], $indexes));
@@ -1198,7 +1199,7 @@ class Database
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
         if (empty($attributes)) {
-            throw new Exception('Missing attributes');
+            throw new DatabaseException('Missing attributes');
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
@@ -1219,24 +1220,24 @@ class Database
         switch ($type) {
             case self::INDEX_KEY:
                 if (!$this->adapter->getSupportForIndex()) {
-                    throw new Exception('Key index is not supported');
+                    throw new DatabaseException('Key index is not supported');
                 }
                 break;
 
             case self::INDEX_UNIQUE:
                 if (!$this->adapter->getSupportForUniqueIndex()) {
-                    throw new Exception('Unique index is not supported');
+                    throw new DatabaseException('Unique index is not supported');
                 }
                 break;
 
             case self::INDEX_FULLTEXT:
                 if (!$this->adapter->getSupportForUniqueIndex()) {
-                    throw new Exception('Fulltext index is not supported');
+                    throw new DatabaseException('Fulltext index is not supported');
                 }
                 break;
 
             default:
-                throw new Exception('Unknown index type: ' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type);
                 break;
         }
 
@@ -1310,7 +1311,7 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new Exception('Missing collection: ' . $collection);
+            throw new DatabaseException('Missing collection: ' . $collection);
         }
 
         if (empty($id)) {
@@ -1412,7 +1413,7 @@ class Database
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         if (!$document->getId() || !$id) {
-            throw new Exception('Must define $id attribute');
+            throw new DatabaseException('Must define $id attribute');
         }
 
         $time = DateTime::now();
@@ -1525,7 +1526,7 @@ class Database
         /** @var string */ $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new Exception("cursor Document must be from the same Collection.");
+            throw new DatabaseException("cursor Document must be from the same Collection.");
         }
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
@@ -1587,7 +1588,7 @@ class Database
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+            throw new DatabaseException("Collection not found");
         }
 
         $queries = Query::groupByType($queries)['filters'];
@@ -1618,7 +1619,7 @@ class Database
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+            throw new DatabaseException("Collection not found");
         }
 
         $queries = self::convertQueries($collection, $queries);

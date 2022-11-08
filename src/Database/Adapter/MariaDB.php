@@ -4,7 +4,8 @@ namespace Utopia\Database\Adapter;
 
 use PDO;
 use PDOException;
-use Utopia\Database\Exception;
+use Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -552,7 +553,7 @@ class MariaDB extends Adapter
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -740,7 +741,7 @@ class MariaDB extends Adapter
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -768,15 +769,15 @@ class MariaDB extends Adapter
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new Exception('Failed to delete document');
-            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+            $stmt->execute() || throw new DatabaseException('Failed to delete document');
+            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
             throw new Exception($th->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;
@@ -923,7 +924,7 @@ class MariaDB extends Adapter
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
@@ -1312,7 +1313,7 @@ class MariaDB extends Adapter
                     $total += 19; // 2022-06-26 14:46:24
                     break;
                 default:
-                    throw new Exception('Unknown Type');
+                    throw new DatabaseException('Unknown Type');
                     break;
             }
         }
@@ -1667,7 +1668,7 @@ class MariaDB extends Adapter
                 return 'DATETIME(3)';
                 break;
             default:
-                throw new Exception('Unknown Type');
+                throw new DatabaseException('Unknown Type');
         }
     }
 
@@ -1732,7 +1733,7 @@ class MariaDB extends Adapter
                 return '>=';
 
             default:
-                throw new Exception('Unknown method:' . $method);
+                throw new DatabaseException('Unknown method:' . $method);
                 break;
         }
     }
@@ -1758,7 +1759,7 @@ class MariaDB extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type);
         }
     }
 
@@ -1789,7 +1790,7 @@ class MariaDB extends Adapter
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type);
                 break;
         }
 
@@ -1864,7 +1865,7 @@ class MariaDB extends Adapter
                 return PDO::PARAM_NULL;
 
             default:
-                throw new Exception('Unknown PDO Type for ' . gettype($value));
+                throw new DatabaseException('Unknown PDO Type for ' . gettype($value));
         }
     }
 

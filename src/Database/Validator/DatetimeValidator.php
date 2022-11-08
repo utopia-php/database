@@ -3,7 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
-use Utopia\Database\Exception;
+use Exception;
 
 class DatetimeValidator extends Validator
 {
@@ -41,7 +41,7 @@ class DatetimeValidator extends Validator
         try {
             new \DateTime($value);
         }
-        catch(\Exception $e) {
+        catch(Exception $e) {
             $this->message = $e->getMessage();
             return false;
         }

@@ -68,10 +68,9 @@ class MariaDB extends Adapter
      * Optionally check if collection exists in Database
      *
      * @param string $database
-     * @param string $collection
+     * @param string|null $collection
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
     public function exists(string $database, ?string $collection): bool
     {

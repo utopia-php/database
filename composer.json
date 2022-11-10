@@ -33,11 +33,5 @@
         "ext-redis": "Needed to support Redis Cache Adapter",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
-    },
-    "repositories": [
-        {
-            "type": "git",
-            "url": "https://github.com/utopia-php/mongo"
-        }
-    ]
+    }
 }

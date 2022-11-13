@@ -433,6 +433,24 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
+        $stmt = $this->getPDO()->prepare("SET SESSION max_execution_time=10;");
+        $stmt->execute();
+
+        var_dump("start sleep");
+
+        $sql = $this->setTimeOut('%s SELECT  sleep(10)', 1);
+
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
+            $stmt->execute();
+        }catch (PDOException $e){
+            var_dump($e->getMessage());
+            var_dump($e->getCode());
+            exit;
+        }
+        var_dump("end sleep");
+die;
+
         $stmt = $this->getPDO()->prepare("
             SELECT * 
             FROM {$this->getSQLTable($name)}
@@ -1872,7 +1890,7 @@ class MariaDB extends Adapter
      * Returns the current PDO object
      * @return PDO 
      */
-    protected function getPDO()
+    protected function getPDO(): PDO
     {
         return $this->pdo;
     }
@@ -1890,5 +1908,19 @@ class MariaDB extends Adapter
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param float $seconds
+     * @return string
+     */
+    protected function setTimeOut(string $sql, float $seconds): string
+    {
+        $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
+        $txt = sprintf($sql, $syntax, '');
+var_dump($txt);
+        return $txt;
     }
 }

@@ -48,4 +48,18 @@ class MySQL extends MariaDB
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
 
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param float $seconds
+     * @return string
+     */
+    protected function setTimeOut(string $sql, float $seconds): string
+    {
+        $syntax = '/*+ max_execution_time(' . ($seconds * 1000) . ') */';
+        $txt = sprintf($sql, '', $syntax);
+        var_dump($txt);
+        return $txt;
+    }
+
 }

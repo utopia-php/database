@@ -433,24 +433,6 @@ class MariaDB extends Adapter
     {
         $name = $this->filter($collection);
 
-        $stmt = $this->getPDO()->prepare("SET SESSION max_execution_time=10;");
-        $stmt->execute();
-
-        var_dump("start sleep");
-
-        $sql = $this->setTimeOut('%s SELECT  sleep(10)', 1);
-
-        try {
-            $stmt = $this->getPDO()->prepare($sql);
-            $stmt->execute();
-        }catch (PDOException $e){
-            var_dump($e->getMessage());
-            var_dump($e->getCode());
-            exit;
-        }
-        var_dump("end sleep");
-die;
-
         $stmt = $this->getPDO()->prepare("
             SELECT * 
             FROM {$this->getSQLTable($name)}
@@ -910,10 +892,10 @@ die;
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
+        //$where[] = 'sleep(3) '; // todo: remove this trigger mock !!!!
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $sql = "
-            SELECT table_main.*
+        $sql = "%s SELECT %s table_main.*, _uid
             FROM {$this->getSQLTable($name)} as table_main
             " . $sqlWhere . "
             GROUP BY _uid
@@ -921,6 +903,7 @@ die;
             LIMIT :offset, :limit;
         ";
 
+        $sql = $this->setTimeOut($sql, 1); // todo: set time!!!!
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
@@ -948,7 +931,14 @@ die;
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        }catch (\Throwable $e){
+            var_dump($e->getCode());
+            var_dump($e->getMessage());
+            var_dump($e->getLine());
+
+        }
 
         $results = $stmt->fetchAll();
 
@@ -1919,8 +1909,6 @@ die;
     protected function setTimeOut(string $sql, float $seconds): string
     {
         $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
-        $txt = sprintf($sql, $syntax, '');
-var_dump($txt);
-        return $txt;
+        return sprintf($sql, $syntax, '');
     }
 }

@@ -24,7 +24,7 @@ use Utopia\Database\Exception\Duplicate;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends MySQL
+class SQLite extends MariaDB
 {
     /**
      * Check if Database exists
@@ -664,10 +664,10 @@ class SQLite extends MySQL
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -837,5 +837,18 @@ class SQLite extends MySQL
             'WITH',
             'WITHOUT',
         ];
+    }
+
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param float $seconds
+     * @return string
+     */
+    protected function setTimeOut(string $sql, float $seconds): string
+    {
+        // todo: implement this
+        return sprintf($sql, '', '');
     }
 }

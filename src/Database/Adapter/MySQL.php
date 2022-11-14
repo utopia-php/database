@@ -57,9 +57,7 @@ class MySQL extends MariaDB
     protected function setTimeOut(string $sql, float $seconds): string
     {
         $syntax = '/*+ max_execution_time(' . ($seconds * 1000) . ') */';
-        $txt = sprintf($sql, '', $syntax);
-        var_dump($txt);
-        return $txt;
+        return sprintf($sql, '', $syntax);
     }
 
 }

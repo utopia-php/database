@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use Exception;
 use Utopia\Database\Exception as DatabaseException;
 
 class Query
@@ -658,7 +657,7 @@ class Query
             try {
                 $parsed[] = Query::parse($query);
             } catch (\Throwable $th) {
-                throw new Exception("Invalid query: ${query}", previous: $th);
+                throw new DatabaseException("Invalid query: ${query}");
             }
         }
 

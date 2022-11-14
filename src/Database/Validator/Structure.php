@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Validator;
@@ -151,13 +151,13 @@ class Structure extends Validator
     {
         if(isset(self::$formats[$name])) {
             if(self::$formats[$name]['type'] !== $type) {
-                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+                throw new DatabaseException('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
             }
 
             return self::$formats[$name];
         }
 
-        throw new Exception('Unknown format validator: "'.$name.'"');
+        throw new DatabaseException('Unknown format validator: "'.$name.'"');
     }
 
     /**

@@ -3,9 +3,7 @@
 namespace Utopia\Database;
 
 use Throwable;
-use Exception;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -519,7 +517,7 @@ class Database
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
         if (!$collection->isEmpty() && $id !== self::METADATA){
-            throw new Duplicate('Collection ' . $id . ' Exists!');
+            throw new DuplicateException('Collection ' . $id . ' Exists!');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -664,7 +662,7 @@ class Database
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
         if (!empty(array_diff($requiredFilters, $filters))) {
-            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+            throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
         if (
@@ -676,7 +674,7 @@ class Database
 
         if ($format) {
             if (!Structure::hasFormat($format, $type)) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
             }
         }
 
@@ -875,7 +873,7 @@ class Database
     {
         $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
+                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
             }
 
             $attribute->setAttribute('format', $format);
@@ -1819,7 +1817,7 @@ class Database
     protected function encodeAttribute(string $name, $value, Document $document)
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception('Filter not found');
+            throw new DatabaseException('Filter not found');
         }
 
         try {
@@ -1850,7 +1848,7 @@ class Database
     protected function decodeAttribute(string $name, $value, Document $document)
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception('Filter not found');
+            throw new DatabaseException('Filter not found');
         }
 
         try {

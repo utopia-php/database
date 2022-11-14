@@ -154,7 +154,7 @@ class MongoClient
         $result = BSON\toPHP(substr($res, 21, $responseLength - 21));
 
         if (property_exists($result, "writeErrors")) {
-            throw new DuplicateException($result->writeErrors[0]->errmsg);
+            throw new Exception($result->writeErrors[0]->errmsg);
         }
 
         if (property_exists($result, "n") && $result->ok == 1) {

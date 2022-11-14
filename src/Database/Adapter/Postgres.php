@@ -3,7 +3,6 @@
 // namespace Utopia\Database\Adapter;
 
 // use PDO;
-// use Exception;
 // use phpDocumentor\Reflection\DocBlock\Tags\Var_;
 // use Utopia\Database\Adapter;
 

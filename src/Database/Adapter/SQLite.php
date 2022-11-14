@@ -4,12 +4,11 @@ namespace Utopia\Database\Adapter;
 
 use PDO;
 use PDOException;
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\ID;
-use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -368,7 +367,7 @@ class SQLite extends MySQL
             switch ($e->getCode()) {
                 case "1062":
                 case "23000":
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document');
                 break;
                 default:
                     throw $e;
@@ -555,7 +554,7 @@ class SQLite extends MySQL
                 switch ($e->getCode()) {
                     case '1062':
                     case '23000':
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException('Duplicated document');
 
                     default:
                         throw $e;

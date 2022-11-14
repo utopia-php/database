@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use Exception;
 use Utopia\Database\Exception as DatabaseException;
 
 class Permission

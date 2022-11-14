@@ -2,10 +2,8 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
-use Exception;
-use  Utopia\Database\Exception as DatabaseException;
-
 use MongoDB\BSON\Regex;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
@@ -1016,7 +1014,7 @@ class MongoDBAdapter extends Adapter
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         return $this->namespace;
@@ -1033,7 +1031,7 @@ class MongoDBAdapter extends Adapter
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new Exception('Missing database');
+            throw new DatabaseException('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -1051,7 +1049,7 @@ class MongoDBAdapter extends Adapter
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);

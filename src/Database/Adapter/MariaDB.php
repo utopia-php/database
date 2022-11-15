@@ -931,14 +931,7 @@ var_dump($sql);
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        try {
-            $stmt->execute();
-        }catch (\Throwable $e){
-            var_dump($e->getCode());
-            var_dump($e->getMessage());
-            var_dump($e->getLine());
-
-        }
+        $stmt->execute();
 
         $results = $stmt->fetchAll();
 

@@ -892,17 +892,17 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        //$where[] = 'sleep(3) '; // todo: remove this trigger mock !!!!
+        //$where[] = 'sleep(3) = 0 '; // todo: remove this trigger mock !!!!
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $sql = "%s SELECT %s table_main.*, _uid
+        $sql = "%s SELECT %s table_main.*
             FROM {$this->getSQLTable($name)} as table_main
             " . $sqlWhere . "
             GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
         ";
-
+var_dump($sql);
         $sql = $this->setTimeOut($sql, 1); // todo: set time!!!!
         $stmt = $this->getPDO()->prepare($sql);
 

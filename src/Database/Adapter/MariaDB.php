@@ -892,10 +892,22 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        //$where[] = 'sleep(3) = 0 '; // todo: remove this trigger mock !!!!
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $sql = "%s SELECT %s table_main.*
+        $this->getPDO()->prepare($this->setTimeoutSession(1.1))->execute();
+        $this->getPDO()->prepare($this->setTimeoutSession())->execute();
+        $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
+        //$sleep = '';
+
+        $sql = "%s SELECT %s table_main.* ".$sleep."
+            FROM {$this->getSQLTable($name)} as table_main
+            " . $sqlWhere . "
+            GROUP BY _uid
+            {$order}
+            LIMIT :offset, :limit;
+        ";
+
+        $sql = "SELECT table_main.* ".$sleep."
             FROM {$this->getSQLTable($name)} as table_main
             " . $sqlWhere . "
             GROUP BY _uid
@@ -1903,5 +1915,17 @@ var_dump($sql);
     {
         $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
         return sprintf($sql, $syntax, '');
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param float|null $seconds
+     * @return string
+     */
+    protected function setTimeoutSession(float $seconds = null): string
+    {
+        $seconds = $seconds ?? 'default';
+        var_dump('SET SESSION max_statement_time = ' . $seconds);
+        return 'SET SESSION max_statement_time = ' . $seconds;
     }
 }

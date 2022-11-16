@@ -894,10 +894,10 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $this->getPDO()->prepare($this->setTimeoutSession(1.1))->execute();
-        $this->getPDO()->prepare($this->setTimeoutSession())->execute();
-        $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
-        //$sleep = '';
+        $this->getPDO()->prepare($this->setTimeoutSession(1/10000))->execute();
+        //$this->getPDO()->prepare($this->setTimeoutSession())->execute();
+        //$sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
+        $sleep = '';
 
         $sql = "%s SELECT %s table_main.* ".$sleep."
             FROM {$this->getSQLTable($name)} as table_main

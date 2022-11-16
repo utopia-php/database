@@ -67,7 +67,7 @@ class MySQL extends MariaDB
      */
     protected function setTimeoutSession(float $seconds = null): string
     {
-        $seconds = $seconds ? (int)$seconds * 1000 : 'default';
+        $seconds = $seconds ? (int)($seconds * 1000) : 'default';
         var_dump('SET SESSION max_execution_time = ' . $seconds);
         return 'SET SESSION max_execution_time = ' . $seconds;
     }

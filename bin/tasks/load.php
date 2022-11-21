@@ -6,7 +6,7 @@
 global $cli;
 
 use Faker\Factory;
-use MongoDB\Client;
+use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
 use Utopia\Cache\Cache;
@@ -16,7 +16,7 @@ use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
@@ -171,18 +171,20 @@ $cli
 
             case 'mongodb':
                 Co\run(function() use (&$start, $limit, $name) {
-                    $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                    $client = new Client('mongodb://mongo/',
-                        [
-                            'username' => 'root',
-                            'password' => 'example',
-                        ],
-                        $options
-                    );
-
-                    $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                    $schema = 'utopiaBenchmarks';
+                    $client = new Client(
+                        $schema,
+                        'mongo',
+                        27017,
+                        'root',
+                        'example'
+                        , false
+                     );
+  
+                    $database = new Database(new Mongo($client), new Cache(new NoCache()));
                     $database->setNamespace($name);
-
+                    $database->setDefaultDatabase($schema);
+                    
                     // Outline collection schema
                     createSchema($database);
 
@@ -193,7 +195,7 @@ $cli
 
                     for ($i=0; $i < $limit/1000; $i++) {
                         go(function() use ($client, $name, $faker) {
-                            $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                            $database = new Database(new Mongo($client), new Cache(new NoCache()));
                             $database->setNamespace($name);
 
                             // Each coroutine loads 1000 documents

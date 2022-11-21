@@ -5,7 +5,7 @@
  */ global $cli;
 
 use Faker\Factory;
-use MongoDB\Client;
+use Utopia\Mongo\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
@@ -13,7 +13,7 @@ use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
@@ -28,19 +28,23 @@ $cli
     ->action(function (string $adapter, string $name, int $limit) {
         $database = null;
 
+
         switch ($adapter) {
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
+                $schema = 'utopiaBenchmarks';
                 $client = new Client(
-                    'mongodb://mongo/',
-                    [
-                        'username' => 'root',
-                        'password' => 'example',
-                    ],
-                    $options
+                  $schema,
+                  'mongo',
+                  27017,
+                  'root',
+                  'example'
+                  , false
                 );
 
-                $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+
+                $database = new Database(new Mongo($client), new Cache(new NoCache()));
+                $database->setDefaultDatabase($schema);
+                
                 break;
 
             case 'mariadb':
@@ -58,6 +62,8 @@ $cli
                 ]);
 
                 $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                $database->setNamespace($name);
+
                 break;
 
             case 'mysql':
@@ -75,6 +81,8 @@ $cli
                 ]);
 
                 $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                $database->setNamespace($name);
+
                 break;
 
             default:
@@ -82,7 +90,6 @@ $cli
                 return;
         }
 
-        $database->setNamespace($name);
 
         $faker = Factory::create();
 

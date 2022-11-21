@@ -6,7 +6,7 @@
 global $cli;
 
 use Faker\Factory;
-use MongoDB\Client;
+use Utopia\Mongo\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
@@ -14,7 +14,7 @@ use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
@@ -30,16 +30,17 @@ $cli
 
         switch ($adapter) {
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                $client = new Client('mongodb://mongo/',
-                    [
-                        'username' => 'root',
-                        'password' => 'example',
-                    ],
-                    $options
-                );
+              $schema = 'utopiaBenchmarks';
+              $client = new Client(
+                  $schema,
+                  'mongo',
+                  27017,
+                  'root',
+                  'example'
+                  , false
+               );
 
-                $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                $database = new Database(new Mongo($client), new Cache(new NoCache()));
                 break;
 
             case 'mariadb':

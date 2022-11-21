@@ -140,7 +140,7 @@ Below is a list of supported adapters, and their compatibly tested versions alon
 | MariaDB | ✅ | 10.5 |
 | MySQL | ✅ | 8.0 |
 | Postgres | 🛠 | 13.0 |
-| MongoDB | ✅ | 3.6 |
+| MongoDB | ✅ | 5 |
 | SQLlite | ✅ | 3.38 |
 
 ` ✅  - supported, 🛠  - work in progress`

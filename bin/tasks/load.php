@@ -173,8 +173,8 @@ $cli
                         'mongo',
                         27017,
                         'root',
-                        'example'
-                        , false
+                        'example',
+                        false
                      );
   
                     $database = new Database(new Mongo($client), $cache);

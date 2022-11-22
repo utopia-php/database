@@ -6,6 +6,7 @@
 global $cli;
 
 use Faker\Factory;
+use Faker\Generator;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
@@ -23,7 +24,7 @@ use Utopia\Validator\Text;
 
 /**
  * @Example
- * docker-compose exec tests bin/load --adapter=mysql --limit=1000 --name=testing
+ * docker-compose exec tests bin/load --adapter=mariadb --limit=1000 --name=testing
  */
 
 $cli
@@ -220,13 +221,13 @@ function createSchema(Database $database) {
     $database->create();
     $database->createCollection('articles');
     $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
-    $database->createAttribute('articles', 'created', Database::VAR_INTEGER, 0, true);
+    $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, null, false, false, null, [], ['datetime']);
     $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
     $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
 }
 
-function addArticle($database, $faker) {
+function addArticle($database, Generator $faker) {
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
         // Three random users out of 10,000 get mutate access
@@ -248,7 +249,7 @@ function addArticle($database, $faker) {
             "delete({$faker->numerify('user####')})",
         ],
         'author' => $faker->name(),
-        'created' => $faker->unixTime(),
+        'created' => \Utopia\Database\DateTime::format($faker->dateTime()),
         'text' => $faker->realTextBetween(1000, 4000),
         'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
         'views' => $faker->randomNumber(6, false)

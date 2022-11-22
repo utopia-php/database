@@ -25,7 +25,7 @@
         "phpunit/phpunit": "^9.4",
         "mongodb/mongodb": "1.8.0",
         "swoole/ide-helper": "4.8.0",
-        "utopia-php/cli": "^0.14.0",
+        "utopia-php/cli": "^0.11.0",
         "vimeo/psalm": "4.0.1"
     },
     "suggests": {

@@ -138,20 +138,20 @@ function runQueries(Database $database, int $limit)
 {
     $results = [];
     // Recent travel blogs
-    $query = ["created.greater(1262322000)", "genre.equal('travel')"];
     $query = ['greaterThan("created", "2010-01-01 05:00:00")', 'equal("genre","travel")'];
     $results[] = runQuery($query, $database, $limit);
 
     // Favorite genres
-    $query = ["genre.equal('fashion, 'finance', 'sports')"];
+    $query = ["equal('genre', ['fashion', 'finance', 'sports'])"];
     $results[] = runQuery($query, $database, $limit);
 
     // Popular posts
-    $query = ["views.greater(100000)"];
+    $query = ["greaterThan('views', 100000)"];
+
     $results[] = runQuery($query, $database, $limit);
 
     // Fulltext search
-    $query = ["text.search('Alice')"];
+    $query = ["search('text', 'Alice')"];
     $results[] = runQuery($query, $database, $limit);
 
     return $results;

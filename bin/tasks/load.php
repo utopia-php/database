@@ -16,10 +16,8 @@ use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 

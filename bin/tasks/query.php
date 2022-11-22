@@ -12,13 +12,17 @@ use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
+
+/**
+ * @Example
+ * docker-compose exec tests bin/load --adapter=mysql --limit=1000 --name=testing
+ */
 
 //  docker-compose exec tests bin/query --adapter=mariadb --limit=10 --name=shmuel
 
@@ -30,11 +34,13 @@ $cli
     ->param('limit', 25, new Numeric(), 'Limit on queried documents', true)
     ->action(function (string $adapter, string $name, int $limit) {
 
+        $namespace = '_ns';
+        $cache = new Cache(new NoCache());
+
         switch ($adapter) {
             case 'mongodb':
-                $schema = 'utopiaBenchmarks';
                 $client = new Client(
-                    $schema,
+                    $name,
                     'mongo',
                     27017,
                     'root',
@@ -42,9 +48,9 @@ $cli
                     , false
                 );
 
-                $database = new Database(new Mongo($client), new Cache(new NoCache()));
-                $database->setDefaultDatabase($schema);
-
+                $database = new Database(new Mongo($client), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
                 break;
 
             case 'mariadb':
@@ -55,8 +61,9 @@ $cli
 
                 $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
-                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
-                $database->setNamespace($name);
+                $database = new Database(new MariaDB($pdo), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
                 break;
 
             case 'mysql':
@@ -67,9 +74,9 @@ $cli
 
                 $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
-                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
-                $database->setNamespace($name);
-
+                $database = new Database(new MySQL($pdo), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
                 break;
 
             default:

@@ -21,7 +21,7 @@ use Utopia\Validator\Text;
 
 /**
  * @Example
- * docker-compose exec tests bin/load --adapter=mysql --limit=1000 --name=testing
+ * docker-compose exec tests bin/query --adapter=mariadb --limit=1000 --name=testing
  */
 
 //  docker-compose exec tests bin/query --adapter=mariadb --limit=10 --name=shmuel

@@ -6,6 +6,7 @@
 global $cli;
 
 use Faker\Factory;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
@@ -22,6 +23,11 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 
+/**
+ * @Example
+ * docker-compose exec tests bin/load --adapter=mysql --limit=1000 --name=testing
+ */
+
 $cli
     ->task('load')
     ->desc('Load database with mock data for testing')
@@ -31,30 +37,26 @@ $cli
     ->action(function ($adapter, $limit, $name) {
 
         $start = null;
+        $namespace = '_ns';
+        $cache = new Cache(new NoCache());
+
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
         Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
-            case 'mariadb': 
-                Co\run(function() use (&$start, $limit, $name) {
+            case 'mariadb':
+                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mariadb';
                     $dbPort = '3306';
                     $dbUser = 'root';
                     $dbPass = 'password';
 
-                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                        PDO::ATTR_TIMEOUT => 3, // Seconds
-                        PDO::ATTR_PERSISTENT => true,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    ]);
-
-                    $cache = new Cache(new NoCache());
+                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
                     $database = new Database(new MariaDB($pdo), $cache);
-                    $database->setNamespace($name);
+                    $database->setDefaultDatabase($name);
+                    $database->setNamespace($namespace);
 
                     // Outline collection schema
                     createSchema($database);
@@ -82,11 +84,12 @@ $cli
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache) {
+                        go(function() use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
-                            $database->setNamespace($name);
+                            $database->setDefaultDatabase($name);
+                            $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
                             for ($i=0; $i < 1000; $i++) {
@@ -103,25 +106,18 @@ $cli
                 break;
 
             case 'mysql': 
-                Co\run(function() use (&$start, $limit, $name) {
+                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mysql';
                     $dbPort = '3307';
                     $dbUser = 'root';
                     $dbPass = 'password';
 
-                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                        PDO::ATTR_TIMEOUT => 3, // Seconds
-                        PDO::ATTR_PERSISTENT => true,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    ]);
+                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
-                    $cache = new Cache(new NoCache());
-
-                    $database = new Database(new MariaDB($pdo), $cache);
-                    $database->setNamespace($name);
+                    $database = new Database(new MySQL($pdo), $cache);
+                    $database->setDefaultDatabase($name);
+                    $database->setNamespace($namespace);
 
                     // Outline collection schema
                     createSchema($database);
@@ -149,11 +145,12 @@ $cli
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache) {
+                        go(function() use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
-                            $database = new Database(new MariaDB($pdo), $cache);
-                            $database->setNamespace($name);
+                            $database = new Database(new MySQL($pdo), $cache);
+                            $database->setDefaultDatabase($name);
+                            $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
                             for ($i=0; $i < 1000; $i++) {
@@ -170,10 +167,9 @@ $cli
                 break;
 
             case 'mongodb':
-                Co\run(function() use (&$start, $limit, $name) {
-                    $schema = 'utopiaBenchmarks';
+                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
                     $client = new Client(
-                        $schema,
+                        $name,
                         'mongo',
                         27017,
                         'root',
@@ -181,10 +177,10 @@ $cli
                         , false
                      );
   
-                    $database = new Database(new Mongo($client), new Cache(new NoCache()));
-                    $database->setNamespace($name);
-                    $database->setDefaultDatabase($schema);
-                    
+                    $database = new Database(new Mongo($client), $cache);
+                    $database->setDefaultDatabase($name);
+                    $database->setNamespace($namespace);
+
                     // Outline collection schema
                     createSchema($database);
 
@@ -194,9 +190,10 @@ $cli
                     $start = microtime(true);
 
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($client, $name, $faker) {
-                            $database = new Database(new Mongo($client), new Cache(new NoCache()));
-                            $database->setNamespace($name);
+                        go(function() use ($client, $faker, $name, $namespace, $cache) {
+                            $database = new Database(new Mongo($client), $cache);
+                            $database->setDefaultDatabase($name);
+                            $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
                             for ($i=0; $i < 1000; $i++) {
@@ -218,7 +215,10 @@ $cli
         Console::success("Completed in {$time} seconds");
     });
 
-function createSchema($database) {
+function createSchema(Database $database) {
+    if($database->exists($database->getDefaultDatabase())){
+        $database->delete($database->getDefaultDatabase());
+    }
     $database->create();
     $database->createCollection('articles');
     $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);

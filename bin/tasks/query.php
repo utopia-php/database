@@ -10,6 +10,7 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -19,6 +20,8 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 
+//  docker-compose exec tests bin/query --adapter=mariadb --limit=10 --name=shmuel
+
 $cli
     ->task('query')
     ->desc('Query mock data')
@@ -26,25 +29,22 @@ $cli
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->param('limit', 25, new Numeric(), 'Limit on queried documents', true)
     ->action(function (string $adapter, string $name, int $limit) {
-        $database = null;
-
 
         switch ($adapter) {
             case 'mongodb':
                 $schema = 'utopiaBenchmarks';
                 $client = new Client(
-                  $schema,
-                  'mongo',
-                  27017,
-                  'root',
-                  'example'
-                  , false
+                    $schema,
+                    'mongo',
+                    27017,
+                    'root',
+                    'example'
+                    , false
                 );
-
 
                 $database = new Database(new Mongo($client), new Cache(new NoCache()));
                 $database->setDefaultDatabase($schema);
-                
+
                 break;
 
             case 'mariadb':
@@ -53,17 +53,10 @@ $cli
                 $dbUser = 'root';
                 $dbPass = 'password';
 
-                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                    PDO::ATTR_TIMEOUT => 3, // Seconds
-                    PDO::ATTR_PERSISTENT => true,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
                 $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
                 $database->setNamespace($name);
-
                 break;
 
             case 'mysql':
@@ -72,13 +65,7 @@ $cli
                 $dbUser = 'root';
                 $dbPass = 'password';
 
-                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                    PDO::ATTR_TIMEOUT => 3, // Seconds
-                    PDO::ATTR_PERSISTENT => true,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
                 $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
                 $database->setNamespace($name);
@@ -145,6 +132,7 @@ function runQueries(Database $database, int $limit)
     $results = [];
     // Recent travel blogs
     $query = ["created.greater(1262322000)", "genre.equal('travel')"];
+    $query = ['greaterThan("created", "2010-01-01 05:00:00")', 'equal("genre","travel")'];
     $results[] = runQuery($query, $database, $limit);
 
     // Favorite genres
@@ -183,3 +171,4 @@ function runQuery(array $query, Database $database, int $limit)
     Console::success("{$time} s");
     return $time;
 }
+

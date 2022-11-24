@@ -105,3 +105,12 @@ $cli
         Console::success("{$time} seconds");
     });
 
+
+$cli
+    ->error()
+    ->inject('error')
+    ->action(function (Exception $error) {
+        Console::error($error->getMessage());
+    });
+
+

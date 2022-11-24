@@ -214,6 +214,16 @@ $cli
         Console::success("Completed in {$time} seconds");
     });
 
+
+
+$cli
+    ->error()
+    ->inject('error')
+    ->action(function (Exception $error) {
+        Console::error($error->getMessage());
+    });
+
+
 function createSchema(Database $database) {
     if($database->exists($database->getDefaultDatabase())){
         $database->delete($database->getDefaultDatabase());

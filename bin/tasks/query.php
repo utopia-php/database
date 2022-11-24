@@ -134,6 +134,15 @@ $cli
         fclose($f);
     });
 
+
+    $cli
+    ->error()
+    ->inject('error')
+    ->action(function (Exception $error) {
+        Console::error($error->getMessage());
+    });
+
+
 function runQueries(Database $database, int $limit)
 {
     $results = [];

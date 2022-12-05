@@ -125,11 +125,20 @@ abstract class Adapter
     public function getDefaultDatabase(): string
     {
         if (empty($this->defaultDatabase)) {
-            throw new Exception('Missing database');
+            throw new Exception('Missing default database');
         }
 
         return $this->defaultDatabase;
     }
+
+    /**
+     * Ping Database
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    abstract public function ping(): bool;
 
     /**
      * Create Database

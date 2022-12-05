@@ -45,6 +45,20 @@ class OrderAttributes extends Validator
             'size' => 512
         ];
 
+        $this->schema[] = [
+            'key' => '$createdAt',
+            'array' => false,
+            'type' => Database::VAR_INTEGER,
+            'size' => 0
+        ];
+
+        $this->schema[] = [
+            'key' => '$updatedAt',
+            'array' => false,
+            'type' => Database::VAR_INTEGER,
+            'size' => 0
+        ];
+
         foreach ($attributes as $attribute) {
             $this->schema[] = $attribute->getArrayCopy();
         }
@@ -52,6 +66,16 @@ class OrderAttributes extends Validator
         $this->indexes[] = [
             'type' => Database::INDEX_UNIQUE,
             'attributes' => ['$id']
+        ];
+
+        $this->indexes[] = [
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['$createdAt']
+        ];
+
+        $this->indexes[] = [
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['$updatedAt']
         ];
 
         foreach ($indexes as $index) {
@@ -110,9 +134,9 @@ class OrderAttributes extends Validator
                 return false;
             }
 
-            // search operator requires fulltext index
+            // search method requires fulltext index
             if (in_array(Query::TYPE_SEARCH, $attributes) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search operator requires fulltext index: ' . implode(",", $attributes);
+                $this->message = 'Search method requires fulltext index: ' . implode(",", $attributes);
                 return false;
             }
         }

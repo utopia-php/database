@@ -15,10 +15,10 @@ services:
 
   adminer:
     image: adminer
-    container_name: appwrite-adminer
+    container_name: utopia-adminer
     restart: always
     ports:
-      - "9506:8080"
+      - "8760:8080"
     networks:
       - database
 
@@ -54,7 +54,7 @@ services:
       - MYSQL_ROOT_PASSWORD=password
   
   mongo:
-    image: mongo:3.6
+    image: mongo:5.0
     container_name: utopia-mongo
     networks:
       - database

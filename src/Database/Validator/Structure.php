@@ -25,7 +25,7 @@ class Structure extends Validator
         [
             '$id' => '$id',
             'type' => Database::VAR_STRING,
-            'size' => 64,
+            'size' => 255,
             'required' => false,
             'signed' => true,
             'array' => false,
@@ -34,7 +34,7 @@ class Structure extends Validator
         [
             '$id' => '$internalId',
             'type' => Database::VAR_STRING,
-            'size' => 64,
+            'size' => 255,
             'required' => false,
             'signed' => true,
             'array' => false,
@@ -43,41 +43,50 @@ class Structure extends Validator
         [
             '$id' => '$collection',
             'type' => Database::VAR_STRING,
-            'size' => 64,
+            'size' => 255,
             'required' => true,
             'signed' => true,
             'array' => false,
             'filters' => [],
         ],
         [
-            '$id' => '$read',
+            '$id' => '$permissions',
             'type' => Database::VAR_STRING,
-            'size' => 64,
+            'size' => 67000, // medium text
             'required' => false,
             'signed' => true,
             'array' => true,
             'filters' => [],
         ],
         [
-            '$id' => '$write',
-            'type' => Database::VAR_STRING,
-            'size' => 64,
+            '$id' => '$createdAt',
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
             'required' => false,
-            'signed' => true,
-            'array' => true,
+            'signed' => false,
+            'array' => false,
             'filters' => [],
         ],
+        [
+            '$id' => '$updatedAt',
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'required' => false,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ]
     ];
 
     /**
      * @var array
      */
-    static protected $formats = [];
+    static protected array $formats = [];
 
     /**
      * @var string
      */
-    protected $message = 'General Error';
+    protected string $message = 'General Error';
 
     /**
      * Structure constructor.
@@ -90,9 +99,7 @@ class Structure extends Validator
 
     /**
      * Remove a Validator
-     * 
-     * @param string $name
-     * 
+     *
      * @return array
      */
     static public function getFormats(): array
@@ -206,6 +213,7 @@ class Structure extends Validator
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
+
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
@@ -251,13 +259,16 @@ class Structure extends Validator
                     $validator = new Boolean();
                     break;
 
+                case Database::VAR_DATETIME:
+                    $validator = new DatetimeValidator();
+                    break;
+
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;
-                    break;
             }
 
-            /** @var string $label Error messasage label, either 'format' or 'type' */
+            /** Error message label, either 'format' or 'type' */
             $label = ($format) ? 'format' : 'type';
 
             if ($format) {

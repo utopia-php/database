@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator;
 use Utopia\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Validator\QueryValidator;
+use Utopia\Database\Validator\Query as QueryValidator;
 use Utopia\Database\Query;
 
 class Queries extends Validator
@@ -21,7 +21,12 @@ class Queries extends Validator
     protected $validator;
 
     /**
-     * @var array
+     * @var Document[]
+     */
+    protected $attributes = [];
+
+    /**
+     * @var Document[]
      */
     protected $indexes = [];
 
@@ -33,21 +38,33 @@ class Queries extends Validator
     /**
      * Queries constructor
      *
-     * @param QueryValidator $validator
-     * @param Document[] $indexes
+     * @param QueryValidator $validator used to validate each query
+     * @param Document[] $attributes allowed attributes to be queried
+     * @param Document[] $indexes available for strict query matching
      * @param bool $strict
      */
-    public function __construct($validator, $indexes, $strict = true)
+    public function __construct(QueryValidator $validator, array $attributes, array $indexes, bool $strict = true)
     {
         $this->validator = $validator;
+        $this->attributes = $attributes;
 
-        $this->indexes[] = [
+        $this->indexes[] = new Document([
             'type' => Database::INDEX_UNIQUE,
             'attributes' => ['$id']
-        ];
+        ]);
 
-        foreach ($indexes as $index) {
-            $this->indexes[] = $index->getArrayCopy(['attributes', 'type']);
+        $this->indexes[] = new Document([
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['$createdAt']
+        ]);
+
+        $this->indexes[] = new Document([
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['$updatedAt']
+        ]);
+
+        foreach ($indexes ?? [] as $index) {
+            $this->indexes[] = $index;
         }
 
         $this->strict = $strict;
@@ -68,50 +85,79 @@ class Queries extends Validator
     /**
      * Is valid.
      *
-     * Returns true if all $queries are valid as a set.
-     * @param mixed $value as array of Query objects
+     * Returns false if:
+     * 1. any query in $value is invalid based on $validator
+     * 
+     * In addition, if $strict is true, this returns false if:
+     * 1. there is no index with an exact match of the filters
+     * 2. there is no index with an exact match of the order attributes
+     * 
+     * Otherwise, returns true.
+     * 
+     * @param mixed $value
      * @return bool
      */
     public function isValid($value): bool
     {
-        /**
-         * Array of attributes from Query->getAttribute()
-         *
-         * @var string[]
-         */
         $queries = [];
-
         foreach ($value as $query) {
-            // [attribute => operator]
-            $queries[$query->getAttribute()] = $query->getOperator(); 
+            if (!$query instanceof Query){
+                try {
+                    $query = Query::parse($query);
+                } catch (\Throwable $th) {
+                    $this->message = 'Invalid query: ${query}';
+                    return false;
+                }
+            }
 
             if (!$this->validator->isValid($query)) {
                 $this->message = 'Query not valid: ' . $this->validator->getDescription();
                 return false;
             }
+
+            $queries[] = $query;
         }
 
-        $found = null;
+        if (!$this->strict) {
+            return true;
+        }
 
-        // Return false if attributes do not exactly match an index
-        if ($this->strict) {
-            // look for strict match among indexes
+        $grouped = Query::groupByType($queries);
+        /** @var Query[] */ $filters = $grouped['filters'];
+        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
+
+        // Check filter queries for exact index match
+        if (count($filters) > 0) {
+            $filtersByAttribute = [];
+            foreach ($filters as $filter) {
+                $filtersByAttribute[$filter->getAttribute()] = $filter->getMethod();
+            }
+
+            $found = null;
+
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  array_keys($queries))) {
-                    $found = $index; 
+                if ($this->arrayMatch($index->getAttribute('attributes'),  array_keys($filtersByAttribute))) {
+                    $found = $index;
                 }
             }
 
             if (!$found) {
-                $this->message = 'Index not found: ' . implode(",", array_keys($queries));
+                $this->message = 'Index not found: ' . implode(",", array_keys($filtersByAttribute));
                 return false;
             }
 
-            // search operator requires fulltext index
-            if (in_array(Query::TYPE_SEARCH, array_values($queries)) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search operator requires fulltext index: ' . implode(",", array_keys($queries));
+            // search method requires fulltext index
+            if (in_array(Query::TYPE_SEARCH, array_values($filtersByAttribute)) && $found['type'] !== Database::INDEX_FULLTEXT) {
+                $this->message = 'Search method requires fulltext index: ' . implode(",", array_keys($filtersByAttribute));
                 return false;
-            } 
+            }
+        }
+
+        // Check order attributes for exact index match
+        $validator = new OrderAttributes($this->attributes, $this->indexes, true);
+        if (count($orderAttributes) > 0 && !$validator->isValid($orderAttributes)) {
+            $this->message = $validator->getDescription();
+            return false;
         }
 
         return true;
@@ -160,12 +206,16 @@ class Queries extends Validator
      *
      * @return bool
      */
-    protected function arrayMatch($indexes, $queries): bool
+    protected function arrayMatch(array $indexes, array $queries): bool
     {
         // Check the count of indexes first for performance
-        if (count($indexes) !== count($queries)) {
+        if (count($queries) !== count($indexes)) {
             return false;
         }
+
+        // Sort them for comparison, the order is not important here anymore.
+        sort($indexes, SORT_STRING);
+        sort($queries, SORT_STRING);
 
         // Only matching arrays will have equal diffs in both directions
         if (array_diff_assoc($indexes, $queries) !== array_diff_assoc($queries, $indexes)) {

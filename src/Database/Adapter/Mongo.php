@@ -1010,8 +1010,7 @@ class Mongo extends Adapter
                 return '$search';
 
             default:
-                throw new Exception('Unknown method:' . $method);
-                break;
+                throw new DatabaseException('Unknown Operator:' . $operator);
         }
     }
 
@@ -1025,17 +1024,11 @@ class Mongo extends Adapter
      */
     protected function getOrder(string $order): int
     {
-        switch ($order) {
-            case Database::ORDER_ASC:
-                return 1;
-                break;
-            case Database::ORDER_DESC:
-                return -1;
-                break;
-            default:
-                throw new Exception('Unknown sort order:' . $order);
-                break;
-        }
+        return match ($order) {
+            Database::ORDER_ASC => 1,
+            Database::ORDER_DESC => -1,
+            default => throw new DatabaseException('Unknown sort order:' . $order),
+        };
     }
 
     /**

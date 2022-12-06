@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Adapter\Mongo;
 
-use  Utopia\Database\Exception as DatabaseException;
+use Exception;
 
 use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
@@ -529,7 +529,7 @@ class MongoDBAdapter extends Adapter
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
+                throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
             $orderMethodInternalId = Query::TYPE_GREATER;
@@ -815,7 +815,7 @@ class MongoDBAdapter extends Adapter
                 break;
 
             default:
-                throw new DatabaseException('Unknown method:' . $method);
+                throw new Exception('Unknown method:' . $method);
                 break;
         }
     }
@@ -837,7 +837,7 @@ class MongoDBAdapter extends Adapter
                 return -1;
                 break;
             default:
-                throw new DatabaseException('Unknown sort order:' . $order);
+                throw new Exception('Unknown sort order:' . $order);
                 break;
         }
     }
@@ -1015,7 +1015,7 @@ class MongoDBAdapter extends Adapter
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new DatabaseException('Missing namespace');
+            throw new Exception('Missing namespace');
         }
 
         return $this->namespace;
@@ -1032,7 +1032,7 @@ class MongoDBAdapter extends Adapter
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new DatabaseException('Missing database');
+            throw new Exception('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -1050,7 +1050,7 @@ class MongoDBAdapter extends Adapter
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new DatabaseException('Missing namespace');
+            throw new Exception('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);

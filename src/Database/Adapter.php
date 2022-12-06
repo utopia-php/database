@@ -2,7 +2,7 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Exception as DatabaseException;
+use Exception;
 
 abstract class Adapter
 {
@@ -66,7 +66,7 @@ abstract class Adapter
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new DatabaseException('Missing namespace');
+            throw new Exception('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);
@@ -86,7 +86,7 @@ abstract class Adapter
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new DatabaseException('Missing namespace');
+            throw new Exception('Missing namespace');
         }
 
         return $this->namespace;
@@ -105,7 +105,7 @@ abstract class Adapter
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new DatabaseException('Missing database');
+            throw new Exception('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -125,7 +125,7 @@ abstract class Adapter
     public function getDefaultDatabase(): string
     {
         if (empty($this->defaultDatabase)) {
-            throw new DatabaseException('Missing default database');
+            throw new Exception('Missing default database');
         }
 
         return $this->defaultDatabase;
@@ -485,7 +485,7 @@ abstract class Adapter
         $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if (\is_null($value)) {
-            throw new DatabaseException('Failed to filter key');
+            throw new Exception('Failed to filter key');
         }
 
         return $value;

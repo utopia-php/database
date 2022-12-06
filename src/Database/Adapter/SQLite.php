@@ -368,7 +368,7 @@ class SQLite extends MySQL
             switch ($e->getCode()) {
                 case "1062":
                 case "23000":
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new Duplicate('Duplicated document');
                 break;
                 default:
                     throw $e;
@@ -555,7 +555,7 @@ class SQLite extends MySQL
                 switch ($e->getCode()) {
                     case '1062':
                     case '23000':
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                        throw new Duplicate('Duplicated document');
 
                     default:
                         throw $e;

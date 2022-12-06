@@ -3,7 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use  Utopia\Database\Exception as DatabaseException;
+
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -12,6 +12,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 use Utopia\Mongo\Exception as MongoException;
@@ -605,7 +606,7 @@ class Mongo extends Adapter
             $attribute = $orderAttributes[0];
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
+                throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
             $orderOperatorInternalId = Query::TYPE_GREATER;

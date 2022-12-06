@@ -1,36 +1,61 @@
 <?php
 
-namespace Utopia\Database\Adapter\Mongo;
+namespace Utopia\Database\Adapter;
 
 use Exception;
 
+use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
+use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
+use Utopia\Mongo\Exception as MongoException;
+use Utopia\Mongo\Client;
 
-class MongoDBAdapter extends Adapter
+class Mongo extends Adapter
 {
     /**
-     * @var MongoClient
+     * @var array
      */
-    protected $client;
+    private array $operators = [
+        '$eq',
+        '$ne',
+        '$lt',
+        '$lte',
+        '$gt',
+        '$gte',
+        '$in',
+        '$text',
+        '$search',
+        '$or',
+        '$and',
+        '$match',
+    ];
+
+    protected Client $client;
 
     /**
      * Constructor.
      *
      * Set connection and settings
      *
-     * @param MongoClient $client
+     * @param Client $client
      */
-    public function __construct(MongoClient $client)
+    public function __construct(Client $client)
     {
         $this->client = $client;
         $this->client->connect();
     }
 
+    /**
+     * @throws Exception
+     */
     public function hello()
     {
         return $this->getClient()->query(['hello' => 1]);
@@ -55,9 +80,6 @@ class MongoDBAdapter extends Adapter
      */
     public function create(string $name): bool
     {
-        $name = $this->filter($name);
-        $this->getClient()->selectDatabase($name);
-
         return true;
     }
 
@@ -66,15 +88,16 @@ class MongoDBAdapter extends Adapter
      * Optionally check if collection exists in database
      *
      * @param string $database database name
-     * @param string $collection (optional) collection name
+     * @param string|null $collection (optional) collection name
      *
      * @return bool
+     * @throws Exception
      */
     public function exists(string $database, string $collection = null): bool
     {
         if (!\is_null($collection)) {
-            $list = $this->flattenArray($this->list());
-
+            $collection = $this->getNamespace() . "_" . $collection;
+            $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
             foreach ($list as $obj) {
                 if (\is_object($obj)) {
                     if ($obj->name == $collection) {
@@ -86,13 +109,14 @@ class MongoDBAdapter extends Adapter
             return false;
         }
 
-        return !\is_null($this->getClient()->selectDatabase($database));
+        return !\is_null($this->getClient()->selectDatabase());
     }
 
     /**
      * List Databases
-     * 
+     *
      * @return array
+     * @throws Exception
      */
     public function list(): array
     {
@@ -111,6 +135,7 @@ class MongoDBAdapter extends Adapter
      * @param string $name
      *
      * @return bool
+     * @throws Exception
      */
     public function delete(string $name): bool
     {
@@ -132,9 +157,15 @@ class MongoDBAdapter extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
+        if($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+            return true;
+        }
+        
         // Returns an array/object with the result document
-        if (empty($this->getClient()->createCollection($id))) {
-            return false;
+        try {
+            $this->getClient()->createCollection($id);
+        } catch (MongoException $e) {
+            throw $e;
         }
 
         $indexesCreated = $this->client->createIndexes($id, [
@@ -169,13 +200,11 @@ class MongoDBAdapter extends Adapter
             // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
                 $key = [];
-                $name = $this->filter($index->getId());
                 $unique = false;
-
                 $attributes = $index->getAttribute('attributes');
                 $orders = $index->getAttribute('orders');
 
-                foreach ($attributes as $j => $attribute) {
+                foreach ($attributes as $attribute) {
                     $attribute = $this->filter($attribute);
 
                     switch ($index->getAttribute('type')) {
@@ -199,10 +228,10 @@ class MongoDBAdapter extends Adapter
                     $key[$attribute] = $order;
                 }
 
-                $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];
+                $newIndexes[$i] = ['key' => $key, 'name' => $this->filter($index->getId()), 'unique' => $unique];
             }
 
-            if (!$this->getClient()->createIndexes($name, $newIndexes)) {
+            if (!$this->getClient()->createIndexes($id, $newIndexes)) {
                 return false;
             }
         }
@@ -212,8 +241,9 @@ class MongoDBAdapter extends Adapter
 
     /**
      * List Collections
-     * 
+     *
      * @return array
+     * @throws Exception
      */
     public function listCollections(): array
     {
@@ -228,9 +258,10 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $id
      * @return bool
+     * @throws Exception
      */
     public function deleteCollection(string $id): bool
     {
@@ -241,13 +272,14 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
@@ -290,8 +322,9 @@ class MongoDBAdapter extends Adapter
      * @param array $attributes
      * @param array $lengths
      * @param array $orders
-     *
+     * @param array $collation
      * @return bool
+     * @throws Exception
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
     {
@@ -338,6 +371,7 @@ class MongoDBAdapter extends Adapter
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteIndex(string $collection, string $id): bool
     {
@@ -355,21 +389,22 @@ class MongoDBAdapter extends Adapter
      * @param string $id
      *
      * @return Document
+     * @throws Exception
      */
     public function getDocument(string $collection, string $id): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $result = $this->client->find($name, ['_uid' => $id])->cursor->firstBatch ?? [];
+        $result = $this->client->find($name, ['_uid' => $id], ['limit' => 1])->cursor->firstBatch;
 
         if (empty($result)) {
             return new Document([]);
         }
 
-        $result = $this->replaceChars('_', '$', $result[0]);
-        $newDoc = new Document($this->client->toArray($result));
+        $result = $this->replaceChars('_', '$', (array)$result[0]);
+        $result = $this->timeToDocument($result);
 
-        return $newDoc;
+        return new Document($result);
     }
 
     /**
@@ -379,16 +414,42 @@ class MongoDBAdapter extends Adapter
      * @param Document $document
      *
      * @return Document
+     * @throws Exception
      */
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $document->removeAttribute('$internalId');
 
-        $record =  $this->replaceChars('$', '_', $document->getArrayCopy());
+        $record = $this->replaceChars('$', '_', (array)$document);
+        $record = $this->timeToMongo($record);
 
-        $this->client->insert($name, $record);
+        $result = $this->insertDocument($name, $this->removeNullKeys($record));
+        $result = $this->replaceChars('_', '$', $result);
+        $result = $this->timeToDocument($result);
 
-        return $document;
+        return new Document($result);
+    }
+
+    /**
+     * @throws Duplicate
+     */
+    private function insertDocument(string $name, array $document): array
+    {
+        try {
+            $this->client->insert($name, $document);
+
+            $result = $this->client->find(
+                $name,
+                ['_uid' => $document['_uid']],
+                ['limit' => 1]
+            )->cursor->firstBatch[0];
+
+            return $this->client->toArray($result);
+
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
+        }
     }
 
     /**
@@ -398,22 +459,23 @@ class MongoDBAdapter extends Adapter
      * @param Document $document
      *
      * @return Document
+     * @throws Exception
      */
     public function updateDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $record = $document->getArrayCopy();
+        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->timeToMongo($record);
 
-        $this->client->update(
-            $name,
-            ['_uid' => $document->getId()],
-            $this->replaceChars('$', '_', $document->getArrayCopy()),
-        );
+        try {
+            $this->client->update($name, ['_uid' => $document->getId()], $record);
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
+        }
 
-        $newDoc = $document->getArrayCopy();
-        $newDoc = $this->replaceChars('_', '$', $newDoc);
-
-        return new Document($newDoc);
+        return $document;
     }
 
     /**
@@ -423,6 +485,7 @@ class MongoDBAdapter extends Adapter
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -478,41 +541,53 @@ class MongoDBAdapter extends Adapter
      * @param string $cursorDirection
      *
      * @return Document[]
+     * @throws Exception
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $filters = [];
+        $filters = $this->buildFilters($queries);
 
-        $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
+        // permissions
+        if (Authorization::$status) { // skip if authorization is disabled
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+        }
+
+        $options = ['limit' => $limit, 'skip' => $offset];
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
+
+            $attribute = $attribute == 'id' ? "_uid" : $attribute;
+            $attribute = $attribute == 'createdAt' ? "_createdAt" : $attribute;
+            $attribute = $attribute == 'updatedAt' ? "_updatedAt" : $attribute;
+
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
 
         $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
 
         // queries
-        $filters = $queries;
 
         if (empty($orderAttributes)) {
             // Allow after pagination without any order
             if (!empty($cursor)) {
                 $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-                ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
-                );
+                $orderOperator = $cursorDirection === Database::CURSOR_AFTER
+                    ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                    : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
                 $filters = array_merge($filters, [
                     '_id' => [
-                        $this->getQueryOperator($orderMethod) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
+                        $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$internalId'])
                     ]
                 ]);
             }
@@ -522,54 +597,62 @@ class MongoDBAdapter extends Adapter
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
+                
                 $options['sort']['_id'] = $this->getOrder($orderType);
             }
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
+
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
 
-            $orderMethodInternalId = Query::TYPE_GREATER;
+            $orderOperatorInternalId = Query::TYPE_GREATER;
             $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
-            $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
-            $filters = array_merge($filters, [
-                '$or' => [
-                    [
-                        $attribute => [
-                            $this->getQueryOperator($orderMethod) => $cursor[$attribute]
-                        ]
-                    ], [
-                        $attribute => $cursor[$attribute],
-                        '_id' => [
-                            $this->getQueryOperator($orderMethodInternalId) => new \MongoDB\BSON\ObjectId($cursor['$internalId'])
-                        ]
-
+            $filter_ext = [
+                [
+                    $attribute => [
+                        $this->getQueryOperator($orderOperator) => $cursor[$attribute]
                     ]
-                ]
-            ]);
+                ],
+                [
+                    $attribute => $cursor[$attribute],
+                    '_id' => [
+                        $this->getQueryOperator($orderOperatorInternalId) => new ObjectId($cursor['$internalId'])
+                    ]
+
+                ],
+            ];
+
+            $filters = [
+                '$and' => [$filters, ['$or' => $filter_ext]]
+            ];
         }
+
+        $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
+        $filters = $this->timeFilter($filters);
 
         /**
          * @var Document[]
          */
         $found = [];
-
-        $filters = $this->buildFilters($filters);
-
         $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
 
         foreach ($this->client->toArray($results) as $i => $result) {
-            $found[] = new Document($this->replaceChars('_', '$', $result));
+            $record = $this->replaceChars('_', '$', (array)$result);
+            $record = $this->timeToDocument($record);
+    
+            $found[] = new Document($record);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -580,19 +663,123 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * Count Documents
+     * Recursive function to convert timestamps/datetime
+     * to BSON based UTCDatetime type for Mongo filter/query.
+     *
+     * @param array $filters
+     *
+     * @return array
+     * @throws Exception
+     */
+    private function timeFilter(array $filters):array 
+    {
+        $results = $filters;
+
+        foreach($filters as $k=>$v) {
+            if($k === '_createdAt' || $k == '_updatedAt') {
+                if(is_array($v)) {
+                    foreach($v as $sk=>$sv) {
+                        $results[$k][$sk] = $this->toMongoDatetime($sv);
+                    }
+                } else {
+                    $results[$k] = $this->toMongoDatetime($v);
+                }
+            } else {
+                if(is_array($v)) {
+                    $results[$k] = $this->timeFilter($v);
+                }
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Converts timestamp base fields to Utopia\Document format.
      * 
+     * @param array $record
+     * 
+     * @return array
+     */
+    private function timeToDocument(array $record):array
+    {
+        $record['$createdAt'] = DateTime::format($record['$createdAt']->toDateTime());
+        $record['$updatedAt'] = DateTime::format($record['$updatedAt']->toDateTime());
+
+        return $record;
+    }
+
+    /**
+     * Converts timestamp base fields to Mongo\BSON datetime format.
+     *
+     * @param array $record
+     *
+     * @return array
+     * @throws Exception
+     */
+    private function timeToMongo(array $record):array
+    {
+        $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
+        $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+
+        return $record;
+    }
+
+    /**
+     * Converts timestamp to Mongo\BSON datetime format.
+     *
+     * @param string $dt
+     * @return UTCDateTime
+     * @throws Exception
+     */
+    private function toMongoDatetime(string $dt): UTCDateTime {
+        $dt = new \DateTime($dt);
+
+        return new UTCDateTime($dt->getTimestamp() . $dt->format('v'));
+    }
+
+    /**
+     * Recursive function to replace chars in array keys, while
+     * skipping any that are explicitly excluded.
+     *
+     * @param array $array
+     * @param string $from
+     * @param string $to
+     * @param array $exclude
+     * @return array
+     */
+    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []):array {
+        $result = [];
+
+        foreach ($array as $key => $value) {
+            if (false == in_array($key, $exclude)) {
+                $key = str_replace($from, $to, $key);
+            }
+            
+            $result[$key] = is_array($value) 
+                ? $this->recursiveReplace($value, $from, $to, $exclude) 
+                : $value;
+        }
+
+        return $result;
+    }
+
+
+    /**
+     * Count Documents
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $max
      *
      * @return int
+     * @throws Exception
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
-
+        // todo $collection is not used?
         $filters = [];
 
         $options = [];
@@ -605,10 +792,9 @@ class MongoDBAdapter extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
-        $roles = \implode('|', Authorization::getRoles());
-
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
+            $roles = \implode('|', Authorization::getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -617,29 +803,29 @@ class MongoDBAdapter extends Adapter
 
     /**
      * Sum an attribute
-     * 
+     *
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
      * @param int $max
      *
      * @return int|float
+     * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
-
+// todo $collection is not used?
         $filters = [];
 
         // queries
         $filters = $this->buildFilters($queries);
 
-        $roles = \implode('|', Authorization::getRoles());
-
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
-            $filters['_permissions']['$in'] = [new Regex("read\(.*(?:{$roles}).*\)", 'i')];
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -649,7 +835,7 @@ class MongoDBAdapter extends Adapter
         // then we set $limit (if $max is provided) so that only $max documents will be passed to the next stage
         // finally we use $group stage to sum the provided attribute that matches the given filters and max
         // We pass the $pipeline to the aggregate method, which returns a cursor, then we get
-        // the array of results from the cursor and we return the total sum of the attribute
+        // the array of results from the cursor, and we return the total sum of the attribute
         $pipeline = [];
         if (!empty($filters)) {
             $pipeline[] = ['$match' => $filters];
@@ -668,11 +854,12 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * @return MongoClient
+     * @param string|null $name
+     * @return Client
      *
      * @throws Exception
      */
-    protected function getDatabase(string $name = null): MongoClient
+    protected function getDatabase(string $name = null): Client
     {
         $database = is_null($name) ? $this->getDefaultDatabase() : $name;
         $selected = $this->getClient()->selectDatabase($database);
@@ -681,11 +868,11 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * @return MongoClient
+     * @return Client
      *
      * @throws Exception
      */
-    protected function getClient()
+    protected function getClient(): Client
     {
         return $this->client;
     }
@@ -699,42 +886,50 @@ class MongoDBAdapter extends Adapter
      * @param array $array
      * @return array
      */
-    protected function replaceChars($from, $to, $array): array
+    protected function replaceChars(string $from, string $to, array $array): array
     {
-        $array = (array) $array;
+        $filter = [
+            'permissions',
+            'createdAt',
+            'updatedAt',
+            'collection'
+        ];
 
-        if (array_key_exists($from . 'permissions', $array))
-            $array[$to . 'permissions'] = $array[$from . 'permissions'];
+        $result = [];
+        foreach ($array as $k => $v) {
+            $clean_key = str_replace($from, "", $k);
+            $key = in_array($clean_key, $filter) ? str_replace($from, $to, $k) : $k;
 
-        if (array_key_exists($from . 'createdAt', $array))
-            $array[$to . 'createdAt'] = $array[$from . 'createdAt'];
+            $result[$key] = is_array($v) ? $this->replaceChars($from, $to, $v) : $v;
+        }
 
-        if (array_key_exists($from . 'updatedAt', $array))
-            $array[$to . 'updatedAt'] = $array[$from . 'updatedAt'];
+        if ($from === '_') {
+            if (array_key_exists('_id', $array)) {
+                $result['$internalId'] = (string)$array['_id'];
 
-        if (array_key_exists($from . 'collection', $array))
-            $array[$to . 'collection'] = $array[$from . 'collection'];
+                unset($result['_id']);
+            }
 
-        if ($from === '_' && array_key_exists($from . 'uid', $array)) { // convert internal to document ID
-            $array[$to . 'id'] = $array[$from . 'uid'];
-            $array[$to . 'internalId'] = (string) $array[$from . 'id'];
+            if (array_key_exists('_uid', $array)) {
+                $result['$id'] = $array['_uid'];
 
-            unset($array[$from . 'uid']);
-        } else if ($from === '$' && array_key_exists($from . 'id', $array)) { // convert document to internal ID
-            $array[$to . 'uid'] = $array[$from . 'id'];
+                unset($result['_uid']);
+            }
+        } else if ($from === '$') {
+            if (array_key_exists('$id', $array)) {
+                $result['_uid'] = $array['$id'];
 
-            if (array_key_exists($from . 'internalId', $array)) {
-                unset($array[$from . 'internalId']); // remove unnecessary internal ID
+                unset($result['$id']);
+            }
+
+            if (array_key_exists('$internalId', $array)) {
+                $result['_id'] = new ObjectId($array['$internalId']);
+
+                unset($result['$internalId']);
             }
         }
 
-        unset($array[$from . 'id']);
-        unset($array[$from . 'permissions']);
-        unset($array[$from . 'collection']);
-        unset($array[$from . 'createdAt']);
-        unset($array[$from . 'updatedAt']);
-
-        return $array;
+        return $result;        
     }
 
     /**
@@ -752,11 +947,19 @@ class MongoDBAdapter extends Adapter
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
+
+            if ($query->getAttribute() === '$createdAt') {
+                $query->setAttribute('_createdAt');
+            }
+
+            if ($query->getAttribute() === '$updatedAt') {
+                $query->setAttribute('_updatedAt');
+            }
+            
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
-            // TODO@kodumbeats Mongo recommends different methods depending on operator - implement the rest
             if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
@@ -775,44 +978,36 @@ class MongoDBAdapter extends Adapter
     /**
      * Get Query Operator
      * 
-     * @param string $method
+     * @param string $operator
      * 
      * @return string
      */
-    protected function getQueryOperator(string $method): string
+    protected function getQueryOperator(string $operator): string
     {
-        switch ($method) {
+        switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '$eq';
-                break;
 
             case Query::TYPE_NOTEQUAL:
                 return '$ne';
-                break;
 
             case Query::TYPE_LESSER:
                 return '$lt';
-                break;
 
             case Query::TYPE_LESSEREQUAL:
                 return '$lte';
-                break;
 
             case Query::TYPE_GREATER:
                 return '$gt';
-                break;
 
             case Query::TYPE_GREATEREQUAL:
                 return '$gte';
-                break;
 
             case Query::TYPE_CONTAINS:
                 return '$in';
-                break;
 
             case Query::TYPE_SEARCH:
                 return '$search';
-                break;
 
             default:
                 throw new Exception('Unknown method:' . $method);
@@ -826,6 +1021,7 @@ class MongoDBAdapter extends Adapter
      * @param string $order
      *
      * @return int
+     * @throws Exception
      */
     protected function getOrder(string $order): int
     {
@@ -1080,16 +1276,23 @@ class MongoDBAdapter extends Adapter
         return $new_array;
     }
 
-    /**
-     * Get list of keywords that cannot be used
-     * 
-     * Mongo does not have concept of reserverd words.
-     *  We put something here just to run the rests for this adapter too
-     * 
-     * @return string[]
-     */
-    public function getKeywords(): array
+    protected function removeNullKeys(array|Document $target): array
     {
-        return ['mongodb'];
+        $target = is_array($target) ? $target : $target->getArrayCopy();
+        $cleaned = [];
+
+        foreach ($target as $key => $value) {
+            if (\is_null($value)) continue;
+
+            $cleaned[$key] = $value;
+        }
+
+
+        return $cleaned;
+    }
+
+    public function getKeywords(): array 
+    {
+        return [];
     }
 }

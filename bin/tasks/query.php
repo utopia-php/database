@@ -147,21 +147,33 @@ function runQueries(Database $database, int $limit)
 {
     $results = [];
     // Recent travel blogs
-    $query = ['greaterThan("created", "2010-01-01 05:00:00")', 'equal("genre","travel")'];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::greaterThan('created', '2010-01-01 05:00:00'),
+        Query::equal('genre', ['travel']),
+        Query::limit($limit)
+    ], $database);
 
     // Favorite genres
-    $query = ["equal('genre', ['fashion', 'finance', 'sports'])"];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::equal('genre', ['fashion', 'finance', 'sports']),
+        Query::limit($limit)
+    ], $database);
 
     // Popular posts
-    $query = ["greaterThan('views', 100000)"];
 
-    $results[] = runQuery($query, $database, $limit);
+    $results[] = runQuery([
+        Query::greaterThan('views', 100000),
+        Query::limit($limit)
+    ], $database);
 
     // Fulltext search
-    $query = ["search('text', 'Alice')"];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::search('text', 'Alice'),
+        Query::limit($limit)
+    ], $database);
 
     return $results;
 }
@@ -174,15 +186,16 @@ function addRoles($faker, $count)
     return count(Authorization::getRoles());
 }
 
-function runQuery(array $query, Database $database, int $limit)
+function runQuery(array $query, Database $database)
 {
-    Console::log('Running query: [' . implode(', ', $query) . ']');
-    $query = array_map(function ($q) {
-        return Query::parse($q);
-    }, $query);
+    $info = array_map(function ($q){
+        /** @var $q Query */
+        return $q->getAttribute() . ' : ' . $q->getMethod() . ' : ' . implode(',',$q->getValues());
+    } , $query);
 
+    Console::log('Running query: [' . implode(', ', $info) . ']');
     $start = microtime(true);
-    $database->find('articles', array_merge($query, [Query::limit($limit)]));
+    $database->find('articles', $query);
     $time = microtime(true) - $start;
     Console::success("{$time} s");
     return $time;

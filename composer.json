@@ -13,8 +13,9 @@
     },
     "require": {
         "php": ">=8.0",
-        "utopia-php/cache": "0.8.*",
         "utopia-php/framework": "0.*.*",
+        "utopia-php/cache": "0.8.*",
+        "utopia-php/mongo": "0.0.2",
         "ext-pdo": "*"
     },
     "require-dev": {
@@ -26,7 +27,6 @@
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",
         "vimeo/psalm": "4.0.1"
-
     },
     "suggests": {
         "ext-mongodb": "Needed to support MongoDB Database Adapter",

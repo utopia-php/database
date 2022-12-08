@@ -520,6 +520,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
+
         if (!$collection->isEmpty() && $id !== self::METADATA){
             throw new DuplicateException('Collection ' . $id . ' Exists!');
         }
@@ -1379,7 +1380,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws StructureException
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {

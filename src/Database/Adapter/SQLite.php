@@ -376,7 +376,7 @@ class SQLite extends MySQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw new Exception('Failed to commit transaction');
         }
 
         return $document;
@@ -564,7 +564,7 @@ class SQLite extends MySQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw new Exception('Failed to commit transaction');
         }
 
         return $document;
@@ -608,7 +608,7 @@ class SQLite extends MySQL
                 return 'UNIQUE INDEX';
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type . '. Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, {Database::INDEX_UNIQUE}');
         }
     }
 
@@ -639,7 +639,7 @@ class SQLite extends MySQL
                 break;
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type . '. Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, {Database::INDEX_UNIQUE}');
                 break;
         }
 

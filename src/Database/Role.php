@@ -2,8 +2,6 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Exception as DatabaseException;
-
 class Role
 {
     public function __construct(
@@ -60,7 +58,7 @@ class Role
      *
      * @param string $role
      * @return Role
-     * @throws DatabaseException
+     * @throws \Exception
      */
     public static function parse(string $role): Role
     {
@@ -81,14 +79,14 @@ class Role
         if (!$hasIdentifier && $hasDimension) {
             $dimensionParts = \explode('/', $role);
             if (\count($dimensionParts) !== 2) {
-                throw new DatabaseException('Only one dimension can be provided.');
+                throw new \Exception('Only one dimension can be provided.');
             }
 
             $role = $dimensionParts[0];
             $dimension = $dimensionParts[1];
 
             if (empty($dimension)) {
-                throw new DatabaseException('Dimension must not be empty.');
+                throw new \Exception('Dimension must not be empty.');
             }
             return new Role($role, '', $dimension);
         }
@@ -96,14 +94,14 @@ class Role
         // Has both identifier and dimension
         $dimensionParts = \explode('/', $roleParts[1]);
         if (\count($dimensionParts) !== 2) {
-            throw new DatabaseException('Only one dimension can be provided.');
+            throw new \Exception('Only one dimension can be provided.');
         }
 
         $identifier = $dimensionParts[0];
         $dimension = $dimensionParts[1];
 
         if (empty($dimension)) {
-            throw new DatabaseException('Dimension must not be empty.');
+            throw new \Exception('Dimension must not be empty.');
         }
         return new Role($role, $identifier, $dimension);
     }

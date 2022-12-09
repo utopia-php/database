@@ -2,8 +2,6 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Exception as DatabaseException;
-
 class Permission
 {
     private Role $role;
@@ -74,14 +72,14 @@ class Permission
      *
      * @param string $permission
      * @return Permission
-     * @throws DatabaseException
+     * @throws \Exception
      */
     public static function parse(string $permission): Permission
     {
         $permissionParts = \explode('("', $permission);
 
         if (\count($permissionParts) !== 2) {
-            throw new DatabaseException('Invalid permission string format: "' . $permission . '".');
+            throw new \Exception('Invalid permission string format: "' . $permission . '".');
         }
 
         $permission = $permissionParts[0];
@@ -104,14 +102,14 @@ class Permission
         if (!$hasIdentifier && $hasDimension) {
             $dimensionParts = \explode('/', $fullRole);
             if (\count($dimensionParts) !== 2) {
-                throw new DatabaseException('Only one dimension can be provided.');
+                throw new \Exception('Only one dimension can be provided.');
             }
 
             $role = $dimensionParts[0];
             $dimension = $dimensionParts[1];
 
             if (empty($dimension)) {
-                throw new DatabaseException('Dimension must not be empty.');
+                throw new \Exception('Dimension must not be empty.');
             }
             return new Permission($permission, $role, '', $dimension);
         }
@@ -119,14 +117,14 @@ class Permission
         // Has both identifier and dimension
         $dimensionParts = \explode('/', $roleParts[1]);
         if (\count($dimensionParts) !== 2) {
-            throw new DatabaseException('Only one dimension can be provided.');
+            throw new \Exception('Only one dimension can be provided.');
         }
 
         $identifier = $dimensionParts[0];
         $dimension = $dimensionParts[1];
 
         if (empty($dimension)) {
-            throw new DatabaseException('Dimension must not be empty.');
+            throw new \Exception('Dimension must not be empty.');
         }
 
         return new Permission($permission, $role, $identifier, $dimension);
@@ -253,4 +251,3 @@ class Permission
         return $permission->toString();
     }
 }
-

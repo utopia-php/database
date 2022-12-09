@@ -719,7 +719,7 @@ class Database
             case self::VAR_DATETIME:
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ${Database::VAR_STRING}, ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DATETIME}');
                 break;
         }
 
@@ -805,7 +805,7 @@ class Database
                 }
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ${Database::VAR_STRING}, ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DATETIME}');
                 break;
         }
     }
@@ -977,7 +977,7 @@ class Database
                     case self::VAR_DATETIME:
                         break;
                     default:
-                        throw new DatabaseException('Unknown attribute type: ' . $type);
+                        throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ${Database::VAR_STRING}, ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DATETIME}');
                         break;
                 }
 
@@ -1237,7 +1237,7 @@ class Database
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ${Database::INDEX_KEY}. ${Database::INDEX_UNIQUE}, ${Database::INDEX_FULLTEXT}');
                 break;
         }
 

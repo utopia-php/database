@@ -1010,7 +1010,7 @@ class Mongo extends Adapter
                 return '$search';
 
             default:
-                throw new DatabaseException('Unknown Operator:' . $operator);
+                throw new DatabaseException('Unknown Operator:' . $operator .'. Must be one of ${Query::TYPE_EQUAL}, ${Query::NOTEQUAL, ${Query::TYPE_LESSER}, ${Query::TYPE_LESSEREQUAL}, ${Query::TYPE_GREATER}, ${Query::TYPE_GREATEREQUAL}, ${Query::TYPE_CONTAINS}, {Query::TYPE_SEARCH}');
         }
     }
 
@@ -1027,7 +1027,7 @@ class Mongo extends Adapter
         return match ($order) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
-            default => throw new DatabaseException('Unknown sort order:' . $order),
+            default => throw new DatabaseException('Unknown sort order:' . $order .'. Must be one of ${Database::ORDER_ASC}, ${Database::ORDER_DESC}'),
         };
     }
 

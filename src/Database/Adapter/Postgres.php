@@ -397,6 +397,19 @@ class Postgres extends MariaDB
             $attributeIndex++;
         }
 
+        $permissions = [];
+        foreach (Database::PERMISSIONS as $type) {
+            foreach ($document->getPermissionsByType($type) as $permission) {
+                $permission = \str_replace('"', '', $permission);
+                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+            }
+        }
+
+        if (!empty($permissions)) {
+            $queryPermissions = "INSERT INTO {$this->getSQLTable($name.'_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+        }
+
         try {
             $stmt->execute();
         } catch (Throwable $e) {
@@ -551,35 +564,39 @@ class Postgres extends MariaDB
         $where = ['1=1'];
         $orders = [];
 
-        $orderAttributes = \array_map(function($orderAttribute) {
-            return $orderAttribute === '$id' ? '_uid' : $orderAttribute;
+        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
+            '$id' => ID::custom('_uid'),
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $orderAttribute
         }, $orderAttributes);
 
         $hasIdAttribute = false;
-        foreach($orderAttributes as $i => $attribute) {
-            if($attribute === '_uid') {
+        foreach ($orderAttributes as $i => $attribute) {
+            if ($attribute === '_uid') {
                 $hasIdAttribute = true;
             }
+
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
-                $orderOperatorInternalId = Query::TYPE_GREATER; // To preserve natural order
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderOperatorInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
                 $where[] = "(
-                        \"{$attribute}\" {$this->getSQLOperator($orderOperator)} :cursor 
+                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            \"{$attribute}\" = :cursor 
+                            table_main.{$attribute} = :cursor 
                             AND
-                            _id {$this->getSQLOperator($orderOperatorInternalId)} {$cursor['$internalId']}
+                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } else if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -592,22 +609,20 @@ class Postgres extends MariaDB
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderOperator = $cursorDirection === Database::CURSOR_AFTER ? (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
-            $where[] = "( _id {$this->getSQLOperator($orderOperator)} {$cursor['$internalId']} )";
+            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
-        if(!$hasIdAttribute) {
+        if (!$hasIdAttribute) {
             if (empty($orderAttributes) && !empty($orderTypes)) {
                 $order = $orderTypes[0] ?? Database::ORDER_ASC;
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
-    
+
                 $orders[] = 'table_main._id ' . $this->filter($order);
             } else {
                 $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
@@ -615,19 +630,29 @@ class Postgres extends MariaDB
         }
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
-        foreach($queries as $i => $query) {
-            if($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            }
+        foreach ($queries as $i => $query) {
+            $query->setAttribute(match ($query->getAttribute()) {
+                '$id' => ID::custom('_uid'),
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $query->getAttribute()
+            });
+
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
                 $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getMethod(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '('.$condition.')';
+            $where[] = empty($condition) ? '' : '(' . $condition . ')';
         }
 
-        $order = 'ORDER BY '.implode(', ', $orders);
+        $order = 'ORDER BY ' . implode(', ', $orders);
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+        }
+
+        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
         $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
             WHERE {$permissions} AND ".implode(' AND ', $where)."
@@ -635,15 +660,23 @@ class Postgres extends MariaDB
             LIMIT :limit OFFSET :offset;
         ");
 
-        foreach($queries as $i => $query) {
-            if($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+        foreach ($queries as $i => $query) {
+            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            foreach ($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
+
+            $attribute = match ($attribute) {
+                '_uid' => '$id',
+                '_createdAt' => '$createdAt',
+                '_updatedAt' => '$updatedAt',
+                default => $attribute
+            };
+
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new Exception("Order attribute '{$attribute}' is empty.");
             }
@@ -656,21 +689,24 @@ class Postgres extends MariaDB
 
         $results = $stmt->fetchAll();
 
-        foreach ($results as &$value) {
-            $value['$id'] = $value['_uid'];
-            $value['$internalId'] = strval($value['_id']);
-            $value['$read'] = (isset($value['_read'])) ? $this->encodeArray($value['_read']) : [];
-            $value['$write'] = (isset($value['_write'])) ? $this->encodeArray($value['_write']) : [];
-            unset($value['_uid']);
-            unset($value['_id']);
-            unset($value['_read']);
-            unset($value['_write']);
+        foreach ($results as $key => $value) {
+            $results[$key]['$id'] = $value['_uid'];
+            $results[$key]['$internalId'] = $value['_id'];
+            $results[$key]['$createdAt'] = $value['_createdAt'];
+            $results[$key]['$updatedAt'] = $value['_updatedAt'];
+            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
 
-            $value = new Document($value);
+            unset($results[$key]['_uid']);
+            unset($results[$key]['_id']);
+            unset($results[$key]['_createdAt']);
+            unset($results[$key]['_updatedAt']);
+            unset($results[$key]['_permissions']);
+
+            $results[$key] = new Document($results[$key]);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results); //TODO: check impact on array_reverse
+            $results = array_reverse($results);
         }
 
         return $results;
@@ -693,37 +729,50 @@ class Postgres extends MariaDB
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
+        $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
+        foreach ($queries as $i => $query) {
+            $query->setAttribute(match ($query->getAttribute()) {
+                '$id' => ID::custom('_uid'),
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $query->getAttribute()
+            });
 
-        foreach($queries as $i => $query) {
-            if($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getMethod(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '('.$condition.')';
+            $where[] = empty($condition) ? '' : '(' . $condition . ')';
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT COUNT(1) as sum FROM (SELECT 1 FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
-            {$limit}) table_count
-        ");
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+        }
 
-        foreach($queries as $i => $query) {
-            if($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sql = "SELECT COUNT(1) as sum
+            FROM
+                (
+                    SELECT 1
+                    FROM {$this->getSQLTable($name)} table_main
+                    " . $sqlWhere . "
+                    {$limit}
+                ) table_count
+        ";
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($queries as $i => $query) {
+            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            foreach ($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }
 
-        if($max !== 0) {
+        if ($max !== 0) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 

@@ -483,9 +483,12 @@ class MongoDBAdapter extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $filters = [];
+
 
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
+
+        // Todo: Set max time execution in milliseconds
+        $options['maxTimeMS'] = 99;
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
@@ -566,8 +569,10 @@ class MongoDBAdapter extends Adapter
 
         $filters = $this->buildFilters($filters);
 
-        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+        // todo: comment mock exceed time limit
+        $filters = array_merge($filters, ['$where' => "sleep(1000) || true"]);
 
+        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         foreach ($this->client->toArray($results) as $i => $result) {
             $found[] = new Document($this->replaceChars('_', '$', $result));
         }
@@ -1092,4 +1097,18 @@ class MongoDBAdapter extends Adapter
     {
         return ['mongodb'];
     }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param float $seconds
+     * @return string
+     */
+    protected function setTimeOut(string $sql, float $seconds): string
+    {
+        var_dump("add mongo timeout ");
+        $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
+        return sprintf($sql, $syntax, '');
+    }
+
 }

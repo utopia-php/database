@@ -2,9 +2,8 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Permissions;

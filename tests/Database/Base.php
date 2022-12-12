@@ -32,11 +32,6 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterName(): string;
 
-    /**
-     * @return int
-     */
-    abstract static protected function getAdapterRowLimit(): int;
-
     public function setUp(): void
     {
         Authorization::setRole('any');
@@ -87,10 +82,9 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) { //todo: implement in mongo + postgres
-            $this->assertNotEmpty($document->getInternalId());
-            $this->assertNotNull($document->getInternalId());
-        }
+        $this->assertNotEmpty($document->getInternalId());
+        $this->assertNotNull($document->getInternalId());
+
     }
 
     /**
@@ -1122,9 +1116,7 @@ abstract class Base extends TestCase
             Query::greaterThan('price', 25.98),
         ]);
 
-        // TODO@kodumbeats hacky way to pass mariadb tests
-        // Remove when query method contains() is supported
-        if (static::getAdapterName() === "mongodb") {
+        if($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             /**
              * Array contains condition
              */
@@ -1160,7 +1152,9 @@ abstract class Base extends TestCase
             /**
              * Fulltext search (wildcard)
              */
+
             // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
+            // todo: I think this needs a changes? how do we distinguish between regular full text and wildcard?
             if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
                 $documents = static::getDatabase()->find('movies', [
                     Query::search('name', 'cap'),
@@ -2409,7 +2403,7 @@ abstract class Base extends TestCase
      */
     public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
-        if (static::getAdapterRowLimit() > 0) {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
             $attributes = [];
 
             // Load the collection up to the limit
@@ -2485,7 +2479,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {
-        if (static::getAdapterRowLimit() > 0) {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit()> 0) {
             $collection = static::getDatabase()->getCollection("widthLimit{$key}");
 
             // create same attribute in testExceptionWidthLimit
@@ -2993,9 +2987,7 @@ abstract class Base extends TestCase
             Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
         ]);
 
-        if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) { // todo: fix in mongo
-            $this->assertEquals(1, count($documents));
-        }
+        $this->assertEquals(1, count($documents));
 
         $this->expectException(StructureException::class);
         static::getDatabase()->createDocument('datetime', new Document([
@@ -3130,12 +3122,6 @@ abstract class Base extends TestCase
 
     public function testWritePermissions()
     {
-        // Skip for mongo, permissions seem to have bug there
-        if (!(in_array(static::getAdapterName(), ['mysql', 'mariadb']))) {
-            $this->assertTrue(true);
-            return;
-        }
-
         $database = static::getDatabase();
 
         $database->createCollection('animals');

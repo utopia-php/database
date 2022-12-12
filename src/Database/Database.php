@@ -555,10 +555,10 @@ class Database
             }
 
             if (
-                $this->adapter->getRowLimit() > 0 &&
-                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit()
+                $this->adapter->getDocumentSizeLimit() > 0 &&
+                $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Row width limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
         }
 
@@ -694,8 +694,8 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
@@ -991,8 +991,8 @@ class Database
                 $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
                 if (
-                    $this->adapter->getRowLimit() > 0 &&
-                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getRowLimit()
+                    $this->adapter->getDocumentSizeLimit() > 0 &&
+                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
                 ) {
                     throw new LimitException('Row width limit reached. Cannot create new attribute.');
                 }
@@ -1030,8 +1030,8 @@ class Database
         }
 
         if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
             return false;

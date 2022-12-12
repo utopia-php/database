@@ -419,6 +419,13 @@ abstract class Adapter
     abstract public function getSupportForCasting(): bool;
 
     /**
+     * Does the adapter handle array Contains?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForQueryContains(): bool;
+
+    /**
      * Get current attribute count from collection document
      * 
      * @param Document $collection
@@ -454,7 +461,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public static function getRowLimit(): int;
+    abstract public static function getDocumentSizeLimit(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.

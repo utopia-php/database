@@ -1229,7 +1229,7 @@ class MariaDB extends Adapter
      *
      * @return int
      */
-    public static function getRowLimit(): int
+    public static function getDocumentSizeLimit(): int
     {
         return 65535;
     }
@@ -1611,6 +1611,16 @@ class MariaDB extends Adapter
      * @return bool
      */
     public function getSupportForCasting(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter handle Query Array Contains?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryContains(): bool
     {
         return false;
     }

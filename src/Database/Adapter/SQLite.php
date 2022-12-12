@@ -24,7 +24,7 @@ use Utopia\Database\Exception\Duplicate;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends MySQL
+class SQLite extends MariaDB
 {
     /**
      * Check if Database exists

@@ -10,7 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;

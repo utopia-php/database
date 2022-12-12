@@ -3,8 +3,7 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Role;
 
 class RoleTest extends TestCase

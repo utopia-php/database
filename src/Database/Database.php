@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Exception;
 use Throwable;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;

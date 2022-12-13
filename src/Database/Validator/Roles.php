@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Role;
+use Utopia\Database\Helpers\Role;
 use Utopia\Validator;
 
 class Roles extends Validator

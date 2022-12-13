@@ -142,7 +142,7 @@ class Postgres extends MariaDB
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("DROP TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$id}\";")
+            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
             ->execute();
     }
 
@@ -168,7 +168,7 @@ class Postgres extends MariaDB
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 ADD COLUMN \"{$id}\" {$type};")
             ->execute();
     }
@@ -188,7 +188,7 @@ class Postgres extends MariaDB
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 DROP COLUMN \"{$id}\";")
             ->execute();
     }
@@ -210,7 +210,7 @@ class Postgres extends MariaDB
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$collection}\" RENAME COLUMN
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN
                 {$this->getSQLQuote()}{$old}{$this->getSQLQuote()}
                 TO
                 {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
@@ -301,49 +301,6 @@ class Postgres extends MariaDB
             ->execute();
     }
 
-    // /**
-    //  * Get Document
-    //  *
-    //  * @param string $collection
-    //  * @param string $id
-    //  * @return Document
-    //  */
-    // public function getDocument(string $collection, string $id): Document
-    // {
-    //     $name = $this->filter($collection);
-
-    //     $stmt = $this->getPDO()->prepare("
-    //         SELECT * 
-    //         FROM {$this->getSQLTable($name)}
-    //         WHERE _uid = :_uid;
-    //     ");
-
-    //     $stmt->bindValue(':_uid', $id);
-
-    //     $stmt->execute();
-
-    //     /** @var array $document */
-    //     $document = $stmt->fetch();
-        
-    //     if (empty($document)) {
-    //         return new Document([]);
-    //     }
-
-    //     $document['$id'] = $document['_uid'];
-    //     $document['$internalId'] = $document['_id'];
-    //     $document['$createdAt'] = $document['_createdAt'];
-    //     $document['$updatedAt'] = $document['_updatedAt'];
-    //     $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
-
-    //     unset($document['_id']);
-    //     unset($document['_uid']);
-    //     unset($document['_createdAt']);
-    //     unset($document['_updatedAt']);
-    //     unset($document['_permissions']);
-
-    //     return new Document($document);
-    // }
-
      /**
      * Create Document
      *
@@ -372,15 +329,14 @@ class Postgres extends MariaDB
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columnNames .= "\"{$column}\", ";
-            $columns .= ':' . $bindKey . ', ';
+            $columns .= "{$this->getSQLQuote()}{$column}{$this->getSQLQuote()}, ";
+            $columnNames .= ':' . $bindKey . ', ';
             $bindIndex++;
         }
 
         $stmt = $this->getPDO()
-            ->prepare("INSERT INTO \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-                ({$columnNames}\"_uid\")
-                VALUES ({$columns}:_uid)");
+            ->prepare("INSERT INTO {$this->getSQLTable($name)}
+                ({$columns}\"_uid\") VALUES ({$columnNames}:_uid)");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -405,13 +361,21 @@ class Postgres extends MariaDB
             }
         }
 
+        
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLTable($name.'_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $queryPermissions = "INSERT INTO {$this->getSQLTable($name.'_perms')}
+            (_type, _permission, _document) VALUES " . implode(', ', $permissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
 
         try {
             $stmt->execute();
+
+            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+
+            if (isset($stmtPermissions)) {
+                $stmtPermissions->execute();
+            }
         } catch (Throwable $e) {
             switch ($e->getCode()) {
                 case 1062:
@@ -447,27 +411,134 @@ class Postgres extends MariaDB
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
         $name = $this->filter($collection);
         $columns = '';
+
+        /**
+         * Get current permissions from the database
+         */
+        $permissionsStmt = $this->getPDO()->prepare("
+                SELECT _type, _permission
+                FROM {$this->getSQLTable($name.'_perms')} p
+                WHERE p._document = :_uid
+        ");
+        $permissionsStmt->bindValue(':_uid', $document->getId());
+        $permissionsStmt->execute();
+        $permissions = $permissionsStmt->fetchAll();
+
+        $initial = [];
+        foreach (Database::PERMISSIONS as $type) {
+            $initial[$type] = [];
+        }
+
+        $permissions = array_reduce($permissions, function (array $carry, array $item) {
+            $carry[$item['_type']][] = $item['_permission'];
+
+            return $carry;
+        }, $initial);
 
         $this->getPDO()->beginTransaction();
 
         /**
+         * Get removed Permissions
+         */
+        $removals = [];
+        foreach(Database::PERMISSIONS as $type) {
+            $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
+            if (!empty($diff)) {
+                $removals[$type] = $diff;
+            }
+        }
+
+        /**
+         * Get added Permissions
+         */
+        $additions = [];
+        foreach(Database::PERMISSIONS as $type) {
+            $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
+            if (!empty($diff)) {
+                $additions[$type] = $diff;
+            }
+        }
+
+        /**
+         * Query to remove permissions
+         */
+        $removeQuery = '';
+        if (!empty($removals)) {
+            $removeQuery = 'AND (';
+            foreach ($removals as $type => $permissions) {
+                $removeQuery .= "(
+                    _type = '{$type}'
+                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                )";
+                if ($type !== \array_key_last($removals)) {
+                    $removeQuery .= ' OR ';
+                }
+            }
+        }
+        if (!empty($removeQuery)) {
+            $removeQuery .= ')';
+            $stmtRemovePermissions = $this->getPDO()
+                ->prepare("
+                DELETE
+                FROM {$this->getSQLTable($name.'_perms')}
+                WHERE
+                    _document = :_uid
+                    {$removeQuery}
+            ");
+            $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+
+            foreach ($removals as $type => $permissions) {
+                foreach ($permissions as $i => $permission) {
+                    $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
+                }
+            }
+        }
+
+        /**
+         * Query to add permissions
+         */
+        if (!empty($additions)) {
+            $values = [];
+            foreach ($additions as $type => $permissions) {
+                foreach ($permissions as $i => $_) {
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                }
+            }
+
+            $stmtAddPermissions = $this->getPDO()
+                ->prepare(
+                    "INSERT INTO {$this->getSQLTable($name.'_perms')}
+                    (_document, _type, _permission) VALUES" . \implode(', ', $values)
+                );
+
+            $stmtAddPermissions->bindValue(":_uid", $document->getId());
+            foreach ($additions as $type => $permissions) {
+                foreach ($permissions as $i => $permission) {
+                    $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
+                }
+            }
+        }
+
+        /**
          * Update Attributes
          */
+
         $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) { // Parse statement
+        foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columns .= "\"{$column}\"=:{$bindKey}, ";
+            $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
             $bindIndex++;
         }
 
         $stmt = $this->getPDO()
-            ->prepare("UPDATE \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
+            ->prepare("UPDATE {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_uid WHERE _uid = :_uid");
 
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $stmt->bindValue(':_uid', $document->getId());
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
@@ -482,29 +553,34 @@ class Postgres extends MariaDB
             $attributeIndex++;
         }
 
-        if(!empty($attributes)) {
+        if (!empty($attributes)) {
             try {
                 $stmt->execute();
-            } catch (Throwable $e) {
+                if (isset($stmtRemovePermissions)) {
+                    $stmtRemovePermissions->execute();
+                }
+                if (isset($stmtAddPermissions)) {
+                    $stmtAddPermissions->execute();
+                }
+            } catch (PDOException $e) {
+                $this->getPDO()->rollBack();
                 switch ($e->getCode()) {
                     case 1062:
-                    case 23505:
-                        $this->getPDO()->rollBack();
-                        throw new Duplicate('Duplicated document: '.$e->getMessage());
-                        break;
+                    case 23000:
+                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
                     default:
                         throw $e;
-                        break;
                 }
             }
         }
 
-        if(!$this->getPDO()->commit()) {
+        if (!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
 
         return $document;
+
     }
 
     /**
@@ -522,17 +598,22 @@ class Postgres extends MariaDB
         $this->getPDO()->beginTransaction();
 
         $stmt = $this->getPDO()
-            ->prepare("DELETE FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"
-                WHERE _uid = :_uid");
+            ->prepare("DELETE FROM {$this->getSQLTable($name)} WHERE _uid = :_uid");
 
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
-        if(!$stmt->execute()) {
+        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name.'_perms')} WHERE _document = :_uid");
+        $stmtPermissions->bindValue(':_uid', $id);
+
+        try {
+            $stmt->execute() || throw new Exception('Failed to delete document');
+            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+        } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
-            throw new Exception('Failed to clean document');
+            throw new Exception($th->getMessage());
         }
 
-        if(!$this->getPDO()->commit()) {
+        if (!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
 
@@ -654,7 +735,7 @@ class Postgres extends MariaDB
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
+        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getSQLTable($name)} as table_main
             WHERE {$permissions} AND ".implode(' AND ', $where)."
             {$order}
             LIMIT :limit OFFSET :offset;
@@ -742,7 +823,7 @@ class Postgres extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main.\"' . $query->getAttribute().'\"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -817,10 +898,14 @@ class Postgres extends MariaDB
             $where[] = implode(' OR ', $conditions);
         }
 
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+        }
+
         $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum
             FROM (
                 SELECT {$attribute}
-                FROM \"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\" table_main
+                FROM {$this->getSQLTable($name)} table_main
                 WHERE {$permissions} AND ".implode(' AND ', $where)."
                 {$limit}
             ) table_count");

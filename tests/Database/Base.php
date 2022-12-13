@@ -15,7 +15,9 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\DatetimeValidator;
 use Utopia\Database\Validator\Structure;
+use Utopia\Validator;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
 
@@ -32,9 +34,12 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterName(): string;
 
+    static public Validator $dateValidator;
+
     public function setUp(): void
     {
         Authorization::setRole('any');
+        self::$dateValidator = new DatetimeValidator();
     }
 
     public function tearDown(): void
@@ -2980,8 +2985,8 @@ abstract class Base extends TestCase
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
         $this->assertEquals(NULL, $document->getAttribute('date2'));
-        $this->assertEquals(true, DateTime::isValid($document->getAttribute('date')));
-        $this->assertEquals(false, DateTime::isValid($document->getAttribute('date2')));
+        $this->assertEquals(true, self::$dateValidator->isValid($document->getAttribute('date')));
+        $this->assertEquals(false, self::$dateValidator->isValid($document->getAttribute('date2')));
 
         $documents = static::getDatabase()->find('datetime', [
             Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),

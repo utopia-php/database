@@ -1113,6 +1113,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildIndex(): bool
+    {
+        return false;
+    }
+
+    /**
      * Does the adapter handle Query Array Contains?
      *
      * @return bool

@@ -412,6 +412,14 @@ abstract class Adapter
     abstract public function getSupportForFulltextIndex(): bool;
 
     /**
+     * Is fulltext wildcard supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForFulltextWildIndex(): bool;
+
+
+    /**
      * Does the adapter handle casting?
      * 
      * @return bool

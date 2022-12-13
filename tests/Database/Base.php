@@ -1154,8 +1154,9 @@ abstract class Base extends TestCase
              */
 
             // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
-            // todo: I think this needs a changes? how do we distinguish between regular full text and wildcard?
-            if (in_array(static::getAdapterName(), ['mysql', 'mariadb'])) {
+            // TODO: I think this needs a changes? how do we distinguish between regular full text and wildcard?
+
+            if($this->getDatabase()->getAdapter()->getSupportForFulltextWildIndex()) {
                 $documents = static::getDatabase()->find('movies', [
                     Query::search('name', 'cap'),
                 ]);

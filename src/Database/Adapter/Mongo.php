@@ -1117,7 +1117,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function getSupportForFulltextWildIndex(): bool
+    public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
     }

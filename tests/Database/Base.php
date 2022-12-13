@@ -1156,7 +1156,7 @@ abstract class Base extends TestCase
             // TODO: Looks like the MongoDB implementation is a bit more complex, skipping that for now.
             // TODO: I think this needs a changes? how do we distinguish between regular full text and wildcard?
 
-            if($this->getDatabase()->getAdapter()->getSupportForFulltextWildIndex()) {
+            if($this->getDatabase()->getAdapter()->getSupportForFulltextWildCardIndex()) {
                 $documents = static::getDatabase()->find('movies', [
                     Query::search('name', 'cap'),
                 ]);

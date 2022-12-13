@@ -594,7 +594,7 @@ class SQLite extends MariaDB
      *
      * @return bool
      */
-    public function getSupportForFulltextWildIndex(): bool
+    public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
     }

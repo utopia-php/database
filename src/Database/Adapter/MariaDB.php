@@ -1182,7 +1182,7 @@ class MariaDB extends Adapter
      *
      * @return bool
      */
-    public function getSupportForFulltextWildIndex(): bool
+    public function getSupportForFulltextWildcardIndex(): bool
     {
         return true;
     }

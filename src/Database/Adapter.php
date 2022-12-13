@@ -416,7 +416,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function getSupportForFulltextWildIndex(): bool;
+    abstract public function getSupportForFulltextWildcardIndex(): bool;
 
 
     /**

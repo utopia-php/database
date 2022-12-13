@@ -1157,6 +1157,8 @@ abstract class Base extends TestCase
 
             $this->assertEquals(4, count($documents));
         }
+
+        $this->assertEquals(true, true); // Test must do an assertion
     }
 
     public function testFindFulltext(){
@@ -1188,6 +1190,9 @@ abstract class Base extends TestCase
                 $this->assertEquals(2, count($documents));
             }
         }
+
+        $this->assertEquals(true, true); // Test must do an assertion
+
     }
 
     public function testFindMultipleConditions(){

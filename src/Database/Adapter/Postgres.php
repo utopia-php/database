@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\ID;
 
 class Postgres extends MariaDB
 {
@@ -673,9 +674,9 @@ class Postgres extends MariaDB
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
+                        table_main.\"{$attribute}\" {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            table_main.{$attribute} = :cursor 
+                            table_main.\"{$attribute}\" = :cursor 
                             AND
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )

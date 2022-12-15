@@ -894,10 +894,9 @@ class MariaDB extends Adapter
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
         $sql = "
-            SELECT table_main.*
+            SELECT DISTINCT _uid, table_main.*
             FROM {$this->getSQLTable($name)} as table_main
             " . $sqlWhere . "
-            GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
         ";

@@ -567,8 +567,8 @@ class Postgres extends MariaDB
                 $this->getPDO()->rollBack();
                 switch ($e->getCode()) {
                     case 1062:
-                    case 23000:
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    case 23505:
+                        throw new Duplicate('Duplicated document: '.$e->getMessage());
 
                     default:
                         throw $e;
@@ -736,11 +736,15 @@ class Postgres extends MariaDB
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $stmt = $this->getPDO()->prepare("SELECT table_main.* FROM {$this->getSQLTable($name)} as table_main
-            WHERE {$permissions} AND ".implode(' AND ', $where)."
+        $sql = "
+            SELECT DISTINCT _uid, table_main.*
+            FROM {$this->getSQLTable($name)} as table_main
+            " . $sqlWhere . "
             {$order}
             LIMIT :limit OFFSET :offset;
-        ");
+        ";
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
@@ -824,7 +828,7 @@ class Postgres extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.\"' . $query->getAttribute().'\"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute().'"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);

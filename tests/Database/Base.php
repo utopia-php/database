@@ -34,12 +34,9 @@ abstract class Base extends TestCase
      */
     abstract static protected function getAdapterName(): string;
 
-    static public Validator $dateValidator;
-
     public function setUp(): void
     {
         Authorization::setRole('any');
-        self::$dateValidator = new DatetimeValidator();
     }
 
     public function tearDown(): void
@@ -3050,9 +3047,10 @@ abstract class Base extends TestCase
         $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
+        $dateValidator = new DatetimeValidator();
         $this->assertEquals(NULL, $document->getAttribute('date2'));
-        $this->assertEquals(true, self::$dateValidator->isValid($document->getAttribute('date')));
-        $this->assertEquals(false, self::$dateValidator->isValid($document->getAttribute('date2')));
+        $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
+        $this->assertEquals(false, $dateValidator->isValid($document->getAttribute('date2')));
 
         $documents = static::getDatabase()->find('datetime', [
             Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),

@@ -1312,7 +1312,7 @@ class MariaDB extends Adapter
                     $total += 19; // 2022-06-26 14:46:24
                     break;
                 default:
-                    throw new DatabaseException('Unknown Type. Must be one of ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DOCUMENT}, ${Database::VAR_DATETIME}');
+                    throw new DatabaseException("Unknown Type. Must be one of ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DOCUMENT}, ${Database::VAR_DATETIME}");
                     break;
             }
         }
@@ -1667,7 +1667,7 @@ class MariaDB extends Adapter
                 return 'DATETIME(3)';
                 break;
             default:
-                throw new DatabaseException('Unknown Type. Must be one of ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DOCUMENT}, ${Database::VAR_DATETIME}');
+                throw new DatabaseException("Unknown Type. Must be one of ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DOCUMENT}, ${Database::VAR_DATETIME}");
         }
     }
 
@@ -1732,7 +1732,7 @@ class MariaDB extends Adapter
                 return '>=';
 
             default:
-                throw new DatabaseException('Unknown method:' . $method . '. Must be one of ${Query::TYPE_EQUAL}, ${Query::TYPE_NOTEQUAL}, ${Query::TYPE_LESSER}, ${Query::TYPE_LESSEREQUAL}, ${Query::TYPE_GREATER}, ${Query::TYPE_GREATEREQUAL}');
+                throw new DatabaseException('Unknown method:' . $method . ". Must be one of ${Query::TYPE_EQUAL}, ${Query::TYPE_NOTEQUAL}, ${Query::TYPE_LESSER}, ${Query::TYPE_LESSEREQUAL}, ${Query::TYPE_GREATER}, ${Query::TYPE_GREATEREQUAL}");
                 break;
         }
     }
@@ -1758,7 +1758,7 @@ class MariaDB extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type . '. Must be one of ${DATABASE::INDEX_KEY}, ${DATABASE::INDEX_ARRAY}, ${DATABASE::INDEX_UNIQUE}, ${DATABASE::INDEX_FULLTEXT}');
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${DATABASE::INDEX_KEY}, ${DATABASE::INDEX_ARRAY}, ${DATABASE::INDEX_UNIQUE}, ${DATABASE::INDEX_FULLTEXT}");
         }
     }
 
@@ -1789,7 +1789,7 @@ class MariaDB extends Adapter
                 break;
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type . '. Must be one of ${DATABASE::INDEX_KEY}, ${DATABASE::INDEX_ARRAY}, ${DATABASE::INDEX_UNIQUE}, ${DATABASE::INDEX_FULLTEXT}');
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${DATABASE::INDEX_KEY}, ${DATABASE::INDEX_ARRAY}, ${DATABASE::INDEX_UNIQUE}, ${DATABASE::INDEX_FULLTEXT}");
                 break;
         }
 

@@ -608,7 +608,7 @@ class SQLite extends MySQL
                 return 'UNIQUE INDEX';
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type . '. Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, {Database::INDEX_UNIQUE}');
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, {Database::INDEX_UNIQUE}");
         }
     }
 
@@ -639,7 +639,7 @@ class SQLite extends MySQL
                 break;
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type . '. Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, {Database::INDEX_UNIQUE}');
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, {Database::INDEX_UNIQUE}");
                 break;
         }
 

@@ -3,7 +3,6 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Role;
-use Exception;
 use Utopia\Validator;
 
 class Roles extends Validator
@@ -178,7 +177,7 @@ class Roles extends Validator
 
             try {
                 $role = Role::parse($role);
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 $this->message = $e->getMessage();
                 return false;
             }

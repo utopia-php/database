@@ -3013,7 +3013,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('datetime_fail');
 
         /** Test for FAILURE */
-        $this->expectException(\Exception::class);
+        $this->expectException(Exception::class);
         static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
     }
 

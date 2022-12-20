@@ -1758,7 +1758,7 @@ class MariaDB extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${DATABASE::INDEX_KEY}, ${DATABASE::INDEX_ARRAY}, ${DATABASE::INDEX_UNIQUE}, ${DATABASE::INDEX_FULLTEXT}");
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, ${Database::INDEX_UNIQUE}, ${Database::INDEX_FULLTEXT}");
         }
     }
 
@@ -1789,7 +1789,7 @@ class MariaDB extends Adapter
                 break;
 
             default:
-                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${DATABASE::INDEX_KEY}, ${DATABASE::INDEX_ARRAY}, ${DATABASE::INDEX_UNIQUE}, ${DATABASE::INDEX_FULLTEXT}");
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, ${Database::INDEX_UNIQUE}, ${Database::INDEX_FULLTEXT}");
                 break;
         }
 

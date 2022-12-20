@@ -1010,7 +1010,7 @@ class Mongo extends Adapter
                 return '$search';
 
             default:
-                throw new DatabaseException('Unknown Operator:' . $operator . ". Must be one of ${Query::TYPE_EQUAL}, ${Query::TYPE_NOTEQUAL}, ${Query::TYPE_LESSER}, ${Query::TYPE_LESSEREQUAL}, ${Query::TYPE_GREATER}, ${Query::TYPE_GREATEREQUAL}, ${Query::TYPE_CONTAINS}, {Query::TYPE_SEARCH}");
+                throw new DatabaseException('Unknown Operator:' . $operator . ". Must be one of ${Query::TYPE_EQUAL}, ${Query::TYPE_NOTEQUAL}, ${Query::TYPE_LESSER}, ${Query::TYPE_LESSEREQUAL}, ${Query::TYPE_GREATER}, ${Query::TYPE_GREATEREQUAL}, ${Query::TYPE_CONTAINS}, ${Query::TYPE_SEARCH}");
         }
     }
 

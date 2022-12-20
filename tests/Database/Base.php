@@ -44,7 +44,7 @@ abstract class Base extends TestCase
 
     public function tearDown(): void
     {
-        Authorization::reset();
+        Authorization::setDefaultStatus(true);
     }
 
     protected string $testDatabase = 'utopiaTests';

@@ -2,7 +2,7 @@
 
 namespace Utopia\Tests;
 
-use Utopia\Database\Exception;
+use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;

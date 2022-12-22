@@ -894,10 +894,10 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $this->getPDO()->prepare($this->setTimeoutSession(1/1000))->execute();
+        $this->getPDO()->prepare($this->setTimeoutSession(1))->execute();
         //$this->getPDO()->prepare($this->setTimeoutSession())->execute();
-        //$sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
         $sleep = '';
+        $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
 
         $sql = "%s SELECT %s table_main.* ".$sleep."
             FROM {$this->getSQLTable($name)} as table_main
@@ -915,7 +915,7 @@ class MariaDB extends Adapter
             LIMIT :offset, :limit;
         ";
 var_dump($sql);
-        $sql = $this->setTimeOut($sql, 1); // todo: set time!!!!
+        $sql = $this->setTimeOut($sql, 1/1000); // todo: set time!!!!
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
@@ -943,7 +943,14 @@ var_dump($sql);
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        }catch (PDOException $exception){
+            var_dump($exception->getMessage());
+            var_dump($exception->errorInfo[0]);
+            var_dump($exception->errorInfo[1]);
+            var_dump($exception->errorInfo[2]);
+        }
 
         $results = $stmt->fetchAll();
 

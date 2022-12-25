@@ -61,15 +61,24 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Returns Max Execution Time
-     * @param float|null $seconds
+     * Returns Max Execution Time Query
+     * @param int $milliseconds
      * @return string
      */
-    protected function setTimeoutSession(float $seconds = null): string
+    protected function setTimeoutSession(int $milliseconds): string
     {
-        $seconds = $seconds ? (int)($seconds * 1000) : 'default';
-        var_dump('SET SESSION max_execution_time = ' . $seconds);
-        return 'SET SESSION max_execution_time = ' . $seconds;
+        var_dump('SET SESSION max_execution_time = ' . $milliseconds);
+        return 'SET SESSION max_execution_time = ' . $milliseconds;
+    }
+
+    /**
+     * Resets Max Execution Time Query
+     * @return string
+     */
+    protected function resetTimeoutSession(): string
+    {
+        var_dump('SET SESSION max_execution_time = default');
+        return 'SET SESSION max_execution_time = default';
     }
 
 }

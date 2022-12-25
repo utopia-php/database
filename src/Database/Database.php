@@ -1509,7 +1509,7 @@ class Database
      * @param Query[] $queries
      *
      * @return Document[]
-     * @throws Exception
+     * @throws Exception|Throwable
      */
     public function find(string $collection, array $queries = []): array
     {

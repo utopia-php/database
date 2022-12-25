@@ -793,12 +793,11 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     *
+     * @param null $timeout
      * @return Document[]
      * @throws Exception
-     * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -894,8 +893,12 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $this->getPDO()->prepare($this->setTimeoutSession(1))->execute();
-        //$this->getPDO()->prepare($this->setTimeoutSession())->execute();
+        $timeout = 1000; // 1 second
+        if($timeout){
+            $this->getPDO()->prepare($this->setTimeoutSession($timeout))->execute();
+            //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
+        }
+
         $sleep = '';
         $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
 
@@ -972,6 +975,10 @@ var_dump($sql);
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
             $results = array_reverse($results);
+        }
+
+        if($timeout){
+            $this->getPDO()->prepare($this->resetTimeoutSession())->execute();
         }
 
         return $results;
@@ -1925,14 +1932,24 @@ var_dump($sql);
     }
 
     /**
-     * Returns Max Execution Time
-     * @param float|null $seconds
+     * Returns Max Execution Time Query
+     * @param int $milliseconds
      * @return string
      */
-    protected function setTimeoutSession(float $seconds = null): string
+    protected function setTimeoutSession(int $milliseconds): string
     {
-        $seconds = $seconds ?? 'default';
+        $seconds = $milliseconds / 1000;
         var_dump('SET SESSION max_statement_time = ' . $seconds);
         return 'SET SESSION max_statement_time = ' . $seconds;
+    }
+
+    /**
+     * Resets Max Execution Time Query
+     * @return string
+     */
+    protected function resetTimeoutSession(): string
+    {
+        var_dump('SET SESSION max_statement_time = default');
+        return 'SET SESSION max_statement_time = default';
     }
 }

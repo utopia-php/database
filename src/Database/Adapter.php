@@ -321,17 +321,17 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param Query[] $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     *
+     * @param null| $timeout // In milliseconds
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array;
 
     /**
      * Sum an attribute

@@ -3,7 +3,9 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use PDOException;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Timeout;
 
 class MySQL extends MariaDB
 {
@@ -79,6 +81,16 @@ class MySQL extends MariaDB
     {
         var_dump('SET SESSION max_execution_time = default');
         return 'SET SESSION max_execution_time = default';
+    }
+
+    /**
+     * @throws Timeout
+     */
+    protected function checkTimeoutException(PDOException|Exception $e): void
+    {
+        if($e->getCode() === 'HY000' && $e->errorInfo && $e->errorInfo[1] == 3024){
+            Throw new Timeout($e);
+        }
     }
 
 }

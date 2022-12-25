@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -946,13 +947,12 @@ var_dump($sql);
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
         try {
             $stmt->execute();
-        }catch (PDOException $exception){
-            var_dump($exception->getMessage());
-            var_dump($exception->errorInfo[0]);
-            var_dump($exception->errorInfo[1]);
-            var_dump($exception->errorInfo[2]);
+        } catch (PDOException $e){
+            $this->checkTimeoutException($e);
+            throw $e;
         }
 
         $results = $stmt->fetchAll();
@@ -1951,5 +1951,16 @@ var_dump($sql);
     {
         var_dump('SET SESSION max_statement_time = default');
         return 'SET SESSION max_statement_time = default';
+    }
+
+
+    /**
+     * @throws Timeout
+     */
+    protected function checkTimeoutException(PDOException|Exception $e): void
+    {
+        if($e->getCode() === '70100' && $e->errorInfo && $e->errorInfo[1] == 1969){
+            Throw new Timeout($e);
+        }
     }
 }

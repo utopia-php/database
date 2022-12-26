@@ -7,6 +7,7 @@ use Exception;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
 
@@ -850,5 +851,24 @@ class SQLite extends MariaDB
     {
         // todo: implement this
         return sprintf($sql, '', '');
+    }
+
+    /**
+     * Resets Max Execution Time Query
+     * @param PDO $pdo
+     */
+    protected function resetTimeoutSession(PDO $pdo)
+    {
+
+    }
+
+    /**
+     * Force a query to throw a timeout exception
+     *
+     * @throws Timeout
+     */
+    public function forceTimeoutException(): void
+    {
+        throw new Timeout('sqlite');
     }
 }

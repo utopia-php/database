@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use PDO;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Timeout;
@@ -63,32 +64,33 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Returns Max Execution Time Query
+     * Set Max Execution Time Query
+     * @param PDO $pdo
      * @param int $milliseconds
-     * @return string
      */
-    protected function setTimeoutSession(int $milliseconds): string
+    protected function setTimeoutSession(PDO $pdo, int $milliseconds)
     {
         var_dump('SET SESSION max_execution_time = ' . $milliseconds);
-        return 'SET SESSION max_execution_time = ' . $milliseconds;
+        $pdo->prepare('SET SESSION max_execution_time = ' . $milliseconds);
     }
 
     /**
      * Resets Max Execution Time Query
-     * @return string
+     * @param PDO $pdo
      */
-    protected function resetTimeoutSession(): string
+    protected function resetTimeoutSession(PDO $pdo)
     {
         var_dump('SET SESSION max_execution_time = default');
-        return 'SET SESSION max_execution_time = default';
+        $pdo->prepare('SET SESSION max_execution_time = default')->execute();
     }
 
     /**
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException|Exception $e): void
+    protected function checkTimeoutException(PDOException $e, PDO $pdo): void
     {
         if($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024){
+            $this->resetTimeoutSession($pdo);  // todo: Does this make sense?
             Throw new Timeout($e->getMessage());
         }
     }

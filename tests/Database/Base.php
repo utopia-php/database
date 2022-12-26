@@ -1798,7 +1798,7 @@ abstract class Base extends TestCase
      */
     public function testTimeout()
     {
-        //$this->expectException(Timeout::class);
+        $this->expectException(Timeout::class);
         static::getDatabase()->getAdapter()->forceTimeoutException();
     }
 

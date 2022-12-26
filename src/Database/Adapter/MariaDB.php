@@ -895,6 +895,7 @@ class MariaDB extends Adapter
 
         $timeout = 1000; // 1 second
         if($timeout){
+            $this->setTimeoutSession($this->getPDO(), $timeout);
             $this->getPDO()->prepare($this->setTimeoutSession($timeout))->execute();
             //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
         }
@@ -950,7 +951,7 @@ var_dump($sql);
         try {
             $stmt->execute();
         } catch (PDOException $e){
-            $this->checkTimeoutException($e);
+            $this->checkTimeoutException($e, $this->pdo);
             throw $e;
         }
 
@@ -977,7 +978,7 @@ var_dump($sql);
         }
 
         if($timeout){
-            $this->getPDO()->prepare($this->resetTimeoutSession())->execute();
+            $this->resetTimeoutSession($this->getPDO());
         }
 
         return $results;
@@ -1932,33 +1933,33 @@ var_dump($sql);
 
     /**
      * Returns Max Execution Time Query
+     * @param PDO $pdo
      * @param int $milliseconds
-     * @return string
      */
-    protected function setTimeoutSession(int $milliseconds): string
+    protected function setTimeoutSession(PDO $pdo, int $milliseconds)
     {
         $seconds = $milliseconds / 1000;
         var_dump('SET SESSION max_statement_time = ' . $seconds);
-        return 'SET SESSION max_statement_time = ' . $seconds;
+        $pdo->prepare('SET SESSION max_statement_time = ' . $seconds)->execute();
     }
 
     /**
      * Resets Max Execution Time Query
-     * @return string
+     * @param PDO $pdo
      */
-    protected function resetTimeoutSession(): string
+    protected function resetTimeoutSession(PDO $pdo)
     {
         var_dump('SET SESSION max_statement_time = default');
-        return 'SET SESSION max_statement_time = default';
+        $pdo->prepare('SET SESSION max_statement_time = default')->execute();
     }
 
     /**
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException $e): void
+    protected function checkTimeoutException(PDOException $e, PDO $pdo): void
     {
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
-            $this->resetTimeoutSession();  // todo: Does this make sense?
+            $this->resetTimeoutSession($pdo);  // todo: Does this make sense?
             Throw new Timeout($e->getMessage());
         }
     }

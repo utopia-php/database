@@ -1117,10 +1117,6 @@ class MongoDBAdapter extends Adapter
      */
     public function forceTimeoutException(): void
     {
-
-        var_dump("ininiiininnini------------ininininininin");
-        die;
-
         try {
             $this->client->find(
                 'movies',
@@ -1128,7 +1124,6 @@ class MongoDBAdapter extends Adapter
                 ['maxTimeMS'=> 1]
             )->cursor->firstBatch ?? [];
         } catch (Exception $e){
-
             $this->checkTimeoutException($e);
         }
 

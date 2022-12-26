@@ -1980,8 +1980,6 @@ var_dump($sql);
             $this->getPDO()->prepare($this->resetTimeoutSession())->execute();
             $this->checkTimeoutException($e);
         }
-
-
     }
 
 }

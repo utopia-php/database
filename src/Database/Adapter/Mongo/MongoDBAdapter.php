@@ -8,6 +8,7 @@ use MongoDB\BSON\Regex;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 
@@ -476,10 +477,11 @@ class MongoDBAdapter extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     *
+     * @param null $timeout
      * @return Document[]
+     * @throws Exception
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1099,16 +1101,37 @@ class MongoDBAdapter extends Adapter
     }
 
     /**
-     * Returns Max Execution Time
-     * @param string $sql
-     * @param float $seconds
-     * @return string
+     * @throws Timeout
      */
-    protected function setTimeOut(string $sql, float $seconds): string
+    protected function checkTimeoutException(Exception $e): void
     {
-        var_dump("add mongo timeout ");
-        $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
-        return sprintf($sql, $syntax, '');
+        if($e->getCode() === 50){
+            Throw new Timeout($e->getMessage());
+        }
+    }
+
+    /**
+     * Force a query to throw a timeout exception
+     *
+     * @throws Timeout
+     */
+    public function forceTimeoutException(): void
+    {
+
+        var_dump("ininiiininnini------------ininininininin");
+        die;
+
+        try {
+            $this->client->find(
+                'movies',
+                ['$where' => 'sleep(1000) || true'],
+                ['maxTimeMS'=> 1]
+            )->cursor->firstBatch ?? [];
+        } catch (Exception $e){
+
+            $this->checkTimeoutException($e);
+        }
+
     }
 
 }

@@ -93,6 +93,8 @@ class Database
     const EVENT_INDEX_CREATE = 'index_create';
     const EVENT_INDEX_DELETE = 'index_delete';
 
+    const TIMEOUT_MS = 1000;
+
 
     /**
      * @var Adapter
@@ -1541,6 +1543,7 @@ class Database
             $orderTypes,
             $cursor ?? [],
             $cursorDirection ?? Database::CURSOR_AFTER,
+            self::TIMEOUT_MS
         );
 
         foreach ($results as &$node) {

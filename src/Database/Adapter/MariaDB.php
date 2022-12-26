@@ -1958,8 +1958,8 @@ var_dump($sql);
      */
     protected function checkTimeoutException(PDOException $e): void
     {
-        if($e->getCode() === '70100' && $e->errorInfo[1] === 1969){
-            Throw new Timeout($e);
+        if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
+            Throw new Timeout($e->getMessage());
         }
     }
 }

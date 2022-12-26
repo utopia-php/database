@@ -54,7 +54,7 @@ services:
       - MYSQL_ROOT_PASSWORD=password
   
   mongo:
-    image: mongo:4.4
+    image: mongo:5.0
     container_name: utopia-mongo
     networks:
       - database

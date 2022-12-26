@@ -1466,6 +1466,7 @@ abstract class Base extends TestCase
             Query::orderDesc('year'),
             Query::cursorAfter($movies[1])
         ]);
+
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
@@ -2960,8 +2961,10 @@ abstract class Base extends TestCase
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
+        
         static::getDatabase()->createCollection('created_at');
     }
 
@@ -3239,8 +3242,11 @@ abstract class Base extends TestCase
                 Database::EVENT_COLLECTION_DELETE,
                 Database::EVENT_DATABASE_DELETE,
             ];
+
             $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
-                $this->assertEquals(array_shift($events), $event);
+                $shifted = array_shift($events);
+
+                $this->assertEquals($shifted, $event);
             });
     
             if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
@@ -3249,6 +3255,7 @@ abstract class Base extends TestCase
             } else {
                 array_shift($events);
             }
+
             $database->list();
     
             $database->setDefaultDatabase($this->testDatabase);
@@ -3261,6 +3268,7 @@ abstract class Base extends TestCase
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $indexId1 = 'index2_' . uniqid();
             $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+            
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
                 'attr1' => 10,
@@ -3270,6 +3278,7 @@ abstract class Base extends TestCase
                     Permission::read(Role::any()),
                 ],
             ]));
+
             $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
             $database->getDocument($collectionId, 'doc1');
             $database->find($collectionId);

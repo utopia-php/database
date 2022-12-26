@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Utopia\Database\Exception\Timeout;
 
 abstract class Adapter
 {
@@ -490,4 +491,13 @@ abstract class Adapter
 
         return $value;
     }
+
+
+    /**
+     * Force a query to throw a timeout exception
+     *
+     * @throws Timeout
+     */
+    abstract public function forceTimeoutException(): void;
+
 }

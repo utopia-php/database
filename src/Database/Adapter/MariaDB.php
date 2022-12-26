@@ -901,7 +901,7 @@ class MariaDB extends Adapter
         }
 
         $sleep = '';
-        $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
+       // $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
 
         $sql = "%s SELECT %s table_main.* ".$sleep."
             FROM {$this->getSQLTable($name)} as table_main
@@ -1959,7 +1959,29 @@ var_dump($sql);
     protected function checkTimeoutException(PDOException $e): void
     {
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
+            $this->resetTimeoutSession();  // todo: Does this make sense?
             Throw new Timeout($e->getMessage());
         }
     }
+
+    /**
+     * Force a query to throw a timeout exception
+     *
+     * @throws Timeout
+     */
+    public function forceTimeoutException(): void
+    {
+        $timeout = 1000; // 1 second
+        $this->getPDO()->prepare($this->setTimeoutSession($timeout))->execute();
+        try {
+            $stmt = $this->getPDO()->prepare("select sleep(2) from {$this->getSQLTable('movies')}");
+            $stmt->execute();
+        } catch (PDOException $e){
+            $this->getPDO()->prepare($this->resetTimeoutSession())->execute();
+            $this->checkTimeoutException($e);
+        }
+
+
+    }
+
 }

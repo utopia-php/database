@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\ID;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
@@ -1789,6 +1790,15 @@ abstract class Base extends TestCase
             Query::offset(0),
             Query::cursorAfter($document)
         ]);
+    }
+
+    /**
+     * @throws Timeout
+     */
+    public function testTimeout()
+    {
+        $this->expectException(Timeout::class);
+        static::getDatabase()->getAdapter()->forceTimeoutException();
     }
 
     /**

@@ -1953,13 +1953,12 @@ var_dump($sql);
         return 'SET SESSION max_statement_time = default';
     }
 
-
     /**
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException|Exception $e): void
+    protected function checkTimeoutException(PDOException $e): void
     {
-        if($e->getCode() === '70100' && $e->errorInfo && $e->errorInfo[1] == 1969){
+        if($e->getCode() === '70100' && $e->errorInfo[1] === 1969){
             Throw new Timeout($e);
         }
     }

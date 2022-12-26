@@ -490,12 +490,4 @@ abstract class Adapter
 
         return $value;
     }
-
-    /**
-     * Check if to throw a timeout Exception
-     *
-     * @param Exception $e
-     * @return void
-     */
-    abstract protected function checkTimeoutException(Exception $e):void;
 }

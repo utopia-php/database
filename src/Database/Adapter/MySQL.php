@@ -88,7 +88,7 @@ class MySQL extends MariaDB
      */
     protected function checkTimeoutException(PDOException|Exception $e): void
     {
-        if($e->getCode() === 'HY000' && $e->errorInfo && $e->errorInfo[1] == 3024){
+        if($e->getCode() === 'HY000' && $e->errorInfo[1] === 3024){
             Throw new Timeout($e);
         }
     }

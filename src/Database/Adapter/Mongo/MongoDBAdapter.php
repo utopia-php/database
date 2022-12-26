@@ -484,7 +484,13 @@ class MongoDBAdapter extends Adapter
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+
+
         $options = ['sort' => [], 'limit' => $limit, 'skip' => $offset];
+
+        // Todo: Set max time execution in milliseconds
+      //  $options['maxTimeMS'] = 99;
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {

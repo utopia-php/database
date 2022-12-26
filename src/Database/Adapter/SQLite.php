@@ -854,12 +854,20 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Returns Max Execution Time Query
+     * @param PDO $pdo
+     * @param int $milliseconds
+     */
+    protected function setTimeoutSession(PDO $pdo, int $milliseconds)
+    {
+    }
+
+    /**
      * Resets Max Execution Time Query
      * @param PDO $pdo
      */
     protected function resetTimeoutSession(PDO $pdo)
     {
-
     }
 
     /**

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "18933262f1f8db14c6657ffe31f0f030",
+    "content-hash": "9dccdfdfd52b648727f6c56084df2436",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -380,16 +380,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "0.0.2",
+            "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "62f9a9c0201af91b6d0dd4f0aa8a335ec9b56a1e"
+                "reference": "3411d8d7320fb5e7a9f8203e7e67c169fd2865ac"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/62f9a9c0201af91b6d0dd4f0aa8a335ec9b56a1e",
-                "reference": "62f9a9c0201af91b6d0dd4f0aa8a335ec9b56a1e",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/3411d8d7320fb5e7a9f8203e7e67c169fd2865ac",
+                "reference": "3411d8d7320fb5e7a9f8203e7e67c169fd2865ac",
                 "shasum": ""
             },
             "require": {
@@ -404,6 +404,7 @@
                 "phpunit/phpunit": "^9.4",
                 "swoole/ide-helper": "4.8.0"
             },
+            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -434,9 +435,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/0.0.2"
+                "source": "https://github.com/utopia-php/mongo/tree/main"
             },
-            "time": "2022-11-08T11:58:46+00:00"
+            "time": "2022-12-25T10:13:30+00:00"
         }
     ],
     "packages-dev": [
@@ -4159,9 +4160,18 @@
             "time": "2015-12-17T08:42:14+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/mongo",
+            "version": "dev-main",
+            "alias": "0.0.2",
+            "alias_normalized": "0.0.2.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "utopia-php/mongo": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

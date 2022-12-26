@@ -896,7 +896,6 @@ class MariaDB extends Adapter
         $timeout = 1000; // 1 second
         if($timeout){
             $this->setTimeoutSession($this->getPDO(), $timeout);
-            $this->getPDO()->prepare($this->setTimeoutSession($timeout))->execute();
             //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
         }
 
@@ -1972,13 +1971,13 @@ var_dump($sql);
     public function forceTimeoutException(): void
     {
         $timeout = 1000; // 1 second
-        $this->getPDO()->prepare($this->setTimeoutSession($timeout))->execute();
+        $this->setTimeoutSession($this->getPDO(), $timeout);
         try {
             $stmt = $this->getPDO()->prepare("select sleep(2) from {$this->getSQLTable('movies')}");
             $stmt->execute();
         } catch (PDOException $e){
-            $this->getPDO()->prepare($this->resetTimeoutSession())->execute();
-            $this->checkTimeoutException($e);
+            $this->resetTimeoutSession($this->getPDO());
+            $this->checkTimeoutException($e, $this->getPDO());
         }
     }
 

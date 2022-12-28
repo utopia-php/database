@@ -58,7 +58,7 @@ class MariaDB extends Adapter
         $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("CREATE {$this->getSQLSchemaKeyword()} IF NOT EXISTS {$this->getSQLQuote()}{$name}{$this->getSQLQuote()} /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
+            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
             ->execute();
     }
 
@@ -131,8 +131,7 @@ class MariaDB extends Adapter
         $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("DROP {$this->getSQLSchemaKeyword()}
-                {$this->getSQLQuote()}{$name}{$this->getSQLQuote()};")
+            ->prepare("DROP DATABASE `{$name}`;")
             ->execute();
     }
 
@@ -293,7 +292,7 @@ class MariaDB extends Adapter
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                MODIFY {$this->getSQLQuote()}{$id}{$this->getSQLQuote()} {$type};")
+                MODIFY `{$id}` {$type};")
             ->execute();
     }
 
@@ -314,10 +313,7 @@ class MariaDB extends Adapter
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN
-                {$this->getSQLQuote()}{$old}{$this->getSQLQuote()}
-                TO
-                {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -338,10 +334,7 @@ class MariaDB extends Adapter
         $new = $this->filter($new);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX
-                {$this->getSQLQuote()}{$old}{$this->getSQLQuote()}
-                 TO
-                {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -502,7 +495,7 @@ class MariaDB extends Adapter
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columns .= "{$this->getSQLQuote()}{$column}{$this->getSQLQuote()}, ";
+            $columns .= "`{$column}`, ";
             $columnNames .= ':' . $bindKey . ', ';
             $bindIndex++;
         }
@@ -542,10 +535,6 @@ class MariaDB extends Adapter
         try {
             $stmt->execute();
 
-            // $statment = $this->getPDO()->prepare("select last_insert_id() as id");
-            // $statment->execute();
-            // $last = $statment->fetch();
-            // $document['$internalId'] = $last['id'];
             $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
 
             if (isset($stmtPermissions)) {
@@ -1850,22 +1839,6 @@ class MariaDB extends Adapter
     protected function getSQLTable(string $name): string
     {
         return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
-    }
-
-    /**
-     * Get SQL Quote
-     */
-    protected function getSQLQuote(): string
-    {
-        return "`";
-    }
-
-    /**
-     * Get SQL Schema Keyword
-     */
-    protected function getSQLSchemaKeyword(): string
-    {
-        return "DATABASE";
     }
 
     /**

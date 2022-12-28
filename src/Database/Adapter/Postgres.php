@@ -51,7 +51,7 @@ class Postgres extends MariaDB
     {
         $name = $this->filter($name);
         return $this->getPDO()
-            ->prepare("DROP {$this->getSQLSchemaKeyword()} {$this->getSQLQuote()}{$name}{$this->getSQLQuote()} CASCADE;")
+            ->prepare("DROP SCHEMA \"{$name}\" CASCADE;")
             ->execute();
     }
 
@@ -212,9 +212,9 @@ class Postgres extends MariaDB
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN
-                {$this->getSQLQuote()}{$old}{$this->getSQLQuote()}
+                \"{$old}\"
                 TO
-                {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
+                \"{$new}\";")
             ->execute();
     }
 
@@ -298,7 +298,7 @@ class Postgres extends MariaDB
 
         //
         return $this->getPDO()
-            ->prepare("ALTER INDEX \"{$schemaName}\".{$old} RENAME TO {$this->getSQLQuote()}{$new}{$this->getSQLQuote()};")
+            ->prepare("ALTER INDEX \"{$schemaName}\".{$old} RENAME TO \"{$new}\";")
             ->execute();
     }
 
@@ -330,7 +330,7 @@ class Postgres extends MariaDB
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columns .= "{$this->getSQLQuote()}{$column}{$this->getSQLQuote()}, ";
+            $columns .= "\"{$column}\", ";
             $columnNames .= ':' . $bindKey . ', ';
             $bindIndex++;
         }
@@ -1067,22 +1067,6 @@ class Postgres extends MariaDB
     protected function getSQLTable(string $name): string
     {
         return "\"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
-
-    /**
-     * Get SQL Quote
-     */
-    protected function getSQLQuote(): string
-    {
-        return '"';
-    }
-
-    /**
-     * Get SQL Schema Keyword
-     */
-    protected function getSQLSchemaKeyword(): string
-    {
-        return "SCHEMA";
     }
 
     /**

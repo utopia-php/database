@@ -1818,7 +1818,7 @@ class Database
     protected function encodeAttribute(string $name, $value, Document $document)
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception('Filter not found');
+            throw new Exception("Filter: {$name} not found");
         }
 
         try {

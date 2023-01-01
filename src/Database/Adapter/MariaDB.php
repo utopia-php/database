@@ -893,7 +893,7 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        $timeout = 1000; // 1 second
+        //$timeout = 1000; // 1 second
         if($timeout){
             $this->setTimeoutSession($this->getPDO(), $timeout);
             //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
@@ -917,8 +917,8 @@ class MariaDB extends Adapter
             {$order}
             LIMIT :offset, :limit;
         ";
-var_dump($sql);
-        $sql = $this->setTimeOut($sql, 1/1000); // todo: set time!!!!
+
+        //$sql = $this->setTimeOut($sql, 1/1000); // todo: set time!!!!
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {

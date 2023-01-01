@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Swoole\Database\PDOProxy;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Timeout;
 
@@ -65,10 +66,10 @@ class MySQL extends MariaDB
 
     /**
      * Set Max Execution Time Query
-     * @param PDO $pdo
+     * @param PDO|PDOProxy $pdo
      * @param int $milliseconds
      */
-    protected function setTimeoutSession(PDO $pdo, int $milliseconds)
+    protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
     {
         var_dump('SET SESSION max_execution_time = ' . $milliseconds);
         $pdo->prepare('SET SESSION max_execution_time = ' . $milliseconds);
@@ -76,18 +77,20 @@ class MySQL extends MariaDB
 
     /**
      * Resets Max Execution Time Query
-     * @param PDO $pdo
+     * @param PDO|PDOProxy $pdo
      */
-    protected function resetTimeoutSession(PDO $pdo)
+    protected function resetTimeoutSession(PDO|PDOProxy $pdo)
     {
         var_dump('SET SESSION max_execution_time = default');
         $pdo->prepare('SET SESSION max_execution_time = default')->execute();
     }
 
     /**
+     * @param PDOException $e
+     * @param PDO|PDOProxy $pdo
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException $e, PDO $pdo): void
+    protected function checkTimeoutException(PDOException $e, PDO|PDOProxy $pdo): void
     {
         if($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024){
             $this->resetTimeoutSession($pdo);  // todo: Does this make sense?

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
+use Swoole\Database\PDOProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -16,19 +17,16 @@ use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends Adapter
 {
-    /**
-     * @var PDO
-     */
-    protected $pdo;
+    protected PDO|PDOProxy $pdo;
 
     /**
      * Constructor.
      *
      * Set connection and settings
      *
-     * @param PDO $pdo
+     * @param PDO|PDOProxy $pdo
      */
-    public function __construct($pdo)
+    public function __construct(PDO|PDOProxy $pdo)
     {
         $this->pdo = $pdo;
     }
@@ -1896,9 +1894,9 @@ class MariaDB extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO
+     * @return PDO|PDOProxy
      */
-    protected function getPDO()
+    protected function getPDO():PDO|PDOProxy
     {
         return $this->pdo;
     }
@@ -1935,7 +1933,7 @@ class MariaDB extends Adapter
      * @param PDO $pdo
      * @param int $milliseconds
      */
-    protected function setTimeoutSession(PDO $pdo, int $milliseconds)
+    protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
     {
         $seconds = $milliseconds / 1000;
         var_dump('SET SESSION max_statement_time = ' . $seconds);
@@ -1946,7 +1944,7 @@ class MariaDB extends Adapter
      * Resets Max Execution Time Query
      * @param PDO $pdo
      */
-    protected function resetTimeoutSession(PDO $pdo)
+    protected function resetTimeoutSession(PDO|PDOProxy $pdo)
     {
         var_dump('SET SESSION max_statement_time = default');
         $pdo->prepare('SET SESSION max_statement_time = default')->execute();
@@ -1955,7 +1953,7 @@ class MariaDB extends Adapter
     /**
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException $e, PDO $pdo): void
+    protected function checkTimeoutException(PDOException $e, PDO|PDOProxy $pdo): void
     {
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
             $this->resetTimeoutSession($pdo);  // todo: Does this make sense?

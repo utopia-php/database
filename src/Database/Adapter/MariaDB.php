@@ -1930,7 +1930,7 @@ class MariaDB extends Adapter
 
     /**
      * Returns Max Execution Time Query
-     * @param PDO $pdo
+     * @param PDO|PDOProxy $pdo
      * @param int $milliseconds
      */
     protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
@@ -1942,7 +1942,7 @@ class MariaDB extends Adapter
 
     /**
      * Resets Max Execution Time Query
-     * @param PDO $pdo
+     * @param PDO|PDOProxy $pdo
      */
     protected function resetTimeoutSession(PDO|PDOProxy $pdo)
     {

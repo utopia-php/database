@@ -1896,9 +1896,9 @@ class MariaDB extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return PDO
      */
-    protected function getPDO(): PDO
+    protected function getPDO()
     {
         return $this->pdo;
     }

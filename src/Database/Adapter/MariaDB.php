@@ -892,10 +892,8 @@ class MariaDB extends Adapter
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
         //$timeout = 1000; // 1 second
-        var_dump('timeout = ' . $timeout);
 
         if($timeout){
-            var_dump('timeout = ' . $timeout);
             $this->setTimeoutSession($this->getPDO(), $timeout);
             //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
         }

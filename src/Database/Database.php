@@ -92,8 +92,6 @@ class Database
     const EVENT_INDEX_CREATE = 'index_create';
     const EVENT_INDEX_DELETE = 'index_delete';
 
-    const TIMEOUT_MS = 1000;
-
 
     /**
      * @var Adapter
@@ -1509,11 +1507,11 @@ class Database
      *
      * @param string $collection
      * @param Query[] $queries
-     *
+     * @param null $timeout
      * @return Document[]
-     * @throws Exception|Throwable
+     * @throws Throwable
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], $timeout = null): array
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
@@ -1543,7 +1541,7 @@ class Database
             $orderTypes,
             $cursor ?? [],
             $cursorDirection ?? Database::CURSOR_AFTER,
-            self::TIMEOUT_MS
+            $timeout
         );
 
         foreach ($results as &$node) {

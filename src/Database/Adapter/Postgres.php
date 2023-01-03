@@ -337,7 +337,7 @@ class Postgres extends MariaDB
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getSQLTable($name)}
-                ({$columns}\"_uid\") VALUES ({$columnNames}:_uid)");
+                ({$columns}\"_uid\") VALUES ({$columnNames}:_uid) RETURNING _id;");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -372,14 +372,13 @@ class Postgres extends MariaDB
         try {
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+            $document['$internalId'] = $stmt->fetch()["_id"];
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
         } catch (Throwable $e) {
             switch ($e->getCode()) {
-                case 1062:
                 case 23505:
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: '.$e->getMessage());
@@ -643,7 +642,7 @@ class Postgres extends MariaDB
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
+        $where = [];
         $orders = [];
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
@@ -886,7 +885,7 @@ class Postgres extends MariaDB
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
-        $where = ['1=1'];
+        $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required

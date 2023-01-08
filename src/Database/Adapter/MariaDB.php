@@ -791,11 +791,11 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     * @param null $timeout
+     * @param null $timeoutMS
      * @return Document[]
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeoutMS = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -891,10 +891,10 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        //$timeout = 1000; // 1 second
+        //$timeoutMS = 1000; // 1 second
 
-        if($timeout){
-            $this->setTimeoutSession($this->getPDO(), $timeout);
+        if($timeoutMS){
+            $this->setTimeoutSession($this->getPDO(), $timeoutMS);
             //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
         }
 
@@ -922,6 +922,7 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SLEEP) continue;
             foreach ($query->getValues() as $key => $value) {
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
@@ -975,7 +976,7 @@ class MariaDB extends Adapter
             $results = array_reverse($results);
         }
 
-        if($timeout){
+        if($timeoutMS){
             $this->resetTimeoutSession($this->getPDO());
         }
 
@@ -1709,6 +1710,9 @@ class MariaDB extends Adapter
     protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
     {
         switch ($method) {
+            case Query::TYPE_SLEEP:
+                return 'sleep('.$value.') = 0';
+
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1755,6 +1759,9 @@ class MariaDB extends Adapter
 
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
+
+            case Query::TYPE_SLEEP:
+                return '';
 
             default:
                 throw new Exception('Unknown method:' . $method);
@@ -1969,8 +1976,8 @@ class MariaDB extends Adapter
      */
     public function forceTimeoutException(): void
     {
-        $timeout = 1000; // 1 second
-        $this->setTimeoutSession($this->getPDO(), $timeout);
+        $timeoutMS = 1000; // 1 second
+        $this->setTimeoutSession($this->getPDO(), $timeoutMS);
         try {
             $stmt = $this->getPDO()->prepare("select sleep(2) from {$this->getSQLTable('movies')}");
             $stmt->execute();

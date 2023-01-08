@@ -15,6 +15,7 @@ class Query
     const TYPE_GREATEREQUAL = 'greaterThanEqual';
     const TYPE_CONTAINS = 'contains';
     const TYPE_SEARCH = 'search';
+    const TYPE_SLEEP = 'sleep';
 
     // Order methods
     const TYPE_ORDERDESC = 'orderDesc';
@@ -539,6 +540,11 @@ class Query
     public static function cursorBefore(Document $value): self
     {
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
+    }
+
+    public static function sleep(int $seconds): self
+    {
+        return new self(self::TYPE_SLEEP,'', values: [$seconds]);
     }
 
     /**

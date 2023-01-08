@@ -329,10 +329,10 @@ abstract class Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     * @param null| $timeout // In milliseconds
+     * @param null| $timeoutMS
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array;
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeoutMS = null): array;
 
     /**
      * Sum an attribute

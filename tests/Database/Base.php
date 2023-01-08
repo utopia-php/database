@@ -1793,10 +1793,14 @@ abstract class Base extends TestCase
         ]);
     }
 
-    /**
-     * @throws Timeout
-     */
-    public function testTimeout()
+
+    public function testTimeout1()
+    {
+        $this->expectException(Timeout::class);
+        static::getDatabase()->find('movies', [Query::sleep(1)], 1);
+    }
+
+    public function testTimeout2()
     {
         $this->expectException(Timeout::class);
         static::getDatabase()->getAdapter()->forceTimeoutException();

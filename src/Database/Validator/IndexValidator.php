@@ -48,7 +48,7 @@ class IndexValidator extends Validator
                 foreach ($indexAttributes as $indexAttribute) {
                     if($indexAttribute === $collectionAttribute['key']){
                         if($collectionAttribute['type'] !== Database::VAR_STRING){
-                            $this->message = "Attribute {$collectionAttribute['key']} cannot be part of a FULLTEXT index";
+                            $this->message = 'Attribute "'.$collectionAttribute['key'].'" cannot be part of a FULLTEXT index';
                             return false;
                         }
                     }

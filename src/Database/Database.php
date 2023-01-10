@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\IndexValidator;
 use Utopia\Database\Validator\Structure;

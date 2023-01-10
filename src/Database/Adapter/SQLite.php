@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Query;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -855,23 +856,6 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Returns Max Execution Time Query
-     * @param PDO|PDOProxy $pdo
-     * @param int $milliseconds
-     */
-    protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
-    {
-    }
-
-    /**
-     * Resets Max Execution Time Query
-     * @param PDO|PDOProxy $pdo
-     */
-    protected function resetTimeoutSession(PDO|PDOProxy $pdo)
-    {
-    }
-
-    /**
      * Force a query to throw a timeout exception
      *
      * @throws Timeout
@@ -879,5 +863,15 @@ class SQLite extends MariaDB
     public function forceTimeoutException(): void
     {
         throw new Timeout('sqlite');
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return false;
     }
 }

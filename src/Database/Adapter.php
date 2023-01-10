@@ -500,4 +500,11 @@ abstract class Adapter
      */
     abstract public function forceTimeoutException(): void;
 
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTimeouts(): bool;
+
 }

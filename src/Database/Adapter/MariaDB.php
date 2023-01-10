@@ -891,17 +891,12 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        //$timeoutMS = 1000; // 1 second
-
         if($timeoutMS){
             $this->setTimeoutSession($this->getPDO(), $timeoutMS);
-            //$this->getPDO()->prepare($this->resetTimeoutSession())->execute();
         }
 
-        $sleep = '';
-       // $sleep = ', sleep(3)'; // todo: remove this trigger mock !!!!
-
-        $sql = "%s SELECT %s table_main.* ".$sleep."
+        $sql = "
+            SELECT table_main.*
             FROM {$this->getSQLTable($name)} as table_main
             " . $sqlWhere . "
             GROUP BY _uid
@@ -909,15 +904,6 @@ class MariaDB extends Adapter
             LIMIT :offset, :limit;
         ";
 
-        $sql = "SELECT table_main.* ".$sleep."
-            FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
-            GROUP BY _uid
-            {$order}
-            LIMIT :offset, :limit;
-        ";
-
-        //$sql = $this->setTimeOut($sql, 1/1000); // todo: set time!!!!
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
@@ -1943,9 +1929,11 @@ class MariaDB extends Adapter
      */
     protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
     {
-        $seconds = $milliseconds / 1000;
-        var_dump('SET SESSION max_statement_time = ' . $seconds);
-        $pdo->prepare('SET SESSION max_statement_time = ' . $seconds)->execute();
+        if(self::getSupportForTimeouts()){
+            $seconds = $milliseconds / 1000;
+            var_dump('SET SESSION max_statement_time = ' . $seconds);
+            $pdo->prepare('SET SESSION max_statement_time = ' . $seconds)->execute();
+        }
     }
 
     /**
@@ -1954,17 +1942,20 @@ class MariaDB extends Adapter
      */
     protected function resetTimeoutSession(PDO|PDOProxy $pdo)
     {
-        var_dump('SET SESSION max_statement_time = default');
-        $pdo->prepare('SET SESSION max_statement_time = default')->execute();
+        if(self::getSupportForTimeouts()) {
+            var_dump('SET SESSION max_statement_time = default');
+            $pdo->prepare('SET SESSION max_statement_time = default')->execute();
+        }
     }
 
     /**
+     * @param PDOException $e
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException $e, PDO|PDOProxy $pdo): void
+    protected function checkTimeoutException(PDOException $e): void
     {
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
-            $this->resetTimeoutSession($pdo);  // todo: Does this make sense?
+            // todo: Do we need to resetTimeoutSession here?
             Throw new Timeout($e->getMessage());
         }
     }
@@ -1985,6 +1976,16 @@ class MariaDB extends Adapter
             $this->resetTimeoutSession($this->getPDO());
             $this->checkTimeoutException($e, $this->getPDO());
         }
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
     }
 
 }

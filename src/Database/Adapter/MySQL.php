@@ -72,7 +72,7 @@ class MySQL extends MariaDB
     protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
     {
         var_dump('SET SESSION max_execution_time = ' . $milliseconds);
-        $pdo->prepare('SET SESSION max_execution_time = ' . $milliseconds);
+        $pdo->prepare('SET SESSION max_execution_time = ' . $milliseconds)->execute();
     }
 
     /**
@@ -87,13 +87,12 @@ class MySQL extends MariaDB
 
     /**
      * @param PDOException $e
-     * @param PDO|PDOProxy $pdo
      * @throws Timeout
      */
-    protected function checkTimeoutException(PDOException $e, PDO|PDOProxy $pdo): void
+    protected function checkTimeoutException(PDOException $e): void
     {
         if($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024){
-            $this->resetTimeoutSession($pdo);  // todo: Does this make sense?
+            // todo: Do we need to resetTimeoutSession here?
             Throw new Timeout($e->getMessage());
         }
     }

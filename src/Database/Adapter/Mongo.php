@@ -35,6 +35,7 @@ class Mongo extends Adapter
         '$or',
         '$and',
         '$match',
+        '$where',
     ];
 
     protected Client $client;
@@ -555,6 +556,9 @@ class Mongo extends Adapter
         }
 
         $options = ['limit' => $limit, 'skip' => $offset];
+        if($timeoutMS){
+            $options['maxTimeMS'] = $timeoutMS;
+        }
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
@@ -645,7 +649,13 @@ class Mongo extends Adapter
          * @var Document[]
          */
         $found = [];
-        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+
+        try {
+            $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+        } catch (MongoException $e){
+            $this->checkTimeoutException($e);
+            throw $e;
+        }
 
         foreach ($this->client->toArray($results) as $i => $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
@@ -959,7 +969,10 @@ class Mongo extends Adapter
             $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
-            if (is_array($value) && $operator === '$eq') {
+            if ($query->getMethod() === 'sleep') {
+                // todo: make this work $where is changed to _where
+                $filters['$where']= 'sleep(1000) || true';
+            } elseif (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
@@ -976,41 +989,26 @@ class Mongo extends Adapter
 
     /**
      * Get Query Operator
-     * 
+     *
      * @param string $operator
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getQueryOperator(string $operator): string
     {
-        switch ($operator) {
-            case Query::TYPE_EQUAL:
-                return '$eq';
-
-            case Query::TYPE_NOTEQUAL:
-                return '$ne';
-
-            case Query::TYPE_LESSER:
-                return '$lt';
-
-            case Query::TYPE_LESSEREQUAL:
-                return '$lte';
-
-            case Query::TYPE_GREATER:
-                return '$gt';
-
-            case Query::TYPE_GREATEREQUAL:
-                return '$gte';
-
-            case Query::TYPE_CONTAINS:
-                return '$in';
-
-            case Query::TYPE_SEARCH:
-                return '$search';
-
-            default:
-                throw new Exception('Unknown Operator:' . $operator);
-        }
+        return match ($operator) {
+            Query::TYPE_SLEEP => '',
+            Query::TYPE_EQUAL => '$eq',
+            Query::TYPE_NOTEQUAL => '$ne',
+            Query::TYPE_LESSER => '$lt',
+            Query::TYPE_LESSEREQUAL => '$lte',
+            Query::TYPE_GREATER => '$gt',
+            Query::TYPE_GREATEREQUAL => '$gte',
+            Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_SEARCH => '$search',
+            default => throw new Exception('Unknown Operator:' . $operator),
+        };
     }
 
     /**
@@ -1315,6 +1313,16 @@ class Mongo extends Adapter
             $this->checkTimeoutException($e);
         }
 
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
     }
 
 }

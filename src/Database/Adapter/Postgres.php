@@ -709,7 +709,6 @@ class Postgres extends SQL
                 $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
-
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
@@ -796,8 +795,6 @@ class Postgres extends SQL
 
         return $results;
     }
-
-
 
     /**
      * Count Documents

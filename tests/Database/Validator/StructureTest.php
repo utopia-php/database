@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
+use Utopia\Database\ID;
 use Utopia\Database\Validator\Structure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
@@ -102,7 +103,7 @@ class StructureTest extends TestCase
         // Cannot encode format when defining constants
         // So add feedback attribute on startup
         $this->collection['attributes'][] = [
-            '$id' => 'feedback',
+            '$id' => ID::custom('feedback'),
             'type' => Database::VAR_STRING,
             'format' => 'email',
             'size' => 55,
@@ -143,7 +144,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -161,7 +162,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'description' => 'Demo description',
             'rating' => 5,
             'price' => 1.99,
@@ -178,7 +179,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -189,7 +190,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'My Title',
             'description' => null,
             'rating' => 5,
@@ -205,7 +206,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'Demo Title',
             'titlex' => 'Unknown Attribute',
             'description' => 'Demo description',
@@ -224,7 +225,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'Demo Title',
             'description' => 'Demo description',
             'rating' => 5,
@@ -240,7 +241,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 5,
             'description' => 'Demo description',
             'rating' => 5,
@@ -258,7 +259,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -271,7 +272,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -284,7 +285,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -296,7 +297,7 @@ class StructureTest extends TestCase
 
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -314,7 +315,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => true,
@@ -327,7 +328,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => '',
@@ -345,7 +346,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -357,7 +358,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -369,7 +370,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -381,7 +382,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -400,7 +401,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -413,7 +414,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -431,7 +432,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -444,7 +445,7 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
         
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,
@@ -462,7 +463,7 @@ class StructureTest extends TestCase
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
-            '$collection' => 'posts',
+            '$collection' => ID::custom('posts'),
             'title' => 'string',
             'description' => 'Demo description',
             'rating' => 5,

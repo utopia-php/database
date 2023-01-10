@@ -2,8 +2,12 @@
 
 namespace Utopia\Tests;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\ID;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 class DocumentTest extends TestCase
 {
@@ -34,10 +38,18 @@ class DocumentTest extends TestCase
         $this->collection = uniqid();
 
         $this->document = new Document([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
+            '$permissions' => [
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('creator'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('updater'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('deleter'))),
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -68,10 +80,57 @@ class DocumentTest extends TestCase
         $this->assertEquals(null, $this->empty->getCollection());
     }
 
-    public function testPermissions()
+    public function testGetCreate()
+    {
+        $this->assertEquals(['any', 'user:creator'], $this->document->getCreate());
+        $this->assertEquals([], $this->empty->getCreate());
+    }
+
+    public function testGetRead()
     {
         $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
-        $this->assertEquals(['role:all'], $this->document->getWrite());
+        $this->assertEquals([], $this->empty->getRead());
+    }
+
+    public function testGetUpdate()
+    {
+        $this->assertEquals(['any', 'user:updater'], $this->document->getUpdate());
+        $this->assertEquals([], $this->empty->getUpdate());
+    }
+
+    public function testGetDelete()
+    {
+        $this->assertEquals(['any', 'user:deleter'], $this->document->getDelete());
+        $this->assertEquals([], $this->empty->getDelete());
+    }
+
+    public function testGetPermissionByType()
+    {
+        $this->assertEquals(['any','user:creator'], $this->document->getPermissionsByType(Database::PERMISSION_CREATE));
+        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_CREATE));
+
+        $this->assertEquals(['user:123','team:123'], $this->document->getPermissionsByType(Database::PERMISSION_READ));
+        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_READ));
+
+        $this->assertEquals(['any','user:updater'], $this->document->getPermissionsByType(Database::PERMISSION_UPDATE));
+        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_UPDATE));
+
+        $this->assertEquals(['any','user:deleter'], $this->document->getPermissionsByType(Database::PERMISSION_DELETE));
+        $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
+    }
+
+    public function testGetPermissions()
+    {
+        $this->assertEquals([
+            Permission::read(Role::user(ID::custom('123'))),
+            Permission::read(Role::team(ID::custom('123'))),
+            Permission::create(Role::any()),
+            Permission::create(Role::user(ID::custom('creator'))),
+            Permission::update(Role::any()),
+            Permission::update(Role::user(ID::custom('updater'))),
+            Permission::delete(Role::any()),
+            Permission::delete(Role::user(ID::custom('deleter'))),
+        ], $this->document->getPermissions());
     }
 
     public function testGetAttributes()
@@ -141,10 +200,15 @@ class DocumentTest extends TestCase
     public function testFindAndReplace()
     {
         $document = new Document([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
+            '$permissions' => [
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -180,10 +244,15 @@ class DocumentTest extends TestCase
     public function testFindAndRemove()
     {
         $document = new Document([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
+            '$permissions' => [
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'
@@ -231,10 +300,18 @@ class DocumentTest extends TestCase
     public function testGetArrayCopy()
     {
         $this->assertEquals([
-            '$id' => $this->id,
-            '$collection' => $this->collection,
-            '$read' => ['user:123', 'team:123'],
-            '$write' => ['role:all'],
+            '$id' => ID::custom($this->id),
+            '$collection' => ID::custom($this->collection),
+            '$permissions' => [
+                Permission::read(Role::user(ID::custom('123'))),
+                Permission::read(Role::team(ID::custom('123'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('creator'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('updater'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('deleter'))),
+            ],
             'title' => 'This is a test.',
             'list' => [
                 'one'

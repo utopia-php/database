@@ -2,11 +2,11 @@
 
 namespace Utopia\Database;
 
-use Exception;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\IndexValidator;
 use Utopia\Database\Validator\Structure;
+use Exception;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;

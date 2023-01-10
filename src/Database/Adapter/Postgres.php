@@ -6,6 +6,7 @@ use PDO;
 use Exception;
 use PDOException;
 use Throwable;
+use Utopia\Database\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
@@ -13,7 +14,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\ID;
 
-class Postgres extends MariaDB
+class Postgres extends SQL
 {
     /**
      * Differences between MariaDB and Postgres
@@ -39,7 +40,7 @@ class Postgres extends MariaDB
             ->execute();
     }
 
-   /**
+    /**
      * Delete Database
      *
      * @param string $name
@@ -75,7 +76,7 @@ class Postgres extends MariaDB
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if($attribute->getAttribute('array')) {
+            if ($attribute->getAttribute('array')) {
                 $attrType = 'TEXT';
             }
 
@@ -92,12 +93,12 @@ class Postgres extends MariaDB
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\")
                 )");
-//,
-//INDEX (\"_createdAt\"),
-//INDEX (\"_updatedAt\")
+        //,
+        //INDEX (\"_createdAt\"),
+        //INDEX (\"_updatedAt\")
         $stmtIndex = $this->getPDO()
             ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
-        try{
+        try {
             $stmt->execute();
             $stmtIndex->execute();
 
@@ -112,20 +113,20 @@ class Postgres extends MariaDB
                 ->execute();
 
             foreach ($indexes as &$index) {
-                $indexId = $this->filter($index->getId()); 
+                $indexId = $this->filter($index->getId());
                 $indexAttributes = $index->getAttribute('attributes');
-    
+
                 $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
             }
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->getPDO()->rollBack();
-            throw new Exception('Failed to create collection: '.$e->getMessage());
+            throw new Exception('Failed to create collection: ' . $e->getMessage());
         }
-        
-        if(!$this->getPDO()->commit()) {
+
+        if (!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
-        
+
         // Update $this->getIndexCount when adding another default index
         // return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
 
@@ -164,7 +165,7 @@ class Postgres extends MariaDB
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed);
 
-        if($array) {
+        if ($array) {
             $type = 'TEXT';
         }
 
@@ -236,19 +237,19 @@ class Postgres extends MariaDB
         $id = $this->filter($id);
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' =>'_uid',
+            '$id' => '_uid',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $attribute
         }, $attributes);
 
-        foreach($attributes as $key => &$attribute) {
+        foreach ($attributes as $key => &$attribute) {
             $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '('.(int)$length.')';
+            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
             $order = $orders[$key] ?? '';
             $attribute = $this->filter($attribute);
 
-            if(Database::INDEX_FULLTEXT === $type) {
+            if (Database::INDEX_FULLTEXT === $type) {
                 $order = '';
             }
 
@@ -302,7 +303,7 @@ class Postgres extends MariaDB
             ->execute();
     }
 
-     /**
+    /**
      * Create Document
      *
      * @param string $collection
@@ -362,9 +363,9 @@ class Postgres extends MariaDB
             }
         }
 
-        
+
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLTable($name.'_perms')}
+            $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')}
             (_type, _permission, _document) VALUES " . implode(', ', $permissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
@@ -381,7 +382,7 @@ class Postgres extends MariaDB
             switch ($e->getCode()) {
                 case 23505:
                     $this->getPDO()->rollBack();
-                    throw new Duplicate('Duplicated document: '.$e->getMessage());
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
                     break;
 
                 default:
@@ -390,7 +391,7 @@ class Postgres extends MariaDB
             }
         }
 
-        if(!$this->getPDO()->commit()) {
+        if (!$this->getPDO()->commit()) {
             throw new Exception('Failed to commit transaction');
         }
 
@@ -420,7 +421,7 @@ class Postgres extends MariaDB
          */
         $permissionsStmt = $this->getPDO()->prepare("
                 SELECT _type, _permission
-                FROM {$this->getSQLTable($name.'_perms')} p
+                FROM {$this->getSQLTable($name . '_perms')} p
                 WHERE p._document = :_uid
         ");
         $permissionsStmt->bindValue(':_uid', $document->getId());
@@ -444,7 +445,7 @@ class Postgres extends MariaDB
          * Get removed Permissions
          */
         $removals = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
             if (!empty($diff)) {
                 $removals[$type] = $diff;
@@ -455,7 +456,7 @@ class Postgres extends MariaDB
          * Get added Permissions
          */
         $additions = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
             if (!empty($diff)) {
                 $additions[$type] = $diff;
@@ -471,7 +472,7 @@ class Postgres extends MariaDB
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
                 )";
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
@@ -483,7 +484,7 @@ class Postgres extends MariaDB
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
                 DELETE
-                FROM {$this->getSQLTable($name.'_perms')}
+                FROM {$this->getSQLTable($name . '_perms')}
                 WHERE
                     _document = :_uid
                     {$removeQuery}
@@ -510,7 +511,7 @@ class Postgres extends MariaDB
 
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(
-                    "INSERT INTO {$this->getSQLTable($name.'_perms')}
+                    "INSERT INTO {$this->getSQLTable($name . '_perms')}
                     (_document, _type, _permission) VALUES" . \implode(', ', $values)
                 );
 
@@ -567,7 +568,7 @@ class Postgres extends MariaDB
                 switch ($e->getCode()) {
                     case 1062:
                     case 23505:
-                        throw new Duplicate('Duplicated document: '.$e->getMessage());
+                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
                     default:
                         throw $e;
@@ -580,7 +581,6 @@ class Postgres extends MariaDB
         }
 
         return $document;
-
     }
 
     /**
@@ -602,7 +602,7 @@ class Postgres extends MariaDB
 
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
-        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name.'_perms')} WHERE _document = :_uid");
+        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid");
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
@@ -684,7 +684,7 @@ class Postgres extends MariaDB
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = '"'.$attribute.'" '.$orderType;
+            $orders[] = '"' . $attribute . '" ' . $orderType;
         }
 
         // Allow after pagination without any order
@@ -721,7 +721,7 @@ class Postgres extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getMethod(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('"table_main"."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -797,7 +797,7 @@ class Postgres extends MariaDB
         return $results;
     }
 
-    
+
 
     /**
      * Count Documents
@@ -827,7 +827,7 @@ class Postgres extends MariaDB
 
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute().'"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $condition = implode(' OR ', $conditions);
@@ -890,13 +890,13 @@ class Postgres extends MariaDB
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
-        foreach($queries as $i => $query) {
-            if($query->getAttribute() === '$id') {
+        foreach ($queries as $i => $query) {
+            if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
             $conditions = [];
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('"table_main"."'.$query->getAttribute().'"', $query->getMethod(), ':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value);
+                $conditions[] = $this->getSQLCondition('"table_main"."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -910,18 +910,18 @@ class Postgres extends MariaDB
             FROM (
                 SELECT {$attribute}
                 FROM {$this->getSQLTable($name)} table_main
-                WHERE {$permissions} AND ".implode(' AND ', $where)."
+                WHERE {$permissions} AND " . implode(' AND ', $where) . "
                 {$limit}
             ) table_count");
 
-        foreach($queries as $i => $query) {
-            if($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_'.$i.'_'.$key.'_'.$query->getAttribute(), $value, $this->getPDOType($value));
+        foreach ($queries as $i => $query) {
+            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            foreach ($query->getValues() as $key => $value) {
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
             }
         }
 
-        if($max !== 0) {
+        if ($max !== 0) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
@@ -946,41 +946,41 @@ class Postgres extends MariaDB
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if($size > 16383) {
+                if ($size > 16383) {
                     return 'TEXT';
                 }
 
                 return "VARCHAR({$size})";
-            break;
+                break;
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
 
-                if($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
+                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
                     return 'BIGINT';
                 }
 
                 return 'INTEGER';
-            break;
+                break;
 
             case Database::VAR_FLOAT:
                 return 'REAL';
-            break;
+                break;
 
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
-            break;
+                break;
 
             case Database::VAR_DOCUMENT:
                 return 'VARCHAR';
-            break;
+                break;
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP';
                 break;
 
             default:
-                throw new Exception('Unknown Type: '. $type);
-            break;
+                throw new Exception('Unknown Type: ' . $type);
+                break;
         }
     }
 
@@ -998,14 +998,14 @@ class Postgres extends MariaDB
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
-                $value = "'".$value.":*'";
+                $value = "'" . $value . ":*'";
                 $value = str_replace('.', ' <-> ', $value);
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery({$value})";
-            break;
+                break;
 
             default:
-                return $attribute.' '.$this->getSQLOperator($operator).' '.$placeholder; // Using \"attrubute_\" to avoid conflicts with custom names;
-            break;
+                return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using \"attrubute_\" to avoid conflicts with custom names;
+                break;
         }
     }
 
@@ -1025,22 +1025,22 @@ class Postgres extends MariaDB
             case Database::INDEX_KEY:
             case Database::INDEX_ARRAY:
                 $type = 'INDEX';
-            break;
+                break;
 
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
-            break;
+                break;
 
             case Database::INDEX_FULLTEXT:
                 $type = 'INDEX';
-            break;
+                break;
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-            break;
+                break;
         }
 
-        return 'CREATE '.$type.' "'.$this->getNamespace().'_'.$collection.'_'.$id.'" ON "'.$this->getDefaultDatabase().'"."'.$this->getNamespace().'_'.$collection.'" ( '.implode(', ', $attributes).' );';
+        return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON "' . $this->getDefaultDatabase() . '"."' . $this->getNamespace() . '_' . $collection . '" ( ' . implode(', ', $attributes) . ' );';
     }
 
     /**
@@ -1050,7 +1050,7 @@ class Postgres extends MariaDB
      */
     protected function getSQLSchema(): string
     {
-        if(!$this->getSupportForSchemas()) {
+        if (!$this->getSupportForSchemas()) {
             return '';
         }
 
@@ -1080,28 +1080,28 @@ class Postgres extends MariaDB
         switch (gettype($value)) {
             case 'string':
                 return PDO::PARAM_STR;
-            break;
+                break;
 
             case 'boolean':
                 return PDO::PARAM_BOOL;
-            break;
+                break;
 
-            //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
+                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
             case 'double':
                 return PDO::PARAM_STR;
-            break;
+                break;
 
             case 'integer':
                 return PDO::PARAM_INT;
-            break;
+                break;
 
             case 'NULL':
                 return PDO::PARAM_NULL;
-            break;
+                break;
 
             default:
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
-            break;
+                break;
         }
     }
 
@@ -1131,13 +1131,13 @@ class Postgres extends MariaDB
      */
     protected function decodeArray(array $value): string
     {
-        if(empty($value))
+        if (empty($value))
             return '{}';
 
-        foreach($value as &$item) {
-            $item = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
+        foreach ($value as &$item) {
+            $item = '"' . str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
         }
 
-        return '{'.implode(",", $value).'}';
+        return '{' . implode(",", $value) . '}';
     }
 }

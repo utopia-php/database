@@ -49,23 +49,28 @@ abstract class Base extends TestCase
 
     protected string $testDatabase = 'utopiaTests';
 
+    public function testPing()
+    {
+        $this->assertEquals(true, static::getDatabase()->ping());
+    }
+
     public function testCreateExistsDelete()
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
         if(!$schemaSupport) {
-            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->create());
             return;
         }
 
         if (!static::getDatabase()->exists($this->testDatabase)) {
-            $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->create());
         }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create());
     }
 
     public function testCreatedAtUpdatedAt()
@@ -432,7 +437,7 @@ abstract class Base extends TestCase
             new Document([
                 '$id' => ID::custom('attribute1'),
                 'type' => Database::VAR_STRING,
-                'size' => 256,
+                'size' => 2500, // longer than 768
                 'required' => false,
                 'signed' => true,
                 'array' => false,
@@ -465,6 +470,15 @@ abstract class Base extends TestCase
                 'array' => false,
                 'filters' => [],
             ]),
+            new Document([
+                '$id' => ID::custom('attribute5'),
+                'type' => Database::VAR_STRING,
+                'size' => 2500,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
         ];
 
         $indexes = [
@@ -496,6 +510,13 @@ abstract class Base extends TestCase
                 'lengths' => [],
                 'orders' => ['ASC'],
             ]),
+            new Document([
+                '$id' => ID::custom('index_2_attributes'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1', 'attribute5'],
+                'lengths' => [200, 300],
+                'orders' => ['DESC'],
+            ]),
         ];
 
         foreach ($collections as $id) {
@@ -505,7 +526,7 @@ abstract class Base extends TestCase
             $this->assertEquals($id, $collection->getId());
 
             $this->assertIsArray($collection->getAttribute('attributes'));
-            $this->assertCount(4, $collection->getAttribute('attributes'));
+            $this->assertCount(5, $collection->getAttribute('attributes'));
             $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
             $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
             $this->assertEquals('attribute-2', $collection->getAttribute('attributes')[1]['$id']);
@@ -516,7 +537,7 @@ abstract class Base extends TestCase
             $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[3]['type']);
 
             $this->assertIsArray($collection->getAttribute('indexes'));
-            $this->assertCount(4, $collection->getAttribute('indexes'));
+            $this->assertCount(5, $collection->getAttribute('indexes'));
             $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
             $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
             $this->assertEquals('index-2', $collection->getAttribute('indexes')[1]['$id']);
@@ -1467,6 +1488,7 @@ abstract class Base extends TestCase
             Query::orderDesc('year'),
             Query::cursorAfter($movies[1])
         ]);
+
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
@@ -2958,8 +2980,10 @@ abstract class Base extends TestCase
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
+        
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
+        
         static::getDatabase()->createCollection('created_at');
     }
 
@@ -3208,5 +3232,85 @@ abstract class Base extends TestCase
         $this->assertCount(1, $docs);
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
+    }
+
+    public function testEvents()
+    {
+        Authorization::skip(function() {
+            $database = static::getDatabase();
+
+            $events = [
+                Database::EVENT_DATABASE_CREATE,
+                Database::EVENT_DATABASE_LIST,
+                Database::EVENT_COLLECTION_CREATE,
+                Database::EVENT_COLLECTION_LIST,
+                Database::EVENT_COLLECTION_READ,
+                Database::EVENT_ATTRIBUTE_CREATE,
+                Database::EVENT_ATTRIBUTE_UPDATE,
+                Database::EVENT_INDEX_CREATE,
+                Database::EVENT_DOCUMENT_CREATE,
+                Database::EVENT_DOCUMENT_UPDATE,
+                Database::EVENT_DOCUMENT_READ,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_COUNT,
+                Database::EVENT_DOCUMENT_SUM,
+                Database::EVENT_INDEX_DELETE,
+                Database::EVENT_DOCUMENT_DELETE,
+                Database::EVENT_ATTRIBUTE_DELETE,
+                Database::EVENT_COLLECTION_DELETE,
+                Database::EVENT_DATABASE_DELETE,
+            ];
+
+            $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
+                $shifted = array_shift($events);
+
+                $this->assertEquals($shifted, $event);
+            });
+    
+            if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+                $database->setDefaultDatabase('hellodb');
+                $database->create();
+            } else {
+                array_shift($events);
+            }
+
+            $database->list();
+    
+            $database->setDefaultDatabase($this->testDatabase);
+    
+            $collectionId = ID::unique();
+            $database->createCollection($collectionId);
+            $database->listCollections();
+            $database->getCollection($collectionId);
+            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+            $database->updateAttributeRequired($collectionId, 'attr1', true);
+            $indexId1 = 'index2_' . uniqid();
+            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+            
+            $document = $database->createDocument($collectionId, new Document([
+                '$id' => 'doc1',
+                'attr1' => 10,
+                '$permissions' => [
+                    Permission::delete(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]));
+
+            $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
+            $database->getDocument($collectionId, 'doc1');
+            $database->find($collectionId);
+            $database->findOne($collectionId);
+            $database->count($collectionId);
+            $database->sum($collectionId, 'attr1');
+            
+            $database->deleteIndex($collectionId, $indexId1);
+            $database->deleteDocument($collectionId, 'doc1');
+            $database->deleteAttribute($collectionId, 'attr1');
+            $database->deleteCollection($collectionId);
+            $database->delete('hellodb');
+        });
+
     }
 }

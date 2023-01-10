@@ -5,16 +5,6 @@
     "keywords": ["php","framework", "upf", "utopia", "database"],
     "license": "MIT",
     "minimum-stability": "stable",
-    "authors": [
-        {
-            "name": "Eldad Fux",
-            "email": "eldad@appwrite.io"
-        },
-        {
-            "name": "Brandon Leckemby",
-            "email": "brandon@appwrite.io"
-        }
-    ],
     "autoload": {
         "psr-4": {"Utopia\\Database\\": "src/Database"}
     },
@@ -23,18 +13,25 @@
     },
     "require": {
         "php": ">=8.0",
+        "utopia-php/framework": "0.*.*",
+        "utopia-php/cache": "0.8.*",
+        "utopia-php/mongo": "0.0.2"
+    },
+    "require-dev": {
         "ext-pdo": "*",
         "ext-redis": "*",
         "ext-mongodb": "*",
-        "utopia-php/framework": "0.*.*",
-        "utopia-php/cache": "0.6.*",
-        "mongodb/mongodb": "1.8.0"
-    },
-    "require-dev": {
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
+        "mongodb/mongodb": "1.8.0",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",
         "vimeo/psalm": "4.0.1"
+    },
+    "suggests": {
+        "ext-mongodb": "Needed to support MongoDB Database Adapter",
+        "ext-redis": "Needed to support Redis Cache Adapter",
+        "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
+        "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
     }
 }

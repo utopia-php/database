@@ -970,7 +970,6 @@ class Mongo extends Adapter
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
             if ($query->getMethod() === 'sleep') {
-                // todo: make this work $where is changed to _where
                 $filters['$where']= 'sleep(1000) || true';
             } elseif (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;

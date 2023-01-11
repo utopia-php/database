@@ -1654,7 +1654,7 @@ class MariaDB extends Adapter
 
             case Database::VAR_FLOAT:
                 $signed = ($signed) ? '' : ' UNSIGNED';
-                return 'FLOAT' . $signed;
+                return 'DOUBLE' . $signed;
 
             case Database::VAR_BOOLEAN:
                 return 'TINYINT(1)';
@@ -1664,7 +1664,7 @@ class MariaDB extends Adapter
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
-                break;
+
             default:
                 throw new Exception('Unknown Type');
         }

@@ -1293,8 +1293,8 @@ class MariaDB extends Adapter
                     }
                     break;
                 case Database::VAR_FLOAT:
-                    // FLOAT(p) takes 4 bytes when p <= 24, 8 otherwise
-                    $total += 4;
+                    // DOUBLE takes 8 bytes
+                    $total += 8;
                     break;
 
                 case Database::VAR_BOOLEAN:

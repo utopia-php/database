@@ -293,13 +293,14 @@ class Postgres extends SQL
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
+        $namespace = $this->getNamespace();
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $schemaName = $this->getDefaultDatabase();
+        $oldIndexName = $collection."_".$old;
+        $newIndexName = $namespace.$collection."_".$new;
 
-        //
         return $this->getPDO()
-            ->prepare("ALTER INDEX \"{$schemaName}\".{$old} RENAME TO \"{$new}\";")
+            ->prepare("ALTER INDEX {$this->getSQLTable($oldIndexName)} RENAME TO \"{$newIndexName}\";")
             ->execute();
     }
 

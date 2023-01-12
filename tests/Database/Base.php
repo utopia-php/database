@@ -1797,7 +1797,7 @@ abstract class Base extends TestCase
     {
         if($this->getDatabase()->getAdapter()->getSupportForTimeouts()){
             $this->expectException(Timeout::class);
-            static::getDatabase()->find('movies', [Query::sleep(1)], 1);
+            static::getDatabase()->find('movies', [ Query::sleep('bla', [1])], 1);
         }
 
         $this->assertEquals(true, true);

@@ -292,7 +292,7 @@ class Query
 
         switch ($method) {
             case self::TYPE_SLEEP:
-                return new self($method,'', values: [$parsedParams[0]]);
+                //return new self($method,'', values: [$parsedParams[0]]);
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
             case self::TYPE_LESSER:
@@ -545,9 +545,12 @@ class Query
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
     }
 
-    public static function sleep(int $seconds): self
+    /**
+     * Helper method to create Query with SLEEP method
+     */
+    public static function sleep(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SLEEP,'', values: [$seconds]);
+        return new self(self::TYPE_SLEEP, $attribute, $values);
     }
 
     /**

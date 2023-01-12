@@ -243,6 +243,14 @@ class QueriesTest extends TestCase
                         'rating'
                     ],
                     'orders' => []
+                ]),
+                new Document([
+                    '$id' => 'key-price',
+                    'type' => 'key',
+                    'attributes' => [
+                        'price'
+                    ],
+                    'orders' => []
                 ])
             ], 
             true,
@@ -250,8 +258,9 @@ class QueriesTest extends TestCase
 
         // Test for SUCCESS
         $this->assertTrue($validator->isValid([
-            'sleep(1)',
+            'sleep("price", 1)',
         ]));
+
 
         // Test for SUCCESS
         $this->assertTrue($validator->isValid([

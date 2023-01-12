@@ -130,6 +130,7 @@ class Queries extends Validator
         if (count($filters) > 0) {
             $filtersByAttribute = [];
             foreach ($filters as $filter) {
+                if($filter->getMethod() === Query::TYPE_SLEEP)return true; // todo: fix this
                 $filtersByAttribute[$filter->getAttribute()] = $filter->getMethod();
             }
 

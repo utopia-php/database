@@ -143,7 +143,8 @@ class Query
             case self::TYPE_OFFSET:
             case self::TYPE_CURSORAFTER:
             case self::TYPE_CURSORBEFORE:
-                return true;
+            case self::TYPE_SLEEP:
+            return true;
         }
 
         return false;
@@ -290,6 +291,8 @@ class Query
         $method = static::getMethodFromAlias($method);
 
         switch ($method) {
+            case self::TYPE_SLEEP:
+                return new self($method,'', values: [$parsedParams[0]]);
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
             case self::TYPE_LESSER:

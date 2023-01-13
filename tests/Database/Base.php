@@ -57,7 +57,7 @@ abstract class Base extends TestCase
     public function testCreateExistsDelete()
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
-        if(!$schemaSupport) {
+        if (!$schemaSupport) {
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->create());
             return;
@@ -1147,16 +1147,16 @@ abstract class Base extends TestCase
         /**
          * Fulltext search
          */
-        if($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+        if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
             $success = static::getDatabase()->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
             $this->assertEquals(true, $success);
-    
+
             $documents = static::getDatabase()->find('movies', [
                 Query::search('name', 'captain'),
             ]);
-    
+
             $this->assertEquals(2, count($documents));
-    
+
             /**
              * Fulltext search (wildcard)
              */
@@ -1165,7 +1165,7 @@ abstract class Base extends TestCase
                 $documents = static::getDatabase()->find('movies', [
                     Query::search('name', 'cap'),
                 ]);
-    
+
                 $this->assertEquals(2, count($documents));
             }
         }
@@ -1852,7 +1852,7 @@ abstract class Base extends TestCase
                 Query::limit(25),
                 Query::equal('value', [$value])
             ]);
-    
+
             $this->assertEquals(1, count($documents));
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }
@@ -2770,7 +2770,7 @@ abstract class Base extends TestCase
             ],
             'name' => 'Violet',
             'inStock' => 51,
-            'date' => '2000-06-12 14:12:55.000'
+            'date' => '2000-06-12 14:12:55.123'
         ]));
 
         $doc = $database->createDocument('flowers', new Document([
@@ -2910,36 +2910,37 @@ abstract class Base extends TestCase
         ]));
     }
 
-    // /**
-    //  * @depends testUpdateAttributeDefault
-    //  * @depends testUpdateAttributeFormat
-    //  */
-    // public function testUpdateAttributeStructure()
-    // {
-    //     // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
+    /**
+     * @depends testUpdateAttributeDefault
+     * @depends testUpdateAttributeFormat
+     */
+    public function testUpdateAttributeStructure()
+    {
+        // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
 
-    //     $database = static::getDatabase();
+        $database = static::getDatabase();
 
-    //     $doc = $database->getDocument('flowers', 'LiliPriced');
-    //     $this->assertIsNumeric($doc->getAttribute('price'));
-    //     $this->assertEquals(500, $doc->getAttribute('price'));
+        $doc = $database->getDocument('flowers', 'LiliPriced');
+        $this->assertIsNumeric($doc->getAttribute('price'));
+        $this->assertEquals(500, $doc->getAttribute('price'));
 
-    //     $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
-    //     $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
+        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
+        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
 
-    //     // Delete cache to force read from database with new schema
-    //     $database->deleteCachedDocument('flowers', 'LiliPriced');
+        // Delete cache to force read from database with new schema
+        $database->deleteCachedDocument('flowers', 'LiliPriced');
 
-    //     $doc = $database->getDocument('flowers', 'LiliPriced');
+        $doc = $database->getDocument('flowers', 'LiliPriced');
 
-    //     $this->assertIsString($doc->getAttribute('price'));
-    //     $this->assertEquals('500', $doc->getAttribute('price'));
+        $this->assertIsString($doc->getAttribute('price'));
+        $this->assertEquals('500', $doc->getAttribute('price'));
 
-    //     // String to Datetime
-    //     $database->deleteCachedDocument('flowers', 'flowerWithDate');
-    //     $doc = $database->getDocument('flowers', 'flowerWithDate');
-    //     $this->assertEquals('2000-06-12 14:12:55.000', $doc->getAttribute('date'));
-    // }
+        // String to Datetime
+        $database->deleteCachedDocument('flowers', 'flowerWithDate');
+        $doc = $database->getDocument('flowers', 'flowerWithDate');
+        //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
+        $this->assertEquals('2000-06-12 14:12:55.123', $doc->getAttribute('date'));
+    }
 
     /**
      * @depends testCreatedAtUpdatedAt
@@ -2951,10 +2952,10 @@ abstract class Base extends TestCase
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        
+
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
-        
+
         static::getDatabase()->createCollection('created_at');
     }
 
@@ -3174,7 +3175,7 @@ abstract class Base extends TestCase
 
         try {
             $database->deleteDocument('animals', 'cat');
-        } catch(ExceptionAuthorization) {
+        } catch (ExceptionAuthorization) {
             $didFail = true;
         }
 
@@ -3186,7 +3187,7 @@ abstract class Base extends TestCase
         try {
             $newDog = $dog->setAttribute('type', 'newDog');
             $database->updateDocument('animals', 'dog', $newDog);
-        } catch(ExceptionAuthorization) {
+        } catch (ExceptionAuthorization) {
             $didFail = true;
         }
 
@@ -3199,7 +3200,7 @@ abstract class Base extends TestCase
         $newCat = $cat->setAttribute('type', 'newCat');
         $database->updateDocument('animals', 'cat', $newCat);
 
-        $docs = Authorization::skip(fn() => $database->find('animals'));
+        $docs = Authorization::skip(fn () => $database->find('animals'));
         $this->assertCount(1, $docs);
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
@@ -3207,7 +3208,7 @@ abstract class Base extends TestCase
 
     public function testEvents()
     {
-        Authorization::skip(function() {
+        Authorization::skip(function () {
             $database = static::getDatabase();
 
             $events = [
@@ -3233,13 +3234,13 @@ abstract class Base extends TestCase
                 Database::EVENT_DATABASE_DELETE,
             ];
 
-            $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
+            $database->on(Database::EVENT_ALL, function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
 
                 $this->assertEquals($shifted, $event);
             });
-    
-            if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+
+            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
                 $database->setDefaultDatabase('hellodb');
                 $database->create();
             } else {
@@ -3247,9 +3248,9 @@ abstract class Base extends TestCase
             }
 
             $database->list();
-    
+
             $database->setDefaultDatabase($this->testDatabase);
-    
+
             $collectionId = ID::unique();
             $database->createCollection($collectionId);
             $database->listCollections();
@@ -3258,7 +3259,7 @@ abstract class Base extends TestCase
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $indexId1 = 'index2_' . uniqid();
             $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
-            
+
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
                 'attr1' => 10,
@@ -3275,13 +3276,12 @@ abstract class Base extends TestCase
             $database->findOne($collectionId);
             $database->count($collectionId);
             $database->sum($collectionId, 'attr1');
-            
+
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-
     }
 }

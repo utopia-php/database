@@ -100,35 +100,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Update Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                MODIFY `{$id}` {$type};")
-            ->execute();
-    }
-
-    /**
      * Get Document
      *
      * @param string $collection

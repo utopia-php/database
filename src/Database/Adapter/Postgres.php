@@ -1029,14 +1029,19 @@ class Postgres extends SQL
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
-                $value = "'" . $value . ":*'";
-                $value = str_replace('.', ' <-> ', $value);
-                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery({$value})";
-                break;
+                /**
+                 * Replace reserved chars with space.
+                 */
+                $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $value));
+
+                /**
+                 * Prepend wildcard by default on the back.
+                 */
+                $value = "'{$value}*'";
+                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
 
             default:
                 return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using \"attrubute_\" to avoid conflicts with custom names;
-                break;
         }
     }
 

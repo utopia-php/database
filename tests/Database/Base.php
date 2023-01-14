@@ -712,45 +712,45 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    // /**
-    //  * @depends testCreateDocument
-    //  */
-    // public function testListDocumentSearch(Document $document)
-    // {
-    //     $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
-    //     if(!$fulltextSupport) {
-    //         $this->expectNotToPerformAssertions();
-    //         return;
-    //     }
+    /**
+     * @depends testCreateDocument
+     */
+    public function testListDocumentSearch(Document $document)
+    {
+        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        if(!$fulltextSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
-    //     static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
-    //     static::getDatabase()->createDocument('documents', new Document([
-    //         '$permissions' => [
-    //             Permission::read(Role::any()),
-    //             Permission::create(Role::any()),
-    //             Permission::update(Role::any()),
-    //             Permission::delete(Role::any()),
-    //         ],
-    //         'string' => '*test+alias@email-provider.com',
-    //         'integer' => 0,
-    //         'bigint' => 8589934592, // 2^33
-    //         'float' => 5.55,
-    //         'boolean' => true,
-    //         'colors' => ['pink', 'green', 'blue'],
-    //         'empty' => [],
-    //     ]));
+        static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
+        static::getDatabase()->createDocument('documents', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'string' => '*test+alias@email-provider.com',
+            'integer' => 0,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+            'empty' => [],
+        ]));
 
-    //     /**
-    //      * Allow reserved keywords for search
-    //      */
-    //     $documents = static::getDatabase()->find('documents', [
-    //         Query::search('string', '*test+alias@email-provider.com'),
-    //     ]);
+        /**
+         * Allow reserved keywords for search
+         */
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*test+alias@email-provider.com'),
+        ]);
 
-    //     $this->assertEquals(1, count($documents));
+        $this->assertEquals(1, count($documents));
 
-    //     return $document;
-    // }
+        return $document;
+    }
 
     /**
      * @depends testGetDocument

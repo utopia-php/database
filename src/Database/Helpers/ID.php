@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Helpers;
 
 class ID
 {

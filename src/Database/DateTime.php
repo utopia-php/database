@@ -14,26 +14,6 @@ class DateTime
     }
 
     /**
-     * @param string|null $datetime
-     * @return bool
-     */
-    public static function isValid(?string $datetime): bool
-    {
-        if (empty($datetime)) {
-            return false;
-        }
-
-        try {
-            new \DateTime($datetime);
-        }
-        catch(Exception $e) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
      * @return string
      */
     public static function now(): string

@@ -44,7 +44,7 @@ services:
       - "8705:8080"
 
   mariadb:
-    image: mariadb:10.5
+    image: mariadb:10.7
     container_name: utopia-mariadb
     networks:
       - database

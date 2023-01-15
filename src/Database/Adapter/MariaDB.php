@@ -1960,7 +1960,7 @@ class MariaDB extends Adapter
         var_dump($e->errorInfo[1]);
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
             // todo: Do we need to resetTimeoutSession here?
-            var_dump("mariadv checkTimeoutException found!!!");
+            var_dump("mariadb checkTimeoutException found!!!");
             Throw new Timeout($e->getMessage());
         }
     }

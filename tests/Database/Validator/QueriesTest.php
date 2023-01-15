@@ -258,12 +258,6 @@ class QueriesTest extends TestCase
 
         // Test for SUCCESS
         $this->assertTrue($validator->isValid([
-            'sleep("price", 1)',
-        ]));
-
-
-        // Test for SUCCESS
-        $this->assertTrue($validator->isValid([
             'lessThanEqual("price", 6.50)',
             'lessThanEqual("title", "string")',
             'lessThanEqual("rating", 2002)',

@@ -936,7 +936,7 @@ class MariaDB extends Adapter
         try {
             $stmt->execute();
         } catch (PDOException $e){
-            $this->checkTimeoutException($e, $this->pdo);
+            $this->checkTimeoutException($e);
             throw $e;
         }
 
@@ -1954,8 +1954,13 @@ class MariaDB extends Adapter
      */
     protected function checkTimeoutException(PDOException $e): void
     {
+        var_dump("checkTimeoutException");
+        var_dump($e->getCode());
+        var_dump($e->errorInfo);
+        var_dump($e->errorInfo[1]);
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
             // todo: Do we need to resetTimeoutSession here?
+            var_dump("mariadv checkTimeoutException found!!!");
             Throw new Timeout($e->getMessage());
         }
     }
@@ -1974,7 +1979,7 @@ class MariaDB extends Adapter
             $stmt->execute();
         } catch (PDOException $e){
             $this->resetTimeoutSession($this->getPDO());
-            $this->checkTimeoutException($e, $this->getPDO());
+            $this->checkTimeoutException($e);
         }
     }
 

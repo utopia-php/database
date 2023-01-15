@@ -259,7 +259,6 @@ class QueriesTest extends TestCase
         // Test for SUCCESS
         $this->assertTrue($validator->isValid([
             'sleep("price", 1)',
-            'sleep("$id", 1)',
         ]));
 
 

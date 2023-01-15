@@ -292,7 +292,6 @@ class Query
 
         switch ($method) {
             case self::TYPE_SLEEP:
-                //return new self($method,'', values: [$parsedParams[0]]);
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
             case self::TYPE_LESSER:

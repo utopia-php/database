@@ -1958,11 +1958,20 @@ class MariaDB extends Adapter
         var_dump($e->getCode());
         var_dump($e->errorInfo);
         var_dump($e->errorInfo[1]);
+
+        // Regular PDO
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
             // todo: Do we need to resetTimeoutSession here?
-            var_dump("mariadb checkTimeoutException found!!!");
+            var_dump("mariadb checkTimeoutException PDO found!!!");
             Throw new Timeout($e->getMessage());
         }
+
+        // PDOProxy which who switches errorInfo
+        if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "70100"){
+            var_dump("mariadb checkTimeoutException PDOProxy found!!!");
+            Throw new Timeout($e->getMessage());
+        }
+
     }
 
     /**

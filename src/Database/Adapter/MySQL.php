@@ -95,6 +95,11 @@ class MySQL extends MariaDB
             // todo: Do we need to resetTimeoutSession here?
             Throw new Timeout($e->getMessage());
         }
+
+        // PDOProxy which who switches errorInfo
+        if($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000"){
+            Throw new Timeout($e->getMessage());
+        }
     }
 
 }

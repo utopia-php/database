@@ -104,7 +104,6 @@ class Queries extends Validator
             if (!$query instanceof Query){
                 try {
                     $query = Query::parse($query);
-                    var_dump($query);
                 } catch (\Throwable $th) {
                     $this->message = 'Invalid query: ${query}';
                     return false;

@@ -22,6 +22,7 @@ class Postgres extends SQL
      * 1. Need to use CASCADE to DROP schema
      * 2. Quotes are different ` vs "
      * 3. DATETIME is TIMESTAMP
+     * 4. Full-text search is different - to_tsvector() and to_tsquery()
      */
 
     /**
@@ -87,8 +88,8 @@ class Postgres extends SQL
             ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
-                \"_createdAt\" TIMESTAMP DEFAULT NULL,
-                \"_updatedAt\" TIMESTAMP DEFAULT NULL,
+                \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
+                \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\")
@@ -242,8 +243,8 @@ class Postgres extends SQL
             $type = 'LONGTEXT';
         }
 
-        if ($type == 'TIMESTAMP') {
-            $type = "TIMESTAMP without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
+        if ($type == 'TIMESTAMP(3)') {
+            $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
         }
 
         return $this->getPDO()
@@ -1006,7 +1007,7 @@ class Postgres extends SQL
                 break;
 
             case Database::VAR_DATETIME:
-                return 'TIMESTAMP';
+                return 'TIMESTAMP(3)';
                 break;
 
             default:

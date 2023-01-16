@@ -2,7 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;

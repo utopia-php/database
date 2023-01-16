@@ -9,7 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -1197,6 +1197,16 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1248,7 +1258,7 @@ class MariaDB extends Adapter
      *
      * @return int
      */
-    public static function getRowLimit(): int
+    public static function getDocumentSizeLimit(): int
     {
         return 65535;
     }
@@ -1630,6 +1640,16 @@ class MariaDB extends Adapter
      * @return bool
      */
     public function getSupportForCasting(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter handle Query Array Contains?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryContains(): bool
     {
         return false;
     }

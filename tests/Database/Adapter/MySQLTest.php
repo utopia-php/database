@@ -30,16 +30,6 @@ class MySQLTest extends Base
     }
 
     /**
-     * Return row limit of adapter
-     *
-     * @return int
-     */
-    static function getAdapterRowLimit(): int
-    {
-        return MySQL::getRowLimit();
-    }
-
-    /**
      *
      * @return int
      */

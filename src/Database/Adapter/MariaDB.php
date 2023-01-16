@@ -832,9 +832,9 @@ class MariaDB extends Adapter
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
+                        table_main.`{$attribute}` {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            table_main.{$attribute} = :cursor 
+                            table_main.`{$attribute}` = :cursor 
                             AND
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
@@ -878,8 +878,11 @@ class MariaDB extends Adapter
             });
 
             $conditions = [];
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $bindKey = 'key_' . $attributeIndex;
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $attributeIndex++;
             }
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
@@ -891,7 +894,7 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $sql = "
             SELECT table_main.*
@@ -906,8 +909,11 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 
@@ -929,6 +935,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
         $stmt->execute();
 
         $results = $stmt->fetchAll();
@@ -982,8 +989,11 @@ class MariaDB extends Adapter
             });
 
             $conditions = [];
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $bindKey = 'key_' . $attributeIndex;
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $attributeIndex++;
             }
 
             $condition = implode(' OR ', $conditions);
@@ -994,7 +1004,7 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sql = "SELECT COUNT(1) as sum
             FROM
                 (
@@ -1008,8 +1018,11 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 
@@ -1052,8 +1065,11 @@ class MariaDB extends Adapter
             });
 
             $conditions = [];
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $bindKey = 'key_' . $attributeIndex;
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $attributeIndex++;
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1077,8 +1093,11 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 

@@ -855,6 +855,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
 
         static::getDatabase()->createDocument('movies', new Document([
             '$id' => ID::custom('frozen'),
@@ -878,6 +879,7 @@ abstract class Base extends TestCase
             'price' => 39.50,
             'active' => true,
             'generes' => ['animation', 'kids'],
+            'with-dash' => 'Works'
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
@@ -901,6 +903,7 @@ abstract class Base extends TestCase
             'price' => 39.50,
             'active' => true,
             'generes' => ['animation', 'kids'],
+            'with-dash' => 'Works'
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
@@ -924,6 +927,7 @@ abstract class Base extends TestCase
             'price' => 25.94,
             'active' => true,
             'generes' => ['science fiction', 'action', 'comics'],
+            'with-dash' => 'Works2'
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
@@ -947,6 +951,7 @@ abstract class Base extends TestCase
             'price' => 25.99,
             'active' => true,
             'generes' => ['science fiction', 'action', 'comics'],
+            'with-dash' => 'Works2'
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
@@ -970,6 +975,7 @@ abstract class Base extends TestCase
             'price' => 0.0,
             'active' => false,
             'generes' => [],
+            'with-dash' => 'Works3'
         ]));
 
         static::getDatabase()->createDocument('movies', new Document([
@@ -991,6 +997,7 @@ abstract class Base extends TestCase
             'price' => 0.0,
             'active' => false,
             'generes' => [],
+            'with-dash' => 'Works3'
         ]));
 
     }
@@ -1016,6 +1023,7 @@ abstract class Base extends TestCase
         $this->assertIsBool($documents[0]->getAttribute('active'));
         $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
         $this->assertIsArray($documents[0]->getAttribute('generes'));
+        $this->assertEquals('Works', $documents[0]->getAttribute('with-dash'));
 
         // Alphabetical order
         $sortedDocuments = $movieDocuments;
@@ -1071,6 +1079,21 @@ abstract class Base extends TestCase
     }
 
     public function testFindCheckInteger(){
+        /**
+         * Query with dash attribute
+         */
+        $documents = static::getDatabase()->find('movies', [
+            Query::equal('with-dash', ['Works']),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::equal('with-dash', ['Works2', 'Works3']),
+        ]);
+
+        $this->assertEquals(4, count($documents));
+
         /**
          * Check an Integer condition
          */
@@ -1947,6 +1970,10 @@ abstract class Base extends TestCase
         $this->assertEquals(6, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('year', [2019])]);
         $this->assertEquals(2, $count);
+        $count = static::getDatabase()->count('movies', [Query::equal('with-dash', ['Works'])]);
+        $this->assertEquals(2, $count);
+        $count = static::getDatabase()->count('movies', [Query::equal('with-dash', ['Works2', 'Works3'])]);
+        $this->assertEquals(4, $count);
 
         Authorization::unsetRole('user:x');
         $count = static::getDatabase()->count('movies');
@@ -2649,6 +2676,7 @@ abstract class Base extends TestCase
             'price' => 39.50,
             'active' => true,
             'generes' => ['animation', 'kids'],
+            'with-dash' => 'Works4'
         ]));
     }
 
@@ -2679,6 +2707,7 @@ abstract class Base extends TestCase
             'price' => 39.50,
             'active' => true,
             'generes' => ['animation', 'kids'],
+            'with-dash' => 'Works4'
         ]));
 
         $this->expectException(DuplicateException::class);

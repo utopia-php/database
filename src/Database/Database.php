@@ -1507,11 +1507,11 @@ class Database
      *
      * @param string $collection
      * @param Query[] $queries
-     * @param null $timeoutMS
+     * @param null $timeout
      * @return Document[]
      * @throws Throwable
      */
-    public function find(string $collection, array $queries = [], $timeoutMS = null): array
+    public function find(string $collection, array $queries = [], $timeout = null): array
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
@@ -1541,7 +1541,7 @@ class Database
             $orderTypes,
             $cursor ?? [],
             $cursorDirection ?? Database::CURSOR_AFTER,
-            $timeoutMS
+            $timeout
         );
 
         foreach ($results as &$node) {

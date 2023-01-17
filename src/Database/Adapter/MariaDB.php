@@ -791,11 +791,11 @@ class MariaDB extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     * @param null $timeoutMS
+     * @param null $timeout
      * @return Document[]
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeoutMS = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -891,8 +891,8 @@ class MariaDB extends Adapter
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
-        if($timeoutMS){
-            $this->setTimeoutSession($this->getPDO(), $timeoutMS);
+        if($timeout){
+            $this->setTimeoutSession($this->getPDO(), $timeout);
         }
 
         $sql = "
@@ -961,7 +961,7 @@ class MariaDB extends Adapter
             $results = array_reverse($results);
         }
 
-        if($timeoutMS){
+        if($timeout){
             $this->resetTimeoutSession($this->getPDO());
         }
 

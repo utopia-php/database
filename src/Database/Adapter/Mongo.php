@@ -539,11 +539,11 @@ class Mongo extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     * @param null $timeoutMS
+     * @param null $timeout
      * @return Document[]
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeoutMS = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -556,8 +556,8 @@ class Mongo extends Adapter
         }
 
         $options = ['limit' => $limit, 'skip' => $offset];
-        if($timeoutMS){
-            $options['maxTimeMS'] = $timeoutMS;
+        if($timeout){
+            $options['maxTimeMS'] = $timeout;
         }
 
         // orders

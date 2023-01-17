@@ -3,9 +3,7 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
+use Utopia\Database\Helpers\ID;
 
 class IDTest extends TestCase
 {

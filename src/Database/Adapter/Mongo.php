@@ -1113,6 +1113,26 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter handle Query Array Contains?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryContains(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1164,7 +1184,7 @@ class Mongo extends Adapter
      *
      * @return int
      */
-    public static function getRowLimit(): int
+    public static function getDocumentSizeLimit(): int
     {
         return 0;
     }

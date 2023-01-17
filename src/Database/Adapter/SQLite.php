@@ -7,7 +7,7 @@ use Exception;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Exception\Duplicate;
 
 /**
@@ -24,7 +24,7 @@ use Utopia\Database\Exception\Duplicate;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends MySQL
+class SQLite extends MariaDB
 {
     /**
      * Check if Database exists
@@ -585,6 +585,16 @@ class SQLite extends MySQL
      * @return bool
      */
     public function getSupportForFulltextIndex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
     }

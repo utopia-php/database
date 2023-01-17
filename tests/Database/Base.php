@@ -2770,7 +2770,7 @@ abstract class Base extends TestCase
             ],
             'name' => 'Violet',
             'inStock' => 51,
-            'date' => '2000-06-12 14:12:55.123'
+            'date' => '2000-06-12 14:12:55.000'
         ]));
 
         $doc = $database->createDocument('flowers', new Document([
@@ -2925,7 +2925,7 @@ abstract class Base extends TestCase
         $this->assertEquals(500, $doc->getAttribute('price'));
 
         $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
-        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
+        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false, filters:['datetime']);
 
         // Delete cache to force read from database with new schema
         $database->deleteCachedDocument('flowers', 'LiliPriced');
@@ -2939,7 +2939,7 @@ abstract class Base extends TestCase
         $database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
         //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
-        $this->assertEquals('2000-06-12 14:12:55.123', $doc->getAttribute('date'));
+        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
     /**

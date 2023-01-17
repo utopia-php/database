@@ -843,17 +843,17 @@ class SQLite extends MariaDB
     }
 
 
-    /**
-     * Returns Max Execution Time
-     * @param string $sql
-     * @param float $seconds
-     * @return string
-     */
-    protected function setTimeOut(string $sql, float $seconds): string
-    {
-        // todo: implement this
-        return sprintf($sql, '', '');
-    }
+//    /**
+//     * Returns Max Execution Time
+//     * @param string $sql
+//     * @param float $seconds
+//     * @return string
+//     */
+//    protected function setTimeOut2(string $sql, float $seconds): string
+//    {
+//        // todo: implement this
+//        return sprintf($sql, '', '');
+//    }
 
     /**
      * Are timeouts supported?
@@ -864,4 +864,24 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    /**
+     * Returns Max Execution Time Query
+     * @param PDO|PDOProxy $pdo
+     * @param int $milliseconds
+     */
+    protected function setTimeout(PDO|PDOProxy $pdo, int $milliseconds)
+    {
+
+    }
+
+    /**
+     * Resets Max Execution Time Query
+     * @param PDO|PDOProxy $pdo
+     */
+    protected function resetTimeout(PDO|PDOProxy $pdo)
+    {
+
+    }
+
 }

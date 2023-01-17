@@ -51,27 +51,26 @@ class MySQL extends MariaDB
 
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
-
-    /**
-     * Returns Max Execution Time
-     * @param string $sql
-     * @param float $seconds
-     * @return string
-     */
-    protected function setTimeOut(string $sql, float $seconds): string
-    {
-        $syntax = '/*+ max_execution_time(' . ($seconds * 1000) . ') */';
-        return sprintf($sql, '', $syntax);
-    }
+//
+//    /**
+//     * Returns Max Execution Time
+//     * @param string $sql
+//     * @param float $seconds
+//     * @return string
+//     */
+//    protected function setTimeOut2(string $sql, float $seconds): string
+//    {
+//        $syntax = '/*+ max_execution_time(' . ($seconds * 1000) . ') */';
+//        return sprintf($sql, '', $syntax);
+//    }
 
     /**
      * Set Max Execution Time Query
      * @param PDO|PDOProxy $pdo
      * @param int $milliseconds
      */
-    protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
+    protected function setTimeout(PDO|PDOProxy $pdo, int $milliseconds)
     {
-        var_dump('SET SESSION max_execution_time = ' . $milliseconds);
         $pdo->prepare('SET SESSION max_execution_time = ' . $milliseconds)->execute();
     }
 
@@ -79,26 +78,26 @@ class MySQL extends MariaDB
      * Resets Max Execution Time Query
      * @param PDO|PDOProxy $pdo
      */
-    protected function resetTimeoutSession(PDO|PDOProxy $pdo)
+    protected function resetTimeout(PDO|PDOProxy $pdo)
     {
-        var_dump('SET SESSION max_execution_time = default');
         $pdo->prepare('SET SESSION max_execution_time = default')->execute();
     }
 
     /**
      * @param PDOException $e
+     * @param PDO|PDOProxy $pdo
      * @throws Timeout
-     * @throws PDOException
      */
-    protected function processException(PDOException $e): void
+    protected function processException(PDOException $e, PDO|PDOProxy $pdo): void
     {
         if($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024){
-            // todo: Do we need to resetTimeoutSession here?
+            $this->resetTimeout($pdo);
             Throw new Timeout($e->getMessage());
         }
 
         // PDOProxy which who switches errorInfo
         if($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000"){
+            $this->resetTimeout($pdo);
             Throw new Timeout($e->getMessage());
         }
 

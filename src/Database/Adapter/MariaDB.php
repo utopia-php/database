@@ -892,7 +892,7 @@ class MariaDB extends Adapter
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
 
         if($timeout){
-            $this->setTimeoutSession($this->getPDO(), $timeout);
+            $this->setTimeout($this->getPDO(), $timeout);
         }
 
         $sql = "
@@ -936,7 +936,7 @@ class MariaDB extends Adapter
         try {
             $stmt->execute();
         } catch (PDOException $e){
-            $this->checkTimeoutException($e);
+            $this->processException($e, $this->getPDO());
         }
 
         $results = $stmt->fetchAll();
@@ -962,7 +962,7 @@ class MariaDB extends Adapter
         }
 
         if($timeout){
-            $this->resetTimeoutSession($this->getPDO());
+            $this->resetTimeout($this->getPDO());
         }
 
         return $results;
@@ -1908,60 +1908,55 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
-
-    /**
-     * Returns Max Execution Time
-     * @param string $sql
-     * @param float $seconds
-     * @return string
-     */
-    protected function setTimeOut(string $sql, float $seconds): string
-    {
-        $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
-        return sprintf($sql, $syntax, '');
-    }
+//
+//    /**
+//     * Returns Max Execution Time
+//     * @param string $sql
+//     * @param float $seconds
+//     * @return string
+//     */
+//    protected function setTimeOut2(string $sql, float $seconds): string
+//    {
+//        $syntax = 'SET STATEMENT max_statement_time = ' . $seconds . ' FOR ';
+//        return sprintf($sql, $syntax, '');
+//    }
 
     /**
      * Returns Max Execution Time Query
      * @param PDO|PDOProxy $pdo
      * @param int $milliseconds
      */
-    protected function setTimeoutSession(PDO|PDOProxy $pdo, int $milliseconds)
+    protected function setTimeout(PDO|PDOProxy $pdo, int $milliseconds)
     {
-        if(self::getSupportForTimeouts()){
             $seconds = $milliseconds / 1000;
-            var_dump('SET SESSION max_statement_time = ' . $seconds);
             $pdo->prepare('SET SESSION max_statement_time = ' . $seconds)->execute();
-        }
     }
 
     /**
      * Resets Max Execution Time Query
      * @param PDO|PDOProxy $pdo
      */
-    protected function resetTimeoutSession(PDO|PDOProxy $pdo)
+    protected function resetTimeout(PDO|PDOProxy $pdo)
     {
-        if(self::getSupportForTimeouts()) {
-            var_dump('SET SESSION max_statement_time = default');
             $pdo->prepare('SET SESSION max_statement_time = default')->execute();
-        }
     }
 
     /**
      * @param PDOException $e
+     * @param PDO|PDOProxy $pdo
      * @throws Timeout
-     * @throws PDOException
      */
-    protected function processException(PDOException $e): void
+    protected function processException(PDOException $e, PDO|PDOProxy $pdo): void
     {
         // Regular PDO
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
-            // todo: Do we need to resetTimeoutSession here?
+            $this->resetTimeout($pdo);
             Throw new Timeout($e->getMessage());
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
-        if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "70100"){
+        if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100'){
+            $this->resetTimeout($pdo);
             Throw new Timeout($e->getMessage());
         }
 

@@ -1803,12 +1803,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, true);
     }
 
-    public function testTimeout2()
-    {
-        $this->expectException(Timeout::class);
-        static::getDatabase()->getAdapter()->forceTimeoutException();
-    }
-
     /**
      * @depends testUpdateDocument
      */

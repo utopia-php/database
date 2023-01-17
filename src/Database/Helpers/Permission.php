@@ -1,6 +1,8 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Helpers;
+
+use Utopia\Database\Database;
 
 class Permission
 {
@@ -74,7 +76,7 @@ class Permission
      * @return Permission
      * @throws \Exception
      */
-    public static function parse(string $permission): Permission
+    public static function parse(string $permission): self
     {
         $permissionParts = \explode('("', $permission);
 
@@ -91,12 +93,12 @@ class Permission
         $hasDimension = \str_contains($fullRole, '/');
 
         if (!$hasIdentifier && !$hasDimension) {
-            return new Permission($permission, $role);
+            return new self($permission, $role);
         }
 
         if ($hasIdentifier && !$hasDimension) {
             $identifier = $roleParts[1];
-            return new Permission($permission, $role, $identifier);
+            return new self($permission, $role, $identifier);
         }
 
         if (!$hasIdentifier && $hasDimension) {
@@ -111,7 +113,7 @@ class Permission
             if (empty($dimension)) {
                 throw new \Exception('Dimension must not be empty.');
             }
-            return new Permission($permission, $role, '', $dimension);
+            return new self($permission, $role, '', $dimension);
         }
 
         // Has both identifier and dimension
@@ -127,7 +129,7 @@ class Permission
             throw new \Exception('Dimension must not be empty.');
         }
 
-        return new Permission($permission, $role, $identifier, $dimension);
+        return new self($permission, $role, $identifier, $dimension);
     }
 
     /**
@@ -144,7 +146,7 @@ class Permission
         }
         $mutated = [];
         foreach ($permissions as $i => $permission) {
-            $permission = Permission::parse($permission);
+            $permission = self::parse($permission);
             foreach (self::$aggregates as $type => $subTypes) {
                 if ($permission->getPermission() != $type) {
                     $mutated[] = $permission->toString();
@@ -154,7 +156,7 @@ class Permission
                     if (!\in_array($subType, $allowed)) {
                         continue;
                     }
-                    $mutated[] = (new Permission(
+                    $mutated[] = (new self(
                         $subType,
                         $permission->getRole(),
                         $permission->getIdentifier(),
@@ -174,7 +176,7 @@ class Permission
      */
     public static function read(Role $role): string
     {
-        $permission = new Permission(
+        $permission = new self(
             'read',
             $role->getRole(),
             $role->getIdentifier(),
@@ -191,7 +193,7 @@ class Permission
      */
     public static function create(Role $role): string
     {
-        $permission = new Permission(
+        $permission = new self(
             'create',
             $role->getRole(),
             $role->getIdentifier(),
@@ -208,7 +210,7 @@ class Permission
      */
     public static function update(Role $role): string
     {
-        $permission = new Permission(
+        $permission = new self(
             'update',
             $role->getRole(),
             $role->getIdentifier(),
@@ -225,7 +227,7 @@ class Permission
      */
     public static function delete(Role $role): string
     {
-        $permission = new Permission(
+        $permission = new self(
             'delete',
             $role->getRole(),
             $role->getIdentifier(),
@@ -242,7 +244,7 @@ class Permission
      */
     public static function write(Role $role): string
     {
-        $permission = new Permission(
+        $permission = new self(
             'write',
             $role->getRole(),
             $role->getIdentifier(),

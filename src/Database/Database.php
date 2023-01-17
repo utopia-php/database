@@ -4,6 +4,9 @@ namespace Utopia\Database;
 
 use Exception;
 use Throwable;
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -555,10 +558,10 @@ class Database
             }
 
             if (
-                $this->adapter->getRowLimit() > 0 &&
-                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit()
+                $this->adapter->getDocumentSizeLimit() > 0 &&
+                $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Row width limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
         }
 
@@ -694,8 +697,8 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
@@ -1009,8 +1012,8 @@ class Database
                 $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
                 if (
-                    $this->adapter->getRowLimit() > 0 &&
-                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getRowLimit()
+                    $this->adapter->getDocumentSizeLimit() > 0 &&
+                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
                 ) {
                     throw new LimitException('Row width limit reached. Cannot create new attribute.');
                 }
@@ -1048,8 +1051,8 @@ class Database
         }
 
         if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
             return false;
@@ -1836,7 +1839,7 @@ class Database
     protected function encodeAttribute(string $name, $value, Document $document)
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception('Filter not found');
+            throw new Exception("Filter: {$name} not found");
         }
 
         try {

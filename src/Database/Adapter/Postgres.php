@@ -12,7 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 
 class Postgres extends SQL
 {

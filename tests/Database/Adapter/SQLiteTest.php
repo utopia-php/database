@@ -30,16 +30,6 @@ class SQLiteTest extends Base
     }
 
     /**
-     * Return row limit of adapter
-     *
-     * @return int
-     */
-    static function getAdapterRowLimit(): int
-    {
-        return SQLite::getRowLimit();
-    }
-
-    /**
      *
      * @return int
      */

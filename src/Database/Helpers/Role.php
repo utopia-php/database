@@ -1,6 +1,6 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Helpers;
 
 class Role
 {
@@ -60,7 +60,7 @@ class Role
      * @return Role
      * @throws \Exception
      */
-    public static function parse(string $role): Role
+    public static function parse(string $role): self
     {
         $roleParts = \explode(':', $role);
         $hasIdentifier = \count($roleParts) > 1;
@@ -68,12 +68,12 @@ class Role
         $role = $roleParts[0];
 
         if (!$hasIdentifier && !$hasDimension) {
-            return new Role($role);
+            return new self($role);
         }
 
         if ($hasIdentifier && !$hasDimension) {
             $identifier = $roleParts[1];
-            return new Role($role, $identifier);
+            return new self($role, $identifier);
         }
 
         if (!$hasIdentifier && $hasDimension) {
@@ -88,7 +88,7 @@ class Role
             if (empty($dimension)) {
                 throw new \Exception('Dimension must not be empty.');
             }
-            return new Role($role, '', $dimension);
+            return new self($role, '', $dimension);
         }
 
         // Has both identifier and dimension
@@ -103,7 +103,7 @@ class Role
         if (empty($dimension)) {
             throw new \Exception('Dimension must not be empty.');
         }
-        return new Role($role, $identifier, $dimension);
+        return new self($role, $identifier, $dimension);
     }
 
     /**
@@ -113,9 +113,9 @@ class Role
      * @param string $status
      * @return Role
      */
-    public static function user(string $identifier, string $status = ''): Role
+    public static function user(string $identifier, string $status = '')
     {
-        return new Role('user', $identifier, $status);
+        return new self('user', $identifier, $status);
     }
 
     /**
@@ -124,9 +124,9 @@ class Role
      * @param string $status
      * @return Role
      */
-    public static function users(string $status = ''): Role
+    public static function users(string $status = ''): self
     {
-        return new Role('users', '', $status);
+        return new self('users', '', $status);
     }
 
     /**
@@ -136,9 +136,9 @@ class Role
      * @param string $dimension
      * @return Role
      */
-    public static function team(string $identifier, string $dimension = ''): Role
+    public static function team(string $identifier, string $dimension = ''): self
     {
-        return new Role('team', $identifier, $dimension);
+        return new self('team', $identifier, $dimension);
     }
 
     /**
@@ -156,14 +156,14 @@ class Role
      *
      * @return Role
      */
-    public static function guests(): Role
+    public static function guests(): self
     {
-        return new Role('guests');
+        return new self('guests');
     }
 
-    public static function member(string $identifier): Role
+    public static function member(string $identifier): self
     {
-        return new Role('member', $identifier);
+        return new self('member', $identifier);
     }
 
 }

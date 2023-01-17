@@ -937,7 +937,6 @@ class MariaDB extends Adapter
             $stmt->execute();
         } catch (PDOException $e){
             $this->checkTimeoutException($e);
-            throw $e;
         }
 
         $results = $stmt->fetchAll();
@@ -1951,8 +1950,9 @@ class MariaDB extends Adapter
     /**
      * @param PDOException $e
      * @throws Timeout
+     * @throws PDOException
      */
-    protected function checkTimeoutException(PDOException $e): void
+    protected function processException(PDOException $e): void
     {
         // Regular PDO
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
@@ -1965,24 +1965,7 @@ class MariaDB extends Adapter
             Throw new Timeout($e->getMessage());
         }
 
-    }
-
-    /**
-     * Force a query to throw a timeout exception
-     *
-     * @throws Timeout
-     */
-    public function forceTimeoutException(): void
-    {
-        $timeoutMS = 1000; // 1 second
-        $this->setTimeoutSession($this->getPDO(), $timeoutMS);
-        try {
-            $stmt = $this->getPDO()->prepare("select sleep(2) from {$this->getSQLTable('movies')}");
-            $stmt->execute();
-        } catch (PDOException $e){
-            $this->resetTimeoutSession($this->getPDO());
-            $this->checkTimeoutException($e);
-        }
+        throw $e;
     }
 
     /**

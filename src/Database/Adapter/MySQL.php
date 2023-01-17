@@ -88,8 +88,9 @@ class MySQL extends MariaDB
     /**
      * @param PDOException $e
      * @throws Timeout
+     * @throws PDOException
      */
-    protected function checkTimeoutException(PDOException $e): void
+    protected function processException(PDOException $e): void
     {
         if($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024){
             // todo: Do we need to resetTimeoutSession here?
@@ -100,6 +101,8 @@ class MySQL extends MariaDB
         if($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000"){
             Throw new Timeout($e->getMessage());
         }
+
+        throw $e;
     }
 
 }

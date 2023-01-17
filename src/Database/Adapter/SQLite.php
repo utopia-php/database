@@ -856,16 +856,6 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Force a query to throw a timeout exception
-     *
-     * @throws Timeout
-     */
-    public function forceTimeoutException(): void
-    {
-        throw new Timeout('sqlite');
-    }
-
-    /**
      * Are timeouts supported?
      *
      * @return bool

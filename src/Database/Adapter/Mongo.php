@@ -653,8 +653,7 @@ class Mongo extends Adapter
         try {
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         } catch (MongoException $e){
-            $this->checkTimeoutException($e);
-            throw $e;
+            $this->processException($e);
         }
 
         foreach ($this->client->toArray($results) as $i => $result) {
@@ -1287,31 +1286,15 @@ class Mongo extends Adapter
 
     /**
      * @throws Timeout
+     * @throws Exception
      */
-    protected function checkTimeoutException(Exception $e): void
+    protected function processException(Exception $e): void
     {
         if($e->getCode() === 50){
             Throw new Timeout($e->getMessage());
         }
-    }
 
-    /**
-     * Force a query to throw a timeout exception
-     *
-     * @throws Timeout
-     */
-    public function forceTimeoutException(): void
-    {
-        try {
-            $this->client->find(
-                'movies',
-                ['$where' => 'sleep(1000) || true'],
-                ['maxTimeMS'=> 1]
-            )->cursor->firstBatch ?? [];
-        } catch (Exception $e){
-            $this->checkTimeoutException($e);
-        }
-
+        throw $e;
     }
 
     /**

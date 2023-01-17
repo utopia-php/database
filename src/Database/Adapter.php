@@ -477,9 +477,10 @@ abstract class Adapter
 
     /**
      * Filter Keys
-     * 
-     * @throws Exception
+     *
+     * @param string $value
      * @return string
+     * @throws Exception
      */
     public function filter(string $value): string
     {
@@ -491,14 +492,6 @@ abstract class Adapter
 
         return $value;
     }
-
-
-    /**
-     * Force a query to throw a timeout exception
-     *
-     * @throws Timeout
-     */
-    abstract public function forceTimeoutException(): void;
 
     /**
      * Are timeouts supported?

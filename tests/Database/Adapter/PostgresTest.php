@@ -28,16 +28,6 @@ class PostgresTest extends Base
     }
 
     /**
-     * Return row limit of adapter
-     *
-     * @return int
-     */
-    static function getAdapterRowLimit(): int
-    {
-        return 2022;
-    }
-
-    /**
      * @reture Adapter
      */
     static function getDatabase(): Database

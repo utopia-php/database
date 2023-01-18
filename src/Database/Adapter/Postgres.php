@@ -771,13 +771,6 @@ class Postgres extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        var_dump("SELECT DISTINCT _uid, table_main.*
-            FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
-            {$order}
-            LIMIT :limit OFFSET :offset;
-        ");
-
         $sql = "
             SELECT DISTINCT _uid, table_main.*
             FROM {$this->getSQLTable($name)} as table_main
@@ -870,8 +863,11 @@ class Postgres extends SQL
             });
 
             $conditions = [];
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $bindKey = 'key_' . $attributeIndex;
+                $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $attributeIndex++;
             }
 
             $condition = implode(' OR ', $conditions);
@@ -882,7 +878,7 @@ class Postgres extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sql = "SELECT COUNT(1) as sum
             FROM
                 (
@@ -896,8 +892,11 @@ class Postgres extends SQL
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 

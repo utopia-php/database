@@ -1079,4 +1079,14 @@ class MariaDB extends SQL
                 throw new Exception('Unknown PDO Type for ' . gettype($value));
         }
     }
+
+    /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return true;
+    }
 }

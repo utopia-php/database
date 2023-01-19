@@ -1188,4 +1188,15 @@ class Postgres extends SQL
 
         return '{' . implode(",", $value) . '}';
     }
+
+    /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    // TODO: Fix full-text search logic for postgres and MariaDB
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return false;
+    }
 }

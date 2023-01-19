@@ -226,16 +226,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Is fulltext Wildcard index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return true;
-    }
-
-    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

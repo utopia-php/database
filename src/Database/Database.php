@@ -952,14 +952,29 @@ class Database
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, &$success) {
-            if ($type !== null || $size !== null || $signed !== null || $array !== null) {
+        /** Ensure required filters for the attribute are passed */
+        $requiredFilters = $this->getRequiredFilters($type);
+        if (!empty(array_diff($requiredFilters, $filters))) {
+            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        }
+
+        if ($format) {
+            if (!Structure::hasFormat($format, $type)) {
+                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+            }
+        }
+
+        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
+            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
                 $array ??= $attribute->getAttribute('array');
+                $format ??= $attribute->getAttribute('format');
+                $formatOptions ??= $attribute->getAttribute('formatOptions');
+                $filters ??= $attribute->getAttribute('filters');
 
                 switch ($type) {
                     case self::VAR_STRING:
@@ -987,7 +1002,10 @@ class Database
                     ->setAttribute('type', $type)
                     ->setAttribute('size', $size)
                     ->setAttribute('signed', $signed)
-                    ->setAttribute('array', $array);
+                    ->setAttribute('array', $array)
+                    ->setAttribute('format', $format)
+                    ->setAttribute('formatOptions', $formatOptions)
+                    ->setAttribute('filters', $filters);
 
                 $attributes = $collectionDoc->getAttribute('attributes');
                 $attributes[$attributeIndex] = $attribute;

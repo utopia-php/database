@@ -868,6 +868,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
         static::getDatabase()->createDocument('movies', new Document([
             '$id' => ID::custom('frozen'),
@@ -1009,7 +1010,8 @@ abstract class Base extends TestCase
             'price' => 0.0,
             'active' => false,
             'generes' => [],
-            'with-dash' => 'Works3'
+            'with-dash' => 'Works3',
+            'nullable' => 'Not null'
         ]));
 
     }
@@ -1971,6 +1973,24 @@ abstract class Base extends TestCase
             Query::offset(10)
         ]);
         $this->assertEquals(false, $document);
+    }
+
+    public function testFindNull()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::isNull('nullable'),
+        ]);
+
+        $this->assertEquals(5, count($documents));
+    }
+
+    public function testFindNotNull()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::isNotNull('nullable'),
+        ]);
+
+        $this->assertEquals(1, count($documents));
     }
 
     /**

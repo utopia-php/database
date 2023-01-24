@@ -98,13 +98,13 @@ class Postgres extends SQL
         //INDEX (\"_createdAt\"),
         //INDEX (\"_updatedAt\")
         $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on \"{$database}\".\"{$namespace}_{$id}\" (LOWER(_uid));");
+            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(_uid));");
         try {
             $stmt->execute();
             $stmtIndex->execute();
 
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}_perms\" (
+                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
                         \"_id\" SERIAL NOT NULL,
                         \"_type\" VARCHAR(12) NOT NULL,
                         \"_permission\" VARCHAR(255) NOT NULL,
@@ -1006,7 +1006,7 @@ class Postgres extends SQL
                 break;
 
             case Database::VAR_FLOAT:
-                return 'REAL';
+                return 'DOUBLE PRECISION';
                 break;
 
             case Database::VAR_BOOLEAN:
@@ -1088,7 +1088,7 @@ class Postgres extends SQL
                 break;
         }
 
-        return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON "' . $this->getDefaultDatabase() . '"."' . $this->getNamespace() . '_' . $collection . '" ( ' . implode(', ', $attributes) . ' );';
+        return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON ' . $this->getSQLTable($collection) . ' ( ' . implode(', ', $attributes) . ' );';
     }
 
     /**

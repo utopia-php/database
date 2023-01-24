@@ -85,7 +85,7 @@ class Postgres extends SQL
         }
 
         $stmt = $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS \"{$database}\".\"{$namespace}_{$id}\" (
+            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,

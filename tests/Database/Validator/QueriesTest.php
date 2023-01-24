@@ -12,21 +12,15 @@ use Utopia\Database\Validator\Queries;
 
 class QueriesTest extends TestCase
 {
-    /**
-     * @var array
-     */
-    protected $collection = [];
+    protected array $collection = [];
+
+    protected array $queries = [];
+
+    protected ?Query $queryValidator = null;
 
     /**
-     * @var DatabaseQuery[] $queries
+     * @throws \Exception
      */
-    protected $queries = [];
-
-    /**
-     * @var Query
-     */
-    protected $queryValidator = null;
-
     public function setUp(): void
     {
         $this->collection = [
@@ -160,6 +154,9 @@ class QueriesTest extends TestCase
     {
     }
 
+    /**
+     * @throws \Exception
+     */
     public function testQueries()
     {
         // test for SUCCESS
@@ -197,10 +194,13 @@ class QueriesTest extends TestCase
         $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
     }
 
+    /**
+     * @throws \Exception
+     */
     public function testLooseOrderQueries()
     {
         $validator = new Queries(
-            $this->queryValidator, 
+            $this->queryValidator,
             [
                 new Document([
                     '$id' => 'title',
@@ -244,7 +244,7 @@ class QueriesTest extends TestCase
                     ],
                     'orders' => []
                 ])
-            ], 
+            ],
             true,
         );
 
@@ -292,6 +292,9 @@ class QueriesTest extends TestCase
         ]));
     }
 
+    /**
+     * @throws \Exception
+     */
     public function testIsStrict()
     {
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
@@ -301,6 +304,5 @@ class QueriesTest extends TestCase
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes'], false);
 
         $this->assertEquals(false, $validator->isStrict());
-
     }
 }

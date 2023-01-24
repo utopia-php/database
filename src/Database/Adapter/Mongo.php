@@ -73,7 +73,7 @@ class Mongo extends Adapter
      * Create Database
      *
      * @param string $name
-     * 
+     *
      * @return bool
      */
     public function create(string $name): bool
@@ -107,7 +107,7 @@ class Mongo extends Adapter
             return false;
         }
 
-        return !\is_null($this->getClient()->selectDatabase());
+        return $this->getClient()->selectDatabase() != null;
     }
 
     /**
@@ -120,7 +120,7 @@ class Mongo extends Adapter
     {
         $list = [];
 
-        foreach ($this->getClient()->listDatabaseNames() as $key => $value) {
+        foreach ((array)$this->getClient()->listDatabaseNames() as $value) {
             $list[] = $value;
         }
 
@@ -155,10 +155,10 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        if($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        if ($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
-        
+
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
@@ -247,7 +247,7 @@ class Mongo extends Adapter
     {
         $list = [];
 
-        foreach ($this->getClient()->listCollectionNames() as $key => $value) {
+        foreach ((array)$this->getClient()->listCollectionNames() as $value) {
             $list[] = $value;
         }
 
@@ -287,10 +287,10 @@ class Mongo extends Adapter
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
@@ -376,8 +376,9 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
         $collection = $this->getDatabase();
+        $collection->dropIndexes($name, [$id]);
 
-        return (!!$collection->dropIndexes($name, [$id]));
+        return true;
     }
 
     /**
@@ -444,7 +445,6 @@ class Mongo extends Adapter
             )->cursor->firstBatch[0];
 
             return $this->client->toArray($result);
-
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }
@@ -559,7 +559,7 @@ class Mongo extends Adapter
         foreach ($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            
+
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
@@ -595,7 +595,7 @@ class Mongo extends Adapter
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
-                
+
                 $options['sort']['_id'] = $this->getOrder($orderType);
             }
         }
@@ -637,7 +637,7 @@ class Mongo extends Adapter
             ];
         }
 
-        $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
+        $filters = $this->recursiveReplace($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
 
         /**
@@ -649,7 +649,7 @@ class Mongo extends Adapter
         foreach ($this->client->toArray($results) as $i => $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
             $record = $this->timeToDocument($record);
-    
+
             $found[] = new Document($record);
         }
 
@@ -669,21 +669,21 @@ class Mongo extends Adapter
      * @return array
      * @throws Exception
      */
-    private function timeFilter(array $filters):array 
+    private function timeFilter(array $filters): array
     {
         $results = $filters;
 
-        foreach($filters as $k=>$v) {
-            if($k === '_createdAt' || $k == '_updatedAt') {
-                if(is_array($v)) {
-                    foreach($v as $sk=>$sv) {
+        foreach ($filters as $k=>$v) {
+            if ($k === '_createdAt' || $k == '_updatedAt') {
+                if (is_array($v)) {
+                    foreach ($v as $sk=>$sv) {
                         $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
                 } else {
                     $results[$k] = $this->toMongoDatetime($v);
                 }
             } else {
-                if(is_array($v)) {
+                if (is_array($v)) {
                     $results[$k] = $this->timeFilter($v);
                 }
             }
@@ -694,12 +694,12 @@ class Mongo extends Adapter
 
     /**
      * Converts timestamp base fields to Utopia\Document format.
-     * 
+     *
      * @param array $record
-     * 
+     *
      * @return array
      */
-    private function timeToDocument(array $record):array
+    private function timeToDocument(array $record): array
     {
         $record['$createdAt'] = DateTime::format($record['$createdAt']->toDateTime());
         $record['$updatedAt'] = DateTime::format($record['$updatedAt']->toDateTime());
@@ -715,7 +715,7 @@ class Mongo extends Adapter
      * @return array
      * @throws Exception
      */
-    private function timeToMongo(array $record):array
+    private function timeToMongo(array $record): array
     {
         $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
         $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
@@ -730,7 +730,8 @@ class Mongo extends Adapter
      * @return UTCDateTime
      * @throws Exception
      */
-    private function toMongoDatetime(string $dt): UTCDateTime {
+    private function toMongoDatetime(string $dt): UTCDateTime
+    {
         $dt = new \DateTime($dt);
 
         return new UTCDateTime($dt->getTimestamp() . $dt->format('v'));
@@ -746,16 +747,17 @@ class Mongo extends Adapter
      * @param array $exclude
      * @return array
      */
-    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []):array {
+    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []): array
+    {
         $result = [];
 
         foreach ($array as $key => $value) {
             if (false == in_array($key, $exclude)) {
                 $key = str_replace($from, $to, $key);
             }
-            
-            $result[$key] = is_array($value) 
-                ? $this->recursiveReplace($value, $from, $to, $exclude) 
+
+            $result[$key] = is_array($value)
+                ? $this->recursiveReplace($value, $from, $to, $exclude)
                 : $value;
         }
 
@@ -814,7 +816,7 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
-// todo $collection is not used?
+        // todo $collection is not used?
         $filters = [];
 
         // queries
@@ -859,10 +861,7 @@ class Mongo extends Adapter
      */
     protected function getDatabase(string $name = null): Client
     {
-        $database = is_null($name) ? $this->getDefaultDatabase() : $name;
-        $selected = $this->getClient()->selectDatabase($database);
-
-        return $selected;
+        return $this->getClient()->selectDatabase();
     }
 
     /**
@@ -913,7 +912,7 @@ class Mongo extends Adapter
 
                 unset($result['_uid']);
             }
-        } else if ($from === '$') {
+        } elseif ($from === '$') {
             if (array_key_exists('$id', $array)) {
                 $result['_uid'] = $array['$id'];
 
@@ -927,7 +926,7 @@ class Mongo extends Adapter
             }
         }
 
-        return $result;        
+        return $result;
     }
 
     /**
@@ -953,7 +952,7 @@ class Mongo extends Adapter
             if ($query->getAttribute() === '$updatedAt') {
                 $query->setAttribute('_updatedAt');
             }
-            
+
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
@@ -975,9 +974,9 @@ class Mongo extends Adapter
 
     /**
      * Get Query Operator
-     * 
+     *
      * @param string $operator
-     * 
+     *
      * @return string
      */
     protected function getQueryOperator(string $operator): string
@@ -1147,13 +1146,13 @@ class Mongo extends Adapter
 
     /**
      * Get current index count from collection document
-     * 
+     *
      * @param Document $collection
      * @return int
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
+        $indexes = \count(((array)$collection->getAttribute('indexes')) ?? []);
 
         return $indexes + static::getCountOfDefaultIndexes();
     }
@@ -1167,7 +1166,7 @@ class Mongo extends Adapter
     {
         return 6;
     }
-    
+
     /**
      * Returns number of indexes used by default.
      *
@@ -1194,7 +1193,7 @@ class Mongo extends Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -1205,7 +1204,7 @@ class Mongo extends Adapter
 
     /**
      * Is casting supported?
-     * 
+     *
      * @return bool
      */
     public function getSupportForCasting(): bool
@@ -1293,7 +1292,9 @@ class Mongo extends Adapter
         $cleaned = [];
 
         foreach ($target as $key => $value) {
-            if (\is_null($value)) continue;
+            if (\is_null($value)) {
+                continue;
+            }
 
             $cleaned[$key] = $value;
         }
@@ -1302,7 +1303,7 @@ class Mongo extends Adapter
         return $cleaned;
     }
 
-    public function getKeywords(): array 
+    public function getKeywords(): array
     {
         return [];
     }

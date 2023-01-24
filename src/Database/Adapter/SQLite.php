@@ -12,7 +12,7 @@ use Utopia\Database\Exception\Duplicate;
 
 /**
  * Main differences from MariaDB and MySQL:
- * 
+ *
  * 1. No concept of a schema. All tables are in the same schema.
  * 2. AUTO_INCREMENT is AUTOINCREAMENT.
  * 3. Can't create indexes in the same statement as creating a table.
@@ -148,10 +148,10 @@ class SQLite extends MariaDB
         } catch (\Throwable $th) {
             var_dump($th->getMessage());
         }
-        
+
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
         $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission'], [], []);
-        
+
         $this->getPDO()->commit();
 
         // Update $this->getCountOfIndexes when adding another default index
@@ -221,8 +221,8 @@ class SQLite extends MariaDB
         $indexs = json_decode($collectionDocument['indexes'], true);
         $index = null;
 
-        foreach($indexs as $node) {
-            if($node['key'] === $old) {
+        foreach ($indexs as $node) {
+            if ($node['key'] === $old) {
                 $index = $node;
                 break;
             }
@@ -364,14 +364,10 @@ class SQLite extends MariaDB
             }
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case "1062":
-                case "23000":
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                break;
-                default:
-                    throw $e;
-            }
+            throw match ($e->getCode()) {
+                "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                default => $e,
+            };
         }
 
         if (!$this->getPDO()->commit()) {
@@ -430,7 +426,7 @@ class SQLite extends MariaDB
          * Get removed Permissions
          */
         $removals = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
             if (!empty($diff)) {
                 $removals[$type] = $diff;
@@ -441,7 +437,7 @@ class SQLite extends MariaDB
          * Get added Permissions
          */
         $additions = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
             if (!empty($diff)) {
                 $additions[$type] = $diff;
@@ -457,7 +453,7 @@ class SQLite extends MariaDB
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
                 )";
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
@@ -540,26 +536,21 @@ class SQLite extends MariaDB
             $attributeIndex++;
         }
 
-        if (!empty($attributes)) {
-            try {
-                $stmt->execute();
-                if (isset($stmtRemovePermissions)) {
-                    $stmtRemovePermissions->execute();
-                }
-                if (isset($stmtAddPermissions)) {
-                    $stmtAddPermissions->execute();
-                }
-            } catch (PDOException $e) {
-                $this->getPDO()->rollBack();
-                switch ($e->getCode()) {
-                    case '1062':
-                    case '23000':
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
-
-                    default:
-                        throw $e;
-                }
+        try {
+            $stmt->execute();
+            if (isset($stmtRemovePermissions)) {
+                $stmtRemovePermissions->execute();
             }
+            if (isset($stmtAddPermissions)) {
+                $stmtAddPermissions->execute();
+            }
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+
+            throw match ($e->getCode()) {
+                '1062', '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                default => $e,
+            };
         }
 
         if (!$this->getPDO()->commit()) {
@@ -631,7 +622,7 @@ class SQLite extends MariaDB
      * @return string
      * @throws Exception
      */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $postfix = '';
 
@@ -649,7 +640,6 @@ class SQLite extends MariaDB
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
@@ -660,12 +650,10 @@ class SQLite extends MariaDB
         }, $attributes);
 
         foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
+            $order = '';
             $attribute = $this->filter($attribute);
 
-            $attributes[$key] = "`{$attribute}`{$postfix} {$order}";
+            $attributes[$key] = "`$attribute`$postfix $order";
         }
 
         return "CREATE {$type} `{$this->getNamespace()}_{$collection}_{$id}` ON `{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . ")";
@@ -674,10 +662,10 @@ class SQLite extends MariaDB
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -693,7 +681,7 @@ class SQLite extends MariaDB
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://www.sqlite.org/lang_keywords.html
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array

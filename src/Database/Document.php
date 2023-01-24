@@ -9,9 +9,9 @@ use Utopia\Database\Helpers\Role;
 
 class Document extends ArrayObject
 {
-    const SET_TYPE_ASSIGN = 'assign';
-    const SET_TYPE_PREPEND = 'prepend';
-    const SET_TYPE_APPEND = 'append';
+    public const SET_TYPE_ASSIGN = 'assign';
+    public const SET_TYPE_PREPEND = 'prepend';
+    public const SET_TYPE_APPEND = 'append';
 
     /**
      * Construct.

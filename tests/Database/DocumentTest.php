@@ -20,12 +20,12 @@ class DocumentTest extends TestCase
      * @var Document
      */
     protected $empty = null;
-    
+
     /**
      * @var string
      */
     protected $id = null;
-    
+
     /**
      * @var string
      */
@@ -34,7 +34,7 @@ class DocumentTest extends TestCase
     public function setUp(): void
     {
         $this->id = uniqid();
-        
+
         $this->collection = uniqid();
 
         $this->document = new Document([
@@ -159,9 +159,9 @@ class DocumentTest extends TestCase
         $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
-        
+
         $this->document->setAttribute('title', 'New title');
-     
+
         $this->assertEquals('New title', $this->document->getAttribute('title', ''));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
 
@@ -184,10 +184,10 @@ class DocumentTest extends TestCase
     public function testFind()
     {
         $this->assertEquals(null, $this->document->find('find', 'one'));
-        
+
         $this->document->setAttribute('findString', 'demo');
         $this->assertEquals($this->document, $this->document->find('findString', 'demo'));
-        
+
         $this->document->setAttribute('findArray', ['demo']);
         $this->assertEquals(null, $this->document->find('findArray', 'demo'));
         $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
@@ -223,13 +223,13 @@ class DocumentTest extends TestCase
         $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
         $this->assertEquals('1', $document->getAttribute('children')[0]['name']);
         $this->assertEquals(true, $document->getAttribute('children')[0]['test']);
-        
+
         // Array with wrong value
         $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
-        
+
         // Array with wrong key
         $this->assertEquals(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-        
+
         // No array
         $this->assertEquals(true, $document->findAndReplace('title', 'This is a test.', 'new'));
         $this->assertEquals('new', $document->getAttribute('title'));
@@ -266,13 +266,13 @@ class DocumentTest extends TestCase
         $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
         $this->assertEquals('y', $document->getAttribute('children')[1]['name']);
         $this->assertCount(2, $document->getAttribute('children'));
-        
+
         // Array with wrong value
         $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
-        
+
         // Array with wrong key
         $this->assertEquals(false, $document->findAndRemove('namex', 'x', 'children'));
-        
+
         // No array
         $this->assertEquals(true, $document->findAndRemove('title', 'This is a test.'));
         $this->assertEquals(false, $document->isset('title'));

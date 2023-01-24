@@ -8,7 +8,7 @@ class Permission
 {
     private Role $role;
 
-    private static $aggregates = [
+    private static array $aggregates = [
         'write' => [
             Database::PERMISSION_CREATE,
             Database::PERMISSION_UPDATE,
@@ -21,8 +21,7 @@ class Permission
         string $role,
         string $identifier = '',
         string $dimension = '',
-    )
-    {
+    ) {
         $this->role = new Role($role, $identifier, $dimension);
     }
 
@@ -101,7 +100,7 @@ class Permission
             return new self($permission, $role, $identifier);
         }
 
-        if (!$hasIdentifier && $hasDimension) {
+        if (!$hasIdentifier) {
             $dimensionParts = \explode('/', $fullRole);
             if (\count($dimensionParts) !== 2) {
                 throw new \Exception('Only one dimension can be provided.');
@@ -253,4 +252,3 @@ class Permission
         return $permission->toString();
     }
 }
-

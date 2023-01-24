@@ -79,6 +79,5 @@ class KeyTest extends TestCase
 
         $this->assertEquals(false, $validator->isValid('$appwrite'));
         $this->assertEquals(false, $validator->isValid('$permissions'));
-
     }
 }

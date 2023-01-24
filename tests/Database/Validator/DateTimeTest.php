@@ -5,13 +5,11 @@ namespace Utopia\Tests\Validator;
 use Utopia\Database\DateTime;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Validator\DatetimeValidator;
-use Utopia\Validator;
 
 class DateTimeTest extends TestCase
 {
     public function setUp(): void
     {
-
     }
 
     public function tearDown(): void
@@ -20,7 +18,6 @@ class DateTimeTest extends TestCase
 
     public function testCreateDatetime()
     {
-
         $dateValidator = new DatetimeValidator();
 
         $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());

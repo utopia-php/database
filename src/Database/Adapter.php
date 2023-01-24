@@ -100,6 +100,7 @@ abstract class Adapter
      * @param string $name
      * @param bool $reset
      *
+     * @return bool
      * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
@@ -133,8 +134,6 @@ abstract class Adapter
 
     /**
      * Ping Database
-     *
-     * @param string $name
      *
      * @return bool
      */
@@ -188,45 +187,47 @@ abstract class Adapter
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $name
-     * 
+     *
      * @return bool
      */
     abstract public function deleteCollection(string $name): bool;
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Update Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;
@@ -335,7 +336,7 @@ abstract class Adapter
 
     /**
      * Sum an attribute
-     * 
+     *
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
@@ -347,7 +348,7 @@ abstract class Adapter
 
     /**
      * Count Documents
-     * 
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $max
@@ -358,55 +359,55 @@ abstract class Adapter
 
     /**
      * Get max STRING limit
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForInt(): int;
 
     /**
      * Get maximum attributes limit.
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForAttributes(): int;
 
     /**
      * Get maximum index limit.
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForIndexes(): int;
 
     /**
      * Is schemas supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForSchemas(): bool;
     /**
      * Is index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForIndex(): bool;
 
     /**
      * Is unique index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForUniqueIndex(): bool;
 
     /**
      * Is fulltext index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForFulltextIndex(): bool;
@@ -421,7 +422,7 @@ abstract class Adapter
 
     /**
      * Does the adapter handle casting?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForCasting(): bool;
@@ -435,7 +436,7 @@ abstract class Adapter
 
     /**
      * Get current attribute count from collection document
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -443,7 +444,7 @@ abstract class Adapter
 
     /**
      * Get current index count from collection document
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -476,7 +477,7 @@ abstract class Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -484,16 +485,17 @@ abstract class Adapter
 
     /**
      * Get list of keywords that cannot be used
-     * 
+     *
      * @return string[]
      */
     abstract public function getKeywords(): array;
 
     /**
      * Filter Keys
-     * 
-     * @throws Exception
+     *
+     * @param string $value
      * @return string
+     * @throws Exception
      */
     public function filter(string $value): string
     {

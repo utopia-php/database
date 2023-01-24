@@ -120,8 +120,8 @@ class OrderValidatorTest extends TestCase
             $this->schema[] = new Document($attribute);
         }
 
-           // Query validator expects Document[]
-           foreach ($this->indexes as $index) {
+        // Query validator expects Document[]
+        foreach ($this->indexes as $index) {
             $this->indexesSchema[] = new Document($index);
         }
     }

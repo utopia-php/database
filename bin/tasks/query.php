@@ -11,7 +11,6 @@ use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;

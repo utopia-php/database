@@ -124,7 +124,7 @@ class OrderAttributes extends Validator
         if ($this->strict) {
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  $attributes)) {
+                if ($this->arrayMatch($index['attributes'], $attributes)) {
                     $found = $index;
                 }
             }

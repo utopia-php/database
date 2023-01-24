@@ -17,22 +17,20 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\DatetimeValidator;
 use Utopia\Database\Validator\Structure;
-use Utopia\Validator;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
-
 
 abstract class Base extends TestCase
 {
     /**
      * @return Database
      */
-    abstract static protected function getDatabase(): Database;
+    abstract protected static function getDatabase(): Database;
 
     /**
      * @return string
      */
-    abstract static protected function getAdapterName(): string;
+    abstract protected static function getAdapterName(): string;
 
     public function setUp(): void
     {
@@ -54,7 +52,7 @@ abstract class Base extends TestCase
     public function testCreateExistsDelete()
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
-        if(!$schemaSupport) {
+        if (!$schemaSupport) {
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->create());
             return;
@@ -86,7 +84,6 @@ abstract class Base extends TestCase
 
         $this->assertNotEmpty($document->getInternalId());
         $this->assertNotNull($document->getInternalId());
-
     }
 
     /**
@@ -726,7 +723,7 @@ abstract class Base extends TestCase
     public function testListDocumentSearch(Document $document)
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
-        if(!$fulltextSupport) {
+        if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -834,7 +831,7 @@ abstract class Base extends TestCase
             ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
             ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND);
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
@@ -858,7 +855,8 @@ abstract class Base extends TestCase
 
 
 
-    public function testFind(){
+    public function testFind()
+    {
         static::getDatabase()->createCollection('movies');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
@@ -1011,7 +1009,6 @@ abstract class Base extends TestCase
             'generes' => [],
             'with-dash' => 'Works3'
         ]));
-
     }
 
     public function testFindBasicChecks()
@@ -1077,10 +1074,10 @@ abstract class Base extends TestCase
             Query::orderAsc(''),
         ]);
         $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
-
     }
 
-    public function testFindCheckPermissions(){
+    public function testFindCheckPermissions()
+    {
         /**
          * Check Permissions
          */
@@ -1090,7 +1087,8 @@ abstract class Base extends TestCase
         $this->assertEquals(6, count($documents));
     }
 
-    public function testFindCheckInteger(){
+    public function testFindCheckInteger()
+    {
         /**
          * Query with dash attribute
          */
@@ -1118,7 +1116,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
     }
 
-    public function testFindBoolean(){
+    public function testFindBoolean()
+    {
         /**
          * Boolean condition
          */
@@ -1129,7 +1128,8 @@ abstract class Base extends TestCase
         $this->assertEquals(4, count($documents));
     }
 
-    public function testFindStringQueryEqual(){
+    public function testFindStringQueryEqual()
+    {
         /**
          * String condition
          */
@@ -1154,10 +1154,10 @@ abstract class Base extends TestCase
         foreach ($documents as $document) {
             $this->assertTrue($document['director'] !== 'TBD');
         }
-
     }
 
-    public function testFindFloat(){
+    public function testFindFloat()
+    {
         /**
          * Float condition
          */
@@ -1169,7 +1169,8 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
-    public function testFindContains(){
+    public function testFindContains()
+    {
         /**
          * Array contains condition
          */
@@ -1193,7 +1194,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, true); // Test must do an assertion
     }
 
-    public function testFindFulltext(){
+    public function testFindFulltext()
+    {
         /**
          * Fulltext search
          */
@@ -1224,10 +1226,10 @@ abstract class Base extends TestCase
         }
 
         $this->assertEquals(true, true); // Test must do an assertion
-
     }
 
-    public function testFindMultipleConditions(){
+    public function testFindMultipleConditions()
+    {
         /**
          * Multiple conditions
          */
@@ -1250,7 +1252,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
     }
 
-    public function testFindByID(){
+    public function testFindByID()
+    {
         /**
          * $id condition
          */
@@ -1262,7 +1265,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Frozen', $documents[0]['name']);
     }
 
-    public function testFindOrderBy(){
+    public function testFindOrderBy()
+    {
         /**
          * ORDER BY
          */
@@ -1282,7 +1286,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[5]['name']);
     }
 
-    public function testFindOrderByNatural(){
+    public function testFindOrderByNatural()
+    {
         /**
          * ORDER BY natural
          */
@@ -1305,7 +1310,8 @@ abstract class Base extends TestCase
         $this->assertEquals($base[5]['name'], $documents[5]['name']);
     }
 
-    public function testFindOrderByMultipleAttributes(){
+    public function testFindOrderByMultipleAttributes()
+    {
         /**
          * ORDER BY - Multiple attributes
          */
@@ -1325,7 +1331,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress', $documents[5]['name']);
     }
 
-    public function testFindOrderByCursorAfter(){
+    public function testFindOrderByCursorAfter()
+    {
         /**
          * ORDER BY - After
          */
@@ -1369,7 +1376,8 @@ abstract class Base extends TestCase
     }
 
 
-    public function testFindOrderByCursorBefore(){
+    public function testFindOrderByCursorBefore()
+    {
         /**
          * ORDER BY - Before
          */
@@ -1421,7 +1429,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByAfterNaturalOrder(){
+    public function testFindOrderByAfterNaturalOrder()
+    {
         /**
          * ORDER BY - After by natural order
          */
@@ -1468,7 +1477,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByBeforeNaturalOrder(){
+    public function testFindOrderByBeforeNaturalOrder()
+    {
         /**
          * ORDER BY - Before by natural order
          */
@@ -1526,7 +1536,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderBySingleAttributeAfter(){
+    public function testFindOrderBySingleAttributeAfter()
+    {
         /**
          * ORDER BY - Single Attribute After
          */
@@ -1575,7 +1586,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderBySingleAttributeBefore(){
+    public function testFindOrderBySingleAttributeBefore()
+    {
         /**
          * ORDER BY - Single Attribute Before
          */
@@ -1633,7 +1645,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByMultipleAttributeAfter(){
+    public function testFindOrderByMultipleAttributeAfter()
+    {
         /**
          * ORDER BY - Multiple Attribute After
          */
@@ -1686,7 +1699,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByMultipleAttributeBefore(){
+    public function testFindOrderByMultipleAttributeBefore()
+    {
         /**
          * ORDER BY - Multiple Attribute Before
          */
@@ -1751,7 +1765,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByAndCursor(){
+    public function testFindOrderByAndCursor()
+    {
         /**
          * ORDER BY + CURSOR
          */
@@ -1770,7 +1785,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindOrderByIdAndCursor(){
+    public function testFindOrderByIdAndCursor()
+    {
         /**
          * ORDER BY ID + CURSOR
          */
@@ -1789,7 +1805,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindOrderByCreateDateAndCursor(){
+    public function testFindOrderByCreateDateAndCursor()
+    {
         /**
          * ORDER BY CREATE DATE + CURSOR
          */
@@ -1809,7 +1826,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindOrderByUpdateDateAndCursor(){
+    public function testFindOrderByUpdateDateAndCursor()
+    {
         /**
          * ORDER BY UPDATE DATE + CURSOR
          */
@@ -1828,7 +1846,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindLimit(){
+    public function testFindLimit()
+    {
         /**
          * Limit
          */
@@ -1845,7 +1864,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Frozen II', $documents[3]['name']);
     }
 
-    public function testFindLimitAndOffset(){
+    public function testFindLimitAndOffset()
+    {
         /**
          * Limit + Offset
          */
@@ -1862,7 +1882,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[3]['name']);
     }
 
-    public function testFindOrQueries(){
+    public function testFindOrQueries()
+    {
         /**
          * Test that OR queries are handled correctly
          */
@@ -1873,7 +1894,8 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
-    public function testFindOrderByAfterException(){
+    public function testFindOrderByAfterException()
+    {
         /**
          * ORDER BY - After Exception
          * Must be last assertion in test
@@ -1943,14 +1965,14 @@ abstract class Base extends TestCase
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
         /**
-         * Check `equals` query 
+         * Check `equals` query
          */
         foreach ($values as $value) {
             $documents = static::getDatabase()->find($collection, [
                 Query::limit(25),
                 Query::equal('value', [$value])
             ]);
-    
+
             $this->assertEquals(1, count($documents));
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }
@@ -2218,7 +2240,7 @@ abstract class Base extends TestCase
             'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
-            'prefs' => new \stdClass,
+            'prefs' => new \stdClass(),
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],
@@ -3055,10 +3077,10 @@ abstract class Base extends TestCase
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        
+
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
-        
+
         static::getDatabase()->createCollection('created_at');
     }
 
@@ -3089,7 +3111,7 @@ abstract class Base extends TestCase
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
         $dateValidator = new DatetimeValidator();
-        $this->assertEquals(NULL, $document->getAttribute('date2'));
+        $this->assertEquals(null, $document->getAttribute('date2'));
         $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
         $this->assertEquals(false, $dateValidator->isValid($document->getAttribute('date2')));
 
@@ -3296,7 +3318,7 @@ abstract class Base extends TestCase
         $newCat = $cat->setAttribute('type', 'newCat');
         $database->updateDocument('animals', 'cat', $newCat);
 
-        $docs = Authorization::skip(fn() => $database->find('animals'));
+        $docs = Authorization::skip(fn () => $database->find('animals'));
         $this->assertCount(1, $docs);
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
@@ -3304,7 +3326,7 @@ abstract class Base extends TestCase
 
     public function testEvents()
     {
-        Authorization::skip(function() {
+        Authorization::skip(function () {
             $database = static::getDatabase();
 
             $events = [
@@ -3330,13 +3352,13 @@ abstract class Base extends TestCase
                 Database::EVENT_DATABASE_DELETE,
             ];
 
-            $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
+            $database->on(Database::EVENT_ALL, function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
 
                 $this->assertEquals($shifted, $event);
             });
-    
-            if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+
+            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
                 $database->setDefaultDatabase('hellodb');
                 $database->create();
             } else {
@@ -3344,9 +3366,9 @@ abstract class Base extends TestCase
             }
 
             $database->list();
-    
+
             $database->setDefaultDatabase($this->testDatabase);
-    
+
             $collectionId = ID::unique();
             $database->createCollection($collectionId);
             $database->listCollections();
@@ -3355,7 +3377,7 @@ abstract class Base extends TestCase
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $indexId1 = 'index2_' . uniqid();
             $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
-            
+
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
                 'attr1' => 10,
@@ -3372,13 +3394,12 @@ abstract class Base extends TestCase
             $database->findOne($collectionId);
             $database->count($collectionId);
             $database->sum($collectionId, 'attr1');
-            
+
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-
     }
 }

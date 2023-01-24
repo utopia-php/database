@@ -50,18 +50,18 @@ class Key extends Validator
 
         // no leading special characters
         $leading = \mb_substr($value, 0, 1);
-        if($leading === '_' || $leading === '.' || $leading === '-') {
+        if ($leading === '_' || $leading === '.' || $leading === '-') {
             return false;
         }
 
         $isInternal = $leading === '$';
 
 
-        if($isInternal && !$this->allowInternal) {
+        if ($isInternal && !$this->allowInternal) {
             return false;
         }
 
-        if($isInternal) {
+        if ($isInternal) {
             $allowList = [ '$id', '$createdAt', '$updatedAt' ];
 
             // If exact match, no need for any further checks
@@ -79,7 +79,7 @@ class Key extends Validator
 
         return true;
     }
-    
+
     /**
      * Is array
      *

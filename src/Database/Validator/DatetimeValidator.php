@@ -13,7 +13,6 @@ class DatetimeValidator extends Validator
 
     public function __construct()
     {
-
     }
 
     /**
@@ -39,8 +38,7 @@ class DatetimeValidator extends Validator
 
         try {
             new \DateTime($value);
-        }
-        catch(\Exception $e) {
+        } catch(\Exception $e) {
             $this->message = $e->getMessage();
             return false;
         }

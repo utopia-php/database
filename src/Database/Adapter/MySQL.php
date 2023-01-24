@@ -9,13 +9,16 @@ class MySQL extends MariaDB
 {
     /**
      * Get SQL Index
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param array $attributes
-     * 
+     *
      * @return string
+     * @throws Exception
+     * @throws Exception
+     * @throws Exception
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
@@ -42,10 +45,8 @@ class MySQL extends MariaDB
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
 
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
-
 }

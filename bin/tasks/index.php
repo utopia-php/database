@@ -5,19 +5,14 @@
  */
 global $cli;
 
-use Faker\Factory;
 use MongoDB\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 
 $cli
@@ -31,7 +26,8 @@ $cli
         switch ($adapter) {
             case 'mongodb':
                 $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                $client = new Client('mongodb://mongo/',
+                $client = new Client(
+                    'mongodb://mongo/',
                     [
                         'username' => 'root',
                         'password' => 'example',
@@ -113,4 +109,3 @@ $cli
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
     });
-

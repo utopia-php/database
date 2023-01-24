@@ -8,14 +8,14 @@ use Utopia\Validator;
 class Roles extends Validator
 {
     // Roles
-    const ROLE_ANY = 'any';
-    const ROLE_GUESTS = 'guests';
-    const ROLE_USERS = 'users';
-    const ROLE_USER = 'user';
-    const ROLE_TEAM = 'team';
-    const ROLE_MEMBER = 'member';
+    public const ROLE_ANY = 'any';
+    public const ROLE_GUESTS = 'guests';
+    public const ROLE_USERS = 'users';
+    public const ROLE_USER = 'user';
+    public const ROLE_TEAM = 'team';
+    public const ROLE_MEMBER = 'member';
 
-    const ROLES = [
+    public const ROLES = [
         self::ROLE_ANY,
         self::ROLE_GUESTS,
         self::ROLE_USERS,
@@ -30,7 +30,7 @@ class Roles extends Validator
 
     protected int $length;
 
-    const CONFIG = [
+    public const CONFIG = [
         self::ROLE_ANY => [
             'identifier' => [
                 'allowed' => false,
@@ -96,10 +96,10 @@ class Roles extends Validator
     ];
 
     // Dimensions
-    const DIMENSION_VERIFIED = 'verified';
-    const DIMENSION_UNVERIFIED = 'unverified';
+    public const DIMENSION_VERIFIED = 'verified';
+    public const DIMENSION_UNVERIFIED = 'unverified';
 
-    const USER_DIMENSIONS = [
+    public const USER_DIMENSIONS = [
         self::DIMENSION_VERIFIED,
         self::DIMENSION_UNVERIFIED,
     ];
@@ -221,8 +221,7 @@ class Roles extends Validator
         string $role,
         string $identifier,
         string $dimension
-    ): bool
-    {
+    ): bool {
         $key = new Key();
 
         $config = self::CONFIG[$role] ?? null;

@@ -100,6 +100,7 @@ class MariaDB extends Adapter
 
         $stmt->execute();
 
+        /** @var array $document */
         $document = $stmt->fetch();
 
         return (($document[$select] ?? '') === $match);
@@ -107,7 +108,7 @@ class MariaDB extends Adapter
 
     /**
      * List Databases
-     * 
+     *
      * @return array
      */
     public function list(): array
@@ -606,7 +607,7 @@ class MariaDB extends Adapter
          * Get removed Permissions
          */
         $removals = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
             if (!empty($diff)) {
                 $removals[$type] = $diff;
@@ -617,7 +618,7 @@ class MariaDB extends Adapter
          * Get added Permissions
          */
         $additions = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
             if (!empty($diff)) {
                 $additions[$type] = $diff;
@@ -633,7 +634,7 @@ class MariaDB extends Adapter
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
                 )";
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
@@ -716,25 +717,23 @@ class MariaDB extends Adapter
             $attributeIndex++;
         }
 
-        if (!empty($attributes)) {
-            try {
-                $stmt->execute();
-                if (isset($stmtRemovePermissions)) {
-                    $stmtRemovePermissions->execute();
-                }
-                if (isset($stmtAddPermissions)) {
-                    $stmtAddPermissions->execute();
-                }
-            } catch (PDOException $e) {
-                $this->getPDO()->rollBack();
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+        try {
+            $stmt->execute();
+            if (isset($stmtRemovePermissions)) {
+                $stmtRemovePermissions->execute();
+            }
+            if (isset($stmtAddPermissions)) {
+                $stmtAddPermissions->execute();
+            }
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                    default:
-                        throw $e;
-                }
+                default:
+                    throw $e;
             }
         }
 
@@ -839,7 +838,7 @@ class MariaDB extends Adapter
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
-            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
@@ -849,8 +848,10 @@ class MariaDB extends Adapter
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
             $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
@@ -908,7 +909,9 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH) {
+                continue;
+            }
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
@@ -1017,7 +1020,9 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH) {
+                continue;
+            }
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
@@ -1092,7 +1097,9 @@ class MariaDB extends Adapter
         ");
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH) {
+                continue;
+            }
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
@@ -1165,7 +1172,7 @@ class MariaDB extends Adapter
     {
         return true;
     }
-    
+
     /**
      * Is index supported?
      *
@@ -1241,7 +1248,7 @@ class MariaDB extends Adapter
     {
         return 4;
     }
-    
+
     /**
      * Returns number of indexes used by default.
      *
@@ -1341,7 +1348,6 @@ class MariaDB extends Adapter
                     break;
                 default:
                     throw new Exception('Unknown Type');
-                    break;
             }
         }
 
@@ -1351,7 +1357,7 @@ class MariaDB extends Adapter
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array
@@ -1703,7 +1709,7 @@ class MariaDB extends Adapter
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
-                break;
+
             default:
                 throw new Exception('Unknown Type');
         }
@@ -1737,7 +1743,6 @@ class MariaDB extends Adapter
 
             default:
                 return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                break;
         }
     }
 
@@ -1771,7 +1776,6 @@ class MariaDB extends Adapter
 
             default:
                 throw new Exception('Unknown method:' . $method);
-                break;
         }
     }
 
@@ -1810,7 +1814,7 @@ class MariaDB extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         switch ($type) {
             case Database::INDEX_KEY:
@@ -1828,7 +1832,6 @@ class MariaDB extends Adapter
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
@@ -1837,10 +1840,10 @@ class MariaDB extends Adapter
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -1856,11 +1859,11 @@ class MariaDB extends Adapter
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
-        if(!$this->getSupportForSchemas()) {
+        if (!$this->getSupportForSchemas()) {
             return '';
         }
 
@@ -1870,8 +1873,8 @@ class MariaDB extends Adapter
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -1883,7 +1886,7 @@ class MariaDB extends Adapter
      *
      * @param mixed $value
      * @return int
-     * @throws Exception 
+     * @throws Exception
      */
     protected function getPDOType(mixed $value): int
     {
@@ -1908,7 +1911,7 @@ class MariaDB extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return PDO
      */
     protected function getPDO()
     {

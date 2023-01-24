@@ -15,10 +15,8 @@ use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
 use Utopia\Database\Adapter\MongoDB;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 
@@ -29,14 +27,13 @@ $cli
     ->param('limit', '', new Numeric(), 'Total number of records to add to database', false)
     ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
     ->action(function ($adapter, $limit, $name) {
-
         $start = null;
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
         Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
-            case 'mariadb': 
-                Co\run(function() use (&$start, $limit, $name) {
+            case 'mariadb':
+                Co\run(function () use (&$start, $limit, $name) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mariadb';
                     $dbPort = '3306';
@@ -77,12 +74,13 @@ $cli
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
+                            ->withPassword('password'),
+                        128
+                    );
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache) {
+                        go(function () use ($pool, $faker, $name, $cache) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
@@ -98,12 +96,11 @@ $cli
                             $database = null;
                         });
                     }
-
                 });
                 break;
 
-            case 'mysql': 
-                Co\run(function() use (&$start, $limit, $name) {
+            case 'mysql':
+                Co\run(function () use (&$start, $limit, $name) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mysql';
                     $dbPort = '3307';
@@ -144,12 +141,13 @@ $cli
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
+                            ->withPassword('password'),
+                        128
+                    );
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache) {
+                        go(function () use ($pool, $faker, $name, $cache) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
@@ -165,14 +163,14 @@ $cli
                             $database = null;
                         });
                     }
-
                 });
                 break;
 
             case 'mongodb':
-                Co\run(function() use (&$start, $limit, $name) {
+                Co\run(function () use (&$start, $limit, $name) {
                     $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                    $client = new Client('mongodb://mongo/',
+                    $client = new Client(
+                        'mongodb://mongo/',
                         [
                             'username' => 'root',
                             'password' => 'example',
@@ -192,7 +190,7 @@ $cli
                     $start = microtime(true);
 
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($client, $name, $faker) {
+                        go(function () use ($client, $name, $faker) {
                             $database = new Database(new MongoDB($client), new Cache(new NoCache()));
                             $database->setNamespace($name);
 
@@ -216,7 +214,8 @@ $cli
         Console::success("Completed in {$time} seconds");
     });
 
-function createSchema($database) {
+function createSchema($database)
+{
     $database->create();
     $database->createCollection('articles');
     $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
@@ -226,7 +225,8 @@ function createSchema($database) {
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
 }
 
-function addArticle($database, $faker) {
+function addArticle($database, $faker)
+{
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
         // Three random users out of 10,000 get mutate access
@@ -254,4 +254,3 @@ function addArticle($database, $faker) {
         'views' => $faker->randomNumber(6, false)
     ]));
 }
-

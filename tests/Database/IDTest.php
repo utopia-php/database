@@ -7,7 +7,6 @@ use Utopia\Database\Helpers\ID;
 
 class IDTest extends TestCase
 {
-
     public function testCustomID()
     {
         $id = ID::custom('test');

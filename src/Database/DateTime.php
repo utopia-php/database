@@ -60,7 +60,9 @@ class DateTime
      */
     public static function formatTz(?string $dbFormat): ?string
     {
-        if (is_null($dbFormat)) return null;
+        if (is_null($dbFormat)) {
+            return null;
+        }
 
         try {
             $value = new \DateTime($dbFormat);

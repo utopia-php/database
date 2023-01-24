@@ -76,23 +76,30 @@ class Query extends Validator
         return $this->message;
     }
 
-    protected function isValidLimit($limit): bool {
+    protected function isValidLimit($limit): bool
+    {
         $validator = new Range(0, $this->maxLimit);
-        if ($validator->isValid($limit)) return true;
+        if ($validator->isValid($limit)) {
+            return true;
+        }
 
         $this->message = 'Invalid limit: ' . $validator->getDescription();
         return false;
     }
 
-    protected function isValidOffset($offset): bool {
+    protected function isValidOffset($offset): bool
+    {
         $validator = new Range(0, $this->maxOffset);
-        if ($validator->isValid($offset)) return true;
+        if ($validator->isValid($offset)) {
+            return true;
+        }
 
         $this->message = 'Invalid offset: ' . $validator->getDescription();
         return false;
     }
 
-    protected function isValidCursor($cursor): bool {
+    protected function isValidCursor($cursor): bool
+    {
         if ($cursor === null) {
             $this->message = 'Cursor must not be null';
             return false;
@@ -100,7 +107,8 @@ class Query extends Validator
         return true;
     }
 
-    protected function isValidAttribute($attribute): bool {
+    protected function isValidAttribute($attribute): bool
+    {
         // Search for attribute in schema
         if (!isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: ' . $attribute;
@@ -110,11 +118,14 @@ class Query extends Validator
         return true;
     }
 
-    protected function isValidAttributeAndValues(string $attribute, array $values): bool {
-        if (!$this->isValidAttribute($attribute)) return false;
+    protected function isValidAttributeAndValues(string $attribute, array $values): bool
+    {
+        if (!$this->isValidAttribute($attribute)) {
+            return false;
+        }
 
         $attributeSchema = $this->schema[$attribute];
-        
+
         if (count($values) > $this->maxValuesCount) {
             $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
             return false;
@@ -141,12 +152,15 @@ class Query extends Validator
                 return false;
             }
         }
-        
+
         return true;
     }
 
-    protected function isValidContains(string $attribute, array $values): bool {
-        if (!$this->isValidAttributeAndValues($attribute, $values)) return false;
+    protected function isValidContains(string $attribute, array $values): bool
+    {
+        if (!$this->isValidAttributeAndValues($attribute, $values)) {
+            return false;
+        }
 
         $attributeSchema = $this->schema[$attribute];
 
@@ -170,7 +184,7 @@ class Query extends Validator
      * 5. count of values is greater than $maxValuesCount
      * 6. value type does not match attribute type
      * 6. contains method is used on non-array attribute
-     * 
+     *
      * Otherwise, returns true.
      *
      * @param DatabaseQuery $query
@@ -205,9 +219,11 @@ class Query extends Validator
             case DatabaseQuery::TYPE_ORDERASC:
             case DatabaseQuery::TYPE_ORDERDESC:
                 // Allow empty string for order attribute so we can order by natural order
-                if ($attribute === '') return true;
+                if ($attribute === '') {
+                    return true;
+                }
                 return $this->isValidAttribute($attribute);
-            
+
             case DatabaseQuery::TYPE_CONTAINS:
                 $values = $query->getValues();
                 return $this->isValidContains($attribute, $values);
@@ -217,7 +233,6 @@ class Query extends Validator
                 $values = $query->getValues();
                 return $this->isValidAttributeAndValues($attribute, $values);
         }
-
     }
     /**
      * Is array

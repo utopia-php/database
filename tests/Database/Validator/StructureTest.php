@@ -95,7 +95,7 @@ class StructureTest extends TestCase
 
     public function setUp(): void
     {
-        Structure::addFormat('email', function($attribute) {
+        Structure::addFormat('email', function ($attribute) {
             $size = $attribute['size'] ?? 0;
             return new Format($size);
         }, Database::VAR_STRING);
@@ -237,9 +237,9 @@ class StructureTest extends TestCase
     }
 
     public function testStringValidation()
-    { 
+    {
         $validator = new Structure(new Document($this->collection));
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 5,
@@ -255,9 +255,9 @@ class StructureTest extends TestCase
     }
 
     public function testArrayOfStringsValidation()
-    { 
+    {
         $validator = new Structure(new Document($this->collection));
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -311,9 +311,9 @@ class StructureTest extends TestCase
     }
 
     public function testIntegerValidation()
-    { 
+    {
         $validator = new Structure(new Document($this->collection));
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -326,7 +326,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -397,9 +397,9 @@ class StructureTest extends TestCase
     }
 
     public function testFloatValidation()
-    { 
+    {
         $validator = new Structure(new Document($this->collection));
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -412,7 +412,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -428,9 +428,9 @@ class StructureTest extends TestCase
     }
 
     public function testBooleanValidation()
-    { 
+    {
         $validator = new Structure(new Document($this->collection));
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -443,7 +443,7 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
-        
+
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -472,7 +472,7 @@ class StructureTest extends TestCase
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team_appwrite.io',
         ])));
-        
+
         $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
     }
 }

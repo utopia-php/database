@@ -11,22 +11,28 @@
     "autoload-dev": {
         "psr-4": {"Utopia\\Tests\\": "tests/Database"}
     },
+    "scripts": {
+        "lint": "./vendor/bin/pint --test",
+        "format": "./vendor/bin/pint",
+        "check": "./vendor/bin/phpstan analyse --level 5 src tests --memory-limit 512M"
+    },
     "require": {
         "php": ">=8.0",
+        "ext-pdo": "*",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.8.*",
-        "utopia-php/mongo": "0.0.2"
+        "utopia-php/mongo": "0.0.2",
+        "laravel/pint": "1.4.*",
+        "phpstan/phpstan": "1.9.*"
     },
     "require-dev": {
-        "ext-pdo": "*",
-        "ext-redis": "*",
-        "ext-mongodb": "*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
         "mongodb/mongodb": "1.8.0",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.11.0",
-        "vimeo/psalm": "4.0.1"
+        "vimeo/psalm": "4.0.1",
+        "ext-redis": "*"
     },
     "suggests": {
         "ext-mongodb": "Needed to support MongoDB Database Adapter",

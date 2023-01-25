@@ -278,7 +278,7 @@ class Structure extends Validator
             }
 
             if($array) { // Validate attribute type for arrays - format for arrays handled separately
-                if($required == false && empty($value)) { // Allow both null and [] for optional arrays
+                if($required == false && (is_array($value) || is_null($value))) { // Allow both null and [] for optional arrays
                     continue;
                 }
                 if(!is_array($value)) {

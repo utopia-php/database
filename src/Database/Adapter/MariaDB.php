@@ -877,15 +877,28 @@ class MariaDB extends Adapter
                 default => $query->getAttribute()
             });
 
-            $conditions = [];
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                $attributeIndex++;
+
+            switch ($query->getMethod()){
+                case Query::TYPE_BETWEEN:
+                    var_dump($query);
+                    break;
+
+                    default:
+                    $conditions = [];
+                    $attributeIndex = 0;
+                    foreach ($query->getValues() as $key => $value) {
+                        var_dump($value);
+                        var_dump($key);
+                        $bindKey = 'key_' . $attributeIndex;
+                        $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                        $attributeIndex++;
+                    }
+                    $condition = implode(' OR ', $conditions);
+                    $where[] = empty($condition) ? '' : '(' . $condition . ')';
             }
-            $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '(' . $condition . ')';
+
+
+
         }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
@@ -1721,7 +1734,20 @@ class MariaDB extends Adapter
      */
     protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
     {
+
+
         switch ($method) {
+            case Query::TYPE_BETWEEN:
+                var_dump($attribute);
+                var_dump("--------");
+                var_dump($value);
+                var_dump("--------");
+                var_dump($method);
+                var_dump($placeholder);
+                $sql = $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder;
+                var_dump($sql);
+
+                return  $sql;
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1737,7 +1763,7 @@ class MariaDB extends Adapter
 
             default:
                 return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                break;
+
         }
     }
 
@@ -1769,9 +1795,11 @@ class MariaDB extends Adapter
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
 
+            case Query::TYPE_BETWEEN:
+                return 'BETWEEN';
+
             default:
                 throw new Exception('Unknown method:' . $method);
-                break;
         }
     }
 
@@ -1828,7 +1856,6 @@ class MariaDB extends Adapter
 
             default:
                 throw new Exception('Unknown Index Type:' . $type);
-                break;
         }
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";

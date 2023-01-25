@@ -1157,6 +1157,26 @@ abstract class Base extends TestCase
 
     }
 
+
+    public function testBetween(){
+
+        $documents1 = static::getDatabase()->find('movies', [
+            Query::between('price', 20, 30),
+        ]);
+
+        var_dump($documents1);
+        $documents2 = static::getDatabase()->find('datetime', [
+            Query::between('date', '1975-12-06 10:00:00+01:00', '2000-12-06 10:00:00+01:00'),
+        ]);
+
+
+        var_dump($documents2);
+
+        exit;
+
+        $this->assertEquals(1, count($documents1));
+    }
+
     public function testFindFloat(){
         /**
          * Float condition

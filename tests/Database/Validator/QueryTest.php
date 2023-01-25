@@ -118,6 +118,8 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('cursorBefore("docId")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderAsc("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderDesc("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('between("price", [1.5, 10.9])')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('between("birthDay",["2024-01-01","2023-01-01"])')));
     }
 
     public function testInvalidMethod()

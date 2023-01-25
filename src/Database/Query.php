@@ -15,6 +15,7 @@ class Query
     const TYPE_GREATEREQUAL = 'greaterThanEqual';
     const TYPE_CONTAINS = 'contains';
     const TYPE_SEARCH = 'search';
+    const TYPE_BETWEEN = 'between';
 
     // Order methods
     const TYPE_ORDERDESC = 'orderDesc';
@@ -142,6 +143,7 @@ class Query
             case self::TYPE_OFFSET:
             case self::TYPE_CURSORAFTER:
             case self::TYPE_CURSORBEFORE:
+            case self::TYPE_BETWEEN:
                 return true;
         }
 
@@ -287,7 +289,6 @@ class Query
         }
 
         $method = static::getMethodFromAlias($method);
-
         switch ($method) {
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
@@ -297,6 +298,7 @@ class Query
             case self::TYPE_GREATEREQUAL:
             case self::TYPE_CONTAINS:
             case self::TYPE_SEARCH:
+            case self::TYPE_BETWEEN:
                 $attribute = $parsedParams[0] ?? '';
                 if (count($parsedParams) < 2) {
                     return new self($method, $attribute);
@@ -483,6 +485,14 @@ class Query
     public static function contains(string $attribute, array $values): self
     {
         return new self(self::TYPE_CONTAINS, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with between method
+     */
+    public static function between(string $attribute, mixed $start, mixed $end): self
+    {
+        return new self(self::TYPE_BETWEEN, $attribute, [$start, $end]);
     }
 
     /**

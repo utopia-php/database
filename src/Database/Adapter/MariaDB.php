@@ -879,16 +879,21 @@ class MariaDB extends Adapter
 
             $conditions = [];
 
-            if (empty($query->getValues())) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), null, null);
-            } else {
-                $attributeIndex = 0;
-                foreach ($query->getValues() as $key => $value) {
-                    $bindKey = 'key_' . $attributeIndex;
-                    $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                    $attributeIndex++;
-                }
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), null, null);
+                    break;
+                default:
+                    $attributeIndex = 0;
+                    foreach ($query->getValues() as $key => $value) {
+                        $bindKey = 'key_' . $attributeIndex;
+                        $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                        $attributeIndex++;
+                    }
+                    break;
             }
+
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
         }

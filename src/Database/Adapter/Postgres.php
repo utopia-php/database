@@ -289,8 +289,7 @@ class Postgres extends SQL
 
             if (Database::INDEX_UNIQUE === $type) {
                 $attribute = "lower(\"{$attribute}\"::text) {$order}";
-            }
-            else{
+            } else {
                 $attribute = "\"{$attribute}\" {$order}";
             }
         }

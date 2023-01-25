@@ -865,7 +865,7 @@ class MariaDB extends SQL
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
                 $attributeIndex++;
             }
 
@@ -941,7 +941,7 @@ class MariaDB extends SQL
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
                 $attributeIndex++;
             }
 

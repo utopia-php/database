@@ -547,9 +547,9 @@ class Query
     /**
      * Helper method to create Query with SLEEP method
      */
-    public static function sleep(string $attribute, array $values): self
+    public static function sleep(string $attribute, int $milliseconds): self
     {
-        return new self(self::TYPE_SLEEP, $attribute, $values);
+        return new self(self::TYPE_SLEEP, $attribute, [$milliseconds]);
     }
 
     /**

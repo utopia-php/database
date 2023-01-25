@@ -287,7 +287,12 @@ class Postgres extends SQL
                 $order = '';
             }
 
-            $attribute = "\"{$attribute}\" {$order}";
+            if (Database::INDEX_UNIQUE === $type) {
+                $attribute = "lower(\"{$attribute}\"::text) {$order}";
+            }
+            else{
+                $attribute = "\"{$attribute}\" {$order}";
+            }
         }
 
         return $this->getPDO()

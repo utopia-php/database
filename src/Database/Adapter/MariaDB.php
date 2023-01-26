@@ -877,25 +877,18 @@ class MariaDB extends Adapter
                 default => $query->getAttribute()
             });
 
+            $where = $this->getSQL($query);
 
-            switch ($query->getMethod()){
-                case Query::TYPE_BETWEEN:
-                    var_dump($query);
-                    break;
 
-                    default:
-                    $conditions = [];
-                    $attributeIndex = 0;
-                    foreach ($query->getValues() as $key => $value) {
-                        var_dump($value);
-                        var_dump($key);
-                        $bindKey = 'key_' . $attributeIndex;
-                        $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                        $attributeIndex++;
-                    }
-                    $condition = implode(' OR ', $conditions);
-                    $where[] = empty($condition) ? '' : '(' . $condition . ')';
-            }
+//            $conditions = [];
+//            $attributeIndex = 0;
+//            foreach ($query->getValues() as $key => $value) {
+//                $bindKey = 'key_' . $attributeIndex;
+//                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+//                $attributeIndex++;
+//            }
+//            $condition = implode(' OR ', $conditions);
+//            $where[] = empty($condition) ? '' : '(' . $condition . ')';
 
 
 
@@ -1732,22 +1725,10 @@ class MariaDB extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
+    protected function getSQLCondition(string $attribute, string $method, string $placeholder, mixed $value): string
     {
 
-
         switch ($method) {
-            case Query::TYPE_BETWEEN:
-                var_dump($attribute);
-                var_dump("--------");
-                var_dump($value);
-                var_dump("--------");
-                var_dump($method);
-                var_dump($placeholder);
-                $sql = $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder;
-                var_dump($sql);
-
-                return  $sql;
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1956,4 +1937,47 @@ class MariaDB extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
+
+    /**
+     * Get SQL Conditions
+     *
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    protected function getSQL(Query $query): string
+    {
+        $placeholder = $query->getAttribute().$query->getMethod().json_encode($query->getValues());
+
+        switch ($query->getMethod()){
+            case Query::TYPE_SEARCH:
+                /**
+                 * Replace reserved chars with space.
+                 */
+                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
+
+                /**
+                 * Prepend wildcard by default on the back.
+                 */
+                $value = "'{$value}*'";
+                return 'MATCH('.$query->getAttribute().') AGAINST('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+
+            case Query::TYPE_BETWEEN:
+                return "table_main.`{$query->getAttribute()}` BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            default:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $placeholder.= '_'.$key;
+                    $conditions[] = $query->getAttribute().' '.$this->getSQLOperator($query->getMethod()) . ' ' . $placeholder;
+                }
+                $condition = implode(' OR ', $conditions);
+                return empty($condition) ? '' : '(' . $condition . ')';
+        }
+
+    }
+
+
+
 }

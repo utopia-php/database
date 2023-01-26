@@ -1312,7 +1312,7 @@ class Database
      *
      * @return Document
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
@@ -1327,12 +1327,22 @@ class Database
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        $selections = $this->getSelections($collection, $queries);
+
         $document = null;
         $cache = null;
 
         $validator = new Authorization(self::PERMISSION_READ);
 
-        if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
+        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
+
+        if (!empty($selections)) {
+            $cacheKey .= ':' . \md5(\implode($selections));
+        } else {
+            $cacheKey .= ':all';
+        }
+
+        if ($cache = $this->cache->load($cacheKey, self::TTL)) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA
@@ -1345,7 +1355,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id);
+        $document = $this->adapter->getDocument($collection->getId(), $id, $selections);
         $document->setAttribute('$collection', $collection->getId());
 
         if ($document->isEmpty()) {
@@ -1358,9 +1368,9 @@ class Database
         }
 
         $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document);
+        $document = $this->decode($collection, $document, $selections);
 
-        $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -1448,7 +1458,7 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -1477,7 +1487,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
@@ -1508,7 +1518,7 @@ class Database
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id . ':*');
     }
 
     /**
@@ -1525,13 +1535,14 @@ class Database
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $grouped = Query::groupByType($queries);
-        /** @var Query[] */ $filters = $grouped['filters'];
-        /** @var int */ $limit = $grouped['limit'];
-        /** @var int */ $offset = $grouped['offset'];
-        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
-        /** @var string[] */ $orderTypes = $grouped['orderTypes'];
-        /** @var Document */ $cursor = $grouped['cursor'];
-        /** @var string */ $cursorDirection = $grouped['cursorDirection'];
+        /** @var $filters Query[] */ $filters = $grouped['filters'];
+        /** @var Query[] $selections */ $selections = $grouped['selections'];
+        /** @var int $limit */ $limit = $grouped['limit'];
+        /** @var int $offset */ $offset = $grouped['offset'];
+        /** @var string[] $orderAttributes */ $orderAttributes = $grouped['orderAttributes'];
+        /** @var string[] $orderTypes */ $orderTypes = $grouped['orderTypes'];
+        /** @var Document $cursor */ $cursor = $grouped['cursor'];
+        /** @var string $cursorDirection */ $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new Exception("cursor Document must be from the same Collection.");
@@ -1539,11 +1550,14 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
+        $selections = $this->getSelections($collection, $selections);
+
         $queries = self::convertQueries($collection, $filters);
 
         $results = $this->adapter->find(
             $collection->getId(),
             $queries,
+            $selections,
             $limit ?? 25,
             $offset ?? 0,
             $orderAttributes,
@@ -1554,7 +1568,7 @@ class Database
 
         foreach ($results as &$node) {
             $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node);
+            $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
         }
 
@@ -1727,7 +1741,7 @@ class Database
      * @return Document
      * @throws Throwable|Exception
      */
-    public function decode(Document $collection, Document $document): Document
+    public function decode(Document $collection, Document $document, array $selections = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
         $attributes = array_merge($attributes, $this->getInternalAttributes());
@@ -1735,8 +1749,7 @@ class Database
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
-            $value = $document->getAttribute($key, null);
-
+            $value = $document->getAttribute($key);
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
@@ -1746,7 +1759,9 @@ class Database
                 }
             }
 
-            $document->setAttribute($key, ($array) ? $value : $value[0]);
+            if (empty($selections) || \in_array($key, $selections)) {
+                $document->setAttribute($key, ($array) ? $value : $value[0]);
+            }
         }
 
         return $document;
@@ -1784,9 +1799,6 @@ class Database
             }
 
             foreach ($value as &$node) {
-                if (is_null($value)) {
-                    continue;
-                }
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
@@ -1797,10 +1809,7 @@ class Database
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
-                    case self::VAR_DATETIME:
-                        break;
                     default:
-                        # code...
                         break;
                 }
             }
@@ -1854,21 +1863,18 @@ class Database
      * @param Document $document
      *
      * @return mixed
+     * @throws Exception
      */
-    protected function decodeAttribute(string $name, $value, Document $document)
+    protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
         }
 
-        try {
-            if (array_key_exists($name, $this->instanceFilters)) {
-                $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
-            } else {
-                $value = self::$filters[$name]['decode']($value, $document, $this);
-            }
-        } catch (\Throwable $th) {
-            throw $th;
+        if (array_key_exists($name, $this->instanceFilters)) {
+            $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+        } else {
+            $value = self::$filters[$name]['decode']($value, $document, $this);
         }
 
         return $value;
@@ -1905,6 +1911,36 @@ class Database
     public function getKeywords(): array
     {
         return $this->adapter->getKeywords();
+    }
+
+    private function getSelections(Document $collection, array $queries): array
+    {
+        if (empty($queries)) {
+            return [];
+        }
+
+        $selections = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Query::TYPE_SELECT) {
+                throw new \Exception('Invalid query type');
+            }
+            foreach ($query->getValues() as $value) {
+                $selections[] = $value;
+            }
+        }
+
+        $attributes = [];
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $attributes[] = $attribute['key'];
+        }
+
+        $invalid = \array_diff($selections, $attributes);
+
+        if (!empty($invalid)) {
+            throw new \Exception('Cannot select attributes: ' . \implode(', ', $invalid));
+        }
+
+        return $selections;
     }
 
     /**

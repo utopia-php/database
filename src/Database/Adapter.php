@@ -283,7 +283,7 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id): Document;
+    abstract public function getDocument(string $collection, string $id, array $selections = []): Document;
 
     /**
      * Create Document
@@ -321,7 +321,8 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param Query[] $queries
+     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -331,7 +332,7 @@ abstract class Adapter
      *
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], array $selections = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
     /**
      * Sum an attribute
@@ -488,6 +489,13 @@ abstract class Adapter
      * @return string[]
      */
     abstract public function getKeywords(): array;
+
+    /**
+     * Get a projection given a list of selected attributes
+     *
+     * @return string[]|string
+     */
+    abstract protected function getProjection(array $selections, string $prefix = ''): mixed;
 
     /**
      * Filter Keys

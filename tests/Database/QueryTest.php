@@ -139,6 +139,13 @@ class QueryTest extends TestCase
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(null, $query->getValues()[0]);
+
+        $query = Query::parse('select(["title", "director"])');
+
+        $this->assertEquals('select', $query->getMethod());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals('title', $query->getValues()[0]);
+        $this->assertEquals('director', $query->getValues()[0]);
     }
 
     public function testParseV2()

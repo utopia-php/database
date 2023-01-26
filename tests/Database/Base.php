@@ -708,6 +708,28 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    /**
+     * @depends testCreateDocument
+     */
+    public function testGetDocumentSelect(Document $document): Document
+    {
+        $document = static::getDatabase()->getDocument('documents', $document->getId(), [
+            Query::select(['string', 'integer']),
+        ]);
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertIsString($document->getAttribute('string'));
+        $this->assertEquals('text📝', $document->getAttribute('string'));
+        $this->assertIsInt($document->getAttribute('integer'));
+        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertArrayNotHasKey('float', $document->getAttributes());
+        $this->assertArrayNotHasKey('boolean', $document->getAttributes());
+        $this->assertArrayNotHasKey('colors', $document->getAttributes());
+        $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
+
+        return $document;
+    }
+
 
     /**
      * @depends testCreateDocument
@@ -1971,6 +1993,20 @@ abstract class Base extends TestCase
             Query::offset(10)
         ]);
         $this->assertEquals(false, $document);
+    }
+
+    public function testFindSelect()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year'])
+        ]);
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document->getAttributes());
+            $this->assertArrayHasKey('year', $document->getAttributes());
+            $this->assertArrayNotHasKey('director', $document->getAttributes());
+            $this->assertArrayNotHasKey('price', $document->getAttributes());
+            $this->assertArrayNotHasKey('active', $document->getAttributes());
+        }
     }
 
     /**

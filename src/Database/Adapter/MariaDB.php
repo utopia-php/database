@@ -428,17 +428,18 @@ class MariaDB extends Adapter
      * @throws Exception
      * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $selections = []): Document
     {
         $name = $this->filter($collection);
 
         $stmt = $this->getPDO()->prepare("
-            SELECT * 
+            SELECT {$this->getProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");
 
         $stmt->bindValue(':_uid', $id);
+
         $stmt->execute();
 
         /** @var array $document */
@@ -786,6 +787,7 @@ class MariaDB extends Adapter
      *
      * @param string $collection
      * @param Query[] $queries
+     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -797,7 +799,7 @@ class MariaDB extends Adapter
      * @throws Exception
      * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], array $selections = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -897,9 +899,9 @@ class MariaDB extends Adapter
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $sql = "
-            SELECT table_main.*
+            SELECT {$this->getProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
+            {$sqlWhere}
             GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
@@ -1913,6 +1915,39 @@ class MariaDB extends Adapter
     protected function getPDO()
     {
         return $this->pdo;
+    }
+
+    /**
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string
+     */
+    protected function getProjection(array $selections, string $prefix = ''): string
+    {
+        if (empty($selections)) {
+            if (!empty($prefix)) {
+                return "`{$prefix}`.*";
+            }
+            return '*';
+        }
+
+        $selections[] = '_uid';
+        $selections[] = '_id';
+        $selections[] = '_createdAt';
+        $selections[] = '_updatedAt';
+        $selections[] = '_permissions';
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "`{$prefix}`.`{$selection}`";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "`{$selection}`";
+            }
+        }
+
+        return \implode(', ', $selections);
     }
 
     /**

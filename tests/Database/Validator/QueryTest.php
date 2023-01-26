@@ -118,6 +118,7 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('cursorBefore("docId")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderAsc("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderDesc("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('select(["title", "description"])')));
     }
 
     public function testInvalidMethod()

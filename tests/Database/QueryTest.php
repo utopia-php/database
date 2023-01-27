@@ -145,7 +145,7 @@ class QueryTest extends TestCase
         $this->assertEquals('select', $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals('title', $query->getValues()[0]);
-        $this->assertEquals('director', $query->getValues()[0]);
+        $this->assertEquals('director', $query->getValues()[1]);
     }
 
     public function testParseV2()

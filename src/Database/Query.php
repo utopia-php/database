@@ -144,6 +144,7 @@ class Query
             case self::TYPE_OFFSET:
             case self::TYPE_CURSORAFTER:
             case self::TYPE_CURSORBEFORE:
+            case self::TYPE_SELECT:
                 return true;
         }
 
@@ -306,7 +307,7 @@ class Query
                 return new self($method, $attribute, \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
 
             case self::TYPE_SELECT:
-                return new self($method, values: $parsedParams);
+                return new self($method, values: $parsedParams[0]);
             case self::TYPE_ORDERASC:
             case self::TYPE_ORDERDESC:
                 return new self($method, $parsedParams[0] ?? '');

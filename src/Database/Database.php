@@ -1327,10 +1327,8 @@ class Database
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
-        $selections = $this->getSelections($collection, $queries);
 
-        $document = null;
-        $cache = null;
+        $selections = $this->getSelections($collection, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -1339,7 +1337,7 @@ class Database
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
         } else {
-            $cacheKey .= ':all';
+            $cacheKey .= ':*';
         }
 
         if ($cache = $this->cache->load($cacheKey, self::TTL)) {

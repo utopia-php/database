@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @var CLI
+ * @var CLI $cli
  */
 global $cli;
 

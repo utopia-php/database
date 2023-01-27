@@ -8,6 +8,8 @@ global $cli;
 use Faker\Factory;
 use Faker\Generator;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
@@ -74,7 +76,6 @@ $cli
                         (new PDOConfig())
                             ->withHost('mariadb')
                             ->withPort(3306)
-                            // ->withUnixSocket('/tmp/mysql.sock')
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
@@ -243,26 +244,26 @@ function addArticle($database, Generator $faker) {
         // Three random users out of 10,000 get mutate access
 
         '$permissions' => [
-            "read({$faker->numerify('user####')})",
-            "read({$faker->numerify('user####')})",
-            "read({$faker->numerify('user####')})",
-            "read({$faker->numerify('user####')})",
-            "read({$faker->numerify('user####')})",
-            "create({$faker->numerify('user####')})",
-            "create({$faker->numerify('user####')})",
-            "create({$faker->numerify('user####')})",
-            "update({$faker->numerify('user####')})",
-            "update({$faker->numerify('user####')})",
-            "update({$faker->numerify('user####')})",
-            "delete({$faker->numerify('user####')})",
-            "delete({$faker->numerify('user####')})",
-            "delete({$faker->numerify('user####')})",
+            Permission::read(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::user($faker->randomNumber(4))),
+            Permission::create(Role::user($faker->randomNumber(4))),
+            Permission::create(Role::user($faker->randomNumber(4))),
+            Permission::create(Role::user($faker->randomNumber(4))),
+            Permission::update(Role::user($faker->randomNumber(4))),
+            Permission::update(Role::user($faker->randomNumber(4))),
+            Permission::update(Role::user($faker->randomNumber(4))),
+            Permission::delete(Role::user($faker->randomNumber(4))),
+            Permission::delete(Role::user($faker->randomNumber(4))),
+            Permission::delete(Role::user($faker->randomNumber(4))),
         ],
         'author' => $faker->name(),
         'created' => \Utopia\Database\DateTime::format($faker->dateTime()),
         'text' => $faker->realTextBetween(1000, 4000),
         'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
-        'views' => $faker->randomNumber(6, false)
+        'views' => $faker->randomNumber(6)
     ]));
 }
 

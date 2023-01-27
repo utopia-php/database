@@ -41,7 +41,7 @@ abstract class Base extends TestCase
 
     public function tearDown(): void
     {
-        Authorization::reset();
+        Authorization::setDefaultStatus(true);
     }
 
     protected string $testDatabase = 'utopiaTests';
@@ -54,7 +54,7 @@ abstract class Base extends TestCase
     public function testCreateExistsDelete()
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
-        if(!$schemaSupport) {
+        if (!$schemaSupport) {
             $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->create());
             return;
@@ -1972,7 +1972,7 @@ abstract class Base extends TestCase
                 Query::limit(25),
                 Query::equal('value', [$value])
             ]);
-    
+
             $this->assertEquals(1, count($documents));
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }
@@ -3065,7 +3065,7 @@ abstract class Base extends TestCase
         $this->assertEquals(500, $doc->getAttribute('price'));
 
         $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
-        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false);
+        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false, filters:['datetime']);
 
         // Delete cache to force read from database with new schema
         $database->deleteCachedDocument('flowers', 'LiliPriced');
@@ -3078,7 +3078,8 @@ abstract class Base extends TestCase
         // String to Datetime
         $database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
-        $this->assertEquals('2000-06-12 14:12:55.000', $doc->getAttribute('date'));
+        //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
+        $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
     /**
@@ -3091,10 +3092,10 @@ abstract class Base extends TestCase
         sleep(1);
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
-        
+
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
-        
+
         static::getDatabase()->createCollection('created_at');
     }
 
@@ -3307,7 +3308,7 @@ abstract class Base extends TestCase
 
         try {
             $database->deleteDocument('animals', 'cat');
-        } catch(ExceptionAuthorization) {
+        } catch (ExceptionAuthorization) {
             $didFail = true;
         }
 
@@ -3319,7 +3320,7 @@ abstract class Base extends TestCase
         try {
             $newDog = $dog->setAttribute('type', 'newDog');
             $database->updateDocument('animals', 'dog', $newDog);
-        } catch(ExceptionAuthorization) {
+        } catch (ExceptionAuthorization) {
             $didFail = true;
         }
 
@@ -3332,7 +3333,7 @@ abstract class Base extends TestCase
         $newCat = $cat->setAttribute('type', 'newCat');
         $database->updateDocument('animals', 'cat', $newCat);
 
-        $docs = Authorization::skip(fn() => $database->find('animals'));
+        $docs = Authorization::skip(fn () => $database->find('animals'));
         $this->assertCount(1, $docs);
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
@@ -3340,7 +3341,7 @@ abstract class Base extends TestCase
 
     public function testEvents()
     {
-        Authorization::skip(function() {
+        Authorization::skip(function () {
             $database = static::getDatabase();
 
             $events = [
@@ -3366,13 +3367,13 @@ abstract class Base extends TestCase
                 Database::EVENT_DATABASE_DELETE,
             ];
 
-            $database->on(Database::EVENT_ALL, function($event, $data) use (&$events) {
+            $database->on(Database::EVENT_ALL, function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
 
                 $this->assertEquals($shifted, $event);
             });
-    
-            if($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+
+            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
                 $database->setDefaultDatabase('hellodb');
                 $database->create();
             } else {
@@ -3380,9 +3381,9 @@ abstract class Base extends TestCase
             }
 
             $database->list();
-    
+
             $database->setDefaultDatabase($this->testDatabase);
-    
+
             $collectionId = ID::unique();
             $database->createCollection($collectionId);
             $database->listCollections();
@@ -3391,7 +3392,7 @@ abstract class Base extends TestCase
             $database->updateAttributeRequired($collectionId, 'attr1', true);
             $indexId1 = 'index2_' . uniqid();
             $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
-            
+
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
                 'attr1' => 10,
@@ -3408,13 +3409,12 @@ abstract class Base extends TestCase
             $database->findOne($collectionId);
             $database->count($collectionId);
             $database->sum($collectionId, 'attr1');
-            
+
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-
     }
 }

@@ -236,6 +236,7 @@ function createSchema(Database $database) {
     $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
     $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
+    $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
 }
 
 function addArticle($database, Generator $faker) {

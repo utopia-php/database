@@ -956,7 +956,20 @@ class Mongo extends Adapter
             
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
+
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $value = null;
+
+                    break;
+                default:
+                    $value = count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0];
+
+                    break;
+            }
 
             if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
@@ -1006,6 +1019,12 @@ class Mongo extends Adapter
 
             case Query::TYPE_SEARCH:
                 return '$search';
+
+            case Query::TYPE_IS_NULL:
+                return '$eq';
+
+            case Query::TYPE_IS_NOT_NULL:
+                return '$ne';
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
@@ -1113,6 +1132,26 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter handle Query Array Contains?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryContains(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1164,7 +1203,7 @@ class Mongo extends Adapter
      *
      * @return int
      */
-    public static function getRowLimit(): int
+    public static function getDocumentSizeLimit(): int
     {
         return 0;
     }

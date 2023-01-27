@@ -2,50 +2,17 @@
 
 namespace Utopia\Database\Adapter;
 
-use PDO;
 use Exception;
+use PDO;
 use PDOException;
-use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
-class MariaDB extends Adapter
+class MariaDB extends SQL
 {
-    /**
-     * @var PDO
-     */
-    protected $pdo;
-
-    /**
-     * Constructor.
-     *
-     * Set connection and settings
-     *
-     * @param PDO $pdo
-     */
-    public function __construct($pdo)
-    {
-        $this->pdo = $pdo;
-    }
-
-    /**
-     * Ping Database
-     *
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function ping(): bool
-    {
-        return $this->getPDO()
-            ->prepare("SELECT 1;")
-            ->execute();
-    }
-
     /**
      * Create Database
      *
@@ -61,58 +28,6 @@ class MariaDB extends Adapter
         return $this->getPDO()
             ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
             ->execute();
-    }
-
-    /**
-     * Check if Database exists
-     * Optionally check if collection exists in Database
-     *
-     * @param string $database
-     * @param string|null $collection
-     * @return bool
-     * @throws Exception
-     */
-    public function exists(string $database, ?string $collection): bool
-    {
-        $database = $this->filter($database);
-
-        if (!\is_null($collection)) {
-            $collection = $this->filter($collection);
-
-            $select = 'TABLE_NAME';
-            $from = 'INFORMATION_SCHEMA.TABLES';
-            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
-            $match = "{$this->getNamespace()}_{$collection}";
-        } else {
-            $select = 'SCHEMA_NAME';
-            $from = 'INFORMATION_SCHEMA.SCHEMATA';
-            $where = 'SCHEMA_NAME = :schema';
-            $match = $database;
-        }
-
-        $stmt = $this->getPDO()->prepare("SELECT {$select} FROM {$from} WHERE {$where}");
-
-        $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
-
-        if (!\is_null($collection)) {
-            $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
-        }
-
-        $stmt->execute();
-
-        $document = $stmt->fetch();
-
-        return (($document[$select] ?? '') === $match);
-    }
-
-    /**
-     * List Databases
-     * 
-     * @return array
-     */
-    public function list(): array
-    {
-        return [];
     }
 
     /**
@@ -210,7 +125,7 @@ class MariaDB extends Adapter
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id.'_perms')};")
+                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
                 ->execute();
             throw $th;
         }
@@ -265,6 +180,27 @@ class MariaDB extends Adapter
     }
 
     /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->execute();
+    }
+
+    /**
      * Update Attribute
      *
      * @param string $collection
@@ -290,27 +226,6 @@ class MariaDB extends Adapter
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 MODIFY `{$id}` {$type};")
-            ->execute();
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -375,7 +290,7 @@ class MariaDB extends Adapter
         $id = $this->filter($id);
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
+            '$id' => '_uid',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $attribute
@@ -420,49 +335,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Get Document
-     *
-     * @param string $collection
-     * @param string $id
-     * @return Document
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function getDocument(string $collection, string $id): Document
-    {
-        $name = $this->filter($collection);
-
-        $stmt = $this->getPDO()->prepare("
-            SELECT * 
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid;
-        ");
-
-        $stmt->bindValue(':_uid', $id);
-        $stmt->execute();
-
-        /** @var array $document */
-        $document = $stmt->fetch();
-        if (empty($document)) {
-            return new Document([]);
-        }
-
-        $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
-        $document['$createdAt'] = $document['_createdAt'];
-        $document['$updatedAt'] = $document['_updatedAt'];
-        $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
-
-        unset($document['_id']);
-        unset($document['_uid']);
-        unset($document['_createdAt']);
-        unset($document['_updatedAt']);
-        unset($document['_permissions']);
-
-        return new Document($document);
-    }
-
-    /**
      * Create Document
      *
      * @param string $collection
@@ -481,6 +353,7 @@ class MariaDB extends Adapter
 
         $name = $this->filter($collection);
         $columns = '';
+        $columnNames = '';
 
         $this->getPDO()->beginTransaction();
 
@@ -491,13 +364,14 @@ class MariaDB extends Adapter
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+            $columns .= "`{$column}`, ";
+            $columnNames .= ':' . $bindKey . ', ';
             $bindIndex++;
         }
 
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_uid");
+                ({$columns}_uid) VALUES ({$columnNames}:_uid)");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -523,17 +397,14 @@ class MariaDB extends Adapter
         }
 
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLTable($name.'_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
 
         try {
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("select last_insert_id() as id");
-            $statment->execute();
-            $last = $statment->fetch();
-            $document['$internalId'] = $last['id'];
+            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
@@ -582,7 +453,7 @@ class MariaDB extends Adapter
          */
         $permissionsStmt = $this->getPDO()->prepare("
                 SELECT _type, _permission
-                FROM {$this->getSQLTable($name.'_perms')} p
+                FROM {$this->getSQLTable($name . '_perms')} p
                 WHERE p._document = :_uid
         ");
         $permissionsStmt->bindValue(':_uid', $document->getId());
@@ -606,7 +477,7 @@ class MariaDB extends Adapter
          * Get removed Permissions
          */
         $removals = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
             if (!empty($diff)) {
                 $removals[$type] = $diff;
@@ -617,7 +488,7 @@ class MariaDB extends Adapter
          * Get added Permissions
          */
         $additions = [];
-        foreach(Database::PERMISSIONS as $type) {
+        foreach (Database::PERMISSIONS as $type) {
             $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
             if (!empty($diff)) {
                 $additions[$type] = $diff;
@@ -633,7 +504,7 @@ class MariaDB extends Adapter
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
                 )";
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
@@ -645,7 +516,7 @@ class MariaDB extends Adapter
             $stmtRemovePermissions = $this->getPDO()
                 ->prepare("
                 DELETE
-                FROM {$this->getSQLTable($name.'_perms')}
+                FROM {$this->getSQLTable($name . '_perms')}
                 WHERE
                     _document = :_uid
                     {$removeQuery}
@@ -673,7 +544,7 @@ class MariaDB extends Adapter
             $stmtAddPermissions = $this->getPDO()
                 ->prepare(
                     "
-                    INSERT INTO {$this->getSQLTable($name.'_perms')}
+                    INSERT INTO {$this->getSQLTable($name . '_perms')}
                     (_document, _type, _permission) VALUES " . \implode(', ', $values)
                 );
 
@@ -763,7 +634,7 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name)} WHERE _uid = :_uid");
         $stmt->bindValue(':_uid', $id);
 
-        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name.'_perms')} WHERE _document = :_uid");
+        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid");
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
@@ -805,7 +676,7 @@ class MariaDB extends Adapter
         $orders = [];
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => ID::custom('_uid'),
+            '$id' => '_uid',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -832,9 +703,9 @@ class MariaDB extends Adapter
                 }
 
                 $where[] = "(
-                        table_main.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
+                        table_main.`{$attribute}` {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            table_main.{$attribute} = :cursor 
+                            table_main.`{$attribute}` = :cursor 
                             AND
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
@@ -871,16 +742,29 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
+                '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
             });
 
             $conditions = [];
-            foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), null, null);
+                    break;
+                default:
+                    $attributeIndex = 0;
+                    foreach ($query->getValues() as $key => $value) {
+                        $bindKey = 'key_' . $attributeIndex;
+                        $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                        $attributeIndex++;
+                    }
+                    break;
             }
+
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
         }
@@ -891,7 +775,7 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $sql = "
             SELECT table_main.*
@@ -905,9 +789,15 @@ class MariaDB extends Adapter
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
+                continue;
+            }
+
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 
@@ -929,6 +819,7 @@ class MariaDB extends Adapter
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
         $stmt->execute();
 
         $results = $stmt->fetchAll();
@@ -975,15 +866,18 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
+                '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
             });
 
             $conditions = [];
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $bindKey = 'key_' . $attributeIndex;
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $attributeIndex++;
             }
 
             $condition = implode(' OR ', $conditions);
@@ -994,7 +888,7 @@ class MariaDB extends Adapter
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sql = "SELECT COUNT(1) as sum
             FROM
                 (
@@ -1008,8 +902,11 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 
@@ -1045,15 +942,18 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
+                '$id' => '_uid',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',
                 default => $query->getAttribute()
             });
 
             $conditions = [];
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute().'`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
+                $bindKey = 'key_' . $attributeIndex;
+                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                $attributeIndex++;
             }
 
             $where[] = implode(' OR ', $conditions);
@@ -1077,8 +977,11 @@ class MariaDB extends Adapter
 
         foreach ($queries as $i => $query) {
             if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
+                $bindKey = 'key_' . $attributeIndex;
+                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
         }
 
@@ -1092,527 +995,6 @@ class MariaDB extends Adapter
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
-    }
-
-    /**
-     * Get max STRING limit
-     *
-     * @return int
-     */
-    public function getLimitForString(): int
-    {
-        return 4294967295;
-    }
-
-    /**
-     * Get max INT limit
-     *
-     * @return int
-     */
-    public function getLimitForInt(): int
-    {
-        return 4294967295;
-    }
-
-    /**
-     * Get maximum column limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     * Can be inherited by MySQL since we utilize the InnoDB engine
-     *
-     * @return int
-     */
-    public function getLimitForAttributes(): int
-    {
-        return 1017;
-    }
-
-    /**
-     * Get maximum index limit.
-     * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
-     *
-     * @return int
-     */
-    public function getLimitForIndexes(): int
-    {
-        return 64;
-    }
-
-    /**
-     * Is schemas supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSchemas(): bool
-    {
-        return true;
-    }
-    
-    /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is unique index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForUniqueIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is fulltext index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Get current attribute count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getCountOfAttributes(Document $collection): int
-    {
-        $attributes = \count($collection->getAttribute('attributes') ?? []);
-
-        // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + static::getCountOfDefaultAttributes() + 1;
-    }
-
-    /**
-     * Get current index count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getCountOfIndexes(Document $collection): int
-    {
-        $indexes = \count($collection->getAttribute('indexes') ?? []);
-        return $indexes + static::getCountOfDefaultIndexes();
-    }
-
-    /**
-     * Returns number of attributes used by default.
-     *
-     * @return int
-     */
-    public static function getCountOfDefaultAttributes(): int
-    {
-        return 4;
-    }
-    
-    /**
-     * Returns number of indexes used by default.
-     *
-     * @return int
-     */
-    public static function getCountOfDefaultIndexes(): int
-    {
-        return 5;
-    }
-
-    /**
-     * Get maximum width, in bytes, allowed for a SQL row
-     * Return 0 when no restrictions apply
-     *
-     * @return int
-     */
-    public static function getRowLimit(): int
-    {
-        return 65535;
-    }
-
-    /**
-     * Estimate maximum number of bytes required to store a document in $collection.
-     * Byte requirement varies based on column type and size.
-     * Needed to satisfy MariaDB/MySQL row width limit.
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getAttributeWidth(Document $collection): int
-    {
-        // Default collection has:
-        // `_id` int(11) => 4 bytes
-        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
-        // but this number seems to vary, so we give a +500 byte buffer
-        $total = 1500;
-
-        /** @var array $attributes */
-        $attributes = $collection->getAttributes()['attributes'];
-        foreach ($attributes as $attribute) {
-            switch ($attribute['type']) {
-                case Database::VAR_STRING:
-                    switch (true) {
-                        case ($attribute['size'] > 16777215):
-                            // 8 bytes length + 4 bytes for LONGTEXT
-                            $total += 12;
-                            break;
-
-                        case ($attribute['size'] > 65535):
-                            // 8 bytes length + 3 bytes for MEDIUMTEXT
-                            $total += 11;
-                            break;
-
-                        case ($attribute['size'] > 16383):
-                            // 8 bytes length + 2 bytes for TEXT
-                            $total += 10;
-                            break;
-
-                        case ($attribute['size'] > 255):
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += ($attribute['size'] * 4) + 2;
-                            break;
-
-                        default:
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += ($attribute['size'] * 4) + 1;
-                            break;
-                    }
-                    break;
-
-                case Database::VAR_INTEGER:
-                    if ($attribute['size'] >= 8) {
-                        $total += 8; // BIGINT takes 8 bytes
-                    } else {
-                        $total += 4; // INT takes 4 bytes
-                    }
-                    break;
-                case Database::VAR_FLOAT:
-                    // DOUBLE takes 8 bytes
-                    $total += 8;
-                    break;
-
-                case Database::VAR_BOOLEAN:
-                    // TINYINT(1) takes one byte
-                    $total += 1;
-                    break;
-
-                case Database::VAR_DOCUMENT:
-                    // CHAR(255)
-                    $total += 255;
-                    break;
-
-                case Database::VAR_DATETIME:
-                    $total += 19; // 2022-06-26 14:46:24
-                    break;
-                default:
-                    throw new Exception('Unknown Type');
-                    break;
-            }
-        }
-
-        return $total;
-    }
-
-    /**
-     * Get list of keywords that cannot be used
-     *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return [
-            'ACCESSIBLE',
-            'ADD',
-            'ALL',
-            'ALTER',
-            'ANALYZE',
-            'AND',
-            'AS',
-            'ASC',
-            'ASENSITIVE',
-            'BEFORE',
-            'BETWEEN',
-            'BIGINT',
-            'BINARY',
-            'BLOB',
-            'BOTH',
-            'BY',
-            'CALL',
-            'CASCADE',
-            'CASE',
-            'CHANGE',
-            'CHAR',
-            'CHARACTER',
-            'CHECK',
-            'COLLATE',
-            'COLUMN',
-            'CONDITION',
-            'CONSTRAINT',
-            'CONTINUE',
-            'CONVERT',
-            'CREATE',
-            'CROSS',
-            'CURRENT_DATE',
-            'CURRENT_ROLE',
-            'CURRENT_TIME',
-            'CURRENT_TIMESTAMP',
-            'CURRENT_USER',
-            'CURSOR',
-            'DATABASE',
-            'DATABASES',
-            'DAY_HOUR',
-            'DAY_MICROSECOND',
-            'DAY_MINUTE',
-            'DAY_SECOND',
-            'DEC',
-            'DECIMAL',
-            'DECLARE',
-            'DEFAULT',
-            'DELAYED',
-            'DELETE',
-            'DELETE_DOMAIN_ID',
-            'DESC',
-            'DESCRIBE',
-            'DETERMINISTIC',
-            'DISTINCT',
-            'DISTINCTROW',
-            'DIV',
-            'DO_DOMAIN_IDS',
-            'DOUBLE',
-            'DROP',
-            'DUAL',
-            'EACH',
-            'ELSE',
-            'ELSEIF',
-            'ENCLOSED',
-            'ESCAPED',
-            'EXCEPT',
-            'EXISTS',
-            'EXIT',
-            'EXPLAIN',
-            'FALSE',
-            'FETCH',
-            'FLOAT',
-            'FLOAT4',
-            'FLOAT8',
-            'FOR',
-            'FORCE',
-            'FOREIGN',
-            'FROM',
-            'FULLTEXT',
-            'GENERAL',
-            'GRANT',
-            'GROUP',
-            'HAVING',
-            'HIGH_PRIORITY',
-            'HOUR_MICROSECOND',
-            'HOUR_MINUTE',
-            'HOUR_SECOND',
-            'IF',
-            'IGNORE',
-            'IGNORE_DOMAIN_IDS',
-            'IGNORE_SERVER_IDS',
-            'IN',
-            'INDEX',
-            'INFILE',
-            'INNER',
-            'INOUT',
-            'INSENSITIVE',
-            'INSERT',
-            'INT',
-            'INT1',
-            'INT2',
-            'INT3',
-            'INT4',
-            'INT8',
-            'INTEGER',
-            'INTERSECT',
-            'INTERVAL',
-            'INTO',
-            'IS',
-            'ITERATE',
-            'JOIN',
-            'KEY',
-            'KEYS',
-            'KILL',
-            'LEADING',
-            'LEAVE',
-            'LEFT',
-            'LIKE',
-            'LIMIT',
-            'LINEAR',
-            'LINES',
-            'LOAD',
-            'LOCALTIME',
-            'LOCALTIMESTAMP',
-            'LOCK',
-            'LONG',
-            'LONGBLOB',
-            'LONGTEXT',
-            'LOOP',
-            'LOW_PRIORITY',
-            'MASTER_HEARTBEAT_PERIOD',
-            'MASTER_SSL_VERIFY_SERVER_CERT',
-            'MATCH',
-            'MAXVALUE',
-            'MEDIUMBLOB',
-            'MEDIUMINT',
-            'MEDIUMTEXT',
-            'MIDDLEINT',
-            'MINUTE_MICROSECOND',
-            'MINUTE_SECOND',
-            'MOD',
-            'MODIFIES',
-            'NATURAL',
-            'NOT',
-            'NO_WRITE_TO_BINLOG',
-            'NULL',
-            'NUMERIC',
-            'OFFSET',
-            'ON',
-            'OPTIMIZE',
-            'OPTION',
-            'OPTIONALLY',
-            'OR',
-            'ORDER',
-            'OUT',
-            'OUTER',
-            'OUTFILE',
-            'OVER',
-            'PAGE_CHECKSUM',
-            'PARSE_VCOL_EXPR',
-            'PARTITION',
-            'POSITION',
-            'PRECISION',
-            'PRIMARY',
-            'PROCEDURE',
-            'PURGE',
-            'RANGE',
-            'READ',
-            'READS',
-            'READ_WRITE',
-            'REAL',
-            'RECURSIVE',
-            'REF_SYSTEM_ID',
-            'REFERENCES',
-            'REGEXP',
-            'RELEASE',
-            'RENAME',
-            'REPEAT',
-            'REPLACE',
-            'REQUIRE',
-            'RESIGNAL',
-            'RESTRICT',
-            'RETURN',
-            'RETURNING',
-            'REVOKE',
-            'RIGHT',
-            'RLIKE',
-            'ROWS',
-            'SCHEMA',
-            'SCHEMAS',
-            'SECOND_MICROSECOND',
-            'SELECT',
-            'SENSITIVE',
-            'SEPARATOR',
-            'SET',
-            'SHOW',
-            'SIGNAL',
-            'SLOW',
-            'SMALLINT',
-            'SPATIAL',
-            'SPECIFIC',
-            'SQL',
-            'SQLEXCEPTION',
-            'SQLSTATE',
-            'SQLWARNING',
-            'SQL_BIG_RESULT',
-            'SQL_CALC_FOUND_ROWS',
-            'SQL_SMALL_RESULT',
-            'SSL',
-            'STARTING',
-            'STATS_AUTO_RECALC',
-            'STATS_PERSISTENT',
-            'STATS_SAMPLE_PAGES',
-            'STRAIGHT_JOIN',
-            'TABLE',
-            'TERMINATED',
-            'THEN',
-            'TINYBLOB',
-            'TINYINT',
-            'TINYTEXT',
-            'TO',
-            'TRAILING',
-            'TRIGGER',
-            'TRUE',
-            'UNDO',
-            'UNION',
-            'UNIQUE',
-            'UNLOCK',
-            'UNSIGNED',
-            'UPDATE',
-            'USAGE',
-            'USE',
-            'USING',
-            'UTC_DATE',
-            'UTC_TIME',
-            'UTC_TIMESTAMP',
-            'VALUES',
-            'VARBINARY',
-            'VARCHAR',
-            'VARCHARACTER',
-            'VARYING',
-            'WHEN',
-            'WHERE',
-            'WHILE',
-            'WINDOW',
-            'WITH',
-            'WRITE',
-            'XOR',
-            'YEAR_MONTH',
-            'ZEROFILL',
-            'ACTION',
-            'BIT',
-            'DATE',
-            'ENUM',
-            'NO',
-            'TEXT',
-            'TIME',
-            'TIMESTAMP',
-            'BODY',
-            'ELSIF',
-            'GOTO',
-            'HISTORY',
-            'MINUS',
-            'OTHERS',
-            'PACKAGE',
-            'PERIOD',
-            'RAISE',
-            'ROWNUM',
-            'ROWTYPE',
-            'SYSDATE',
-            'SYSTEM',
-            'SYSTEM_TIME',
-            'VERSIONING',
-            'WITHOUT'
-        ];
-    }
-
-    /**
-     * Does the adapter handle casting?
-     *
-     * @return bool
-     */
-    public function getSupportForCasting(): bool
-    {
-        return false;
     }
 
     /**
@@ -1664,7 +1046,7 @@ class MariaDB extends Adapter
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
-
+                break;
             default:
                 throw new Exception('Unknown Type');
         }
@@ -1680,7 +1062,7 @@ class MariaDB extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
+    protected function getSQLCondition(string $attribute, string $method, ?string $placeholder, mixed $value): string
     {
         switch ($method) {
             case Query::TYPE_SEARCH:
@@ -1695,69 +1077,14 @@ class MariaDB extends Adapter
                 $value = "'{$value}*'";
 
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
-
             default:
-                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                break;
-        }
-    }
+                $condition = $attribute . ' ' . $this->getSQLOperator($method);
 
-    /**
-     * Get SQL Operator
-     *
-     * @param string $method
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLOperator(string $method): string
-    {
-        switch ($method) {
-            case Query::TYPE_EQUAL:
-                return '=';
+                if (!empty($placeholder)) {
+                    $condition .= ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                }
 
-            case Query::TYPE_NOTEQUAL:
-                return '!=';
-
-            case Query::TYPE_LESSER:
-                return '<';
-
-            case Query::TYPE_LESSEREQUAL:
-                return '<=';
-
-            case Query::TYPE_GREATER:
-                return '>';
-
-            case Query::TYPE_GREATEREQUAL:
-                return '>=';
-
-            default:
-                throw new Exception('Unknown method:' . $method);
-                break;
-        }
-    }
-
-    /**
-     * Get SQL Index Type
-     *
-     * @param string $type
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndexType(string $type): string
-    {
-        switch ($type) {
-            case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
-                return 'INDEX';
-
-            case Database::INDEX_UNIQUE:
-                return 'UNIQUE INDEX';
-
-            case Database::INDEX_FULLTEXT:
-                return 'FULLTEXT INDEX';
-
-            default:
-                throw new Exception('Unknown Index Type:' . $type);
+                return $condition;
         }
     }
 
@@ -1796,50 +1123,6 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Get SQL condition for permissions
-     *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
-     */
-    protected function getSQLPermissionsCondition(string $collection, array $roles): string
-    {
-        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-        return "table_main._uid IN (
-                    SELECT distinct(_document)
-                    FROM {$this->getSQLTable($collection.'_perms')}
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = 'read'
-                )";
-    }
-
-    /**
-     * Get SQL schema
-     *
-     * @return string 
-     */
-    protected function getSQLSchema(): string
-    {
-        if(!$this->getSupportForSchemas()) {
-            return '';
-        }
-
-        return "`{$this->getDefaultDatabase()}`.";
-    }
-
-    /**
-     * Get SQL table
-     *
-     * @param string $name 
-     * @return string 
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
-    }
-
-    /**
      * Get PDO Type
      *
      * @param mixed $value
@@ -1868,26 +1151,12 @@ class MariaDB extends Adapter
     }
 
     /**
-     * Returns the current PDO object
-     * @return PDO 
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
      */
-    protected function getPDO()
+    public function getSupportForFulltextWildcardIndex(): bool
     {
-        return $this->pdo;
-    }
-
-    /**
-     * Returns default PDO configuration
-     */
-    public static function getPDOAttributes(): array
-    {
-        return [
-            PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
-            PDO::ATTR_PERSISTENT => true, // Create a persistent connection
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on srrors
-            PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
-            PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
-        ];
+        return true;
     }
 }

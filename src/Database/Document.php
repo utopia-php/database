@@ -4,6 +4,8 @@ namespace Utopia\Database;
 
 use ArrayObject;
 use Exception;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 class Document extends ArrayObject
 {

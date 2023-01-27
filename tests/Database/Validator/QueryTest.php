@@ -110,13 +110,16 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('equal("$id", ["Iron Man", "Ant Man"])')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('notEqual("title", ["Iron Man", "Ant Man"])')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('equal("description", "Best movie ever")')));
-        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('greaterThan("rating", 4)')), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('greaterThan("rating", 4)')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('lessThan("price", 6.50)')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('lessThanEqual("price", 6)')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('contains("tags", "action")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('cursorAfter("docId")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('cursorBefore("docId")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderAsc("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderDesc("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('isNull("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('isNotNull("title")')));
     }
 
     public function testInvalidMethod()

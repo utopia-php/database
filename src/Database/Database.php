@@ -4,13 +4,17 @@ namespace Utopia\Database;
 
 use Exception;
 use Throwable;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Structure;
+use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Cache\Cache;
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\IndexValidator;
+use Utopia\Database\Validator\Structure;
 
 class Database
 {
@@ -66,16 +70,16 @@ class Database
 
     // Events
     const EVENT_ALL = '*';
-    
+
     const EVENT_DATABASE_LIST = 'database_list';
     const EVENT_DATABASE_CREATE = 'database_create';
     const EVENT_DATABASE_DELETE = 'database_delete';
-    
+
     const EVENT_COLLECTION_LIST = 'collection_list';
     const EVENT_COLLECTION_CREATE = 'collection_delete';
     const EVENT_COLLECTION_READ = 'collection_read';
     const EVENT_COLLECTION_DELETE = 'collection_delete';
-    
+
     const EVENT_DOCUMENT_FIND = 'document_find';
     const EVENT_DOCUMENT_CREATE = 'document_create';
     const EVENT_DOCUMENT_READ = 'document_read';
@@ -428,7 +432,7 @@ class Database
      * Create the Default Database
      *
      * @throws Exception
-     * 
+     *
      * @return bool
      */
     public function create(): bool
@@ -482,7 +486,7 @@ class Database
     public function list(): array
     {
         $databases = $this->adapter->list();
-        
+
         $this->trigger(self::EVENT_DATABASE_LIST, $databases);
 
         return $databases;
@@ -500,7 +504,7 @@ class Database
         $deleted = $this->adapter->delete($name);
 
         $this->trigger(self::EVENT_DATABASE_DELETE, ['name' => $name, 'deleted' => $deleted]);
-        
+
         return $deleted;
     }
 
@@ -513,7 +517,7 @@ class Database
      *
      * @return Document
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document 
+    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
 
@@ -555,17 +559,17 @@ class Database
             }
 
             if (
-                $this->adapter->getRowLimit() > 0 &&
-                $this->adapter->getAttributeWidth($collection) > $this->adapter->getRowLimit()
+                $this->adapter->getDocumentSizeLimit() > 0 &&
+                $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Row width limit of ' . $this->adapter->getRowLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Row width limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
         }
 
         $createdCollection = $this->silent(fn() => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-        
+
         return $createdCollection;
     }
 
@@ -582,7 +586,7 @@ class Database
         $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
 
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
-        
+
         return $collection;
     }
 
@@ -621,12 +625,12 @@ class Database
     public function deleteCollection(string $id): bool
     {
         $this->adapter->deleteCollection($id);
-        
+
         $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
         $deleted = $this->silent(fn() => $this->deleteDocument(self::METADATA, $id));
 
         $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
-        
+
         return $deleted;
     }
 
@@ -694,8 +698,8 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
@@ -749,7 +753,7 @@ class Database
      *
      * @return array
      */
-    protected function getRequiredFilters(string $type): array 
+    protected function getRequiredFilters(string $type): array
     {
         switch ($type) {
             case self::VAR_STRING:
@@ -949,14 +953,29 @@ class Database
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null): bool
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, &$success) {
-            if ($type !== null || $size !== null || $signed !== null || $array !== null) {
+        /** Ensure required filters for the attribute are passed */
+        $requiredFilters = $this->getRequiredFilters($type);
+        if (!empty(array_diff($requiredFilters, $filters))) {
+            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+        }
+
+        if ($format) {
+            if (!Structure::hasFormat($format, $type)) {
+                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+            }
+        }
+
+        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
+            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
                 $array ??= $attribute->getAttribute('array');
+                $format ??= $attribute->getAttribute('format');
+                $formatOptions ??= $attribute->getAttribute('formatOptions');
+                $filters ??= $attribute->getAttribute('filters');
 
                 switch ($type) {
                     case self::VAR_STRING:
@@ -984,15 +1003,18 @@ class Database
                     ->setAttribute('type', $type)
                     ->setAttribute('size', $size)
                     ->setAttribute('signed', $signed)
-                    ->setAttribute('array', $array);
+                    ->setAttribute('array', $array)
+                    ->setAttribute('format', $format)
+                    ->setAttribute('formatOptions', $formatOptions)
+                    ->setAttribute('filters', $filters);
 
                 $attributes = $collectionDoc->getAttribute('attributes');
                 $attributes[$attributeIndex] = $attribute;
                 $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
                 if (
-                    $this->adapter->getRowLimit() > 0 &&
-                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getRowLimit()
+                    $this->adapter->getDocumentSizeLimit() > 0 &&
+                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
                 ) {
                     throw new LimitException('Row width limit reached. Cannot create new attribute.');
                 }
@@ -1030,8 +1052,8 @@ class Database
         }
 
         if (
-            $this->adapter->getRowLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getRowLimit()
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
             return false;
@@ -1053,7 +1075,7 @@ class Database
         $collection = $this->silent(fn()=>$this->getCollection($collection));
 
         $attributes = $collection->getAttribute('attributes', []);
-        
+
         $attribute = null;
 
         foreach ($attributes as $key => $value) {
@@ -1072,7 +1094,7 @@ class Database
         $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
-        
+
         return $deleted;
     }
 
@@ -1130,7 +1152,7 @@ class Database
         $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
-        
+
         return $renamed;
     }
 
@@ -1203,6 +1225,11 @@ class Database
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
+        $validator = new IndexValidator($collection);
+        if(!$validator->isValid(['type' => $type, 'attributes' => $attributes])){
+            throw new Exception($validator->getDescription());
+        }
+
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
         /** @var Document[] $indexes */
@@ -1256,7 +1283,7 @@ class Database
         }
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
-        
+
         return $index;
     }
 
@@ -1291,7 +1318,7 @@ class Database
         $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
         $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
-        
+
         return $deleted;
     }
 
@@ -1393,7 +1420,7 @@ class Database
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         $document = $this->decode($collection, $document);
-        
+
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
         return $document;
@@ -1471,7 +1498,7 @@ class Database
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
-        
+
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
         return $deleted;
@@ -1564,7 +1591,7 @@ class Database
     {
         $results = $this->silent(fn() => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
         $found = \reset($results);
-        
+
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
 
         return $found;
@@ -1594,7 +1621,7 @@ class Database
         $queries = self::convertQueries($collection, $queries);
 
         $count = $this->adapter->count($collection->getId(), $queries, $max);
-        
+
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
 
         return $count;
@@ -1623,7 +1650,7 @@ class Database
 
         $queries = self::convertQueries($collection, $queries);
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
-        
+
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
 
         return $sum;
@@ -1818,7 +1845,7 @@ class Database
     protected function encodeAttribute(string $name, $value, Document $document)
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception('Filter not found');
+            throw new Exception("Filter: {$name} not found");
         }
 
         try {
@@ -1890,7 +1917,7 @@ class Database
 
     /**
      * Get list of keywords that cannot be used
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array
@@ -1900,7 +1927,7 @@ class Database
 
     /**
      * Get Database Adapter
-     * 
+     *
      * @return Adapter
      */
     public function getAdapter(): Adapter

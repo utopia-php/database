@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fd2a69cf99b2bda4f42ce979ae1fd509",
+    "content-hash": "2c6c34e8bb40d29122d8b6c4823f5dc9",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -3849,16 +3849,16 @@
         },
         {
             "name": "utopia-php/cli",
-            "version": "0.11.0",
+            "version": "0.14.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cli.git",
-                "reference": "c7a6908a8dbe9234b8b2c954e5487d34cb079af6"
+                "reference": "c30ef985a4e739758a0d95eb0706b357b6d8c086"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cli/zipball/c7a6908a8dbe9234b8b2c954e5487d34cb079af6",
-                "reference": "c7a6908a8dbe9234b8b2c954e5487d34cb079af6",
+                "url": "https://api.github.com/repos/utopia-php/cli/zipball/c30ef985a4e739758a0d95eb0706b357b6d8c086",
+                "reference": "c30ef985a4e739758a0d95eb0706b357b6d8c086",
                 "shasum": ""
             },
             "require": {
@@ -3867,7 +3867,7 @@
             },
             "require-dev": {
                 "phpunit/phpunit": "^9.3",
-                "vimeo/psalm": "4.0.1"
+                "squizlabs/php_codesniffer": "^3.6"
             },
             "type": "library",
             "autoload": {
@@ -3896,9 +3896,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cli/issues",
-                "source": "https://github.com/utopia-php/cli/tree/0.11.0"
+                "source": "https://github.com/utopia-php/cli/tree/0.14.0"
             },
-            "time": "2021-04-16T15:16:08+00:00"
+            "time": "2022-10-09T10:19:07+00:00"
         },
         {
             "name": "vimeo/psalm",
@@ -4172,5 +4172,5 @@
         "ext-redis": "*",
         "ext-mongodb": "*"
     },
-    "plugin-api-version": "2.3.0"
+    "plugin-api-version": "2.2.0"
 }

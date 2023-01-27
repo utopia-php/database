@@ -1,9 +1,9 @@
 <?php
 
-namespace Utopia\Database;
+namespace Utopia\Database\Adapter;
 
-use PDO;
 use Exception;
+use PDO;
 use PDOException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
@@ -755,6 +755,12 @@ abstract class SQL extends Adapter
 
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
+
+            case Query::TYPE_IS_NULL:
+                return 'IS NULL';
+
+            case Query::TYPE_IS_NOT_NULL:
+                return 'IS NOT NULL';
 
             default:
                 throw new Exception('Unknown method:' . $method);

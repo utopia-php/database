@@ -2,17 +2,16 @@
 
 namespace Utopia\Database\Adapter;
 
-use PDO;
 use Exception;
+use PDO;
 use PDOException;
 use Throwable;
-use Utopia\Database\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Helpers\ID;
 
 class Postgres extends SQL
 {
@@ -757,12 +756,22 @@ class Postgres extends SQL
             });
 
             $conditions = [];
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('"table_main"."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                $attributeIndex++;
+
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), null, null);
+                    break;
+                default:
+                    $attributeIndex = 0;
+                    foreach ($query->getValues() as $key => $value) {
+                        $bindKey = 'key_' . $attributeIndex;
+                        $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                        $attributeIndex++;
+                    }
+                    break;
             }
+
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
         }
@@ -786,7 +795,9 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
+                continue;
+            }
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
@@ -813,6 +824,7 @@ class Postgres extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
         $stmt->execute();
 
         $results = $stmt->fetchAll();
@@ -1036,12 +1048,12 @@ class Postgres extends SQL
      * 
      * @param string $attribute
      * @param string $operator
-     * @param string $placeholder
+     * @param string|null $placeholder
      * @param mixed $value
      * 
      * @return string
      */
-    protected function getSQLCondition(string $attribute, string $operator, string $placeholder, $value): string
+    protected function getSQLCondition(string $attribute, string $operator, ?string $placeholder, mixed $value): string
     {
         switch ($operator) {
             case Query::TYPE_SEARCH:
@@ -1057,7 +1069,13 @@ class Postgres extends SQL
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
 
             default:
-                return $attribute . ' ' . $this->getSQLOperator($operator) . ' ' . $placeholder; // Using \"attrubute_\" to avoid conflicts with custom names;
+                $condition = $attribute . ' ' . $this->getSQLOperator($operator);
+
+                if (!empty($placeholder)) {
+                    $condition .= ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                }
+
+                return $condition;
         }
     }
 

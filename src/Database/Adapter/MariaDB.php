@@ -750,12 +750,22 @@ class MariaDB extends SQL
             });
 
             $conditions = [];
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                $attributeIndex++;
+
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), null, null);
+                    break;
+                default:
+                    $attributeIndex = 0;
+                    foreach ($query->getValues() as $key => $value) {
+                        $bindKey = 'key_' . $attributeIndex;
+                        $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
+                        $attributeIndex++;
+                    }
+                    break;
             }
+
             $condition = implode(' OR ', $conditions);
             $where[] = empty($condition) ? '' : '(' . $condition . ')';
         }
@@ -780,7 +790,10 @@ class MariaDB extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
+                continue;
+            }
+
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;
@@ -1030,7 +1043,7 @@ class MariaDB extends SQL
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(string $attribute, string $method, string $placeholder, $value): string
+    protected function getSQLCondition(string $attribute, string $method, ?string $placeholder, mixed $value): string
     {
         switch ($method) {
             case Query::TYPE_SEARCH:
@@ -1045,10 +1058,14 @@ class MariaDB extends SQL
                 $value = "'{$value}*'";
 
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
-
             default:
-                return $attribute . ' ' . $this->getSQLOperator($method) . ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                break;
+                $condition = $attribute . ' ' . $this->getSQLOperator($method);
+
+                if (!empty($placeholder)) {
+                    $condition .= ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
+                }
+
+                return $condition;
         }
     }
 

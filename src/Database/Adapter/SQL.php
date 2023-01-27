@@ -756,6 +756,12 @@ abstract class SQL extends Adapter
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
 
+            case Query::TYPE_IS_NULL:
+                return 'IS NULL';
+
+            case Query::TYPE_IS_NOT_NULL:
+                return 'IS NOT NULL';
+
             default:
                 throw new Exception('Unknown method:' . $method);
                 break;

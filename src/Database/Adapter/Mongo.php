@@ -958,7 +958,10 @@ class Mongo extends Adapter
             $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
-            if (is_array($value) && $operator === '$eq') {
+            if ($operator === 'between' && isset($value[0]) && isset($value[1])) {
+                $filters[$attribute]['$lte'] = $value[1];
+                $filters[$attribute]['$gte'] = $value[0];
+            } else if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
@@ -1006,6 +1009,9 @@ class Mongo extends Adapter
 
             case Query::TYPE_SEARCH:
                 return '$search';
+
+            case Query::TYPE_BETWEEN:
+                return 'between'; // this is not an operator will be replaced with $gte/$lte
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);

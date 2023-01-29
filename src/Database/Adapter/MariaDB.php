@@ -1683,9 +1683,6 @@ class MariaDB extends Adapter
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
 
-//            case Query::TYPE_BETWEEN:
-//                return 'BETWEEN';
-
             default:
                 throw new Exception('Unknown method:' . $method);
         }

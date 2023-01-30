@@ -958,7 +958,7 @@ class Mongo extends Adapter
             $operator = $this->getQueryOperator($query->getMethod());
             $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
-            if ($operator === 'between' && isset($value[0]) && isset($value[1])) {
+            if ($query->getMethod() === Query::TYPE_BETWEEN) {
                 $filters[$attribute]['$lte'] = $value[1];
                 $filters[$attribute]['$gte'] = $value[0];
             } else if (is_array($value) && $operator === '$eq') {

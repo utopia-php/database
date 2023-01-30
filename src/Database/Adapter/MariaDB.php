@@ -1872,7 +1872,7 @@ class MariaDB extends Adapter
                  * Prepend wildcard by default on the back.
                  */
                 $value = "'{$value}*'";
-                return 'match('.$attribute.') against('.$this->getPDO()->quote($value).' in boolean mode)';
+                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
 
             case Query::TYPE_BETWEEN:
                 return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";

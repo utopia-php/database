@@ -341,8 +341,8 @@ abstract class SQL extends Adapter
                     }
                     break;
                 case Database::VAR_FLOAT:
-                    // FLOAT(p) takes 4 bytes when p <= 24, 8 otherwise
-                    $total += 4;
+                    // DOUBLE takes 8 bytes
+                    $total += 8;
                     break;
 
                 case Database::VAR_BOOLEAN:
@@ -671,61 +671,6 @@ abstract class SQL extends Adapter
     public function getSupportForQueryContains(): bool
     {
         return false;
-    }
-
-    /**
-     * Get SQL Type
-     *
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
-    {
-        switch ($type) {
-            case Database::VAR_STRING:
-                // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
-                    return 'LONGTEXT';
-                }
-
-                if ($size > 65535) {
-                    return 'MEDIUMTEXT';
-                }
-
-                if ($size > 16383) {
-                    return 'TEXT';
-                }
-
-                return "VARCHAR({$size})";
-
-            case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
-                $signed = ($signed) ? '' : ' UNSIGNED';
-
-                if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes
-                    return 'BIGINT' . $signed;
-                }
-
-                return 'INT' . $signed;
-
-            case Database::VAR_FLOAT:
-                $signed = ($signed) ? '' : ' UNSIGNED';
-                return 'FLOAT' . $signed;
-
-            case Database::VAR_BOOLEAN:
-                return 'TINYINT(1)';
-
-            case Database::VAR_DOCUMENT:
-                return 'CHAR(255)';
-
-            case Database::VAR_DATETIME:
-                return 'DATETIME(3)';
-                break;
-            default:
-                throw new Exception('Unknown Type');
-        }
     }
 
     /**

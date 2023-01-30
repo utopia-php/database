@@ -2518,16 +2518,15 @@ abstract class Base extends TestCase
             // [3, 128, 125, 30, 24, 2],
             //
             // Taken 500 bytes off for tests
-            [0, 1024, 15, 0, 606, 3],
+            [0, 1024, 15, 0, 304, 3],
             [1, 512, 31, 0, 0, 333],
             [2, 256, 62, 103, 0, 5],
-            [3, 128, 124, 30, 24, 14],
+            [3, 128, 124, 30, 12, 14],
         ];
     }
 
     /**
      * @dataProvider rowWidthExceedsMaximum
-     * @expectedException LimitException
      */
     public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
     {

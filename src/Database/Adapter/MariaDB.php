@@ -1046,7 +1046,7 @@ class MariaDB extends SQL
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
-                break;
+
             default:
                 throw new Exception('Unknown Type');
         }

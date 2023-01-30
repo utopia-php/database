@@ -685,31 +685,26 @@ abstract class SQL extends Adapter
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
-
             case Query::TYPE_NOTEQUAL:
                 return '!=';
-
             case Query::TYPE_LESSER:
                 return '<';
-
             case Query::TYPE_LESSEREQUAL:
                 return '<=';
-
             case Query::TYPE_GREATER:
                 return '>';
-
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
-
             case Query::TYPE_IS_NULL:
                 return 'IS NULL';
-
             case Query::TYPE_IS_NOT_NULL:
                 return 'IS NOT NULL';
-
+            case Query::TYPE_LIKE:
+                return 'LIKE';
+            case Query::TYPE_NOT_LIKE:
+                return 'NOT LIKE';
             default:
                 throw new Exception('Unknown method:' . $method);
-                break;
         }
     }
 
@@ -750,11 +745,11 @@ abstract class SQL extends Adapter
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (
-                    SELECT distinct(_document)
-                    FROM {$this->getSQLTable($collection . '_perms')}
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = 'read'
-                )";
+                SELECT distinct(_document)
+                FROM {$this->getSQLTable($collection . '_perms')}
+                WHERE _permission IN (" . implode(', ', $roles) . ")
+                AND _type = 'read'
+            )";
     }
 
     /**

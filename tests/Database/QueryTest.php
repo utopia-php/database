@@ -163,6 +163,18 @@ class QueryTest extends TestCase
         $this->assertEquals('isNotNull', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
+
+        $query = Query::parse('like("director", "Tester")');
+
+        $this->assertEquals('like', $query->getMethod());
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals(["Tester"], $query->getValues());
+
+        $query = Query::parse('notLike("director", "Tester")');
+
+        $this->assertEquals('notLike', $query->getMethod());
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals(["Tester"], $query->getValues());
     }
 
     public function testParseV2()

@@ -4,6 +4,7 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -1991,6 +1992,24 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    public function testFindLike()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::like('name', 'Frozen%'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+    }
+
+    public function testFindNotLike()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::notLike('name', 'Frozen%'),
+        ]);
+
+        $this->assertEquals(4, count($documents));
     }
 
     /**

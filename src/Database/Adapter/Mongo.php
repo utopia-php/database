@@ -941,7 +941,7 @@ class Mongo extends Adapter
     {
         $filters = [];
 
-        foreach ($queries as $i => $query) {
+        foreach ($queries as $query) {
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
@@ -957,27 +957,29 @@ class Mongo extends Adapter
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
 
-            switch ($query->getMethod()) {
-                case Query::TYPE_IS_NULL:
-                case Query::TYPE_IS_NOT_NULL:
-                    $value = null;
+            $value = match ($query->getMethod()) {
+                Query::TYPE_IS_NULL,
+                Query::TYPE_IS_NOT_NULL => null,
+                default => count($query->getValues()) > 1
+                    ? $query->getValues()
+                    : $query->getValues()[0],
+            };
 
-                    break;
-                default:
-                    $value = count($query->getValues()) > 1
-                        ? $query->getValues()
-                        : $query->getValues()[0];
+            $negated = match ($query->getMethod()) {
+                Query::TYPE_NOT_LIKE => true,
+                default => false,
+            };
 
-                    break;
-            }
-
-            if (is_array($value) && $operator === '$eq') {
+            if ($operator == '$eq' && \is_array($value)) {
                 $filters[$attribute]['$in'] = $value;
-            } elseif ($operator === '$in') {
+            } else if ($operator == '$ne' && \is_array($value)) {
+                $filters[$attribute]['$nin'] = $value;
+            } else if($operator == '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
-            } elseif ($operator === '$search') {
-                // only one fulltext index per mongo collection, so attribute not necessary
+            } else if ($operator == '$search') {
                 $filters['$text'][$operator] = $value;
+            } else if ($negated) {
+                $filters[$attribute]['$not'][$operator] = $value;
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -997,35 +999,26 @@ class Mongo extends Adapter
     {
         switch ($operator) {
             case Query::TYPE_EQUAL:
-                return '$eq';
-
-            case Query::TYPE_NOTEQUAL:
-                return '$ne';
-
-            case Query::TYPE_LESSER:
-                return '$lt';
-
-            case Query::TYPE_LESSEREQUAL:
-                return '$lte';
-
-            case Query::TYPE_GREATER:
-                return '$gt';
-
-            case Query::TYPE_GREATEREQUAL:
-                return '$gte';
-
-            case Query::TYPE_CONTAINS:
-                return '$in';
-
-            case Query::TYPE_SEARCH:
-                return '$search';
-
             case Query::TYPE_IS_NULL:
                 return '$eq';
-
+            case Query::TYPE_NOTEQUAL:
             case Query::TYPE_IS_NOT_NULL:
                 return '$ne';
-
+            case Query::TYPE_LESSER:
+                return '$lt';
+            case Query::TYPE_LESSEREQUAL:
+                return '$lte';
+            case Query::TYPE_GREATER:
+                return '$gt';
+            case Query::TYPE_GREATEREQUAL:
+                return '$gte';
+            case Query::TYPE_CONTAINS:
+                return '$in';
+            case Query::TYPE_SEARCH:
+                return '$search';
+            case Query::TYPE_LIKE:
+            case Query::TYPE_NOT_LIKE:
+                return '$regex';
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }

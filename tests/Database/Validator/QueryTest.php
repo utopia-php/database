@@ -120,6 +120,8 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderDesc("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('isNull("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('isNotNull("title")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('like("title", "Iron Man")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('notLike("title", "Iron Man")')));
     }
 
     public function testInvalidMethod()

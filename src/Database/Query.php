@@ -17,6 +17,8 @@ class Query
     const TYPE_SEARCH = 'search';
     const TYPE_IS_NULL = 'isNull';
     const TYPE_IS_NOT_NULL = 'isNotNull';
+    const TYPE_LIKE = 'like';
+    const TYPE_NOT_LIKE = 'notLike';
 
     // Order methods
     const TYPE_ORDERDESC = 'orderDesc';
@@ -129,7 +131,7 @@ class Query
      */
     public static function isMethod(string $value): bool
     {
-        return match (static::getMethodFromAlias($value)) {
+        return match ($value) {
             self::TYPE_EQUAL,
             self::TYPE_NOTEQUAL,
             self::TYPE_LESSER,
@@ -145,10 +147,11 @@ class Query
             self::TYPE_CURSORAFTER,
             self::TYPE_CURSORBEFORE,
             self::TYPE_IS_NULL,
-            self::TYPE_IS_NOT_NULL => true,
+            self::TYPE_IS_NOT_NULL,
+            self::TYPE_LIKE,
+            self::TYPE_NOT_LIKE => true,
             default => false,
         };
-
     }
 
     /**
@@ -289,8 +292,6 @@ class Query
             }
         }
 
-        $method = static::getMethodFromAlias($method);
-
         switch ($method) {
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
@@ -302,6 +303,8 @@ class Query
             case self::TYPE_SEARCH:
             case self::TYPE_IS_NULL:
             case self::TYPE_IS_NOT_NULL:
+            case self::TYPE_LIKE:
+            case self::TYPE_NOT_LIKE:
                 $attribute = $parsedParams[0] ?? '';
                 if (count($parsedParams) < 2) {
                     return new self($method, $attribute);
@@ -410,28 +413,6 @@ class Query
 
         // Unknown format
         return $value;
-    }
-
-    /**
-     * Returns Method from Alias.
-     *
-     * @param string $method
-     * @return string
-     */
-    static protected function getMethodFromAlias(string $method): string
-    {
-        return $method;
-        /*
-        Commented out as we didn't consider this important at the moment, since IDE autocomplete should do the job.
-        return match ($method) {
-            'lt' => self::TYPE_LESSER,
-            'lte' => self::TYPE_LESSEREQUAL,
-            'gt' => self::TYPE_GREATER,
-            'gte' => self::TYPE_GREATEREQUAL,
-            'eq' => self::TYPE_EQUAL,
-            default => $method
-        };
-        */
     }
 
     /**
@@ -554,6 +535,16 @@ class Query
     public static function isNotNull(string $attribute): self
     {
         return new self(self::TYPE_IS_NOT_NULL, $attribute);
+    }
+
+    public static function like(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_LIKE, $attribute, [$value]);
+    }
+
+    public static function notLike(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_NOT_LIKE, $attribute, [$value]);
     }
 
     /**

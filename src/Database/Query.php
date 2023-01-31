@@ -15,6 +15,8 @@ class Query
     const TYPE_GREATEREQUAL = 'greaterThanEqual';
     const TYPE_CONTAINS = 'contains';
     const TYPE_SEARCH = 'search';
+    const TYPE_IS_NULL = 'isNull';
+    const TYPE_IS_NOT_NULL = 'isNotNull';
     const TYPE_BETWEEN = 'between';
 
     // Order methods
@@ -128,26 +130,27 @@ class Query
      */
     public static function isMethod(string $value): bool
     {
-        switch (static::getMethodFromAlias($value)) {
-            case self::TYPE_EQUAL:
-            case self::TYPE_NOTEQUAL:
-            case self::TYPE_LESSER:
-            case self::TYPE_LESSEREQUAL:
-            case self::TYPE_GREATER:
-            case self::TYPE_GREATEREQUAL:
-            case self::TYPE_CONTAINS:
-            case self::TYPE_SEARCH:
-            case self::TYPE_ORDERASC:
-            case self::TYPE_ORDERDESC:
-            case self::TYPE_LIMIT:
-            case self::TYPE_OFFSET:
-            case self::TYPE_CURSORAFTER:
-            case self::TYPE_CURSORBEFORE:
-            case self::TYPE_BETWEEN:
-                return true;
-        }
+        return match (static::getMethodFromAlias($value)) {
+            self::TYPE_EQUAL,
+            self::TYPE_NOTEQUAL,
+            self::TYPE_LESSER,
+            self::TYPE_LESSEREQUAL,
+            self::TYPE_GREATER,
+            self::TYPE_GREATEREQUAL,
+            self::TYPE_CONTAINS,
+            self::TYPE_SEARCH,
+            self::TYPE_ORDERASC,
+            self::TYPE_ORDERDESC,
+            self::TYPE_LIMIT,
+            self::TYPE_OFFSET,
+            self::TYPE_CURSORAFTER,
+            self::TYPE_CURSORBEFORE,
+            self::TYPE_IS_NULL,
+            self::TYPE_IS_NOT_NULL => true,
+            self::TYPE_BETWEEN,
+            default => false,
+        };
 
-        return false;
     }
 
     /**
@@ -298,6 +301,8 @@ class Query
             case self::TYPE_GREATEREQUAL:
             case self::TYPE_CONTAINS:
             case self::TYPE_SEARCH:
+            case self::TYPE_IS_NULL:
+            case self::TYPE_IS_NOT_NULL:
             case self::TYPE_BETWEEN:
                 $attribute = $parsedParams[0] ?? '';
                 if (count($parsedParams) < 2) {
@@ -551,12 +556,22 @@ class Query
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
     }
 
+    public static function isNull(string $attribute): self
+    {
+        return new self(self::TYPE_IS_NULL, $attribute);
+    }
+
+    public static function isNotNull(string $attribute): self
+    {
+        return new self(self::TYPE_IS_NOT_NULL, $attribute);
+    }
+
     /**
      * Filters $queries for $types
-     * 
+     *
      * @param Query[] $queries
-     * @param string[] ...$types
-     * 
+     * @param string[] $types
+     *
      * @return Query[]
      */
     public static function getByType(array $queries, string ...$types): array

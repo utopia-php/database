@@ -956,7 +956,20 @@ class Mongo extends Adapter
             
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
+
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $value = null;
+
+                    break;
+                default:
+                    $value = count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0];
+
+                    break;
+            }
 
             if ($query->getMethod() === Query::TYPE_BETWEEN) {
                 $filters[$attribute]['$lte'] = $value[1];
@@ -1013,6 +1026,11 @@ class Mongo extends Adapter
             case Query::TYPE_BETWEEN:
                 return 'between'; // this is not an operator will be replaced with $gte/$lte
 
+            case Query::TYPE_IS_NULL:
+                return '$eq';
+
+            case Query::TYPE_IS_NOT_NULL:
+                return '$ne';
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }

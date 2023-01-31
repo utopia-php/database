@@ -1,24 +1,25 @@
 <?php
 
 /**
- * @var CLI
+ * @var CLI $cli
  */
 global $cli;
 
-use Faker\Factory;
-use MongoDB\Client;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Mongo\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Database\Validator\Authorization;
-use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
+
+/**
+ * @Example
+ * docker-compose exec tests bin/index --adapter=mysql --name=testing
+ */
 
 $cli
     ->task('index')
@@ -26,20 +27,22 @@ $cli
     ->param('adapter', '', new Text(0), 'Database adapter', false)
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->action(function ($adapter, $name) {
-        $database = null;
+
+        $namespace = '_ns';
+        $cache = new Cache(new NoCache());
 
         switch ($adapter) {
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
-                $client = new Client('mongodb://mongo/',
-                    [
-                        'username' => 'root',
-                        'password' => 'example',
-                    ],
-                    $options
-                );
+              $client = new Client(
+                  $name,
+                  'mongo',
+                  27017,
+                  'root',
+                  'example'
+                  , false
+               );
 
-                $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                $database = new Database(new Mongo($client), $cache);
                 break;
 
             case 'mariadb':
@@ -48,15 +51,9 @@ $cli
                 $dbUser = 'root';
                 $dbPass = 'password';
 
-                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                    PDO::ATTR_TIMEOUT => 3, // Seconds
-                    PDO::ATTR_PERSISTENT => true,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
-                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                $database = new Database(new MariaDB($pdo), $cache);
                 break;
 
             case 'mysql':
@@ -65,15 +62,9 @@ $cli
                 $dbUser = 'root';
                 $dbPass = 'password';
 
-                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                    PDO::ATTR_TIMEOUT => 3, // Seconds
-                    PDO::ATTR_PERSISTENT => true,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
-                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                $database = new Database(new MySQL($pdo), $cache);
                 break;
 
             default:
@@ -81,36 +72,45 @@ $cli
                 return;
         }
 
-        $database->setNamespace($name);
+        $database->setDefaultDatabase($name);
+        $database->setNamespace($namespace);
 
-        Console::info("For query: [created.greater(1262322000), genre.equal('travel')]");
+        Console::info("For query: greaterThan(created, 2010-01-01 05:00:00)', 'equal(genre,travel)");
 
         $start = microtime(true);
-        $success = $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+        $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
+
+        Console::info("equal('genre', ['fashion', 'finance', 'sports'])");
+
+        $start = microtime(true);
+        $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
 
-        Console::info("For query: genre.equal('fashion', 'finance', 'sports')");
+        Console::info("greaterThan('views', 100000)");
 
         $start = microtime(true);
-        $success = $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
+        $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
 
-        Console::info("For query: views.greater(100000)");
-
+        Console::info("search('text', 'Alice')");
         $start = microtime(true);
-        $success = $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
-        $time = microtime(true) - $start;
-        Console::success("{$time} seconds");
-
-
-        Console::info("For query: text.search('Alice')");
-        $start = microtime(true);
-        $success = $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
+        $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
     });
+
+
+$cli
+    ->error()
+    ->inject('error')
+    ->action(function (Exception $error) {
+        Console::error($error->getMessage());
+    });
+
 

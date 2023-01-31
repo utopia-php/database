@@ -750,7 +750,7 @@ class Postgres extends SQL
         }
 
         foreach ($queries as $query) {
-            $where[] = $this->getSQLConditions($query);
+            $where[] = $this->getSQLCondition($query);
         }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
@@ -840,7 +840,7 @@ class Postgres extends SQL
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
-            $where[] = $this->getSQLConditions($query);
+            $where[] = $this->getSQLCondition($query);
         }
 
         if (Authorization::$status) {
@@ -896,7 +896,7 @@ class Postgres extends SQL
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
         foreach ($queries as $query) {
-            $where[] = $this->getSQLConditions($query);
+            $where[] = $this->getSQLCondition($query);
         }
 
         if (Authorization::$status) {
@@ -1093,13 +1093,13 @@ class Postgres extends SQL
 
 
     /**
-     * Get SQL Conditions
+     * Get SQL Condition
      *
      * @param Query $query
      * @return string
      * @throws Exception
      */
-    protected function getSQLConditions(Query $query): string
+    protected function getSQLCondition(Query $query): string
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',

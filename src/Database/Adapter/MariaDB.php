@@ -741,7 +741,7 @@ class MariaDB extends SQL
         }
 
         foreach ($queries as $query) {
-            $where[] = $this->getSQLConditions($query);
+            $where[] = $this->getSQLCondition($query);
         }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
@@ -828,7 +828,7 @@ class MariaDB extends SQL
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
-            $where[] = $this->getSQLConditions($query);
+            $where[] = $this->getSQLCondition($query);
         }
 
         if (Authorization::$status) {
@@ -881,7 +881,7 @@ class MariaDB extends SQL
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
-            $where[] = $this->getSQLConditions($query);
+            $where[] = $this->getSQLCondition($query);
         }
 
         if (Authorization::$status) {
@@ -1022,13 +1022,13 @@ class MariaDB extends SQL
 
 
     /**
-     * Get SQL Conditions
+     * Get SQL Condition
      *
      * @param Query $query
      * @return string
      * @throws Exception
      */
-    protected function getSQLConditions(Query $query): string
+    protected function getSQLCondition(Query $query): string
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',

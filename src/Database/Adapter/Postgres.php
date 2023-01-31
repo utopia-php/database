@@ -5,11 +5,12 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
+use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -747,33 +748,9 @@ class Postgres extends SQL
                 $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
-        foreach ($queries as $i => $query) {
-            $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $query->getAttribute()
-            });
 
-            $conditions = [];
-
-            switch ($query->getMethod()) {
-                case Query::TYPE_IS_NULL:
-                case Query::TYPE_IS_NOT_NULL:
-                    $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), null, null);
-                    break;
-                default:
-                    $attributeIndex = 0;
-                    foreach ($query->getValues() as $key => $value) {
-                        $bindKey = 'key_' . $attributeIndex;
-                        $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                        $attributeIndex++;
-                    }
-                    break;
-            }
-
-            $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '(' . $condition . ')';
+        foreach ($queries as $query) {
+            $where[] = $this->getSQLConditions($query);
         }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
@@ -793,17 +770,8 @@ class Postgres extends SQL
         ";
 
         $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
-                continue;
-            }
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
-            }
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
@@ -824,7 +792,6 @@ class Postgres extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-
         $stmt->execute();
 
         $results = $stmt->fetchAll();
@@ -852,6 +819,8 @@ class Postgres extends SQL
         return $results;
     }
 
+
+
     /**
      * Count Documents
      *
@@ -870,24 +839,8 @@ class Postgres extends SQL
         $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $i => $query) {
-            $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => ID::custom('_uid'),
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $query->getAttribute()
-            });
-
-            $conditions = [];
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                $attributeIndex++;
-            }
-
-            $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '(' . $condition . ')';
+        foreach ($queries as $query) {
+            $where[] = $this->getSQLConditions($query);
         }
 
         if (Authorization::$status) {
@@ -905,15 +858,8 @@ class Postgres extends SQL
                 ) table_count
         ";
         $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
-            }
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
         }
 
         if ($max !== 0) {
@@ -949,16 +895,8 @@ class Postgres extends SQL
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
-        foreach ($queries as $i => $query) {
-            if ($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            }
-            $conditions = [];
-            foreach ($query->getValues() as $key => $value) {
-                $conditions[] = $this->getSQLCondition('"table_main"."' . $query->getAttribute() . '"', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value);
-            }
-
-            $where[] = implode(' OR ', $conditions);
+        foreach ($queries as $query) {
+            $where[] = $this->getSQLConditions($query);
         }
 
         if (Authorization::$status) {
@@ -973,11 +911,8 @@ class Postgres extends SQL
                 {$limit}
             ) table_count");
 
-        foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            foreach ($query->getValues() as $key => $value) {
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $query->getAttribute(), $value, $this->getPDOType($value));
-            }
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
         }
 
         if ($max !== 0) {
@@ -1044,71 +979,23 @@ class Postgres extends SQL
     }
 
     /**
-     * Get SQL Condtions
-     * 
-     * @param string $attribute
-     * @param string $operator
-     * @param string|null $placeholder
-     * @param mixed $value
-     * 
-     * @return string
-     */
-    protected function getSQLCondition(string $attribute, string $operator, ?string $placeholder, mixed $value): string
-    {
-        switch ($operator) {
-            case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $value));
-
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = "'{$value}*'";
-                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
-
-            default:
-                $condition = $attribute . ' ' . $this->getSQLOperator($operator);
-
-                if (!empty($placeholder)) {
-                    $condition .= ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                }
-
-                return $condition;
-        }
-    }
-
-    /**
      * Get SQL Index
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param array $attributes
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
-        switch ($type) {
-            case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
-                $type = 'INDEX';
-                break;
-
-            case Database::INDEX_UNIQUE:
-                $type = 'UNIQUE INDEX';
-                break;
-
-            case Database::INDEX_FULLTEXT:
-                $type = 'INDEX';
-                break;
-
-            default:
-                throw new Exception('Unknown Index Type:' . $type);
-                break;
-        }
+        $type = match ($type) {
+            Database::INDEX_KEY, Database::INDEX_ARRAY, Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            default => throw new Exception('Unknown Index Type:' . $type),
+        };
 
         return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON ' . $this->getSQLTable($collection) . ' ( ' . implode(', ', $attributes) . ' );';
     }
@@ -1140,39 +1027,21 @@ class Postgres extends SQL
 
     /**
      * Get PDO Type
-     * 
+     *
      * @param mixed $value
-     * 
+     *
      * @return int
+     * @throws Exception
      */
     protected function getPDOType($value): int
     {
-        switch (gettype($value)) {
-            case 'string':
-                return PDO::PARAM_STR;
-                break;
-
-            case 'boolean':
-                return PDO::PARAM_BOOL;
-                break;
-
-                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
-            case 'double':
-                return PDO::PARAM_STR;
-                break;
-
-            case 'integer':
-                return PDO::PARAM_INT;
-                break;
-
-            case 'NULL':
-                return PDO::PARAM_NULL;
-                break;
-
-            default:
-                throw new Exception('Unknown PDO Type for ' . gettype($value));
-                break;
-        }
+        return match (gettype($value)) {
+            'string', 'double' => PDO::PARAM_STR,
+            'boolean' => PDO::PARAM_BOOL,
+            'integer' => PDO::PARAM_INT,
+            'NULL' => PDO::PARAM_NULL,
+            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+        };
     }
 
     /**
@@ -1220,5 +1089,48 @@ class Postgres extends SQL
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
+    }
+
+
+    /**
+     * Get SQL Conditions
+     *
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    protected function getSQLConditions(Query $query): string
+    {
+        $query->setAttribute(match ($query->getAttribute()) {
+            '$id' => '_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $query->getAttribute()
+        });
+
+        $attribute = "\"{$query->getAttribute()}\"" ;
+        $placeholder = $this->getSQLPlaceholder($query);
+
+        switch ($query->getMethod()){
+            case Query::TYPE_SEARCH:
+                $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
+                $value = "'{$value}*'";
+                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
+
+            case Query::TYPE_BETWEEN:
+                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Query::TYPE_IS_NULL:
+            case Query::TYPE_IS_NOT_NULL:
+                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
+            default:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).':'.$placeholder.'_'.$key;
+                }
+                $condition = implode(' OR ', $conditions);
+                return empty($condition) ? '' : '(' . $condition . ')';
+        }
     }
 }

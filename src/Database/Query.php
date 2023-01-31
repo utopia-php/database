@@ -146,8 +146,8 @@ class Query
             self::TYPE_CURSORAFTER,
             self::TYPE_CURSORBEFORE,
             self::TYPE_IS_NULL,
-            self::TYPE_IS_NOT_NULL => true,
             self::TYPE_BETWEEN,
+            self::TYPE_IS_NOT_NULL => true,
             default => false,
         };
 

@@ -800,6 +800,8 @@ class Postgres extends SQL
             }
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
+                $value = $this->getSQLValue($query->getMethod(), $value);
+
                 $bindKey = 'key_' . $attributeIndex;
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
                 $attributeIndex++;
@@ -1065,7 +1067,8 @@ class Postgres extends SQL
                 /**
                  * Prepend wildcard by default on the back.
                  */
-                $value = "'{$value}*'";
+                $value = $this->getSQLValue($operator, $value);
+
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
 
             default:

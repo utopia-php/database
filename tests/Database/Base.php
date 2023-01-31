@@ -1993,6 +1993,24 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    public function testFindStartsWith()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::startsWith('name', 'Work'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+    }
+
+    public function testFindEndsWith()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::endsWith('name', 'Marvel'),
+        ]);
+
+        $this->assertEquals(1, count($documents));
+    }
+
     /**
      * @depends testFind
      */

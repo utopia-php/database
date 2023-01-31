@@ -685,32 +685,36 @@ abstract class SQL extends Adapter
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
-
             case Query::TYPE_NOTEQUAL:
                 return '!=';
-
             case Query::TYPE_LESSER:
                 return '<';
-
             case Query::TYPE_LESSEREQUAL:
                 return '<=';
-
             case Query::TYPE_GREATER:
                 return '>';
-
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
-
             case Query::TYPE_IS_NULL:
                 return 'IS NULL';
-
             case Query::TYPE_IS_NOT_NULL:
                 return 'IS NOT NULL';
-
+            case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_ENDS_WITH:
+                return 'LIKE';
             default:
                 throw new Exception('Unknown method:' . $method);
-                break;
         }
+    }
+
+    protected function getSQLValue(string $method, mixed $value)
+    {
+        return match($method) {
+            Query::TYPE_STARTS_WITH => "$value%",
+            Query::TYPE_ENDS_WITH => "%$value",
+            Query::TYPE_SEARCH => "'$value*'",
+            default => $value
+        };
     }
 
     /**

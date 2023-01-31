@@ -795,6 +795,8 @@ class MariaDB extends SQL
 
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
+                $value = $this->getSQLValue($query->getMethod(), $value);
+
                 $bindKey = 'key_' . $attributeIndex;
                 $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
                 $attributeIndex++;
@@ -1074,7 +1076,7 @@ class MariaDB extends SQL
                 /**
                  * Prepend wildcard by default on the back.
                  */
-                $value = "'{$value}*'";
+                $value = $this->getSQLValue($method, $value);
 
                 return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
             default:

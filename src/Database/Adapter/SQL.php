@@ -816,7 +816,7 @@ abstract class SQL extends Adapter
         return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
     }
 
-    /**s
+    /**
      * @param $stmt
      * @param Query $query
      * @return void

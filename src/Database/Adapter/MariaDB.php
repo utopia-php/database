@@ -779,7 +779,7 @@ class MariaDB extends SQL
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $sql = "
-            SELECT {$this->getProjection($selections, 'table_main')}
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
             GROUP BY _uid
@@ -1005,7 +1005,7 @@ class MariaDB extends SQL
      * @param string $prefix
      * @return string
      */
-    protected function getProjection(array $selections, string $prefix = ''): string
+    protected function getAttributeProjection(array $selections, string $prefix = ''): string
     {
         if (empty($selections)) {
             if (!empty($prefix)) {

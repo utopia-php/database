@@ -397,7 +397,7 @@ class Mongo extends Adapter
         $options = ['limit' => 1];
 
         if (!empty($selections)) {
-            $options['projection'] = $this->getProjection($selections);
+            $options['projection'] = $this->getAttributeProjection($selections);
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
@@ -567,7 +567,7 @@ class Mongo extends Adapter
         ];
 
         if (!empty($selections)) {
-            $options['projection'] = $this->getProjection($selections);
+            $options['projection'] = $this->getAttributeProjection($selections);
         }
 
         // orders
@@ -1063,7 +1063,7 @@ class Mongo extends Adapter
         };
     }
 
-    protected function getProjection(array $selections, string $prefix = ''): array
+    protected function getAttributeProjection(array $selections, string $prefix = ''): array
     {
         $projection = [];
 

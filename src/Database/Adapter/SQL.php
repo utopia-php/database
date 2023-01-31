@@ -113,7 +113,7 @@ abstract class SQL extends Adapter
         $name = $this->filter($collection);
 
         $stmt = $this->getPDO()->prepare("
-            SELECT {$this->getProjection($selections)} 
+            SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");

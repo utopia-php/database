@@ -280,7 +280,7 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param string[] $selections
      * @return Document
      */
     abstract public function getDocument(string $collection, string $id, array $selections = []): Document;
@@ -491,11 +491,13 @@ abstract class Adapter
     abstract public function getKeywords(): array;
 
     /**
-     * Get a projection given a list of selected attributes
+     * Get an attribute projection given a list of selected attributes
      *
+     * @param string[] $selections
+     * @param string $prefix
      * @return string[]|string
      */
-    abstract protected function getProjection(array $selections, string $prefix = ''): mixed;
+    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
 
     /**
      * Filter Keys

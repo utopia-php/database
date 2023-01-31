@@ -785,7 +785,7 @@ class Postgres extends SQL
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $sql = "
-            SELECT DISTINCT _uid, {$this->getProjection($selection, 'table_main')}
+            SELECT DISTINCT _uid, {$this->getAttributeProjection($selection, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
             {$order}
@@ -999,7 +999,7 @@ class Postgres extends SQL
      * @param string $prefix
      * @return string
      */
-    protected function getProjection(array $selections, string $prefix = ''): string
+    protected function getAttributeProjection(array $selections, string $prefix = ''): string
     {
         if (empty($selections)) {
             if (!empty($prefix)) {

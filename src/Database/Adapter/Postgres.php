@@ -1221,4 +1221,10 @@ class Postgres extends SQL
     {
         return false;
     }
+
+    public function backticks($str): string
+    {
+        return "\"{$str}\"";
+    }
+
 }

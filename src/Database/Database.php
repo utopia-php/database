@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use Exception;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;

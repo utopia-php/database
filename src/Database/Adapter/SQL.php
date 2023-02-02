@@ -806,38 +806,4 @@ abstract class SQL extends Adapter
         ];
     }
 
-    public function backticks($str): string
-    {
-        return "`{$str}`";
-    }
-
-    /**
-     * Increase and Decrease Attribute Value
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
-     * @throws Exception
-     */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
-    {
-        $name = $this->filter($collection);
-        $attribute = $this->filter($attribute);
-
-        $sqlMax = $max ? " and {$this->backticks($attribute)} <= {$max}" : "";
-        $sqlMin = $min ? " and {$this->backticks($attribute)} >= {$min}" : "";
-
-        $sql = "update {$this->getSQLTable($name)} set {$this->backticks($attribute)} = {$this->backticks($attribute)} + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
-        $stmt = $this->getPDO()->prepare($sql);
-        $stmt->bindValue(':_uid', $id);
-        $stmt->bindValue(':val', $value);
-
-        $stmt->execute() || throw new Exception('Failed to update Attribute');
-        return true;
-    }
-
 }

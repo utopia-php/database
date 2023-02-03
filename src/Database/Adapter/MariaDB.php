@@ -742,6 +742,10 @@ class MariaDB extends SQL
         }
 
         foreach ($queries as $i => $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
             $query->setAttribute(match ($query->getAttribute()) {
                 '$id' => '_uid',
                 '$createdAt' => '_createdAt',
@@ -792,7 +796,10 @@ class MariaDB extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
+            if ($query->getMethod() === Query::TYPE_SEARCH
+                || $query->getMethod() === Query::TYPE_SELECT
+                || empty($query->getValues())
+            ) {
                 continue;
             }
 

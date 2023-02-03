@@ -1347,7 +1347,7 @@ class Database
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
-        $this->validateSelections($collection, $queries);
+        $selections = $this->validateSelections($collection, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -1567,9 +1567,12 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
-        $this->validateSelections($collection, $selections);
+        $queries = \array_merge(
+            $selections,
+            self::convertQueries($collection, $filters)
+        );
 
-        $queries = self::convertQueries($collection, $filters);
+        $selections = $this->validateSelections($collection, $selections);
 
         $results = $this->adapter->find(
             $collection->getId(),
@@ -1753,9 +1756,9 @@ class Database
      *
      * @param Document $collection
      * @param Document $document
-     *
+     * @param string[] $selections
      * @return Document
-     * @throws Throwable|Exception
+     * @throws Exception
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
@@ -1936,10 +1939,10 @@ class Database
      * @param Query[] $queries
      * @throws Exception
      */
-    private function validateSelections(Document $collection, array $queries): void
+    private function validateSelections(Document $collection, array $queries): array
     {
         if (empty($queries)) {
-            return;
+            return [];
         }
 
         $selections = [];

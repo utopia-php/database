@@ -960,6 +960,10 @@ class Mongo extends Adapter
         $filters = [];
 
         foreach ($queries as $i => $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
@@ -991,9 +995,9 @@ class Mongo extends Adapter
 
             if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
-            } elseif ($operator === '$in') {
+            } else if ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
-            } elseif ($operator === '$search') {
+            } else if ($operator === '$search') {
                 // only one fulltext index per mongo collection, so attribute not necessary
                 $filters['$text'][$operator] = $value;
             } else {

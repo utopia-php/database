@@ -751,6 +751,10 @@ class Postgres extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         foreach ($queries as $i => $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
             $query->setAttribute(match ($query->getAttribute()) {
                 '$id' => '_uid',
                 '$createdAt' => '_createdAt',
@@ -798,9 +802,13 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
+            if ($query->getMethod() === Query::TYPE_SEARCH
+                || $query->getMethod() === Query::TYPE_SELECT
+                || empty($query->getValues())
+            ) {
                 continue;
             }
+
             $attributeIndex = 0;
             foreach ($query->getValues() as $key => $value) {
                 $bindKey = 'key_' . $attributeIndex;

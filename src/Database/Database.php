@@ -1327,6 +1327,7 @@ class Database
      *
      * @param string $collection
      * @param string $id
+     * @param Query[] $queries
      *
      * @return Document
      */
@@ -1346,7 +1347,7 @@ class Database
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
-        $selections = $this->getSelections($collection, $queries);
+        $this->validateSelections($collection, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -1371,7 +1372,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id, $selections);
+        $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
         $document->setAttribute('$collection', $collection->getId());
 
         if ($document->isEmpty()) {
@@ -1566,14 +1567,13 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
-        $selections = $this->getSelections($collection, $selections);
+        $this->validateSelections($collection, $selections);
 
         $queries = self::convertQueries($collection, $filters);
 
         $results = $this->adapter->find(
             $collection->getId(),
             $queries,
-            $selections,
             $limit ?? 25,
             $offset ?? 0,
             $orderAttributes,
@@ -1929,19 +1929,25 @@ class Database
         return $this->adapter->getKeywords();
     }
 
-    private function getSelections(Document $collection, array $queries): array
+    /**
+     * Validate if a set of attributes can be selected from the collection
+     *
+     * @param Document $collection
+     * @param Query[] $queries
+     * @throws Exception
+     */
+    private function validateSelections(Document $collection, array $queries): void
     {
         if (empty($queries)) {
-            return [];
+            return;
         }
 
         $selections = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() !== Query::TYPE_SELECT) {
-                throw new \Exception('Invalid query type');
-            }
-            foreach ($query->getValues() as $value) {
-                $selections[] = $value;
+            if ($query->getMethod() == Query::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    $selections[] = $value;
+                }
             }
         }
 
@@ -1955,8 +1961,6 @@ class Database
         if (!empty($invalid)) {
             throw new \Exception('Cannot select attributes: ' . \implode(', ', $invalid));
         }
-
-        return $selections;
     }
 
     /**

@@ -385,16 +385,18 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Query[] $queries
      * @return Document
-     * @throws Exception
+     * @throws MongoException
      */
-    public function getDocument(string $collection, string $id, array $selections = []): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $filters = ['_uid' => $id];
         $options = ['limit' => 1];
+
+        $selections = $this->getAttributeSelections($queries);
 
         if (!empty($selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
@@ -538,7 +540,6 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param Query[] $queries
-     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -549,7 +550,7 @@ class Mongo extends Adapter
      * @return Document[]
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], array $selections = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -565,6 +566,8 @@ class Mongo extends Adapter
             'limit' => $limit,
             'skip' => $offset
         ];
+
+        $selections = $this->getAttributeSelections($queries);
 
         if (!empty($selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);

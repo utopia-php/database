@@ -104,13 +104,15 @@ abstract class SQL extends Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param Query[] $queries
      * @return Document
      * @throws Exception
-     * @throws PDOException
      */
-    public function getDocument(string $collection, string $id, array $selections = []): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
+
+        $selections = $this->getAttributeSelections($queries);
 
         $stmt = $this->getPDO()->prepare("
             SELECT {$this->getAttributeProjection($selections)} 

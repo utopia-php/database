@@ -664,7 +664,7 @@ class Postgres extends SQL
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param Query[] $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -676,7 +676,7 @@ class Postgres extends SQL
      * @throws Exception 
      * @throws PDOException 
      */
-    public function find(string $collection, array $queries = [], array $selection = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -747,6 +747,9 @@ class Postgres extends SQL
                 $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
+
+        $selections = $this->getAttributeSelections($queries);
+
         foreach ($queries as $i => $query) {
             $query->setAttribute(match ($query->getAttribute()) {
                 '$id' => '_uid',
@@ -785,7 +788,7 @@ class Postgres extends SQL
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $sql = "
-            SELECT DISTINCT _uid, {$this->getAttributeProjection($selection, 'table_main')}
+            SELECT DISTINCT _uid, {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
             {$order}

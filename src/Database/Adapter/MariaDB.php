@@ -669,7 +669,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], array $selections = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -777,6 +777,8 @@ class MariaDB extends SQL
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $selections = $this->getAttributeSelections($queries);
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}

@@ -280,10 +280,10 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     * @param string[] $selections
+     * @param Query[] $selections
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id, array $selections = []): Document;
+    abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
 
     /**
      * Create Document
@@ -322,7 +322,6 @@ abstract class Adapter
      *
      * @param string $collection
      * @param Query[] $queries
-     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -332,7 +331,7 @@ abstract class Adapter
      *
      * @return Document[]
      */
-    abstract public function find(string $collection, array $queries = [], array $selections = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
     /**
      * Sum an attribute
@@ -498,6 +497,29 @@ abstract class Adapter
      * @return string[]|string
      */
     abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+
+    /**
+     * Get all selected attributes from queries
+     *
+     * @param Query[] $queries
+     * @return string[]
+     */
+    protected function getAttributeSelections(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    foreach ($query->getValues() as $value) {
+                        $selections[] = $value;
+                    }
+                    break;
+            }
+        }
+
+        return $selections;
+    }
 
     /**
      * Filter Keys

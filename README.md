@@ -127,9 +127,7 @@ static::getDatabase()->createDocument('movies', new Document([
 
 ```php
 // Get document with all attributes
-$document = static::getDatabase()->getDocument('movies', '1', [
-    Query::select(['name', 'director', 'year']),
-]);
+$document = static::getDatabase()->getDocument('movies', '1');
 
 // Get document with a sub-set of attributes
 $document = static::getDatabase()->getDocument('movies', '1', [

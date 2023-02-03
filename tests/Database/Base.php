@@ -2021,11 +2021,18 @@ abstract class Base extends TestCase
             Query::select(['name', 'year'])
         ]);
         foreach ($documents as $document) {
-            $this->assertArrayHasKey('name', $document->getAttributes());
-            $this->assertArrayHasKey('year', $document->getAttributes());
-            $this->assertArrayNotHasKey('director', $document->getAttributes());
-            $this->assertArrayNotHasKey('price', $document->getAttributes());
-            $this->assertArrayNotHasKey('active', $document->getAttributes());
+            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayHasKey('$permissions', $document);
+
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
         }
     }
 

@@ -1964,6 +1964,15 @@ class Database
         if (!empty($invalid)) {
             throw new \Exception('Cannot select attributes: ' . \implode(', ', $invalid));
         }
+
+        $selections[] = '$id';
+        $selections[] = '$internalId';
+        $selections[] = '$collection';
+        $selections[] = '$createdAt';
+        $selections[] = '$updatedAt';
+        $selections[] = '$permissions';
+
+        return $selections;
     }
 
     /**

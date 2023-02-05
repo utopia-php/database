@@ -1239,10 +1239,10 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? " and \"{$attribute}\" <= {$max}" : "";
-        $sqlMin = $min ? " and \"{$attribute}\" >= {$min}" : "";
+        $sqlMax = $max ? " AND \"{$attribute}\" <= {$max}" : "";
+        $sqlMin = $min ? " AND \"{$attribute}\" >= {$min}" : "";
 
-        $sql = "update {$this->getSQLTable($name)} set \"{$attribute}\" = \"{$attribute}\" + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
+        $sql = "UPDATE {$this->getSQLTable($name)} SET \"{$attribute}\" = \"{$attribute}\" + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);

@@ -819,8 +819,6 @@ class Postgres extends SQL
         return $results;
     }
 
-
-
     /**
      * Count Documents
      *

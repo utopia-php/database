@@ -822,11 +822,13 @@ abstract class SQL extends Adapter
      * @return void
      */
     public function bindConditionValue($stmt, Query $query){
-        /** @var PDOStatement $stmt */
-        if ($query->getMethod() === Query::TYPE_SEARCH) return;
-        foreach ($query->getValues() as $key => $value) {
-            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+        if($query->getMethod() !== Query::TYPE_OR){
+            /** @var PDOStatement $stmt */
+            if ($query->getMethod() === Query::TYPE_SEARCH) return;
+            foreach ($query->getValues() as $key => $value) {
+                $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+                $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+            }
         }
     }
 }

@@ -652,6 +652,32 @@ class MariaDB extends SQL
         return true;
     }
 
+
+    /**
+     * @throws Exception
+     */
+    public function nested(array $queries = []): string
+    {
+        $separator = 'and';
+
+        $conditions = [];
+        foreach ($queries as $query) {
+            /* @var $query Query */
+            if($query->getMethod() === Query::TYPE_OR){
+
+                $separator = 'or';
+
+                foreach ($query->getValues() as $queriesArray) {
+                    $conditions[] = $this->nested($queriesArray);
+                }
+            }
+            else $conditions[] = $this->getSQLCondition($query);
+        }
+
+        $tmp = implode(" {$separator} ", $conditions);
+        return empty($tmp) ? '' : '(' . $tmp . ')';
+    }
+
     /**
      * Find Documents
      *
@@ -740,9 +766,14 @@ class MariaDB extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        if(!empty($queries)){
+            $where[] = $this->nested($queries);
         }
+
+        var_dump($where);
+//        foreach ($queries as $query) {
+//            $where[] = $this->getSQLCondition($query);
+//        }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
 
@@ -760,6 +791,9 @@ class MariaDB extends SQL
             {$order}
             LIMIT :offset, :limit;
         ";
+
+        var_dump($sql);
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);

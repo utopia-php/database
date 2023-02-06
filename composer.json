@@ -15,11 +15,11 @@
         "php": ">=8.0",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.8.*",
-        "utopia-php/mongo": "0.0.2"
+        "utopia-php/mongo": "0.0.2",
+        "ext-pdo": "*"
     },
     "require-dev": {
-        "ext-pdo": "*",
-        "ext-redis": "*",
+      "ext-redis": "*",
         "ext-mongodb": "*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",

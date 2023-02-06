@@ -751,6 +751,11 @@ class MariaDB extends SQL
             $conditions = [];
 
             switch ($query->getMethod()) {
+                case Query::TYPE_OR:
+                    var_dump($query);
+                    die;
+                    break;
+
                 case Query::TYPE_IS_NULL:
                 case Query::TYPE_IS_NOT_NULL:
                     $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), null, null);

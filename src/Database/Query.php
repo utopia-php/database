@@ -17,6 +17,7 @@ class Query
     const TYPE_SEARCH = 'search';
     const TYPE_IS_NULL = 'isNull';
     const TYPE_IS_NOT_NULL = 'isNotNull';
+    const TYPE_OR = 'or';
 
     // Order methods
     const TYPE_ORDERDESC = 'orderDesc';
@@ -556,6 +557,11 @@ class Query
         return new self(self::TYPE_IS_NOT_NULL, $attribute);
     }
 
+    public static function or(array ...$queries): Query
+    {
+        return new self(self::TYPE_OR, '', $queries);
+    }
+
     /**
      * Filters $queries for $types
      *
@@ -648,6 +654,7 @@ class Query
         }
 
         return [
+            'nesting' => $filters,
             'filters' => $filters,
             'limit' => $limit,
             'offset' => $offset,

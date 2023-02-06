@@ -1944,6 +1944,21 @@ abstract class Base extends TestCase
         $this->assertEquals(['any'], $documents[0]->getDelete());
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::limit(25),
+            Query::equal('value', [$value]),
+            Query::or(
+                [Query::equal('value', [1,2]), Query::equal('value', [3,4])],
+                [Query::equal('value', [555]), Query::equal('value', [666])]
+            )
+        ]);
+
+
+        exit;
+
+
+
         /**
          * Check `equals` query 
          */

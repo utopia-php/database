@@ -654,31 +654,6 @@ class MariaDB extends SQL
 
 
     /**
-     * @throws Exception
-     */
-    public function nested(array $queries = []): string
-    {
-        $separator = 'and';
-
-        $conditions = [];
-        foreach ($queries as $query) {
-            /* @var $query Query */
-            if($query->getMethod() === Query::TYPE_OR){
-
-                $separator = 'or';
-
-                foreach ($query->getValues() as $queriesArray) {
-                    $conditions[] = $this->nested($queriesArray);
-                }
-            }
-            else $conditions[] = $this->getSQLCondition($query);
-        }
-
-        $tmp = implode(" {$separator} ", $conditions);
-        return empty($tmp) ? '' : '(' . $tmp . ')';
-    }
-
-    /**
      * Find Documents
      *
      * @param string $collection
@@ -767,13 +742,8 @@ class MariaDB extends SQL
         }
 
         if(!empty($queries)){
-            $where[] = $this->nested($queries);
+            $where[] = $this->getSQLConditions($queries);
         }
-
-        var_dump($where);
-//        foreach ($queries as $query) {
-//            $where[] = $this->getSQLCondition($query);
-//        }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
 
@@ -791,13 +761,8 @@ class MariaDB extends SQL
             {$order}
             LIMIT :offset, :limit;
         ";
-
-        var_dump($sql);
-
         $stmt = $this->getPDO()->prepare($sql);
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
+        $this->bindNestedConditionValue($stmt, $queries);
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
@@ -861,8 +826,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        if(!empty($queries)){
+            $where[] = $this->getSQLConditions($queries);
         }
 
         if (Authorization::$status) {
@@ -880,9 +845,7 @@ class MariaDB extends SQL
                 ) table_count
         ";
         $stmt = $this->getPDO()->prepare($sql);
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
+        $this->bindNestedConditionValue($stmt, $queries);
 
         if ($max !== 0) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
@@ -914,8 +877,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        if(!empty($queries)){
+            $where[] = $this->getSQLConditions($queries);
         }
 
         if (Authorization::$status) {
@@ -934,9 +897,7 @@ class MariaDB extends SQL
             ) table_count
         ");
 
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
+        $this->bindNestedConditionValue($stmt, $queries);
 
         if ($max !== 0) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);

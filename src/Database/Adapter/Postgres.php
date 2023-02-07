@@ -749,8 +749,8 @@ class Postgres extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        if(!empty($queries)){
+            $where[] = $this->getSQLConditions($queries);
         }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
@@ -770,9 +770,7 @@ class Postgres extends SQL
         ";
 
         $stmt = $this->getPDO()->prepare($sql);
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
+        $this->bindNestedConditionValue($stmt, $queries);
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
@@ -837,8 +835,8 @@ class Postgres extends SQL
         $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        if(!empty($queries)){
+            $where[] = $this->getSQLConditions($queries);
         }
 
         if (Authorization::$status) {
@@ -856,9 +854,7 @@ class Postgres extends SQL
                 ) table_count
         ";
         $stmt = $this->getPDO()->prepare($sql);
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
+        $this->bindNestedConditionValue($stmt, $queries);
 
         if ($max !== 0) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
@@ -893,8 +889,8 @@ class Postgres extends SQL
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        if(!empty($queries)){
+            $where[] = $this->getSQLConditions($queries);
         }
 
         if (Authorization::$status) {
@@ -909,9 +905,7 @@ class Postgres extends SQL
                 {$limit}
             ) table_count");
 
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
+        $this->bindNestedConditionValue($stmt, $queries);
 
         if ($max !== 0) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
@@ -1125,7 +1119,7 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

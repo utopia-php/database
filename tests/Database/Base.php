@@ -1968,21 +1968,6 @@ abstract class Base extends TestCase
         $this->assertEquals(['any'], $documents[0]->getDelete());
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
-
-        $documents = static::getDatabase()->find($collection, [
-            Query::limit(25),
-            Query::equal('value', [$value]),
-            Query::or(
-                [Query::equal('value', [1,2]), Query::equal('value', [3,4])],
-                [Query::equal('value', [555]), Query::equal('value', [666])]
-            )
-        ]);
-
-
-        exit;
-
-
-
         /**
          * Check `equals` query 
          */
@@ -1995,6 +1980,29 @@ abstract class Base extends TestCase
             $this->assertEquals(1, count($documents));
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }
+    }
+
+
+    public function testFindOr(){
+        $documents = static::getDatabase()->find('movies', [
+            Query::equal('active', [true]),
+            Query::or(
+                [
+                    Query::equal('year', [2013]),
+                ],
+                [
+                    Query::equal('price', [39.5]),
+                ],
+                [
+                    Query::equal('name', ["Frozen II"]),
+                    Query::equal('year', [2019])
+                ]
+            ),
+            Query::limit(25)
+        ]);
+
+        $this->assertEquals(4, count($documents));
+
     }
 
     /**

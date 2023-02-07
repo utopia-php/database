@@ -818,17 +818,49 @@ abstract class SQL extends Adapter
 
     /**
      * @param $stmt
-     * @param Query $query
+     * @param Query[] $queries
      * @return void
      */
-    public function bindConditionValue($stmt, Query $query){
-        if($query->getMethod() !== Query::TYPE_OR){
-            /** @var PDOStatement $stmt */
-            if ($query->getMethod() === Query::TYPE_SEARCH) return;
-            foreach ($query->getValues() as $key => $value) {
-                $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-                $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+    public function bindNestedConditionValue($stmt, array $queries = []){
+        /** @var PDOStatement $stmt */
+        foreach ($queries as $query) {
+            if(is_array($query)){
+                $this->bindNestedConditionValue($stmt, $query);
+            }
+            else {
+                if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+                if ($query->getMethod() === Query::TYPE_OR){
+                    $this->bindNestedConditionValue($stmt, $query->getValues()); // Nested $queries are in values
+                }else {
+                    foreach ($query->getValues() as $key => $value) {
+                        $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+                        $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+                    }
+                }
             }
         }
     }
+
+    /**
+     * @throws Exception
+     */
+    public function getSQLConditions(array $queries = []): string
+    {
+        $separator = 'and';
+        $conditions = [];
+        foreach ($queries as $query) {
+            /* @var $query Query */
+            if($query->getMethod() === Query::TYPE_OR){
+                $separator = 'or';
+                foreach ($query->getValues() as $queriesArray) {
+                    $conditions[] = $this->getSQLConditions($queriesArray);
+                }
+            }
+            else $conditions[] = $this->getSQLCondition($query);
+        }
+
+        $tmp = implode(" {$separator} ", $conditions);
+        return empty($tmp) ? '' : '(' . $tmp . ')';
+    }
+
 }

@@ -664,7 +664,6 @@ class Query
         }
 
         return [
-            'nesting' => $filters,
             'filters' => $filters,
             'limit' => $limit,
             'offset' => $offset,

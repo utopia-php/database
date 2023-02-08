@@ -120,7 +120,9 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('orderDesc("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('isNull("title")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('isNotNull("title")')));
-        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('startsWith("title", "Fro)')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('between("price", [1.5, 10.9])')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('between("birthDay",["2024-01-01","2023-01-01"])')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('startsWith("title", "Fro")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('endsWith("title", "Zen")')));
     }
 

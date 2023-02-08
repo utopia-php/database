@@ -981,6 +981,9 @@ class Mongo extends Adapter
                 $filters[$attribute]['$in'] = $query->getValues();
             } else if ($operator == '$search') {
                 $filters['$text'][$operator] = $value;
+            }  else if ($operator === Query::TYPE_BETWEEN) {
+                $filters[$attribute]['$lte'] = $value[1];
+                $filters[$attribute]['$gte'] = $value[0];
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -1015,6 +1018,10 @@ class Mongo extends Adapter
                 return '$in';
             case Query::TYPE_SEARCH:
                 return '$search';
+
+            case Query::TYPE_BETWEEN:
+                return 'between'; // this is not an operator will be replaced with $gte/$lte
+
             case Query::TYPE_IS_NULL:
                 return '$eq';
             case Query::TYPE_IS_NOT_NULL:

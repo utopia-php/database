@@ -51,53 +51,30 @@ class MySQL extends MariaDB
 
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
-//
-//    /**
-//     * Returns Max Execution Time
-//     * @param string $sql
-//     * @param float $seconds
-//     * @return string
-//     */
-//    protected function setTimeOut2(string $sql, float $seconds): string
-//    {
-//        $syntax = '/*+ max_execution_time(' . ($seconds * 1000) . ') */';
-//        return sprintf($sql, '', $syntax);
-//    }
 
     /**
-     * Set Max Execution Time Query
-     * @param PDO|PDOProxy $pdo
+     * Returns Max Execution Time
+     * @param string $sql
      * @param int $milliseconds
+     * @return string
      */
-    protected function setTimeout(PDO|PDOProxy $pdo, int $milliseconds)
+    protected function setTimeOut(string $sql, int $milliseconds): string
     {
-        $pdo->prepare('SET SESSION max_execution_time = ' . $milliseconds)->execute();
-    }
-
-    /**
-     * Resets Max Execution Time Query
-     * @param PDO|PDOProxy $pdo
-     */
-    protected function resetTimeout(PDO|PDOProxy $pdo)
-    {
-        $pdo->prepare('SET SESSION max_execution_time = default')->execute();
+        return preg_replace('/SELECT/', "SELECT /*+ max_execution_time({$milliseconds}) */", $sql, 1);
     }
 
     /**
      * @param PDOException $e
-     * @param PDO|PDOProxy $pdo
      * @throws Timeout
      */
-    protected function processException(PDOException $e, PDO|PDOProxy $pdo): void
+    protected function processException(PDOException $e): void
     {
         if($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024){
-            $this->resetTimeout($pdo);
             Throw new Timeout($e->getMessage());
         }
 
         // PDOProxy which who switches errorInfo
         if($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000"){
-            $this->resetTimeout($pdo);
             Throw new Timeout($e->getMessage());
         }
 

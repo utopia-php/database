@@ -5,13 +5,10 @@ namespace Utopia\Database\Adapter;
 use PDO;
 use Exception;
 use PDOException;
-use Swoole\Database\PDOProxy;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Timeout;
 use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Query;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -842,19 +839,6 @@ class SQLite extends MariaDB
         ];
     }
 
-
-//    /**
-//     * Returns Max Execution Time
-//     * @param string $sql
-//     * @param float $seconds
-//     * @return string
-//     */
-//    protected function setTimeOut2(string $sql, float $seconds): string
-//    {
-//        // todo: implement this
-//        return sprintf($sql, '', '');
-//    }
-
     /**
      * Are timeouts supported?
      *
@@ -863,25 +847,6 @@ class SQLite extends MariaDB
     public function getSupportForTimeouts(): bool
     {
         return false;
-    }
-
-    /**
-     * Returns Max Execution Time Query
-     * @param PDO|PDOProxy $pdo
-     * @param int $milliseconds
-     */
-    protected function setTimeout(PDO|PDOProxy $pdo, int $milliseconds)
-    {
-
-    }
-
-    /**
-     * Resets Max Execution Time Query
-     * @param PDO|PDOProxy $pdo
-     */
-    protected function resetTimeout(PDO|PDOProxy $pdo)
-    {
-
     }
 
 }

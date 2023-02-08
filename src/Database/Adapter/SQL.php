@@ -736,12 +736,19 @@ abstract class SQL extends Adapter
 
     protected function getSQLValue(string $method, mixed $value)
     {
-        return match($method) {
-            Query::TYPE_STARTS_WITH => "$value%",
-            Query::TYPE_ENDS_WITH => "%$value",
-            Query::TYPE_SEARCH => "'$value*'",
-            default => $value
-        };
+        switch ($method) {
+            case Query::TYPE_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return "$value%";
+            case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return "%$value";
+            case Query::TYPE_SEARCH:
+                $value = $this->escapeWildcards($value);
+                return "'$value*'";
+            default:
+                return $value;
+        }
     }
 
     /**

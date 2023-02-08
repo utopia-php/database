@@ -11,6 +11,7 @@ use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -677,7 +678,7 @@ class Postgres extends SQL
      * @throws Exception 
      * @throws PDOException 
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -769,6 +770,10 @@ class Postgres extends SQL
             LIMIT :limit OFFSET :offset;
         ";
 
+        if($timeout){
+            $sql = $this->setTimeout($sql, $timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -792,7 +797,11 @@ class Postgres extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        } catch (PDOException $e){
+            $this->processException($e);
+        }
 
         $results = $stmt->fetchAll();
 
@@ -1110,6 +1119,9 @@ class Postgres extends SQL
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()){
+            case Query::TYPE_SLEEP:
+                return 'sleep('.$query->getValue().') = 0';
+
             case Query::TYPE_SEARCH:
                 $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
                 $value = "'{$value}*'";
@@ -1130,5 +1142,50 @@ class Postgres extends SQL
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
         }
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param int $milliseconds
+     * @return string
+     */
+    protected function setTimeout(string $sql, int $milliseconds): string
+    {
+        if(!$this->getSupportForTimeouts()){
+            return $sql;
+        }
+
+        $seconds = $milliseconds / 1000;
+        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+    }
+
+    /**
+     * @param PDOException $e
+     * @throws Timeout
+     */
+    protected function processException(PDOException $e): void
+    {
+        // Regular PDO
+        if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
+            Throw new Timeout($e->getMessage());
+        }
+
+        // PDOProxy switches errorInfo PDOProxy.php line 64
+        if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100'){
+            Throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
     }
 }

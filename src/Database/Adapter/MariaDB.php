@@ -1055,7 +1055,7 @@ class MariaDB extends SQL
 
         switch ($query->getMethod()){
             case Query::TYPE_SLEEP:
-                return 'sleep('.$value.') = 0';
+                return 'sleep('.$query->getValue().') = 0';
 
             case Query::TYPE_SEARCH:
                 /**

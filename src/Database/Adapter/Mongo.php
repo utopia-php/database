@@ -966,11 +966,27 @@ class Mongo extends Adapter
 
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
+
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $value = null;
+
+                    break;
+                default:
+                    $value = count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0];
+
+                    break;
+            }
 
             if ($query->getMethod() === 'sleep') {
-                $filters['$where']= 'sleep('.($value * 1000).') || true';
-            } elseif (is_array($value) && $operator === '$eq') {
+                $filters['$where'] = 'sleep(' . ($value * 1000) . ') || true';
+            } else if ($query->getMethod() === Query::TYPE_BETWEEN) {
+                $filters[$attribute]['$lte'] = $value[1];
+                $filters[$attribute]['$gte'] = $value[0];
+            } else if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
@@ -995,18 +1011,45 @@ class Mongo extends Adapter
      */
     protected function getQueryOperator(string $operator): string
     {
-        return match ($operator) {
-            Query::TYPE_SLEEP => '',
-            Query::TYPE_EQUAL => '$eq',
-            Query::TYPE_NOTEQUAL => '$ne',
-            Query::TYPE_LESSER => '$lt',
-            Query::TYPE_LESSEREQUAL => '$lte',
-            Query::TYPE_GREATER => '$gt',
-            Query::TYPE_GREATEREQUAL => '$gte',
-            Query::TYPE_CONTAINS => '$in',
-            Query::TYPE_SEARCH => '$search',
-            default => throw new Exception('Unknown Operator:' . $operator),
-        };
+        switch ($operator) {
+            case Query::TYPE_EQUAL:
+                return '$eq';
+
+            case Query::TYPE_NOTEQUAL:
+                return '$ne';
+
+            case Query::TYPE_LESSER:
+                return '$lt';
+
+            case Query::TYPE_LESSEREQUAL:
+                return '$lte';
+
+            case Query::TYPE_GREATER:
+                return '$gt';
+
+            case Query::TYPE_GREATEREQUAL:
+                return '$gte';
+
+            case Query::TYPE_CONTAINS:
+                return '$in';
+
+            case Query::TYPE_SEARCH:
+                return '$search';
+
+            case Query::TYPE_BETWEEN:
+                return 'between'; // this is not an operator will be replaced with $gte/$lte
+
+            case Query::TYPE_IS_NULL:
+                return '$eq';
+
+            case Query::TYPE_IS_NOT_NULL:
+                return '$ne';
+
+            case Query::TYPE_SLEEP:
+                return '';
+            default:
+                throw new Exception('Unknown Operator:' . $operator);
+        }
     }
 
     /**
@@ -1110,6 +1153,26 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter handle Query Array Contains?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryContains(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1161,7 +1224,7 @@ class Mongo extends Adapter
      *
      * @return int
      */
-    public static function getRowLimit(): int
+    public static function getDocumentSizeLimit(): int
     {
         return 0;
     }

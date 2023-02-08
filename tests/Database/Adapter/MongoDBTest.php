@@ -32,16 +32,6 @@ class MongoDBTest extends Base
     }
 
     /**
-     * Return row limit of adapter
-     *
-     * @return int
-     */
-    static function getAdapterRowLimit(): int
-    {
-        return 0;
-    }
-
-    /**
      * @return Database
      * @throws Exception
      */

@@ -132,10 +132,17 @@ class Query extends Validator
         $attributeType = $attributeSchema['type'];
 
         foreach ($values as $value) {
-            $condition = match ($attributeType) {
-                Database::VAR_DATETIME => gettype($value) === Database::VAR_STRING,
-                default => gettype($value) === $attributeType
-            };
+            switch ($attributeType) {
+                case Database::VAR_DATETIME:
+                    $condition = gettype($value) === Database::VAR_STRING;
+                    break;
+                case Database::VAR_FLOAT:
+                    $condition = (gettype($value) === Database::VAR_FLOAT || gettype($value) === Database::VAR_INTEGER);
+                    break;
+                default:
+                    $condition = gettype($value) === $attributeType;
+                    break;
+            }
 
             if (!$condition) {
                 $this->message = 'Query type does not match expected: ' . $attributeType;

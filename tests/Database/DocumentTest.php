@@ -5,9 +5,9 @@ namespace Utopia\Tests;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 class DocumentTest extends TestCase
 {

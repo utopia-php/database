@@ -7,7 +7,7 @@ use Exception;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\ID;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Exception\Duplicate;
 
 /**
@@ -585,6 +585,16 @@ class SQLite extends MariaDB
      * @return bool
      */
     public function getSupportForFulltextIndex(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is fulltext Wildcard index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
     }

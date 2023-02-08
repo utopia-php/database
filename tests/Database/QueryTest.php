@@ -73,6 +73,18 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_CURSORAFTER, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([$cursor], $query->getValues());
+
+        $query = Query::isNull('title');
+
+        $this->assertEquals(Query::TYPE_IS_NULL, $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
+
+        $query = Query::isNotNull('title');
+
+        $this->assertEquals(Query::TYPE_IS_NOT_NULL, $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
     }
 
     public function testParse()
@@ -139,6 +151,18 @@ class QueryTest extends TestCase
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(null, $query->getValues()[0]);
+
+        $query = Query::parse('isNull("director")');
+
+        $this->assertEquals('isNull', $query->getMethod());
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
+
+        $query = Query::parse('isNotNull("director")');
+
+        $this->assertEquals('isNotNull', $query->getMethod());
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
     }
 
     public function testParseV2()
@@ -394,6 +418,8 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('offset'));
         $this->assertTrue(Query::isMethod('cursorAfter'));
         $this->assertTrue(Query::isMethod('cursorBefore'));
+        $this->assertTrue(Query::isMethod('isNull'));
+        $this->assertTrue(Query::isMethod('isNotNull'));
 
         $this->assertTrue(Query::isMethod(Query::TYPE_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_NOTEQUAL));
@@ -409,6 +435,8 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OFFSET));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORAFTER));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORBEFORE));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
 
         /*
         Tests for aliases if we enable them:

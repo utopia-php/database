@@ -16,7 +16,6 @@
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.8.*",
         "utopia-php/mongo": "0.0.2"
-
     },
     "require-dev": {
         "ext-pdo": "*",

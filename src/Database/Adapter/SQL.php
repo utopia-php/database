@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -709,7 +710,6 @@ abstract class SQL extends Adapter
 
             default:
                 throw new Exception('Unknown method:' . $method);
-                break;
         }
     }
 
@@ -804,5 +804,29 @@ abstract class SQL extends Adapter
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
+    }
+
+
+    /**
+     * @param Query $query
+     * @return string
+     */
+    protected function getSQLPlaceholder(Query $query): string
+    {
+        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+    }
+
+    /**
+     * @param $stmt
+     * @param Query $query
+     * @return void
+     */
+    public function bindConditionValue($stmt, Query $query){
+        /** @var PDOStatement $stmt */
+        if ($query->getMethod() === Query::TYPE_SEARCH) return;
+        foreach ($query->getValues() as $key => $value) {
+            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+        }
     }
 }

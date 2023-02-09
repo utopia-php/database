@@ -15,14 +15,14 @@ class PostgresTest extends Base
     /**
      * @var Database
      */
-    static $database = null;
+    public static $database = null;
 
     /**
      * Return name of adapter
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
         return "postgres";
     }
@@ -30,9 +30,9 @@ class PostgresTest extends Base
     /**
      * @reture Adapter
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 

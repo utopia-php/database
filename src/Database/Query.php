@@ -7,27 +7,27 @@ use Exception;
 class Query
 {
     // Filter methods
-    const TYPE_EQUAL = 'equal';
-    const TYPE_NOTEQUAL = 'notEqual';
-    const TYPE_LESSER = 'lessThan';
-    const TYPE_LESSEREQUAL = 'lessThanEqual';
-    const TYPE_GREATER = 'greaterThan';
-    const TYPE_GREATEREQUAL = 'greaterThanEqual';
-    const TYPE_CONTAINS = 'contains';
-    const TYPE_SEARCH = 'search';
-    const TYPE_IS_NULL = 'isNull';
-    const TYPE_IS_NOT_NULL = 'isNotNull';
-    const TYPE_BETWEEN = 'between';
+    public const TYPE_EQUAL = 'equal';
+    public const TYPE_NOTEQUAL = 'notEqual';
+    public const TYPE_LESSER = 'lessThan';
+    public const TYPE_LESSEREQUAL = 'lessThanEqual';
+    public const TYPE_GREATER = 'greaterThan';
+    public const TYPE_GREATEREQUAL = 'greaterThanEqual';
+    public const TYPE_CONTAINS = 'contains';
+    public const TYPE_SEARCH = 'search';
+    public const TYPE_IS_NULL = 'isNull';
+    public const TYPE_IS_NOT_NULL = 'isNotNull';
+    public const TYPE_BETWEEN = 'between';
 
     // Order methods
-    const TYPE_ORDERDESC = 'orderDesc';
-    const TYPE_ORDERASC = 'orderAsc';
+    public const TYPE_ORDERDESC = 'orderDesc';
+    public const TYPE_ORDERASC = 'orderAsc';
 
     // Pagination methods
-    const TYPE_LIMIT = 'limit';
-    const TYPE_OFFSET = 'offset';
-    const TYPE_CURSORAFTER = 'cursorAfter';
-    const TYPE_CURSORBEFORE = 'cursorBefore';
+    public const TYPE_LIMIT = 'limit';
+    public const TYPE_OFFSET = 'offset';
+    public const TYPE_CURSORAFTER = 'cursorAfter';
+    public const TYPE_CURSORBEFORE = 'cursorBefore';
 
     protected const CHAR_SINGLE_QUOTE = '\'';
     protected const CHAR_DOUBLE_QUOTE = '"';
@@ -150,7 +150,6 @@ class Query
             self::TYPE_IS_NOT_NULL => true,
             default => false,
         };
-
     }
 
     /**
@@ -234,7 +233,7 @@ class Query
                     $stack[] = $char;
                     $stackCount++;
                     continue;
-                } else if ($char === static::CHAR_BRACKET_END) {
+                } elseif ($char === static::CHAR_BRACKET_END) {
                     // End of array
                     \array_pop($stack);
                     $stackCount--;
@@ -248,7 +247,7 @@ class Query
                     $currentParam = "";
 
                     continue;
-                } else if ($char === static::CHAR_COMMA) { // Params separation support
+                } elseif ($char === static::CHAR_COMMA) { // Params separation support
                     // If in array stack, dont merge yet, just mark it in array param builder
                     if ($isArrayStack) {
                         $currentArrayParam[] = $currentParam;
@@ -345,7 +344,7 @@ class Query
 
         if ($char === static::CHAR_SPACE) {
             $canBeIgnored = true;
-        } else if ($char === static::CHAR_COMMA) {
+        } elseif ($char === static::CHAR_COMMA) {
             $canBeIgnored = true;
         }
 
@@ -362,7 +361,7 @@ class Query
     {
         if ($char === self::CHAR_SINGLE_QUOTE) {
             return true;
-        } else if ($char === self::CHAR_DOUBLE_QUOTE) {
+        } elseif ($char === self::CHAR_DOUBLE_QUOTE) {
             return true;
         }
 
@@ -373,13 +372,13 @@ class Query
     {
         if ($char === static::CHAR_COMMA) {
             return true;
-        } else if ($char === static::CHAR_BRACKET_END) {
+        } elseif ($char === static::CHAR_BRACKET_END) {
             return true;
-        } else if ($char === static::CHAR_BRACKET_START) {
+        } elseif ($char === static::CHAR_BRACKET_START) {
             return true;
-        } else if ($char === static::CHAR_DOUBLE_QUOTE) {
+        } elseif ($char === static::CHAR_DOUBLE_QUOTE) {
             return true;
-        } else if ($char === static::CHAR_SINGLE_QUOTE) {
+        } elseif ($char === static::CHAR_SINGLE_QUOTE) {
             return true;
         }
 
@@ -398,14 +397,14 @@ class Query
 
         if ($value === 'false') { // Boolean value
             return false;
-        } else if ($value === 'true') {
+        } elseif ($value === 'true') {
             return true;
-        } else if ($value === 'null') { // Null value
+        } elseif ($value === 'null') { // Null value
             return null;
-        } else if (\is_numeric($value)) { // Numeric value
+        } elseif (\is_numeric($value)) { // Numeric value
             // Cast to number
             return $value + 0;
-        } else if (\str_starts_with($value, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($value, static::CHAR_SINGLE_QUOTE)) { // String param
+        } elseif (\str_starts_with($value, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($value, static::CHAR_SINGLE_QUOTE)) { // String param
             $value = \substr($value, 1, -1); // Remove '' or ""
             return $value;
         }
@@ -420,7 +419,7 @@ class Query
      * @param string $method
      * @return string
      */
-    static protected function getMethodFromAlias(string $method): string
+    protected static function getMethodFromAlias(string $method): string
     {
         return $method;
         /*
@@ -595,12 +594,12 @@ class Query
      * - orderTypes: array of Database::ORDER_ASC or Database::ORDER_DESC
      * - cursor: Document
      * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
-     * 
+     *
      * @param array $queries
      * @param int $defaultLimit
      * @param int $defaultOffset
      * @param string $defaultCursorDirection
-     * 
+     *
      * @return array
      */
     public static function groupByType(array $queries): array
@@ -613,7 +612,9 @@ class Query
         $cursor = null;
         $cursorDirection = null;
         foreach ($queries as $query) {
-            if (!$query instanceof Query) continue;
+            if (!$query instanceof Query) {
+                continue;
+            }
 
             $method = $query->getMethod();
             $attribute = $query->getAttribute();
@@ -630,14 +631,18 @@ class Query
 
                 case Query::TYPE_LIMIT:
                     // keep the 1st limit encountered and ignore the rest
-                    if ($limit !== null) break;
+                    if ($limit !== null) {
+                        break;
+                    }
 
                     $limit = $values[0] ?? $limit;
                     break;
 
                 case Query::TYPE_OFFSET:
                     // keep the 1st offset encountered and ignore the rest
-                    if ($offset !== null) break;
+                    if ($offset !== null) {
+                        break;
+                    }
 
                     $offset = $values[0] ?? $limit;
                     break;
@@ -645,7 +650,9 @@ class Query
                 case Query::TYPE_CURSORAFTER:
                 case Query::TYPE_CURSORBEFORE:
                     // keep the 1st cursor encountered and ignore the rest
-                    if ($cursor !== null) break;
+                    if ($cursor !== null) {
+                        break;
+                    }
 
                     $cursor = $values[0] ?? $limit;
                     $cursorDirection = $method === Query::TYPE_CURSORAFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
@@ -670,9 +677,9 @@ class Query
 
     /**
      * Iterate over $queries attempting to parse each
-     * 
+     *
      * @param string[] $queries
-     * 
+     *
      * @return Query[]
      */
     public static function parseQueries(array $queries): array

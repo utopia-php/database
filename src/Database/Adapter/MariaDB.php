@@ -710,7 +710,7 @@ class MariaDB extends SQL
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
-            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
@@ -720,8 +720,10 @@ class MariaDB extends SQL
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
             $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
@@ -981,7 +983,7 @@ class MariaDB extends SQL
      * @return string
      * @throws Exception
      */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $type = match ($type) {
             Database::INDEX_KEY, Database::INDEX_ARRAY => 'INDEX',
@@ -998,7 +1000,7 @@ class MariaDB extends SQL
      *
      * @param mixed $value
      * @return int
-     * @throws Exception 
+     * @throws Exception
      */
     protected function getPDOType(mixed $value): int
     {
@@ -1040,7 +1042,7 @@ class MariaDB extends SQL
         $attribute = "`{$query->getAttribute()}`" ;
         $placeholder = $this->getSQLPlaceholder($query);
 
-        switch ($query->getMethod()){
+        switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1068,9 +1070,4 @@ class MariaDB extends SQL
                 return empty($condition) ? '' : '(' . $condition . ')';
         }
     }
-
-
-
-
-
 }

@@ -5,8 +5,6 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use PDOStatement;
-use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -18,7 +16,7 @@ class Postgres extends SQL
 {
     /**
      * Differences between MariaDB and Postgres
-     * 
+     *
      * 1. Need to use CASCADE to DROP schema
      * 2. Quotes are different ` vs "
      * 3. DATETIME is TIMESTAMP
@@ -29,7 +27,7 @@ class Postgres extends SQL
      * Create Database
      *
      * @param string $name
-     * 
+     *
      * @return bool
      */
     public function create(string $name): bool
@@ -59,7 +57,7 @@ class Postgres extends SQL
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
@@ -136,7 +134,7 @@ class Postgres extends SQL
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $id
      * @return bool
      */
@@ -151,13 +149,13 @@ class Postgres extends SQL
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
@@ -178,11 +176,11 @@ class Postgres extends SQL
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id, bool $array = false): bool
@@ -255,14 +253,14 @@ class Postgres extends SQL
 
     /**
      * Create Index
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param array $attributes
      * @param array $lengths
      * @param array $orders
-     * 
+     *
      * @return bool
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
@@ -301,10 +299,10 @@ class Postgres extends SQL
 
     /**
      * Delete Index
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteIndex(string $collection, string $id): bool
@@ -673,9 +671,9 @@ class Postgres extends SQL
      * @param array $cursor
      * @param string $cursorDirection
      *
-     * @return array 
-     * @throws Exception 
-     * @throws PDOException 
+     * @return array
+     * @throws Exception
+     * @throws PDOException
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
@@ -719,7 +717,7 @@ class Postgres extends SQL
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
-            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
@@ -729,8 +727,10 @@ class Postgres extends SQL
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
             $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
@@ -927,10 +927,10 @@ class Postgres extends SQL
 
     /**
      * Get SQL Type
-     * 
+     *
      * @param string $type
      * @param int $size in chars
-     * 
+     *
      * @return string
      */
     protected function getSQLType(string $type, int $size, bool $signed = true): string
@@ -1001,7 +1001,7 @@ class Postgres extends SQL
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -1015,8 +1015,8 @@ class Postgres extends SQL
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -1044,9 +1044,9 @@ class Postgres extends SQL
 
     /**
      * Encode array
-     * 
+     *
      * @param string $value
-     * 
+     *
      * @return array
      */
     protected function encodeArray(string $value): array
@@ -1061,15 +1061,16 @@ class Postgres extends SQL
 
     /**
      * Decode array
-     * 
+     *
      * @param array $value
-     * 
+     *
      * @return string
      */
     protected function decodeArray(array $value): string
     {
-        if (empty($value))
+        if (empty($value)) {
             return '{}';
+        }
 
         foreach ($value as &$item) {
             $item = '"' . str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
@@ -1109,7 +1110,7 @@ class Postgres extends SQL
         $attribute = "\"{$query->getAttribute()}\"" ;
         $placeholder = $this->getSQLPlaceholder($query);
 
-        switch ($query->getMethod()){
+        switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
                 $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
                 $value = "'{$value}*'";

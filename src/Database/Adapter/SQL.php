@@ -92,7 +92,7 @@ abstract class SQL extends Adapter
 
     /**
      * List Databases
-     * 
+     *
      * @return array
      */
     public function list(): array
@@ -371,7 +371,7 @@ abstract class SQL extends Adapter
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
+     *
      * @return string[]
      */
     public function getKeywords(): array
@@ -741,10 +741,10 @@ abstract class SQL extends Adapter
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -760,7 +760,7 @@ abstract class SQL extends Adapter
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -774,8 +774,8 @@ abstract class SQL extends Adapter
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -784,7 +784,7 @@ abstract class SQL extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return PDO
      */
     protected function getPDO()
     {
@@ -821,9 +821,12 @@ abstract class SQL extends Adapter
      * @param Query $query
      * @return void
      */
-    public function bindConditionValue($stmt, Query $query){
+    public function bindConditionValue($stmt, Query $query)
+    {
         /** @var PDOStatement $stmt */
-        if ($query->getMethod() === Query::TYPE_SEARCH) return;
+        if ($query->getMethod() === Query::TYPE_SEARCH) {
+            return;
+        }
         foreach ($query->getValues() as $key => $value) {
             $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
             $stmt->bindValue($placeholder, $value, $this->getPDOType($value));

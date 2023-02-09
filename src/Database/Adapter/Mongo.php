@@ -973,7 +973,7 @@ class Mongo extends Adapter
             if ($query->getMethod() === Query::TYPE_BETWEEN) {
                 $filters[$attribute]['$lte'] = $value[1];
                 $filters[$attribute]['$gte'] = $value[0];
-            } else if (is_array($value) && $operator === '$eq') {
+            } elseif (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();

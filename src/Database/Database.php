@@ -18,37 +18,37 @@ use Utopia\Database\Validator\Structure;
 
 class Database
 {
-    const VAR_STRING = 'string';
+    public const VAR_STRING = 'string';
     // Simple Types
-    const VAR_INTEGER = 'integer';
-    const VAR_FLOAT = 'double';
-    const VAR_BOOLEAN = 'boolean';
-    const VAR_DATETIME = 'datetime';
+    public const VAR_INTEGER = 'integer';
+    public const VAR_FLOAT = 'double';
+    public const VAR_BOOLEAN = 'boolean';
+    public const VAR_DATETIME = 'datetime';
 
     // Relationships Types
-    const VAR_DOCUMENT = 'document';
+    public const VAR_DOCUMENT = 'document';
 
     // Index Types
-    const INDEX_KEY = 'key';
-    const INDEX_FULLTEXT = 'fulltext';
-    const INDEX_UNIQUE = 'unique';
-    const INDEX_SPATIAL = 'spatial';
-    const INDEX_ARRAY = 'array';
+    public const INDEX_KEY = 'key';
+    public const INDEX_FULLTEXT = 'fulltext';
+    public const INDEX_UNIQUE = 'unique';
+    public const INDEX_SPATIAL = 'spatial';
+    public const INDEX_ARRAY = 'array';
 
     // Orders
-    const ORDER_ASC = 'ASC';
-    const ORDER_DESC = 'DESC';
+    public const ORDER_ASC = 'ASC';
+    public const ORDER_DESC = 'DESC';
 
     // Permissions
-    const PERMISSION_CREATE= 'create';
-    const PERMISSION_READ = 'read';
-    const PERMISSION_UPDATE = 'update';
-    const PERMISSION_DELETE = 'delete';
+    public const PERMISSION_CREATE= 'create';
+    public const PERMISSION_READ = 'read';
+    public const PERMISSION_UPDATE = 'update';
+    public const PERMISSION_DELETE = 'delete';
 
     // Aggregate permissions
-    const PERMISSION_WRITE = 'write';
+    public const PERMISSION_WRITE = 'write';
 
-    const PERMISSIONS = [
+    public const PERMISSIONS = [
         self::PERMISSION_CREATE,
         self::PERMISSION_READ,
         self::PERMISSION_UPDATE,
@@ -56,45 +56,45 @@ class Database
     ];
 
     // Collections
-    const METADATA = '_metadata';
+    public const METADATA = '_metadata';
 
     // Cursor
-    const CURSOR_BEFORE = 'before';
-    const CURSOR_AFTER = 'after';
+    public const CURSOR_BEFORE = 'before';
+    public const CURSOR_AFTER = 'after';
 
     // Lengths
-    const LENGTH_KEY = 255;
+    public const LENGTH_KEY = 255;
 
     // Cache
-    const TTL = 60 * 60 * 24; // 24 hours
+    public const TTL = 60 * 60 * 24; // 24 hours
 
     // Events
-    const EVENT_ALL = '*';
+    public const EVENT_ALL = '*';
 
-    const EVENT_DATABASE_LIST = 'database_list';
-    const EVENT_DATABASE_CREATE = 'database_create';
-    const EVENT_DATABASE_DELETE = 'database_delete';
+    public const EVENT_DATABASE_LIST = 'database_list';
+    public const EVENT_DATABASE_CREATE = 'database_create';
+    public const EVENT_DATABASE_DELETE = 'database_delete';
 
-    const EVENT_COLLECTION_LIST = 'collection_list';
-    const EVENT_COLLECTION_CREATE = 'collection_delete';
-    const EVENT_COLLECTION_READ = 'collection_read';
-    const EVENT_COLLECTION_DELETE = 'collection_delete';
+    public const EVENT_COLLECTION_LIST = 'collection_list';
+    public const EVENT_COLLECTION_CREATE = 'collection_delete';
+    public const EVENT_COLLECTION_READ = 'collection_read';
+    public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
-    const EVENT_DOCUMENT_FIND = 'document_find';
-    const EVENT_DOCUMENT_CREATE = 'document_create';
-    const EVENT_DOCUMENT_READ = 'document_read';
-    const EVENT_DOCUMENT_UPDATE = 'document_update';
-    const EVENT_DOCUMENT_DELETE = 'document_delete';
-    const EVENT_DOCUMENT_COUNT = 'document_count';
-    const EVENT_DOCUMENT_SUM = 'document_sum';
+    public const EVENT_DOCUMENT_FIND = 'document_find';
+    public const EVENT_DOCUMENT_CREATE = 'document_create';
+    public const EVENT_DOCUMENT_READ = 'document_read';
+    public const EVENT_DOCUMENT_UPDATE = 'document_update';
+    public const EVENT_DOCUMENT_DELETE = 'document_delete';
+    public const EVENT_DOCUMENT_COUNT = 'document_count';
+    public const EVENT_DOCUMENT_SUM = 'document_sum';
 
-    const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
-    const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
-    const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
+    public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
+    public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
+    public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
 
-    const EVENT_INDEX_RENAME = 'index_rename';
-    const EVENT_INDEX_CREATE = 'index_create';
-    const EVENT_INDEX_DELETE = 'index_delete';
+    public const EVENT_INDEX_RENAME = 'index_rename';
+    public const EVENT_INDEX_CREATE = 'index_create';
+    public const EVENT_INDEX_DELETE = 'index_delete';
 
 
     /**
@@ -212,7 +212,7 @@ class Database
     /**
      * @var array
      */
-    static protected array $filters = [];
+    protected static array $filters = [];
 
     /**
      * @var array
@@ -290,7 +290,9 @@ class Database
              * @throws Exception
              */
             function (?string $value) {
-                if (is_null($value)) return null;
+                if (is_null($value)) {
+                    return null;
+                }
                 try {
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
@@ -318,7 +320,7 @@ class Database
      */
     public function on(string $event, callable $callback): self
     {
-        if(!isset($this->listeners[$event])) {
+        if (!isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][] = $callback;
@@ -331,7 +333,8 @@ class Database
      * @param callable $callback
      * @return mixed
      */
-    public function silent(callable $callback): mixed {
+    public function silent(callable $callback): mixed
+    {
         $previous = $this->silentEvents;
         $this->silentEvents = true;
         $result = $callback();
@@ -348,12 +351,14 @@ class Database
      */
     protected function trigger(string $event, mixed $args = null): void
     {
-        if($this->silentEvents) return;
+        if ($this->silentEvents) {
+            return;
+        }
         foreach ($this->listeners[self::EVENT_ALL] as $callback) {
             call_user_func($callback, $event, $args);
         }
 
-        foreach(($this->listeners[$event] ?? []) as $callback) {
+        foreach (($this->listeners[$event] ?? []) as $callback) {
             call_user_func($callback, $event, $args);
         }
     }
@@ -457,7 +462,7 @@ class Database
             ['indexes', self::VAR_STRING, 1000000, false],
         ]);
 
-        $this->silent(fn() => $this->createCollection(self::METADATA, $attributes));
+        $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
         $this->trigger(self::EVENT_DATABASE_CREATE, $name);
 
@@ -519,9 +524,9 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
-        $collection = $this->silent(fn() => $this->getCollection($id));
+        $collection = $this->silent(fn () => $this->getCollection($id));
 
-        if (!$collection->isEmpty() && $id !== self::METADATA){
+        if (!$collection->isEmpty() && $id !== self::METADATA) {
             throw new DuplicateException('Collection ' . $id . ' Exists!');
         }
 
@@ -566,7 +571,7 @@ class Database
             }
         }
 
-        $createdCollection = $this->silent(fn() => $this->createDocument(self::METADATA, $collection));
+        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
@@ -583,7 +588,7 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
+        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
 
@@ -603,7 +608,7 @@ class Database
     {
         Authorization::disable();
 
-        $result = $this->silent(fn() => $this->find(self::METADATA, [
+        $result = $this->silent(fn () => $this->find(self::METADATA, [
             Query::limit($limit),
             Query::offset($offset)
         ]));
@@ -626,8 +631,8 @@ class Database
     {
         $this->adapter->deleteCollection($id);
 
-        $collection = $this->silent(fn() => $this->getDocument(self::METADATA, $id));
-        $deleted = $this->silent(fn() => $this->deleteDocument(self::METADATA, $id));
+        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
 
         $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
 
@@ -653,7 +658,7 @@ class Database
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
@@ -738,7 +743,7 @@ class Database
         $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
@@ -826,7 +831,7 @@ class Database
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
     {
         // Load
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -843,7 +848,7 @@ class Database
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
@@ -1072,7 +1077,7 @@ class Database
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn () =>$this->getCollection($collection));
 
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1088,7 +1093,7 @@ class Database
         $collection->setAttribute('attributes', $attributes);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
@@ -1109,7 +1114,7 @@ class Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1146,7 +1151,7 @@ class Database
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
@@ -1167,7 +1172,7 @@ class Database
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1197,7 +1202,7 @@ class Database
         $this->adapter->renameIndex($collection->getId(), $old, $new);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
@@ -1223,10 +1228,10 @@ class Database
             throw new Exception('Missing attributes');
         }
 
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new IndexValidator($collection);
-        if(!$validator->isValid(['type' => $type, 'attributes' => $attributes])){
+        if (!$validator->isValid(['type' => $type, 'attributes' => $attributes])) {
             throw new Exception($validator->getDescription());
         }
 
@@ -1279,7 +1284,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
@@ -1297,7 +1302,7 @@ class Database
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1312,7 +1317,7 @@ class Database
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
         $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
@@ -1344,7 +1349,7 @@ class Database
             return new Document();
         }
 
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $document = null;
         $cache = null;
 
@@ -1399,7 +1404,7 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $time = DateTime::now();
 
@@ -1445,8 +1450,8 @@ class Database
         $time = DateTime::now();
         $document->setAttribute('$updatedAt', $time);
 
-        $old = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
@@ -1487,8 +1492,8 @@ class Database
     {
         $validator = new Authorization(self::PERMISSION_DELETE);
 
-        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA
             && !$validator->isValid($document->getDelete())) {
@@ -1540,7 +1545,7 @@ class Database
      */
     public function find(string $collection, array $queries = []): array
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $grouped = Query::groupByType($queries);
         /** @var Query[] */ $filters = $grouped['filters'];
@@ -1589,7 +1594,7 @@ class Database
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
-        $results = $this->silent(fn() => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
+        $results = $this->silent(fn () => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
@@ -1611,7 +1616,7 @@ class Database
      */
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
             throw new Exception("Collection not found");
@@ -1642,7 +1647,7 @@ class Database
      */
     public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
     {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
             throw new Exception("Collection not found");
@@ -1665,7 +1670,7 @@ class Database
      *
      * @return void
      */
-    static public function addFilter(string $name, callable $encode, callable $decode): void
+    public static function addFilter(string $name, callable $encode, callable $decode): void
     {
         self::$filters[$name] = [
             'encode' => $encode,
@@ -1680,7 +1685,7 @@ class Database
     public function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach ($this->attributes as $internal){
+        foreach ($this->attributes as $internal) {
             $attributes[] = new Document($internal);
         }
         return $attributes;

@@ -330,7 +330,7 @@ class Query
     /**
      * Utility method to only append symbol if relevant.
      *
-     * @param array $stack
+     * @param bool $isStringStack
      * @param string $char
      * @param int $index
      * @param string $filter
@@ -569,7 +569,7 @@ class Query
      * Filters $queries for $types
      *
      * @param Query[] $queries
-     * @param string[] $types
+     * @param string ...$types
      *
      * @return Query[]
      */
@@ -596,10 +596,6 @@ class Query
      * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
      *
      * @param array $queries
-     * @param int $defaultLimit
-     * @param int $defaultOffset
-     * @param string $defaultCursorDirection
-     *
      * @return array
      */
     public static function groupByType(array $queries): array

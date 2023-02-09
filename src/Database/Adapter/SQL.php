@@ -792,6 +792,15 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Get PDO Type
+     *
+     * @param mixed $value
+     * @return int
+     * @throws Exception
+     */
+    protected abstract function getPDOType(mixed $value): int;
+
+    /**
      * Returns default PDO configuration
      */
     public static function getPDOAttributes(): array

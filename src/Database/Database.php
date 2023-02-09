@@ -474,7 +474,7 @@ class Database
      * Optionally check if collection exists in database
      *
      * @param string $database database name
-     * @param string $collection (optional) collection name
+     * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
@@ -647,14 +647,16 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param null $default
      * @param bool $signed
      * @param bool $array
-     * @param string $format optional validation format of attribute
-     * @param string $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param string|null $format optional validation format of attribute
+     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array $filters
      *
      * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -823,10 +825,10 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $key Metadata key to update
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
      *
-     * @return Document
+     * @return void
+     * @throws Exception
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
     {
@@ -949,14 +951,17 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
+     * @param string|null $type
+     * @param int|null $size utf8mb4 chars length
      * @param bool $signed
      * @param bool $array
      *
      * To update attribute key (ID), use renameAttribute instead.
-     *
+     * @param string|null $format
+     * @param array $formatOptions
+     * @param array $filters
      * @return bool
+     * @throws Exception
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -972,15 +977,15 @@ class Database
             }
         }
 
-        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
+        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters) {
             if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
                 $array ??= $attribute->getAttribute('array');
                 $format ??= $attribute->getAttribute('format');
-                $formatOptions ??= $attribute->getAttribute('formatOptions');
-                $filters ??= $attribute->getAttribute('filters');
+                $formatOptions = $attribute->getAttribute('formatOptions');
+                $filters = $attribute->getAttribute('filters');
 
                 switch ($type) {
                     case self::VAR_STRING:
@@ -1108,9 +1113,9 @@ class Database
      *
      * @param string $collection
      * @param string $old Current attribute ID
-     * @param string $name New attribute ID
-     *
+     * @param string $new
      * @return bool
+     * @throws DuplicateException
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
@@ -1548,13 +1553,13 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $grouped = Query::groupByType($queries);
-        /** @var Query[] */ $filters = $grouped['filters'];
-        /** @var int */ $limit = $grouped['limit'];
-        /** @var int */ $offset = $grouped['offset'];
-        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
-        /** @var string[] */ $orderTypes = $grouped['orderTypes'];
-        /** @var Document */ $cursor = $grouped['cursor'];
-        /** @var string */ $cursorDirection = $grouped['cursorDirection'];
+        $filters = $grouped['filters'];
+        $limit = $grouped['limit'];
+        $offset = $grouped['offset'];
+        $orderAttributes = $grouped['orderAttributes'];
+        $orderTypes = $grouped['orderTypes'];
+        $cursor = $grouped['cursor'];
+        $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new Exception("cursor Document must be from the same Collection.");
@@ -1571,7 +1576,7 @@ class Database
             $offset ?? 0,
             $orderAttributes,
             $orderTypes,
-            $cursor ?? [],
+            $cursor,
             $cursorDirection ?? Database::CURSOR_AFTER,
         );
 
@@ -1801,7 +1806,9 @@ class Database
             }
 
             if ($array) {
-                $value = (!is_string($value)) ? ($value ?? []) : json_decode($value, true);
+                $value = !is_string($value)
+                    ? $value
+                    : json_decode($value, true);
             } else {
                 $value = [$value];
             }

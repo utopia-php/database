@@ -831,7 +831,7 @@ abstract class Base extends TestCase
             ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
             ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND);
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 

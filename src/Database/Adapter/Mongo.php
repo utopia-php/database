@@ -394,7 +394,6 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $filters = ['_uid' => $id];
-        $options = ['limit' => 1];
 
         $selections = $this->getAttributeSelections($queries);
 

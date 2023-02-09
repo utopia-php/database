@@ -718,11 +718,17 @@ class MariaDB extends SQL
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
-            );
+
+            if ($cursorDirection === Database::CURSOR_AFTER) {
+                $orderMethod = $orderType === Database::ORDER_DESC
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+            } else {
+                $orderMethod = $orderType === Database::ORDER_DESC
+                    ? Query::TYPE_GREATER
+                    : Query::TYPE_LESSER;
+            }
+
             $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
 

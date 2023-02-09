@@ -14,7 +14,7 @@ class ID
         $uniqid = \uniqid();
 
         if ($padding > 0) {
-            $bytes = \random_bytes(\ceil((int)($padding / 2))); // one byte expands to two chars
+            $bytes = \random_bytes(\ceil(($padding / 2))); // one byte expands to two chars
             $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
         }
 

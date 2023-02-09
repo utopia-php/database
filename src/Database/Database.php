@@ -984,8 +984,13 @@ class Database
                 $signed ??= $attribute->getAttribute('signed');
                 $array ??= $attribute->getAttribute('array');
                 $format ??= $attribute->getAttribute('format');
-                $formatOptions = $attribute->getAttribute('formatOptions');
-                $filters = $attribute->getAttribute('filters');
+
+                if (empty(($formatOptions))) {
+                    $formatOptions = $attribute->getAttribute('formatOptions');
+                }
+                if (empty(($filters))) {
+                    $filters = $attribute->getAttribute('filters');
+                }
 
                 switch ($type) {
                     case self::VAR_STRING:

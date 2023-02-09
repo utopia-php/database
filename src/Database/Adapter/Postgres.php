@@ -420,11 +420,9 @@ class Postgres extends SQL
                 case 23505:
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                    break;
 
                 default:
                     throw $e;
-                    break;
             }
         }
 
@@ -941,7 +939,6 @@ class Postgres extends SQL
                 }
 
                 return "VARCHAR({$size})";
-                break;
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
 
@@ -950,27 +947,21 @@ class Postgres extends SQL
                 }
 
                 return 'INTEGER';
-                break;
 
             case Database::VAR_FLOAT:
                 return 'DOUBLE PRECISION';
-                break;
 
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
-                break;
 
             case Database::VAR_DOCUMENT:
                 return 'VARCHAR';
-                break;
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
-                break;
 
             default:
                 throw new Exception('Unknown Type: ' . $type);
-                break;
         }
     }
 

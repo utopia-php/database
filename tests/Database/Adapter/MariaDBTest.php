@@ -12,10 +12,7 @@ use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
 {
-    /**
-     * @var Database
-     */
-    public static $database = null;
+    public static ?Database $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented

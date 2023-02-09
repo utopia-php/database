@@ -12,10 +12,8 @@ use Utopia\Tests\Base;
 
 class PostgresTest extends Base
 {
-    /**
-     * @var Database
-     */
-    public static $database = null;
+
+    public static ?Database $database = null;
 
     /**
      * Return name of adapter

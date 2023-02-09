@@ -730,7 +730,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
 
         // only execute when $default is given
@@ -816,7 +815,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
     }
 
@@ -978,7 +976,7 @@ class Database
         }
 
         $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters) {
-            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
+            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || !empty($formatOptions) || !empty($filters)) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
@@ -1011,7 +1009,6 @@ class Database
                         break;
                     default:
                         throw new Exception('Unknown attribute type: ' . $type);
-                        break;
                 }
 
                 $attribute
@@ -1063,7 +1060,6 @@ class Database
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
-            return false;
         }
 
         if (
@@ -1071,7 +1067,6 @@ class Database
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
-            return false;
         }
 
         return true;
@@ -1279,7 +1274,6 @@ class Database
 
             default:
                 throw new Exception('Unknown index type: ' . $type);
-                break;
         }
 
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
@@ -1719,7 +1713,7 @@ class Database
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
-            $value = $document->getAttribute($key, null);
+            $value = $document->getAttribute($key);
 
             // continue on optional param with no default
             if (is_null($value) && is_null($default)) {
@@ -1727,6 +1721,8 @@ class Database
             }
 
             // assign default only if no no value provided
+            // False positive "Call to function is_null() with mixed will always evaluate to false"
+            // @phpstan-ignore-next-line
             if (is_null($value) && !is_null($default)) {
                 $value = ($array) ? $default : [$default];
             } else {

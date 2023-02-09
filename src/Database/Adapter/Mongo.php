@@ -1176,14 +1176,14 @@ class Mongo extends Adapter
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        $indexes = \count(((array)$collection->getAttribute('indexes')) ?? []);
+        $indexes = \count($collection->getAttribute('indexes') ?? []);
 
         return $indexes + static::getCountOfDefaultIndexes();
     }
 
     /**
      * Returns number of attributes used by default.
-     *
+     *p
      * @return int
      */
     public static function getCountOfDefaultAttributes(): int

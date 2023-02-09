@@ -361,7 +361,6 @@ abstract class SQL extends Adapter
                     break;
                 default:
                     throw new Exception('Unknown Type');
-                    break;
             }
         }
 

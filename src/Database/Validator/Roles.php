@@ -231,19 +231,9 @@ class Roles extends Validator
             return false;
         }
 
-        if (!isset($config['identifier'])) {
-            $this->message = 'Role "' . $role . '" missing identifier configuration.';
-            return false;
-        }
-
-        if (!isset($config['dimension'])) {
-            $this->message = 'Role "' . $role . '" missing dimension configuration.';
-            return false;
-        }
-
         // Process identifier configuration
-        $allowed = $config['identifier']['allowed'] ?? false;
-        $required = $config['identifier']['required'] ?? false;
+        $allowed = $config['identifier']['allowed'];
+        $required = $config['identifier']['required'];
 
         // Not allowed and has an identifier
         if (!$allowed && !empty($identifier)) {
@@ -266,8 +256,8 @@ class Roles extends Validator
         }
 
         // Process dimension configuration
-        $allowed = $config['dimension']['allowed'] ?? false;
-        $required = $config['dimension']['required'] ?? false;
+        $allowed = $config['dimension']['allowed'];
+        $required = $config['dimension']['required'];
         $options = $config['dimension']['options'] ?? [$dimension];
 
         // Not allowed and has a dimension
@@ -277,6 +267,8 @@ class Roles extends Validator
         }
 
         // Required and has no dimension
+        // PHPStan complains because there are currently no dimensions that are required, but there might be in future
+        // @phpstan-ignore-next-line
         if ($allowed && $required && empty($dimension)) {
             $this->message = 'Role "' . $role . '"' . ' must have a dimension value.';
             return false;

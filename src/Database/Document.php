@@ -178,7 +178,7 @@ class Document extends ArrayObject
      *
      * @return mixed
      */
-    public function getAttribute(string $name, $default = null)
+    public function getAttribute(string $name, mixed $default = null): mixed
     {
         if (isset($this[$name])) {
             return $this[$name];

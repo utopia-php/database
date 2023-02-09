@@ -5,19 +5,24 @@
  */ global $cli;
 
 use Faker\Factory;
-use MongoDB\Client;
+use Utopia\Mongo\Client;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
 use Utopia\Database\Query;
-use Utopia\Database\Adapter\MongoDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 
+/**
+ * @Example
+ * docker-compose exec tests bin/query --adapter=mariadb --limit=1000 --name=testing
+ */
 $cli
     ->task('query')
     ->desc('Query mock data')
@@ -25,21 +30,24 @@ $cli
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->param('limit', 25, new Numeric(), 'Limit on queried documents', true)
     ->action(function (string $adapter, string $name, int $limit) {
-        $database = null;
+
+        $namespace = '_ns';
+        $cache = new Cache(new NoCache());
 
         switch ($adapter) {
             case 'mongodb':
-                $options = ["typeMap" => ['root' => 'array', 'document' => 'array', 'array' => 'array']];
                 $client = new Client(
-                    'mongodb://mongo/',
-                    [
-                        'username' => 'root',
-                        'password' => 'example',
-                    ],
-                    $options
+                    $name,
+                    'mongo',
+                    27017,
+                    'root',
+                    'example'
+                    , false
                 );
 
-                $database = new Database(new MongoDB($client), new Cache(new NoCache()));
+                $database = new Database(new Mongo($client), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
                 break;
 
             case 'mariadb':
@@ -48,15 +56,11 @@ $cli
                 $dbUser = 'root';
                 $dbPass = 'password';
 
-                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                    PDO::ATTR_TIMEOUT => 3, // Seconds
-                    PDO::ATTR_PERSISTENT => true,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
-                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                $database = new Database(new MariaDB($pdo), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
                 break;
 
             case 'mysql':
@@ -65,15 +69,11 @@ $cli
                 $dbUser = 'root';
                 $dbPass = 'password';
 
-                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
-                    PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-                    PDO::ATTR_TIMEOUT => 3, // Seconds
-                    PDO::ATTR_PERSISTENT => true,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                ]);
+                $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
-                $database = new Database(new MariaDB($pdo), new Cache(new NoCache()));
+                $database = new Database(new MySQL($pdo), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
                 break;
 
             default:
@@ -81,7 +81,6 @@ $cli
                 return;
         }
 
-        $database->setNamespace($name);
 
         $faker = Factory::create();
 
@@ -132,24 +131,46 @@ $cli
         fclose($f);
     });
 
+
+    $cli
+    ->error()
+    ->inject('error')
+    ->action(function (Exception $error) {
+        Console::error($error->getMessage());
+    });
+
+
 function runQueries(Database $database, int $limit)
 {
     $results = [];
     // Recent travel blogs
-    $query = ["created.greater(1262322000)", "genre.equal('travel')"];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::greaterThan('created', '2010-01-01 05:00:00'),
+        Query::equal('genre', ['travel']),
+        Query::limit($limit)
+    ], $database);
 
     // Favorite genres
-    $query = ["genre.equal('fashion, 'finance', 'sports')"];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::equal('genre', ['fashion', 'finance', 'sports']),
+        Query::limit($limit)
+    ], $database);
 
     // Popular posts
-    $query = ["views.greater(100000)"];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::greaterThan('views', 100000),
+        Query::limit($limit)
+    ], $database);
 
     // Fulltext search
-    $query = ["text.search('Alice')"];
-    $results[] = runQuery($query, $database, $limit);
+
+    $results[] = runQuery([
+        Query::search('text', 'Alice'),
+        Query::limit($limit)
+    ], $database);
 
     return $results;
 }
@@ -162,16 +183,18 @@ function addRoles($faker, $count)
     return count(Authorization::getRoles());
 }
 
-function runQuery(array $query, Database $database, int $limit)
+function runQuery(array $query, Database $database)
 {
-    Console::log('Running query: [' . implode(', ', $query) . ']');
-    $query = array_map(function ($q) {
-        return Query::parse($q);
-    }, $query);
+    $info = array_map(function ($q){
+        /** @var $q Query */
+        return $q->getAttribute() . ' : ' . $q->getMethod() . ' : ' . implode(',',$q->getValues());
+    } , $query);
 
+    Console::log('Running query: [' . implode(', ', $info) . ']');
     $start = microtime(true);
-    $database->find('articles', array_merge($query, [Query::limit($limit)]));
+    $database->find('articles', $query);
     $time = microtime(true) - $start;
     Console::success("{$time} s");
     return $time;
 }
+

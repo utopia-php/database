@@ -955,9 +955,25 @@ class Mongo extends Adapter
 
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
-            $value = (count($query->getValues()) > 1) ? $query->getValues() : $query->getValues()[0];
 
-            if (is_array($value) && $operator === '$eq') {
+            switch ($query->getMethod()) {
+                case Query::TYPE_IS_NULL:
+                case Query::TYPE_IS_NOT_NULL:
+                    $value = null;
+
+                    break;
+                default:
+                    $value = count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0];
+
+                    break;
+            }
+
+            if ($query->getMethod() === Query::TYPE_BETWEEN) {
+                $filters[$attribute]['$lte'] = $value[1];
+                $filters[$attribute]['$gte'] = $value[0];
+            } else if (is_array($value) && $operator === '$eq') {
                 $filters[$attribute]['$in'] = $value;
             } elseif ($operator === '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
@@ -1006,6 +1022,14 @@ class Mongo extends Adapter
             case Query::TYPE_SEARCH:
                 return '$search';
 
+            case Query::TYPE_BETWEEN:
+                return 'between'; // this is not an operator will be replaced with $gte/$lte
+
+            case Query::TYPE_IS_NULL:
+                return '$eq';
+
+            case Query::TYPE_IS_NOT_NULL:
+                return '$ne';
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }

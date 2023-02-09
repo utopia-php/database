@@ -260,9 +260,9 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      *
      * @return bool
      */
@@ -662,15 +662,15 @@ class Postgres extends SQL
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      *
-     * @return array
+     * @return array<Document>
      * @throws Exception
      * @throws PDOException
      */
@@ -824,7 +824,7 @@ class Postgres extends SQL
      * Count data set size using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int
@@ -865,7 +865,6 @@ class Postgres extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -918,7 +917,6 @@ class Postgres extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -974,7 +972,7 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array<string> $attributes
      *
      * @return string
      * @throws Exception
@@ -1039,7 +1037,7 @@ class Postgres extends SQL
      *
      * @param string $value
      *
-     * @return array
+     * @return array<string>
      */
     protected function encodeArray(string $value): array
     {
@@ -1054,7 +1052,7 @@ class Postgres extends SQL
     /**
      * Decode array
      *
-     * @param array $value
+     * @param array<string> $value
      *
      * @return string
      */

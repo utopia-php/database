@@ -281,9 +281,9 @@ class MariaDB extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -661,9 +661,9 @@ class MariaDB extends SQL
      * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      *
      * @return array<Document>
@@ -866,7 +866,6 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -920,7 +919,6 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -987,7 +985,7 @@ class MariaDB extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array<string> $attributes
      * @return string
      * @throws Exception
      */

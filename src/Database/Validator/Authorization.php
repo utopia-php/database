@@ -7,21 +7,21 @@ use Utopia\Validator;
 class Authorization extends Validator
 {
     /**
-     * @var array
+     * @var array<string, bool>
      */
-    public static $roles = [
+    public static array $roles = [
         'any' => true
     ];
 
     /**
      * @var string
      */
-    protected $action = '';
+    protected string $action = '';
 
     /**
      * @var string
      */
-    protected $message = 'Authorization Error';
+    protected string $message = 'Authorization Error';
 
     /**
      * @param string $action
@@ -96,7 +96,7 @@ class Authorization extends Validator
     }
 
     /**
-     * @return array
+     * @return array<string>
      */
     public static function getRoles(): array
     {
@@ -124,7 +124,7 @@ class Authorization extends Validator
     /**
      * @var bool
      */
-    public static $status = true;
+    public static bool $status = true;
 
     /**
      * Default value in case we need
@@ -132,7 +132,7 @@ class Authorization extends Validator
      *
      * @var bool
      */
-    public static $statusDefault = true;
+    public static bool $statusDefault = true;
 
     /**
      * Change default status.
@@ -155,7 +155,7 @@ class Authorization extends Validator
      *
      * @return mixed
      */
-    public static function skip(callable $callback)
+    public static function skip(callable $callback): mixed
     {
         $initialStatus = self::$status;
 

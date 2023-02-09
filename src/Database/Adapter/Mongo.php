@@ -19,7 +19,7 @@ use Utopia\Mongo\Client;
 class Mongo extends Adapter
 {
     /**
-     * @var array
+     * @var array<string>
      */
     private array $operators = [
         '$eq',
@@ -44,6 +44,7 @@ class Mongo extends Adapter
      * Set connection and settings
      *
      * @param Client $client
+     * @throws MongoException
      */
     public function __construct(Client $client)
     {
@@ -52,17 +53,11 @@ class Mongo extends Adapter
     }
 
     /**
-     * @throws Exception
-     */
-    public function hello()
-    {
-        return $this->getClient()->query(['hello' => 1]);
-    }
-
-    /**
      * Ping Database
      *
      * @return bool
+     * @throws Exception
+     * @throws MongoException
      */
     public function ping(): bool
     {
@@ -113,7 +108,7 @@ class Mongo extends Adapter
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      * @throws Exception
      */
     public function list(): array
@@ -191,7 +186,6 @@ class Mongo extends Adapter
         if (!empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
-             * @var array
              */
             $newIndexes = [];
 
@@ -240,7 +234,7 @@ class Mongo extends Adapter
     /**
      * List Collections
      *
-     * @return array
+     * @return array<Document>
      * @throws Exception
      */
     public function listCollections(): array
@@ -317,10 +311,10 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     * @param array $collation
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
+     * @param array<string, mixed> $collation
      * @return bool
      * @throws Exception
      */
@@ -431,6 +425,11 @@ class Mongo extends Adapter
     }
 
     /**
+     *
+     * @param string $name
+     * @param array<string, mixed> $document
+     *
+     * @return array<string, mixed>
      * @throws Duplicate
      */
     private function insertDocument(string $name, array $document): array
@@ -530,12 +529,12 @@ class Mongo extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      *
      * @return array<Document>
@@ -664,16 +663,16 @@ class Mongo extends Adapter
      * Recursive function to convert timestamps/datetime
      * to BSON based UTCDatetime type for Mongo filter/query.
      *
-     * @param array $filters
+     * @param array<string, mixed> $filters
      *
-     * @return array
+     * @return array<string, mixed>
      * @throws Exception
      */
     private function timeFilter(array $filters): array
     {
         $results = $filters;
 
-        foreach ($filters as $k=>$v) {
+        foreach ($filters as $k => $v) {
             if ($k === '_createdAt' || $k == '_updatedAt') {
                 if (is_array($v)) {
                     foreach ($v as $sk=>$sv) {
@@ -695,9 +694,9 @@ class Mongo extends Adapter
     /**
      * Converts timestamp base fields to Utopia\Document format.
      *
-     * @param array $record
+     * @param array<string, mixed> $record
      *
-     * @return array
+     * @return array<string, mixed>
      */
     private function timeToDocument(array $record): array
     {
@@ -710,9 +709,9 @@ class Mongo extends Adapter
     /**
      * Converts timestamp base fields to Mongo\BSON datetime format.
      *
-     * @param array $record
+     * @param array<string, mixed> $record
      *
-     * @return array
+     * @return array<string, mixed>
      * @throws Exception
      */
     private function timeToMongo(array $record): array
@@ -739,18 +738,18 @@ class Mongo extends Adapter
      * Recursive function to replace chars in array keys, while
      * skipping any that are explicitly excluded.
      *
-     * @param array $array
+     * @param array<string, mixed> $array
      * @param string $from
      * @param string $to
-     * @param array $exclude
-     * @return array
+     * @param array<string> $exclude
+     * @return array<string, mixed>
      */
     private function recursiveReplace(array $array, string $from, string $to, array $exclude = []): array
     {
         $result = [];
 
         foreach ($array as $key => $value) {
-            if (false == in_array($key, $exclude)) {
+            if (!in_array($key, $exclude)) {
                 $key = str_replace($from, $to, $key);
             }
 
@@ -776,10 +775,8 @@ class Mongo extends Adapter
     public function count(string $collection, array $queries = [], int $max = 0): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
-        // todo $collection is not used?
-        $filters = [];
 
+        $filters = [];
         $options = [];
 
         // set max limit
@@ -878,8 +875,8 @@ class Mongo extends Adapter
      *
      * @param string $from
      * @param string $to
-     * @param array $array
-     * @return array
+     * @param array<string, mixed> $array
+     * @return array<string, mixed>
      */
     protected function replaceChars(string $from, string $to, array $array): array
     {
@@ -932,9 +929,10 @@ class Mongo extends Adapter
      *
      * @param array<Query> $queries
      *
-     * @return array
+     * @return array<string, mixed>
+     * @throws Exception
      */
-    protected function buildFilters($queries): array
+    protected function buildFilters(array $queries): array
     {
         $filters = [];
 
@@ -1290,7 +1288,7 @@ class Mongo extends Adapter
      * Flattens the array.
      *
      * @param mixed $list
-     * @return array
+     * @return array<mixed>
      */
     protected function flattenArray(mixed $list): array
     {
@@ -1299,16 +1297,20 @@ class Mongo extends Adapter
             return array($list);
         }
 
-        $new_array = [];
+        $newArray = [];
 
         foreach ($list as $value) {
-            $new_array = array_merge($new_array, $this->flattenArray($value));
+            $newArray = array_merge($newArray, $this->flattenArray($value));
         }
 
-        return $new_array;
+        return $newArray;
     }
 
-    protected function removeNullKeys(array|Document $target): array
+    /**
+     * @param array<string, mixed>|Document $target
+     * @return array<string, mixed>|Document
+     */
+    protected function removeNullKeys(array|Document $target): array|Document
     {
         $target = is_array($target) ? $target : $target->getArrayCopy();
         $cleaned = [];

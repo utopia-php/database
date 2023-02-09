@@ -86,8 +86,7 @@ class QueryTest extends TestCase
         $this->assertEquals([], $query->getValues());
     }
 
-    public function testParse()
-    {
+    public function testParse(): void    {
         $query = Query::parse('equal("title", "Iron Man")');
 
         $this->assertEquals('equal', $query->getMethod());
@@ -164,8 +163,7 @@ class QueryTest extends TestCase
         $this->assertEquals([], $query->getValues());
     }
 
-    public function testParseV2()
-    {
+    public function testParseV2(): void    {
         $query = Query::parse('equal("attr", 1)');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("attr", $query->getAttribute());
@@ -344,8 +342,7 @@ class QueryTest extends TestCase
 
     /*
     Tests for aliases if we enable them:
-    public function testAlias()
-    {
+    public function testAlias(): void    {
         $query = Query::parse('eq(1)');
         $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
         $query = Query::parse('lt(1)');
@@ -359,8 +356,7 @@ class QueryTest extends TestCase
     }
     */
 
-    public function testParseComplex()
-    {
+    public function testParseComplex(): void    {
         $queries = [
             Query::parse('equal("One",[55.55,\'Works\',true])'),
             // Same query with random spaces
@@ -384,8 +380,7 @@ class QueryTest extends TestCase
         }
     }
 
-    public function testGetAttribute()
-    {
+    public function testGetAttribute(): void    {
         $query = Query::parse('equal("title", "Iron Man")');
 
         $this->assertIsArray($query->getValues());
@@ -394,15 +389,13 @@ class QueryTest extends TestCase
         $this->assertEquals('Iron Man', $query->getValues()[0]);
     }
 
-    public function testGetMethod()
-    {
+    public function testGetMethod(): void    {
         $query = Query::parse('equal("title", "Iron Man")');
 
         $this->assertEquals('equal', $query->getMethod());
     }
 
-    public function testisMethod()
-    {
+    public function testisMethod(): void    {
         $this->assertTrue(Query::isMethod('equal'));
         $this->assertTrue(Query::isMethod('notEqual'));
         $this->assertTrue(Query::isMethod('lessThan'));

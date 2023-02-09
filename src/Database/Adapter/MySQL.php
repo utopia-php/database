@@ -13,7 +13,7 @@ class MySQL extends MariaDB
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array<string> $attributes
      *
      * @return string
      * @throws Exception

@@ -20,8 +20,7 @@ class AuthorizationTest extends TestCase
     {
     }
 
-    public function testValues()
-    {
+    public function testValues(): void    {
         Authorization::setRole(Role::any()->toString());
 
         $document = new Document([
@@ -97,8 +96,7 @@ class AuthorizationTest extends TestCase
         }), true);
     }
 
-    public function testNestedSkips()
-    {
+    public function testNestedSkips(): void    {
         $this->assertEquals(true, Authorization::$status);
 
         Authorization::skip(function () {

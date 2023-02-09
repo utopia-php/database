@@ -23,8 +23,7 @@ class PermissionsTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testSingleMethodSingleValue()
-    {
+    public function testSingleMethodSingleValue(): void    {
         $object = new Permissions();
 
         $document = new Document([
@@ -92,8 +91,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodSingleValue()
-    {
+    public function testMultipleMethodSingleValue(): void    {
         $object = new Permissions();
 
         $document = new Document([
@@ -150,8 +148,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodMultipleValues()
-    {
+    public function testMultipleMethodMultipleValues(): void    {
         $object = new Permissions();
 
         $document = new Document([
@@ -186,8 +183,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testInvalidPermissions()
-    {
+    public function testInvalidPermissions(): void    {
         $object = new Permissions();
 
         $this->assertFalse($object->isValid(Permission::create(Role::any())));

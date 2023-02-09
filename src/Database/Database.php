@@ -96,19 +96,12 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
-
-    /**
-     * @var Adapter
-     */
     protected Adapter $adapter;
 
-    /**
-     * @var Cache
-     */
     protected Cache $cache;
 
     /**
-     * @var array
+     * @var array<string, bool>
      */
     protected array $primitives = [
         self::VAR_STRING => true,
@@ -119,7 +112,7 @@ class Database
 
     /**
      * List of Internal Ids
-     * @var array
+     * @var array<array<string, mixed>>
      */
     protected array $attributes = [
         [
@@ -168,7 +161,7 @@ class Database
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
-     * @var array
+     * @var array<string, mixed>
      */
     protected array $collection = [
         '$id' => self::METADATA,
@@ -210,17 +203,17 @@ class Database
     ];
 
     /**
-     * @var array
+     * @var array<string, array{encode: callable, decode: callable}>
      */
     protected static array $filters = [];
 
     /**
-     * @var array
+     * @var array<string, array{encode: callable, decode: callable}>
      */
     private array $instanceFilters = [];
 
     /**
-     * @var array
+     * @var array<string, mixed>
      */
     protected array $listeners = [
         '*' => [],
@@ -234,6 +227,7 @@ class Database
     /**
      * @param Adapter $adapter
      * @param Cache $cache
+     * @param array<string, array{encode: callable, decode: callable}> $filters
      */
     public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
@@ -247,7 +241,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function ($value) {
+            function (mixed $value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
                 if (!is_array($value) && !$value instanceof \stdClass) {
@@ -259,8 +253,9 @@ class Database
             /**
              * @param mixed $value
              * @return mixed
+             * @throws Exception
              */
-            function ($value) {
+            function (mixed $value) {
                 if (!is_string($value)) {
                     return $value;
                 }
@@ -486,7 +481,7 @@ class Database
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      */
     public function list(): array
     {
@@ -517,8 +512,8 @@ class Database
      * Create Collection
      *
      * @param string $id
-     * @param array<Document> $attributes (optional)
-     * @param array<Document> $indexes (optional)
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      *
      * @return Document
      */
@@ -601,7 +596,7 @@ class Database
      * @param int $offset
      * @param int $limit
      *
-     * @return array
+     * @return array<Document>
      * @throws Exception
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
@@ -651,12 +646,15 @@ class Database
      * @param bool $signed
      * @param bool $array
      * @param string|null $format optional validation format of attribute
-     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
-     * @param array $filters
+     * @param array<string, mixed> $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param array<string> $filters
      *
      * @return bool
+     * @throws AuthorizationException
      * @throws DuplicateException
      * @throws LimitException
+     * @throws StructureException
+     * @throws Throwable
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -757,21 +755,14 @@ class Database
      *
      * @param string $type Type of the attribute
      *
-     * @return array
+     * @return array<string>
      */
     protected function getRequiredFilters(string $type): array
     {
-        switch ($type) {
-            case self::VAR_STRING:
-            case self::VAR_INTEGER:
-            case self::VAR_FLOAT:
-            case self::VAR_BOOLEAN:
-                return [];
-            case self::VAR_DATETIME:
-                return ['datetime'];
-            default:
-                return [];
-        }
+        return match ($type) {
+            self::VAR_DATETIME => ['datetime'],
+            default => [],
+        };
     }
 
     /**
@@ -895,7 +886,7 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param array $formatOptions assoc array with custom options that can be passed for the format validation
+     * @param array<string, mixed> $formatOptions assoc array with custom options that can be passed for the format validation
      *
      * @return void
      */
@@ -911,9 +902,10 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param array $filters
+     * @param array<string> $filters
      *
      * @return void
+     * @throws Exception
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): void
     {
@@ -927,11 +919,12 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param mixed $default
      *
      * @return void
+     * @throws Exception
      */
-    public function updateAttributeDefault(string $collection, string $id, $default = null): void
+    public function updateAttributeDefault(string $collection, string $id, mixed $default = null): void
     {
         $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
             if ($attribute->getAttribute('required') === true) {
@@ -956,8 +949,8 @@ class Database
      *
      * To update attribute key (ID), use renameAttribute instead.
      * @param string|null $format
-     * @param array $formatOptions
-     * @param array $filters
+     * @param array<string, mixed> $formatOptions
+     * @param array<string> $filters
      * @return bool
      * @throws Exception
      */
@@ -1221,11 +1214,16 @@ class Database
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      *
      * @return bool
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws Throwable
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -1240,8 +1238,9 @@ class Database
             throw new Exception($validator->getDescription());
         }
 
-        // index IDs are case insensitive
+        // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
+
         /** @var array<Document> $indexes */
         foreach ($indexes as $index) {
             if (\strtolower($index->getId()) === \strtolower($id)) {
@@ -1440,10 +1439,12 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Document $document
      * @return Document
      *
-     * @throws Exception
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Throwable
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
@@ -1592,7 +1593,7 @@ class Database
 
     /**
      * @param string $collection
-     * @param array $queries
+     * @param array<Query> $queries
      * @return bool|Document
      * @throws Exception
      */
@@ -1649,7 +1650,7 @@ class Database
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -1683,7 +1684,7 @@ class Database
     }
 
     /**
-     * @return array Document
+     * @return array<Document>
      * @throws Exception
      */
     public function getInternalAttributes(): array
@@ -1855,7 +1856,7 @@ class Database
      * @return mixed
      * @throws Throwable
      */
-    protected function encodeAttribute(string $name, $value, Document $document)
+    protected function encodeAttribute(string $name, $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception("Filter: {$name} not found");
@@ -1886,7 +1887,7 @@ class Database
      *
      * @return mixed
      */
-    protected function decodeAttribute(string $name, $value, Document $document)
+    protected function decodeAttribute(string $name, $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new Exception('Filter not found');
@@ -1911,7 +1912,7 @@ class Database
      *
      * @return int
      */
-    public function getLimitForAttributes()
+    public function getLimitForAttributes(): int
     {
         // If negative, return 0
         // -1 ==> virtual columns count as total, so treat as buffer
@@ -1923,7 +1924,7 @@ class Database
      *
      * @return int
      */
-    public function getLimitForIndexes()
+    public function getLimitForIndexes(): int
     {
         return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
     }

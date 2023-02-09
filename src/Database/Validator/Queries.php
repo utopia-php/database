@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -14,8 +15,14 @@ class Queries extends Validator
 
     protected QueryValidator $validator;
 
+    /**
+     * @var array<Document>
+     */
     protected array $attributes = [];
 
+    /**
+     * @var array<Document>
+     */
     protected array $indexes = [];
     protected bool $strict;
 
@@ -23,10 +30,10 @@ class Queries extends Validator
      * Queries constructor
      *
      * @param QueryValidator $validator used to validate each query
-     * @param array<Document> $attributes allowed attributes to be queried
-     * @param array<Document> $indexes available for strict query matching
+     * @param array<Document>|null $attributes allowed attributes to be queried
+     * @param array<Document>|null $indexes available for strict query matching
      * @param bool $strict
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct(QueryValidator $validator, ?array $attributes, ?array $indexes, bool $strict = true)
     {
@@ -189,8 +196,8 @@ class Queries extends Validator
     /**
      * Check if indexed array $indexes matches $queries
      *
-     * @param array $indexes
-     * @param array $queries
+     * @param array<string> $indexes
+     * @param array<string> $queries
      *
      * @return bool
      */

@@ -10,7 +10,7 @@ class KeyTest extends TestCase
     /**
      * @var Key
      */
-    protected $object = null;
+    protected ?Key $object = null;
 
     public function setUp(): void
     {
@@ -21,8 +21,7 @@ class KeyTest extends TestCase
     {
     }
 
-    public function testValues()
-    {
+    public function testValues(): void    {
         // Must be strings
         $this->assertEquals(false, $this->object->isValid(false));
         $this->assertEquals(false, $this->object->isValid(null));

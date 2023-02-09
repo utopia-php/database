@@ -16,7 +16,7 @@ abstract class SQL extends Adapter
     /**
      * @var PDO
      */
-    protected $pdo;
+    protected PDO $pdo;
 
     /**
      * Constructor.
@@ -93,7 +93,7 @@ abstract class SQL extends Adapter
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      */
     public function list(): array
     {
@@ -122,8 +122,8 @@ abstract class SQL extends Adapter
         $stmt->bindValue(':_uid', $id);
         $stmt->execute();
 
-        /** @var array $document */
         $document = $stmt->fetch();
+
         if (empty($document)) {
             return new Document([]);
         }
@@ -299,8 +299,8 @@ abstract class SQL extends Adapter
         // but this number seems to vary, so we give a +500 byte buffer
         $total = 1500;
 
-        /** @var array $attributes */
         $attributes = $collection->getAttributes()['attributes'];
+
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
@@ -741,7 +741,7 @@ abstract class SQL extends Adapter
      * Get SQL condition for permissions
      *
      * @param string $collection
-     * @param array $roles
+     * @param array<string> $roles
      * @return string
      * @throws Exception
      */
@@ -785,7 +785,7 @@ abstract class SQL extends Adapter
      * Returns the current PDO object
      * @return PDO
      */
-    protected function getPDO()
+    protected function getPDO(): PDO
     {
         return $this->pdo;
     }
@@ -801,6 +801,8 @@ abstract class SQL extends Adapter
 
     /**
      * Returns default PDO configuration
+     *
+     * @return array<int, mixed>
      */
     public static function getPDOAttributes(): array
     {
@@ -825,11 +827,12 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param $stmt
+     * @param PDOStatement $stmt
      * @param Query $query
      * @return void
+     * @throws Exception
      */
-    public function bindConditionValue($stmt, Query $query)
+    public function bindConditionValue(PDOStatement $stmt, Query $query): void
     {
         /** @var PDOStatement $stmt */
         if ($query->getMethod() === Query::TYPE_SEARCH) {

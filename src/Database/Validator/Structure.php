@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Closure;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -16,12 +17,12 @@ class Structure extends Validator
     /**
      * @var Document
      */
-    protected $collection;
+    protected Document $collection;
 
     /**
-     * @var array
+     * @var array<array<string, mixed>>
      */
-    protected $attributes = [
+    protected array $attributes = [
         [
             '$id' => '$id',
             'type' => Database::VAR_STRING,
@@ -79,7 +80,7 @@ class Structure extends Validator
     ];
 
     /**
-     * @var array
+     * @var array<string, array{callback: callable, type: string}>
      */
     protected static array $formats = [];
 
@@ -100,7 +101,7 @@ class Structure extends Validator
     /**
      * Remove a Validator
      *
-     * @return array
+     * @return array<string, array{callback: callable, type: string}>
      */
     public static function getFormats(): array
     {
@@ -112,10 +113,10 @@ class Structure extends Validator
      * Stores a callback and required params to create Validator
      *
      * @param string $name
-     * @param \Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
+     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
      * @param string $type Primitive data type for validation
      */
-    public static function addFormat(string $name, \Closure $callback, string $type): void
+    public static function addFormat(string $name, Closure $callback, string $type): void
     {
         self::$formats[$name] = [
             'callback' => $callback,
@@ -145,7 +146,8 @@ class Structure extends Validator
      * @param string $name
      * @param string $type
      *
-     * @return array
+     * @return array{callback: callable, type: string}
+     * @throws Exception
      */
     public static function getFormat(string $name, string $type): array
     {

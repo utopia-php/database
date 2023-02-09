@@ -41,11 +41,19 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+
+    /**
+     * @var array<mixed>
+     */
     protected array $values = [];
 
 
     /**
      * Construct a new query object
+     *
+     * @param string $method
+     * @param string $attribute
+     * @param array<mixed> $values
      */
     public function __construct(string $method, string $attribute = '', array $values = [])
     {
@@ -54,28 +62,42 @@ class Query
         $this->values = $values;
     }
 
+    /**
+     * @return string
+     */
     public function getMethod(): string
     {
         return $this->method;
     }
 
+    /**
+     * @return string
+     */
     public function getAttribute(): string
     {
         return $this->attribute;
     }
 
+    /**
+     * @return array<mixed>
+     */
     public function getValues(): array
     {
         return $this->values;
     }
 
-    public function getValue($default = null)
+    /**
+     * @param mixed $default
+     * @return mixed
+     */
+    public function getValue(mixed $default = null): mixed
     {
         return $this->values[0] ?? $default;
     }
 
     /**
-     * Sets Method.
+     * Sets method
+     *
      * @param string $method
      * @return self
      */
@@ -87,7 +109,8 @@ class Query
     }
 
     /**
-     * Sets Attribute.
+     * Sets attribute
+     *
      * @param string $attribute
      * @return self
      */
@@ -99,8 +122,9 @@ class Query
     }
 
     /**
-     * Sets Values.
-     * @param array $values
+     * Sets values
+     *
+     * @param array<mixed> $values
      * @return self
      */
     public function setValues(array $values): self
@@ -111,11 +135,11 @@ class Query
     }
 
     /**
-     * Sets Value.
-     * @param $value
+     * Sets value
+     * @param mixed $value
      * @return self
      */
-    public function setValue($value): self
+    public function setValue(mixed $value): self
     {
         $this->values = [$value];
 
@@ -157,7 +181,7 @@ class Query
      *
      * @param string $filter
      * @return self
-     * @throws \Exception
+     * @throws Exception
      */
     public static function parse(string $filter): self
     {
@@ -175,7 +199,7 @@ class Query
 
         // Check for deprecated query syntax
         if (\str_contains($method, '.')) {
-            throw new \Exception("Invalid query method");
+            throw new Exception("Invalid query method");
         }
 
         $currentParam = ""; // We build param here before pushing when it's ended
@@ -357,7 +381,7 @@ class Query
         }
     }
 
-    protected static function isQuote(string $char)
+    protected static function isQuote(string $char): bool
     {
         if ($char === self::CHAR_SINGLE_QUOTE) {
             return true;
@@ -368,7 +392,7 @@ class Query
         return false;
     }
 
-    protected static function isSpecialChar(string $char)
+    protected static function isSpecialChar(string $char): bool
     {
         if ($char === static::CHAR_COMMA) {
             return true;
@@ -437,6 +461,10 @@ class Query
 
     /**
      * Helper method to create Query with equal method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
      */
     public static function equal(string $attribute, array $values): self
     {
@@ -445,46 +473,70 @@ class Query
 
     /**
      * Helper method to create Query with notEqual method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function notEqual(string $attribute, $value): self
+    public static function notEqual(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_NOTEQUAL, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with lessThan method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function lessThan(string $attribute, $value): self
+    public static function lessThan(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_LESSER, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with lessThanEqual method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function lessThanEqual(string $attribute, $value): self
+    public static function lessThanEqual(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_LESSEREQUAL, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with greaterThan method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function greaterThan(string $attribute, $value): self
+    public static function greaterThan(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_GREATER, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with greaterThanEqual method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function greaterThanEqual(string $attribute, $value): self
+    public static function greaterThanEqual(string $attribute, mixed$value): self
     {
         return new self(self::TYPE_GREATEREQUAL, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with contains method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
      */
     public static function contains(string $attribute, array $values): self
     {
@@ -493,6 +545,11 @@ class Query
 
     /**
      * Helper method to create Query with between method
+     *
+     * @param string $attribute
+     * @param mixed $start
+     * @param mixed $end
+     * @return Query
      */
     public static function between(string $attribute, mixed $start, mixed $end): self
     {
@@ -501,14 +558,21 @@ class Query
 
     /**
      * Helper method to create Query with search method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function search(string $attribute, $value): self
+    public static function search(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with orderDesc method
+     *
+     * @param string $attribute
+     * @return Query
      */
     public static function orderDesc(string $attribute): self
     {
@@ -517,6 +581,9 @@ class Query
 
     /**
      * Helper method to create Query with orderAsc method
+     *
+     * @param string $attribute
+     * @return Query
      */
     public static function orderAsc(string $attribute): self
     {
@@ -525,6 +592,9 @@ class Query
 
     /**
      * Helper method to create Query with limit method
+     *
+     * @param int $value
+     * @return Query
      */
     public static function limit(int $value): self
     {
@@ -533,6 +603,9 @@ class Query
 
     /**
      * Helper method to create Query with offset method
+     *
+     * @param int $value
+     * @return Query
      */
     public static function offset(int $value): self
     {
@@ -541,6 +614,9 @@ class Query
 
     /**
      * Helper method to create Query with cursorAfter method
+     *
+     * @param Document $value
+     * @return Query
      */
     public static function cursorAfter(Document $value): self
     {
@@ -549,17 +625,32 @@ class Query
 
     /**
      * Helper method to create Query with cursorBefore method
+     *
+     * @param Document $value
+     * @return Query
      */
     public static function cursorBefore(Document $value): self
     {
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
     }
 
+    /**
+     * Helper method to create Query with isNull method
+     *
+     * @param string $attribute
+     * @return Query
+     */
     public static function isNull(string $attribute): self
     {
         return new self(self::TYPE_IS_NULL, $attribute);
     }
 
+    /**
+     * Helper method to create Query with isNotNull method
+     *
+     * @param string $attribute
+     * @return Query
+     */
     public static function isNotNull(string $attribute): self
     {
         return new self(self::TYPE_IS_NOT_NULL, $attribute);
@@ -586,17 +677,18 @@ class Query
     }
 
     /**
-     * Iterates through $queries and returns an array with:
-     * - filters: array of filter queries
-     * - limit: int
-     * - offset: int
-     * - orderAttributes: array of attribute keys
-     * - orderTypes: array of Database::ORDER_ASC or Database::ORDER_DESC
-     * - cursor: Document
-     * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
+     * Iterates through queries are groups them by type
      *
-     * @param array $queries
-     * @return array
+     * @param array<Query> $queries
+     * @return array{
+     *     filters: array<Query>,
+     *     limit: int|null,
+     *     offset: int|null,
+     *     orderAttributes: array<string>,
+     *     orderTypes: array<string>,
+     *     cursor: Document|null,
+     *     cursorDirection: string|null
+     * }
      */
     public static function groupByType(array $queries): array
     {
@@ -677,6 +769,7 @@ class Query
      * @param array<string> $queries
      *
      * @return array<Query>
+     * @throws Exception
      */
     public static function parseQueries(array $queries): array
     {

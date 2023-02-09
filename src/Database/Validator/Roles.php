@@ -26,6 +26,9 @@ class Roles extends Validator
 
     protected string $message = 'Roles Error';
 
+    /**
+     * @var array<string>
+     */
     protected array $allowed;
 
     protected int $length;
@@ -108,7 +111,7 @@ class Roles extends Validator
      * Roles constructor.
      *
      * @param int $length maximum amount of role. 0 means unlimited.
-     * @param array $allowed allowed roles. Defaults to all available.
+     * @param array<string> $allowed allowed roles. Defaults to all available.
      */
     public function __construct(int $length = 0, array $allowed = self::ROLES)
     {

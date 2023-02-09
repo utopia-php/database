@@ -9,8 +9,7 @@ use Utopia\Database\Helpers\Role;
 
 class PermissionTest extends TestCase
 {
-    public function testOutputFromString()
-    {
+    public function testOutputFromString(): void    {
         $permission = Permission::parse('read("any")');
         $this->assertEquals('read', $permission->getPermission());
         $this->assertEquals('any', $permission->getRole());
@@ -140,8 +139,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('unverified', $permission->getDimension());
     }
 
-    public function testInputFromParameters()
-    {
+    public function testInputFromParameters(): void    {
         $permission = new Permission('read', 'any');
         $this->assertEquals('read("any")', $permission->toString());
 
@@ -191,8 +189,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('delete("team:123/admin")', $permission->toString());
     }
 
-    public function testInputFromRoles()
-    {
+    public function testInputFromRoles(): void    {
         $permission = Permission::read(Role::any());
         $this->assertEquals('read("any")', $permission);
 

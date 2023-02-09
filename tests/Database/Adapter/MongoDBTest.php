@@ -13,8 +13,6 @@ use Utopia\Tests\Base;
 
 class MongoDBTest extends Base
 {
-    public static $pool = null;
-
     public static ?Database $database = null;
 
 
@@ -64,8 +62,7 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
-    public function testCreateExistsDelete()
-    {
+    public function testCreateExistsDelete(): void    {
         // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
         $this->assertNotNull(static::getDatabase()->create());
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
@@ -73,23 +70,19 @@ class MongoDBTest extends Base
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
-    public function testRenameAttribute()
-    {
+    public function testRenameAttribute(): void    {
         $this->assertTrue(true);
     }
 
-    public function testRenameAttributeExisting()
-    {
+    public function testRenameAttributeExisting(): void    {
         $this->assertTrue(true);
     }
 
-    public function testUpdateAttributeStructure()
-    {
+    public function testUpdateAttributeStructure(): void    {
         $this->assertTrue(true);
     }
 
-    public function testKeywords()
-    {
+    public function testKeywords(): void    {
         $this->assertTrue(true);
     }
 }

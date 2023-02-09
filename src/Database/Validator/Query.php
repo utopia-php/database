@@ -13,12 +13,12 @@ class Query extends Validator
     /**
      * @var string
      */
-    protected $message = 'Invalid query';
+    protected string $message = 'Invalid query';
 
     /**
-     * @var array
+     * @var array<string, array<string, mixed>>
      */
-    protected $schema = [];
+    protected array $schema = [];
 
     protected int $maxLimit;
     protected int $maxOffset;
@@ -76,7 +76,7 @@ class Query extends Validator
         return $this->message;
     }
 
-    protected function isValidLimit($limit): bool
+    protected function isValidLimit(int $limit): bool
     {
         $validator = new Range(0, $this->maxLimit);
         if ($validator->isValid($limit)) {
@@ -87,7 +87,7 @@ class Query extends Validator
         return false;
     }
 
-    protected function isValidOffset($offset): bool
+    protected function isValidOffset(int $offset): bool
     {
         $validator = new Range(0, $this->maxOffset);
         if ($validator->isValid($offset)) {
@@ -98,7 +98,7 @@ class Query extends Validator
         return false;
     }
 
-    protected function isValidCursor($cursor): bool
+    protected function isValidCursor(?Document $cursor): bool
     {
         if ($cursor === null) {
             $this->message = 'Cursor must not be null';
@@ -107,7 +107,7 @@ class Query extends Validator
         return true;
     }
 
-    protected function isValidAttribute($attribute): bool
+    protected function isValidAttribute(string $attribute): bool
     {
         // Search for attribute in schema
         if (!isset($this->schema[$attribute])) {
@@ -118,6 +118,11 @@ class Query extends Validator
         return true;
     }
 
+    /**
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return bool
+     */
     protected function isValidAttributeAndValues(string $attribute, array $values): bool
     {
         if (!$this->isValidAttribute($attribute)) {
@@ -156,6 +161,11 @@ class Query extends Validator
         return true;
     }
 
+    /**
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return bool
+     */
     protected function isValidContains(string $attribute, array $values): bool
     {
         if (!$this->isValidAttributeAndValues($attribute, $values)) {

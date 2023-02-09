@@ -224,7 +224,7 @@ $cli
     });
 
 
-function createSchema(Database $database)
+function createSchema(Database $database): void
 {
     if ($database->exists($database->getDefaultDatabase())) {
         $database->delete($database->getDefaultDatabase());
@@ -239,7 +239,7 @@ function createSchema(Database $database)
     $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
 }
 
-function addArticle($database, Generator $faker)
+function addArticle($database, Generator $faker): void
 {
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access

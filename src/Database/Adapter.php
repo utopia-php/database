@@ -17,7 +17,7 @@ abstract class Adapter
     protected string $defaultDatabase = '';
 
     /**
-     * @var array
+     * @var array<string, mixed>
      */
     protected array $debug = [];
 
@@ -35,7 +35,7 @@ abstract class Adapter
     }
 
     /**
-     * @return array
+     * @return array<string, mixed>
      */
     public function getDebug(): array
     {
@@ -162,7 +162,7 @@ abstract class Adapter
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      */
     abstract public function list(): array;
 
@@ -258,9 +258,9 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      *
      * @return bool
      */
@@ -325,9 +325,9 @@ abstract class Adapter
      * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      *
      * @return array<Document>
@@ -344,7 +344,7 @@ abstract class Adapter
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0);
+    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int;
 
     /**
      * Count Documents

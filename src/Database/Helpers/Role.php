@@ -112,7 +112,7 @@ class Role
      * @param string $status
      * @return Role
      */
-    public static function user(string $identifier, string $status = '')
+    public static function user(string $identifier, string $status = ''): Role
     {
         return new self('user', $identifier, $status);
     }

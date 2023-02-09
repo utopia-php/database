@@ -11,7 +11,7 @@ class Key extends Validator
     /**
      * @var string
      */
-    protected $message = 'Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
+    protected string $message = 'Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
 
     /**
      * Get Description.

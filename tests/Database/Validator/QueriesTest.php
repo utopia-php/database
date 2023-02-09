@@ -12,8 +12,14 @@ use Utopia\Database\Validator\Queries;
 
 class QueriesTest extends TestCase
 {
+    /**
+     * @var array<string, mixed>
+     */
     protected array $collection = [];
 
+    /**
+     * @var array<string>
+     */
     protected array $queries = [];
 
     protected ?Query $queryValidator = null;
@@ -157,8 +163,7 @@ class QueriesTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testQueries()
-    {
+    public function testQueries(): void    {
         // test for SUCCESS
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
@@ -197,8 +202,7 @@ class QueriesTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testLooseOrderQueries()
-    {
+    public function testLooseOrderQueries(): void    {
         $validator = new Queries(
             $this->queryValidator,
             [
@@ -295,8 +299,7 @@ class QueriesTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testIsStrict()
-    {
+    public function testIsStrict(): void    {
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
         $this->assertEquals(true, $validator->isStrict());

@@ -252,9 +252,9 @@ class SQLite extends MariaDB
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -621,7 +621,7 @@ class SQLite extends MariaDB
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array<string> $attributes
      * @return string
      * @throws Exception
      */
@@ -666,7 +666,7 @@ class SQLite extends MariaDB
      * Get SQL condition for permissions
      *
      * @param string $collection
-     * @param array $roles
+     * @param array<string> $roles
      * @return string
      * @throws Exception
      */

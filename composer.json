@@ -14,7 +14,7 @@
     "scripts": {
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",
-        "check": "./vendor/bin/phpstan analyse --level 5 src tests --memory-limit 512M"
+        "check": "./vendor/bin/phpstan analyse --level 6 src tests --memory-limit 512M"
     },
     "require": {
         "ext-pdo": "*",

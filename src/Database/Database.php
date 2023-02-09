@@ -346,7 +346,7 @@ class Database
      * Trigger callback for events
      *
      * @param string $event
-     * @param array|null $args
+     * @param mixed $args
      * @return void
      */
     protected function trigger(string $event, mixed $args = null): void
@@ -447,7 +447,7 @@ class Database
 
         /**
          * Create array of attribute documents
-         * @var Document[] $attributes
+         * @var array<Document> $attributes
          */
         $attributes = array_map(function ($attribute) {
             return new Document([
@@ -517,8 +517,8 @@ class Database
      * Create Collection
      *
      * @param string $id
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes (optional)
+     * @param array<Document> $indexes (optional)
      *
      * @return Document
      */
@@ -647,7 +647,7 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
-     * @param null $default
+     * @param mixed $default
      * @param bool $signed
      * @param bool $array
      * @param string|null $format optional validation format of attribute
@@ -658,13 +658,13 @@ class Database
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
-        /** @var Document[] $attributes */
+        /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
@@ -1242,7 +1242,7 @@ class Database
 
         // index IDs are case insensitive
         $indexes = $collection->getAttribute('indexes', []);
-        /** @var Document[] $indexes */
+        /** @var array<Document> $indexes */
         foreach ($indexes as $index) {
             if (\strtolower($index->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Index already exists');
@@ -1542,9 +1542,9 @@ class Database
      * Find Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      *
-     * @return Document[]
+     * @return array<Document>
      * @throws Exception
      */
     public function find(string $collection, array $queries = []): array
@@ -1612,7 +1612,7 @@ class Database
      * Count the number of documents. Pass $max=0 for unlimited count
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int
@@ -1643,7 +1643,7 @@ class Database
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int|float
@@ -1720,7 +1720,7 @@ class Database
                 continue;
             }
 
-            // assign default only if no no value provided
+            // assign default only if no value provided
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
             if (is_null($value) && !is_null($default)) {
@@ -1931,7 +1931,7 @@ class Database
     /**
      * Get list of keywords that cannot be used
      *
-     * @return string[]
+     * @return array<string>
      */
     public function getKeywords(): array
     {
@@ -1950,8 +1950,8 @@ class Database
 
     /**
      * @param Document $collection
-     * @param Query[] $queries
-     * @return Query[]
+     * @param array<Query> $queries
+     * @return array<Query>
      * @throws Exception
      */
     public static function convertQueries(Document $collection, array $queries): array

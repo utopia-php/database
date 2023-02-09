@@ -27,7 +27,7 @@ class Query extends Validator
     /**
      * Query constructor
      *
-     * @param Document[] $attributes
+     * @param array<Document> $attributes
      * @param int $maxLimit
      * @param int $maxOffset
      * @param int $maxValuesCount

@@ -99,9 +99,9 @@ class QueriesTest extends TestCase
 
         array_push($this->queries, $query1, $query2);
 
-        // Constructor expects Document[] $indexes
+        // Constructor expects array<Document> $indexes
         // Object property declaration cannot initialize a Document object
-        // Add Document[] $indexes separately
+        // Add array<Document> $indexes separately
         $index1 = new Document([
             '$id' => ID::custom('testindex'),
             'type' => 'key',

@@ -568,10 +568,10 @@ class Query
     /**
      * Filters $queries for $types
      *
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param string ...$types
      *
-     * @return Query[]
+     * @return array<Query>
      */
     public static function getByType(array $queries, string ...$types): array
     {
@@ -674,9 +674,9 @@ class Query
     /**
      * Iterate over $queries attempting to parse each
      *
-     * @param string[] $queries
+     * @param array<string> $queries
      *
-     * @return Query[]
+     * @return array<Query>
      */
     public static function parseQueries(array $queries): array
     {

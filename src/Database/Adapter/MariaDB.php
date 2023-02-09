@@ -51,8 +51,8 @@ class MariaDB extends SQL
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -95,6 +95,10 @@ class MariaDB extends SQL
             $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
         }
 
+        /**
+         * @var array<string> $attributes
+         * @var array<string> $indexes
+         */
         try {
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
@@ -654,7 +658,7 @@ class MariaDB extends SQL
      * Find Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -662,7 +666,7 @@ class MariaDB extends SQL
      * @param array $cursor
      * @param string $cursorDirection
      *
-     * @return Document[]
+     * @return array<Document>
      * @throws Exception
      * @throws PDOException
      */
@@ -820,7 +824,7 @@ class MariaDB extends SQL
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      * @return int
      * @throws Exception
@@ -873,7 +877,7 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      * @return int|float
      * @throws Exception

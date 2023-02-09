@@ -146,8 +146,8 @@ class Mongo extends Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      * @throws Exception
      */
@@ -538,7 +538,7 @@ class Mongo extends Adapter
      * @param array $cursor
      * @param string $cursorDirection
      *
-     * @return Document[]
+     * @return array<Document>
      * @throws Exception
      */
     public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
@@ -641,7 +641,7 @@ class Mongo extends Adapter
         $filters = $this->timeFilter($filters);
 
         /**
-         * @var Document[]
+         * @var array<Document>
          */
         $found = [];
         $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
@@ -732,9 +732,7 @@ class Mongo extends Adapter
      */
     private function toMongoDatetime(string $dt): UTCDateTime
     {
-        $dt = new \DateTime($dt);
-
-        return new UTCDateTime($dt->getTimestamp() . $dt->format('v'));
+        return new UTCDateTime(new \DateTime($dt));
     }
 
     /**
@@ -769,7 +767,7 @@ class Mongo extends Adapter
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int
@@ -806,7 +804,7 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int|float
@@ -932,7 +930,7 @@ class Mongo extends Adapter
     /**
      * Build mongo filters from array of $queries
      *
-     * @param Query[] $queries
+     * @param array<Query> $queries
      *
      * @return array
      */

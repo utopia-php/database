@@ -179,8 +179,8 @@ abstract class Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes (optional)
+     * @param array<Document> $indexes (optional)
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
@@ -322,7 +322,7 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -330,7 +330,7 @@ abstract class Adapter
      * @param array $cursor
      * @param string $cursorDirection
      *
-     * @return Document[]
+     * @return array<Document>
      */
     abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
@@ -339,7 +339,7 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int|float
@@ -350,7 +350,7 @@ abstract class Adapter
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int
@@ -486,7 +486,7 @@ abstract class Adapter
     /**
      * Get list of keywords that cannot be used
      *
-     * @return string[]
+     * @return array<string>
      */
     abstract public function getKeywords(): array;
 

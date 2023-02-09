@@ -87,8 +87,8 @@ class SQLite extends MariaDB
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -111,6 +111,9 @@ class SQLite extends MariaDB
             $attributes[$key] = "`{$attrId}` {$attrType}, ";
         }
 
+        /**
+         * @var array<string> $attributes
+         */
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
                     `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -682,7 +685,7 @@ class SQLite extends MariaDB
      * Get list of keywords that cannot be used
      *  Refference: https://www.sqlite.org/lang_keywords.html
      *
-     * @return string[]
+     * @return array<string>
      */
     public function getKeywords(): array
     {

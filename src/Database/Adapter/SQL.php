@@ -371,7 +371,7 @@ abstract class SQL extends Adapter
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
      *
-     * @return string[]
+     * @return array<string>
      */
     public function getKeywords(): array
     {

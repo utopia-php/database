@@ -59,8 +59,8 @@ class Postgres extends SQL
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
@@ -82,6 +82,9 @@ class Postgres extends SQL
             $attribute = "\"{$attrId}\" {$attrType}, ";
         }
 
+        /**
+         * @var array<string> $attributes
+         */
         $stmt = $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
@@ -875,7 +878,7 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int|float

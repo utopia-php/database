@@ -11,12 +11,12 @@ use Utopia\Database\Query;
 class OrderValidatorTest extends TestCase
 {
     /**
-     * @var Document[]
+     * @var array<Document>
      */
     protected $schema;
 
     /**
-     * @var Document[]
+     * @var array<Document>
      */
     protected $indexesSchema;
 
@@ -115,12 +115,12 @@ class OrderValidatorTest extends TestCase
 
     public function setUp(): void
     {
-        // Query validator expects Document[]
+        // Query validator expects array<Document>
         foreach ($this->attributes as $attribute) {
             $this->schema[] = new Document($attribute);
         }
 
-        // Query validator expects Document[]
+        // Query validator expects array<Document>
         foreach ($this->indexes as $index) {
             $this->indexesSchema[] = new Document($index);
         }

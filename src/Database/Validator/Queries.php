@@ -23,8 +23,8 @@ class Queries extends Validator
      * Queries constructor
      *
      * @param QueryValidator $validator used to validate each query
-     * @param Document[] $attributes allowed attributes to be queried
-     * @param Document[] $indexes available for strict query matching
+     * @param array<Document> $attributes allowed attributes to be queried
+     * @param array<Document> $indexes available for strict query matching
      * @param bool $strict
      * @throws \Exception
      */
@@ -108,9 +108,9 @@ class Queries extends Validator
         }
 
         $grouped = Query::groupByType($queries);
-        /** @var Query[] $filters */
+        /** @var array<Query> $filters */
         $filters = $grouped['filters'];
-        /** @var string[] $orderAttributes */
+        /** @var array<string> $orderAttributes */
         $orderAttributes = $grouped['orderAttributes'];
 
         // Check filter queries for exact index match

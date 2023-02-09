@@ -32,8 +32,8 @@ class OrderAttributes extends Validator
     /**
      * Expression constructor
      *
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @param bool $strict
      */
     public function __construct($attributes, $indexes, $strict = true)
@@ -102,7 +102,7 @@ class OrderAttributes extends Validator
      *
      * Returns true if query typed according to schema.
      *
-     * @param string[] $attributes
+     * @param array<string> $attributes
      *
      * @return bool
      */

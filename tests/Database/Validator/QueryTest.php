@@ -11,7 +11,7 @@ use Utopia\Database\Query as DatabaseQuery;
 class QueryTest extends TestCase
 {
     /**
-     * @var Document[]
+     * @var array<Document>
      */
     protected $schema;
 
@@ -93,7 +93,7 @@ class QueryTest extends TestCase
 
     public function setUp(): void
     {
-        // Query validator expects Document[]
+        // Query validator expects array<Document>
         foreach ($this->attributes as $attribute) {
             $this->schema[] = new Document($attribute);
         }

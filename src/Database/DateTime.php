@@ -35,10 +35,18 @@ class DateTime
      * @param \DateTime $date
      * @param int $seconds
      * @return string
+     * @throws Exception
      */
     public static function addSeconds(\DateTime $date, int $seconds): string
     {
-        $date->add(\DateInterval::createFromDateString($seconds . ' seconds'));
+        $interval  = \DateInterval::createFromDateString($seconds . ' seconds');
+
+        if (!$interval) {
+            throw new Exception('Invalid interval');
+        }
+
+        $date->add($interval);
+
         return self::format($date);
     }
 

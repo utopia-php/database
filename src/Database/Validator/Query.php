@@ -56,7 +56,7 @@ class Query extends Validator
         ];
 
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key')] = $attribute->getArrayCopy();
+            $this->schema[(string)$attribute->getAttribute('key')] = $attribute->getArrayCopy();
         }
 
         $this->maxLimit = $maxLimit;

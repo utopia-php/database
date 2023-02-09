@@ -1963,7 +1963,9 @@ abstract class Base extends TestCase
             Query::offset(2),
             Query::orderAsc('name')
         ]);
-        $this->assertEquals('Frozen', $document['name']);
+
+        $this->assertTrue($document instanceof Document);
+        $this->assertEquals('Frozen', $document->getAttribute('name'));
 
         $document = static::getDatabase()->findOne('movies', [
             Query::offset(10)
@@ -2824,7 +2826,8 @@ abstract class Base extends TestCase
         $this->assertCount(1, $colors->getAttribute('indexes'));
 
         // Document should be there if adapter migrated properly
-        $document = $database->findOne('colors', []);
+        $document = $database->findOne('colors');
+        $this->assertTrue($document instanceof Document);
         $this->assertEquals('black', $document->getAttribute('verbose'));
         $this->assertEquals('#000000', $document->getAttribute('hex'));
         $this->assertEquals(null, $document->getAttribute('name'));

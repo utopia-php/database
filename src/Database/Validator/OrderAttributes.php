@@ -15,12 +15,12 @@ class OrderAttributes extends Validator
     protected string $message = 'Invalid order attribute';
 
     /**
-     * @var array<string, mixed>
+     * @var array<array<string, mixed>>
      */
     protected array $schema = [];
 
     /**
-     * @var array<string, mixed>
+     * @var array<array<string, mixed>>
      */
     protected array $indexes = [];
 

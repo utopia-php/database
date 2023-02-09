@@ -820,10 +820,21 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @return string
+     * @throws Exception
      */
     protected function getSQLPlaceholder(Query $query): string
     {
-        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+        $encoded = \json_encode([
+            $query->getAttribute(),
+            $query->getMethod(),
+            $query->getValues()
+        ]);
+
+        if ($encoded === false) {
+            throw new Exception('Failed to encode query');
+        }
+
+        return \md5($encoded);
     }
 
     /**

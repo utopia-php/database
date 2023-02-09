@@ -13,7 +13,7 @@ class QueryTest extends TestCase
     /**
      * @var array<Document>
      */
-    protected array|Document $schema;
+    protected array $schema;
 
     /**
      * @var array<array<string, mixed>>

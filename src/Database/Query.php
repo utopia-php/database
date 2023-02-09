@@ -191,6 +191,11 @@ class Query
 
         // Separate method from filter
         $paramsStart = mb_strpos($filter, static::CHAR_PARENTHESES_START);
+
+        if ($paramsStart === false) {
+            throw new Exception("Invalid query");
+        }
+
         $method = mb_substr($filter, 0, $paramsStart);
 
         // Separate params from filter

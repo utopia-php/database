@@ -13,12 +13,12 @@ class OrderValidatorTest extends TestCase
     /**
      * @var array<Document>
      */
-    protected array|Document $schema;
+    protected array $schema;
 
     /**
      * @var array<Document>
      */
-    protected array|Document $indexesSchema;
+    protected array $indexesSchema;
 
     /**
      * @var array<array<string, mixed>>
@@ -113,6 +113,9 @@ class OrderValidatorTest extends TestCase
         ],
     ];
 
+    /**
+     * @throws \Exception
+     */
     public function setUp(): void
     {
         // Query validator expects array<Document>

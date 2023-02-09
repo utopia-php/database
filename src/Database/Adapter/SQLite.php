@@ -100,6 +100,9 @@ class SQLite extends MariaDB
 
         $this->getPDO()->beginTransaction();
 
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
@@ -108,12 +111,9 @@ class SQLite extends MariaDB
                 $attrType = 'LONGTEXT';
             }
 
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
+            $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
-        /**
-         * @var array<string> $attributes
-         */
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
                     `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +121,7 @@ class SQLite extends MariaDB
                     `_createdAt` datetime(3) DEFAULT NULL,
                     `_updatedAt` datetime(3) DEFAULT NULL,
                     `_permissions` MEDIUMTEXT DEFAULT NULL".((!empty($attributes)) ? ',' : '')."
-                    " . substr(\implode(' ', $attributes), 0, -2) . "
+                    " . substr(\implode(' ', $attributeStrings), 0, -2) . "
                 )")
             ->execute();
 

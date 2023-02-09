@@ -63,6 +63,12 @@ class MariaDB extends SQL
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+
+        /** @var array<string> $indexStrings */
+        $indexStrings = [];
+
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
@@ -71,7 +77,7 @@ class MariaDB extends SQL
                 $attrType = 'LONGTEXT';
             }
 
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
+            $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
         foreach ($indexes as $key => $index) {
@@ -92,13 +98,9 @@ class MariaDB extends SQL
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
             }
 
-            $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+            $indexStrings[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
         }
 
-        /**
-         * @var array<string> $attributes
-         * @var array<string> $indexes
-         */
         try {
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
@@ -107,9 +109,9 @@ class MariaDB extends SQL
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributes) . "
+                        " . \implode(' ', $attributeStrings) . "
                         PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexes) . "
+                        " . \implode(' ', $indexStrings) . "
                         UNIQUE KEY `_uid` (`_uid`),
                         KEY `_created_at` (`_createdAt`),
                         KEY `_updated_at` (`_updatedAt`)

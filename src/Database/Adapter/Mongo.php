@@ -92,10 +92,11 @@ class Mongo extends Adapter
             $collection = $this->getNamespace() . "_" . $collection;
             $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
             foreach ($list as $obj) {
-                if (\is_object($obj)) {
-                    if ($obj->name == $collection) {
-                        return true;
-                    }
+                if (\is_object($obj)
+                    && isset($obj->name)
+                    && $obj->name === $collection
+                ) {
+                    return true;
                 }
             }
 
@@ -1308,11 +1309,11 @@ class Mongo extends Adapter
 
     /**
      * @param array<string, mixed>|Document $target
-     * @return array<string, mixed>|Document
+     * @return array<string, mixed>
      */
-    protected function removeNullKeys(array|Document $target): array|Document
+    protected function removeNullKeys(array|Document $target): array
     {
-        $target = is_array($target) ? $target : $target->getArrayCopy();
+        $target = \is_array($target) ? $target : $target->getArrayCopy();
         $cleaned = [];
 
         foreach ($target as $key => $value) {

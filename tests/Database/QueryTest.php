@@ -161,6 +161,18 @@ class QueryTest extends TestCase
         $this->assertEquals('isNotNull', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
+
+        $query = Query::parse('startsWith("director", "Quentin")');
+
+        $this->assertEquals('startsWith', $query->getMethod());
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals(['Quentin'], $query->getValues());
+
+        $query = Query::parse('endsWith("director", "Tarantino")');
+
+        $this->assertEquals('endsWith', $query->getMethod());
+        $this->assertEquals('director', $query->getAttribute());
+        $this->assertEquals(['Tarantino'], $query->getValues());
     }
 
     public function testParseV2(): void    {

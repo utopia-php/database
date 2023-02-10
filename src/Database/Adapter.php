@@ -59,9 +59,9 @@ abstract class Adapter
      *
      * @param string $namespace
      *
+     * @return bool
      * @throws Exception
      *
-     * @return bool
      */
     public function setNamespace(string $namespace): bool
     {
@@ -79,9 +79,9 @@ abstract class Adapter
      *
      * Get namespace of current set scope
      *
+     * @return string
      * @throws Exception
      *
-     * @return string
      */
     public function getNamespace(): string
     {
@@ -119,9 +119,9 @@ abstract class Adapter
      *
      * Get Database from current scope
      *
+     * @return string
      * @throws Exception
      *
-     * @return string
      */
     public function getDefaultDatabase(): string
     {
@@ -391,6 +391,7 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForSchemas(): bool;
+
     /**
      * Is index supported?
      *
@@ -503,6 +504,33 @@ abstract class Adapter
 
         if (\is_null($value)) {
             throw new Exception('Failed to filter key');
+        }
+
+        return $value;
+    }
+
+    public function escapeWildcards(string $value): string
+    {
+        $wildcards = [
+            '%',
+            '_',
+            '[',
+            ']',
+            '^',
+            '-',
+            '.',
+            '*',
+            '+',
+            '?',
+            '(',
+            ')',
+            '{',
+            '}',
+            '|'
+        ];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
         }
 
         return $value;

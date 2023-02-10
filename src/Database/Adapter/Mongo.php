@@ -34,6 +34,7 @@ class Mongo extends Adapter
         '$or',
         '$and',
         '$match',
+        '$regex',
     ];
 
     protected Client $client;
@@ -937,7 +938,7 @@ class Mongo extends Adapter
     {
         $filters = [];
 
-        foreach ($queries as $i => $query) {
+        foreach ($queries as $query) {
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
@@ -957,26 +958,28 @@ class Mongo extends Adapter
                 case Query::TYPE_IS_NULL:
                 case Query::TYPE_IS_NOT_NULL:
                     $value = null;
-
                     break;
                 default:
-                    $value = count($query->getValues()) > 1
-                        ? $query->getValues()
-                        : $query->getValues()[0];
-
+                    $value = $this->getQueryValue(
+                        $query->getMethod(),
+                        count($query->getValues()) > 1
+                            ? $query->getValues()
+                            : $query->getValues()[0]
+                    );
                     break;
             }
 
-            if ($query->getMethod() === Query::TYPE_BETWEEN) {
+            if ($operator == '$eq' && \is_array($value)) {
+                $filters[$attribute]['$in'] = $value;
+            } else if ($operator == '$ne' && \is_array($value)) {
+                $filters[$attribute]['$nin'] = $value;
+            } else if($operator == '$in') {
+                $filters[$attribute]['$in'] = $query->getValues();
+            } else if ($operator == '$search') {
+                $filters['$text'][$operator] = $value;
+            }  else if ($operator === Query::TYPE_BETWEEN) {
                 $filters[$attribute]['$lte'] = $value[1];
                 $filters[$attribute]['$gte'] = $value[0];
-            } elseif (is_array($value) && $operator === '$eq') {
-                $filters[$attribute]['$in'] = $value;
-            } elseif ($operator === '$in') {
-                $filters[$attribute]['$in'] = $query->getValues();
-            } elseif ($operator === '$search') {
-                // only one fulltext index per mongo collection, so attribute not necessary
-                $filters['$text'][$operator] = $value;
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -997,25 +1000,18 @@ class Mongo extends Adapter
         switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '$eq';
-
             case Query::TYPE_NOTEQUAL:
                 return '$ne';
-
             case Query::TYPE_LESSER:
                 return '$lt';
-
             case Query::TYPE_LESSEREQUAL:
                 return '$lte';
-
             case Query::TYPE_GREATER:
                 return '$gt';
-
             case Query::TYPE_GREATEREQUAL:
                 return '$gte';
-
             case Query::TYPE_CONTAINS:
                 return '$in';
-
             case Query::TYPE_SEARCH:
                 return '$search';
 
@@ -1024,12 +1020,30 @@ class Mongo extends Adapter
 
             case Query::TYPE_IS_NULL:
                 return '$eq';
-
             case Query::TYPE_IS_NOT_NULL:
                 return '$ne';
+            case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_ENDS_WITH:
+                return '$regex';
+
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }
+    }
+
+    protected function getQueryValue(string $method, mixed $value): mixed
+    {
+        switch ($method) {
+            case Query::TYPE_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return $value.'.*';
+            case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return '.*'.$value;
+            default:
+                return $value;
+        }
+
     }
 
     /**

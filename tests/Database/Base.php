@@ -4,6 +4,7 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -2034,6 +2035,45 @@ abstract class Base extends TestCase
     {
         $documents = static::getDatabase()->find('movies', [
             Query::isNotNull('nullable'),
+        ]);
+
+        $this->assertEquals(1, count($documents));
+    }
+
+    public function testFindStartsWith()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::startsWith('name', 'Work'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+
+        if ($this->getDatabase()->getAdapter() instanceof SQL) {
+            $documents = static::getDatabase()->find('movies', [
+                Query::startsWith('name', '%ork'),
+            ]);
+        } else {
+            $documents = static::getDatabase()->find('movies', [
+                Query::startsWith('name', '.*ork'),
+            ]);
+        }
+
+        $this->assertEquals(0, count($documents));
+    }
+
+    public function testFindStartsWithWords()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::startsWith('name', 'Work in Progress'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+    }
+
+    public function testFindEndsWith()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::endsWith('name', 'Marvel'),
         ]);
 
         $this->assertEquals(1, count($documents));

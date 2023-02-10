@@ -677,6 +677,23 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * @param PDOStatement $stmt
+     * @param Query $query
+     * @return void
+     */
+    protected function bindConditionValue(PDOStatement $stmt, Query $query): void
+    {
+        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod === Query::TYPE_SELECT) {
+            return;
+        }
+        foreach ($query->getValues() as $key => $value) {
+            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+            $value = $this->getSQLValue($query->getMethod(), $value);
+            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+        }
+    }
+
+    /**
      * Get SQL Operator
      *
      * @param string $method
@@ -688,30 +705,51 @@ abstract class SQL extends Adapter
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
-
             case Query::TYPE_NOTEQUAL:
                 return '!=';
-
             case Query::TYPE_LESSER:
                 return '<';
-
             case Query::TYPE_LESSEREQUAL:
                 return '<=';
-
             case Query::TYPE_GREATER:
                 return '>';
-
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
-
             case Query::TYPE_IS_NULL:
                 return 'IS NULL';
-
             case Query::TYPE_IS_NOT_NULL:
                 return 'IS NOT NULL';
-
+            case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_ENDS_WITH:
+                return 'LIKE';
             default:
                 throw new Exception('Unknown method:' . $method);
+        }
+    }
+
+    /**
+     * @param Query $query
+     * @return string
+     */
+    protected function getSQLPlaceholder(Query $query): string
+    {
+        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+    }
+
+    protected function getSQLValue(string $method, mixed $value)
+    {
+        switch ($method) {
+            case Query::TYPE_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return "$value%";
+            case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return "%$value";
+            case Query::TYPE_SEARCH:
+                $value = $this->escapeWildcards($value);
+                return "'$value*'";
+            default:
+                return $value;
         }
     }
 
@@ -806,30 +844,5 @@ abstract class SQL extends Adapter
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
-    }
-
-
-    /**
-     * @param Query $query
-     * @return string
-     */
-    protected function getSQLPlaceholder(Query $query): string
-    {
-        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
-    }
-
-    /**
-     * @param PDOStatement $stmt
-     * @param Query $query
-     * @return void
-     */
-    public function bindConditionValue(PDOStatement $stmt, Query $query){
-        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
-            return;
-        }
-        foreach ($query->getValues() as $key => $value) {
-            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-        }
     }
 }

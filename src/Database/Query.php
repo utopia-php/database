@@ -18,6 +18,8 @@ class Query
     const TYPE_IS_NULL = 'isNull';
     const TYPE_IS_NOT_NULL = 'isNotNull';
     const TYPE_BETWEEN = 'between';
+    const TYPE_STARTS_WITH = 'startsWith';
+    const TYPE_ENDS_WITH = 'endsWith';
 
     const TYPE_SELECT = 'select';
 
@@ -150,6 +152,8 @@ class Query
             self::TYPE_IS_NULL,
             self::TYPE_IS_NOT_NULL,
             self::TYPE_BETWEEN,
+            self::TYPE_STARTS_WITH,
+            self::TYPE_ENDS_WITH,
             self::TYPE_SELECT => true,
             default => false,
         };
@@ -307,6 +311,8 @@ class Query
             case self::TYPE_IS_NULL:
             case self::TYPE_IS_NOT_NULL:
             case self::TYPE_BETWEEN:
+            case self::TYPE_STARTS_WITH:
+            case self::TYPE_ENDS_WITH:
                 $attribute = $parsedParams[0] ?? '';
                 if (count($parsedParams) < 2) {
                     return new self($method, $attribute);
@@ -574,6 +580,16 @@ class Query
     public static function isNotNull(string $attribute): self
     {
         return new self(self::TYPE_IS_NOT_NULL, $attribute);
+    }
+
+    public static function startsWith(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_STARTS_WITH, $attribute, [$value]);
+    }
+
+    public static function endsWith(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
     }
 
     /**

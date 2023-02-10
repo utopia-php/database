@@ -683,7 +683,7 @@ abstract class SQL extends Adapter
      */
     protected function bindConditionValue(PDOStatement $stmt, Query $query): void
     {
-        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod === Query::TYPE_SELECT) {
+        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
             return;
         }
         foreach ($query->getValues() as $key => $value) {

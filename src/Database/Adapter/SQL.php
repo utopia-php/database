@@ -105,16 +105,18 @@ abstract class SQL extends Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param Query[] $queries
      * @return Document
      * @throws Exception
-     * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
 
+        $selections = $this->getAttributeSelections($queries);
+
         $stmt = $this->getPDO()->prepare("
-            SELECT * 
+            SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");
@@ -681,7 +683,7 @@ abstract class SQL extends Adapter
      */
     protected function bindConditionValue(PDOStatement $stmt, Query $query): void
     {
-        if ($query->getMethod() === Query::TYPE_SEARCH) {
+        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
             return;
         }
         foreach ($query->getValues() as $key => $value) {

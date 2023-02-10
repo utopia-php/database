@@ -709,6 +709,28 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    /**
+     * @depends testCreateDocument
+     */
+    public function testGetDocumentSelect(Document $document): Document
+    {
+        $document = static::getDatabase()->getDocument('documents', $document->getId(), [
+            Query::select(['string', 'integer']),
+        ]);
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertIsString($document->getAttribute('string'));
+        $this->assertEquals('text📝', $document->getAttribute('string'));
+        $this->assertIsInt($document->getAttribute('integer'));
+        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertArrayNotHasKey('float', $document->getAttributes());
+        $this->assertArrayNotHasKey('boolean', $document->getAttributes());
+        $this->assertArrayNotHasKey('colors', $document->getAttributes());
+        $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
+
+        return $document;
+    }
+
 
     /**
      * @depends testCreateDocument
@@ -2055,6 +2077,27 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    public function testFindSelect()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year'])
+        ]);
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayHasKey('$permissions', $document);
+
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+        }
     }
 
     /**

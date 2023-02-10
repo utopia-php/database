@@ -665,7 +665,7 @@ class Postgres extends SQL
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param Query[] $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -750,6 +750,9 @@ class Postgres extends SQL
         }
 
         foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
             $where[] = $this->getSQLCondition($query);
         }
 
@@ -761,10 +764,12 @@ class Postgres extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        $selections = $this->getAttributeSelections($queries);
+
         $sql = "
-            SELECT DISTINCT _uid, table_main.*
+            SELECT DISTINCT _uid, {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
+            {$sqlWhere}
             {$order}
             LIMIT :limit OFFSET :offset;
         ";
@@ -926,6 +931,42 @@ class Postgres extends SQL
     }
 
     /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): string
+    {
+        if (empty($selections)) {
+            if (!empty($prefix)) {
+                return "\"{$prefix}\".*";
+            }
+            return '*';
+        }
+
+        $selections[] = '_uid';
+        $selections[] = '_id';
+        $selections[] = '_createdAt';
+        $selections[] = '_updatedAt';
+        $selections[] = '_permissions';
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "\"{$prefix}\".\"{$selection}\"";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "\"{$selection}\"";
+            }
+        }
+
+        return \implode(', ', $selections);
+
+    }
+
+    /*
      * Get SQL Condition
      *
      * @param Query $query

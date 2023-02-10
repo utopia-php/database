@@ -657,6 +657,7 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param Query[] $queries
+     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -741,6 +742,9 @@ class MariaDB extends SQL
         }
 
         foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
             $where[] = $this->getSQLCondition($query);
         }
 
@@ -752,10 +756,12 @@ class MariaDB extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        $selections = $this->getAttributeSelections($queries);
+
         $sql = "
-            SELECT table_main.*
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
+            {$sqlWhere}
             GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
@@ -918,6 +924,41 @@ class MariaDB extends SQL
     }
 
     /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): string
+    {
+        if (empty($selections)) {
+            if (!empty($prefix)) {
+                return "`{$prefix}`.*";
+            }
+            return '*';
+        }
+
+        $selections[] = '_uid';
+        $selections[] = '_id';
+        $selections[] = '_createdAt';
+        $selections[] = '_updatedAt';
+        $selections[] = '_permissions';
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "`{$prefix}`.`{$selection}`";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "`{$selection}`";
+            }
+        }
+
+        return \implode(', ', $selections);
+    }
+
+    /*
      * Get SQL Condition
      *
      * @param Query $query

@@ -21,6 +21,8 @@ class Query
     const TYPE_STARTS_WITH = 'startsWith';
     const TYPE_ENDS_WITH = 'endsWith';
 
+    const TYPE_SELECT = 'select';
+
     // Order methods
     const TYPE_ORDERDESC = 'orderDesc';
     const TYPE_ORDERASC = 'orderAsc';
@@ -151,7 +153,8 @@ class Query
             self::TYPE_IS_NOT_NULL,
             self::TYPE_BETWEEN,
             self::TYPE_STARTS_WITH,
-            self::TYPE_ENDS_WITH => true,
+            self::TYPE_ENDS_WITH,
+            self::TYPE_SELECT => true,
             default => false,
         };
 
@@ -316,6 +319,8 @@ class Query
                 }
                 return new self($method, $attribute, \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
 
+            case self::TYPE_SELECT:
+                return new self($method, values: $parsedParams[0]);
             case self::TYPE_ORDERASC:
             case self::TYPE_ORDERDESC:
                 return new self($method, $parsedParams[0] ?? '');
@@ -514,6 +519,11 @@ class Query
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }
 
+    public static function select(array $attributes): self
+    {
+        return new self(self::TYPE_SELECT, values: $attributes);
+    }
+
     /**
      * Helper method to create Query with orderDesc method
      */
@@ -622,6 +632,7 @@ class Query
     public static function groupByType(array $queries): array
     {
         $filters = [];
+        $selections = [];
         $limit = null;
         $offset = null;
         $orderAttributes = [];
@@ -667,6 +678,10 @@ class Query
                     $cursorDirection = $method === Query::TYPE_CURSORAFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
                     break;
 
+                case Query::TYPE_SELECT:
+                    $selections[] = $query;
+                    break;
+
                 default:
                     $filters[] = $query;
                     break;
@@ -675,6 +690,7 @@ class Query
 
         return [
             'filters' => $filters,
+            'selections' => $selections,
             'limit' => $limit,
             'offset' => $offset,
             'orderAttributes' => $orderAttributes,

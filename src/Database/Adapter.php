@@ -280,10 +280,10 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Query[] $selections
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id): Document;
+    abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
 
     /**
      * Create Document
@@ -321,7 +321,7 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param \Utopia\Database\Query[] $queries
+     * @param Query[] $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -489,6 +489,38 @@ abstract class Adapter
      * @return string[]
      */
     abstract public function getKeywords(): array;
+
+    /**
+     * Get an attribute projection given a list of selected attributes
+     *
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string[]|string
+     */
+    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+
+    /**
+     * Get all selected attributes from queries
+     *
+     * @param Query[] $queries
+     * @return string[]
+     */
+    protected function getAttributeSelections(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    foreach ($query->getValues() as $value) {
+                        $selections[] = $value;
+                    }
+                    break;
+            }
+        }
+
+        return $selections;
+    }
 
     /**
      * Filter Keys

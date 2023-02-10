@@ -124,6 +124,7 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('between("birthDay",["2024-01-01","2023-01-01"])')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('startsWith("title", "Fro")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('endsWith("title", "Zen")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('select(["title", "description"])')));
     }
 
     public function testInvalidMethod()

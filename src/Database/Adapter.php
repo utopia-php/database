@@ -281,10 +281,10 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param array<Query> $queries
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id): Document;
+    abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
 
     /**
      * Create Document
@@ -490,6 +490,38 @@ abstract class Adapter
      * @return array<string>
      */
     abstract public function getKeywords(): array;
+
+    /**
+     * Get an attribute projection given a list of selected attributes
+     *
+     * @param array<string> $selections
+     * @param string $prefix
+     * @return mixed
+     */
+    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+
+    /**
+     * Get all selected attributes from queries
+     *
+     * @param Query[] $queries
+     * @return string[]
+     */
+    protected function getAttributeSelections(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    foreach ($query->getValues() as $value) {
+                        $selections[] = $value;
+                    }
+                    break;
+            }
+        }
+
+        return $selections;
+    }
 
     /**
      * Filter Keys

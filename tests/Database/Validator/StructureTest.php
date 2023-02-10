@@ -118,7 +118,8 @@ class StructureTest extends TestCase
     {
     }
 
-    public function testDocumentInstance(): void    {
+    public function testDocumentInstance(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid('string'));
@@ -129,7 +130,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Value must be an instance of Document', $validator->getDescription());
     }
 
-    public function testCollectionAttribute(): void    {
+    public function testCollectionAttribute(): void
+    {
         $validator = new Structure(new Document());
 
         $this->assertEquals(false, $validator->isValid(new Document()));
@@ -137,7 +139,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Missing collection attribute $collection', $validator->getDescription());
     }
 
-    public function testCollection(): void    {
+    public function testCollection(): void
+    {
         $validator = new Structure(new Document());
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -154,7 +157,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Collection "" not found', $validator->getDescription());
     }
 
-    public function testRequiredKeys(): void    {
+    public function testRequiredKeys(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -170,7 +174,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Missing required attribute "title"', $validator->getDescription());
     }
 
-    public function testNullValues(): void    {
+    public function testNullValues(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -196,7 +201,8 @@ class StructureTest extends TestCase
         ])));
     }
 
-    public function testUnknownKeys(): void    {
+    public function testUnknownKeys(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -214,7 +220,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Unknown attribute: "titlex"', $validator->getDescription());
     }
 
-    public function testValidDocument(): void    {
+    public function testValidDocument(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -229,7 +236,8 @@ class StructureTest extends TestCase
         ])));
     }
 
-    public function testStringValidation(): void    {
+    public function testStringValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -246,7 +254,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
     }
 
-    public function testArrayOfStringsValidation(): void    {
+    public function testArrayOfStringsValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -301,7 +310,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
     }
 
-    public function testIntegerValidation(): void    {
+    public function testIntegerValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -331,7 +341,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
     }
 
-    public function testArrayOfIntegersValidation(): void    {
+    public function testArrayOfIntegersValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -385,7 +396,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "reviews[\'0\']" has invalid type. Value must be a valid integer', $validator->getDescription());
     }
 
-    public function testFloatValidation(): void    {
+    public function testFloatValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -415,7 +427,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "price" has invalid type. Value must be a valid float', $validator->getDescription());
     }
 
-    public function testBooleanValidation(): void    {
+    public function testBooleanValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -445,7 +458,8 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "published" has invalid type. Value must be a valid boolean', $validator->getDescription());
     }
 
-    public function testFormatValidation(): void    {
+    public function testFormatValidation(): void
+    {
         $validator = new Structure(new Document($this->collection));
 
         $this->assertEquals(false, $validator->isValid(new Document([

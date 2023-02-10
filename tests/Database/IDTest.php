@@ -7,12 +7,14 @@ use Utopia\Database\Helpers\ID;
 
 class IDTest extends TestCase
 {
-    public function testCustomID(): void    {
+    public function testCustomID(): void
+    {
         $id = ID::custom('test');
         $this->assertEquals('test', $id);
     }
 
-    public function testUniqueID(): void    {
+    public function testUniqueID(): void
+    {
         $id = ID::unique();
         $this->assertNotEmpty($id);
         $this->assertIsString($id);

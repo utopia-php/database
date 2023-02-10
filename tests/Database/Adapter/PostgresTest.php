@@ -12,7 +12,6 @@ use Utopia\Tests\Base;
 
 class PostgresTest extends Base
 {
-
     public static ?Database $database = null;
 
     /**

@@ -163,7 +163,8 @@ class QueriesTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testQueries(): void    {
+    public function testQueries(): void
+    {
         // test for SUCCESS
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
@@ -202,7 +203,8 @@ class QueriesTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testLooseOrderQueries(): void    {
+    public function testLooseOrderQueries(): void
+    {
         $validator = new Queries(
             $this->queryValidator,
             [
@@ -299,7 +301,8 @@ class QueriesTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testIsStrict(): void    {
+    public function testIsStrict(): void
+    {
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
         $this->assertEquals(true, $validator->isStrict());

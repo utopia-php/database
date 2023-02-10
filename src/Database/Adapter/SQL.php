@@ -105,16 +105,18 @@ abstract class SQL extends Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param Query[] $queries
      * @return Document
      * @throws Exception
-     * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
 
+        $selections = $this->getAttributeSelections($queries);
+
         $stmt = $this->getPDO()->prepare("
-            SELECT * 
+            SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");
@@ -680,7 +682,7 @@ abstract class SQL extends Adapter
      */
     protected function bindConditionValue(PDOStatement $stmt, Query $query): void
     {
-        if ($query->getMethod() === Query::TYPE_SEARCH) {
+        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
             return;
         }
         foreach ($query->getValues() as $key => $value) {
@@ -727,13 +729,20 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @return string
+     * @throws Exception
      */
     protected function getSQLPlaceholder(Query $query): string
     {
-        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
+
+        if ($json === false) {
+            throw new Exception('Failed to encode query');
+        }
+
+        return \md5($json);
     }
 
-    protected function getSQLValue(string $method, mixed $value)
+    protected function getSQLValue(string $method, mixed $value): mixed
     {
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
@@ -835,7 +844,7 @@ abstract class SQL extends Adapter
      * @return int
      * @throws Exception
      */
-    protected abstract function getPDOType(mixed $value): int;
+    abstract protected function getPDOType(mixed $value): int;
 
     /**
      * Returns default PDO configuration

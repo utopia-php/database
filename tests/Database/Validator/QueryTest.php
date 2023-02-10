@@ -103,7 +103,8 @@ class QueryTest extends TestCase
     {
     }
 
-    public function testQuery(): void    {
+    public function testQuery(): void
+    {
         $validator = new Query($this->schema);
 
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('equal("$id", ["Iron Man", "Ant Man"])')));
@@ -123,9 +124,11 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('between("birthDay",["2024-01-01","2023-01-01"])')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('startsWith("title", "Fro")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('endsWith("title", "Zen")')));
+        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('select(["title", "description"])')));
     }
 
-    public function testInvalidMethod(): void    {
+    public function testInvalidMethod(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('eqqual("title", "Iron Man")'));
@@ -134,7 +137,8 @@ class QueryTest extends TestCase
         $this->assertEquals('Query method invalid: eqqual', $validator->getDescription());
     }
 
-    public function testAttributeNotFound(): void    {
+    public function testAttributeNotFound(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('equal("name", "Iron Man")'));
@@ -148,7 +152,8 @@ class QueryTest extends TestCase
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
     }
 
-    public function testAttributeWrongType(): void    {
+    public function testAttributeWrongType(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('equal("title", 1776)'));
@@ -157,7 +162,8 @@ class QueryTest extends TestCase
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
     }
 
-    public function testMethodWrongType(): void    {
+    public function testMethodWrongType(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('contains("title", "Iron")'));
@@ -166,13 +172,15 @@ class QueryTest extends TestCase
         $this->assertEquals('Query method only supported on array attributes: contains', $validator->getDescription());
     }
 
-    public function testQueryDate(): void    {
+    public function testQueryDate(): void
+    {
         $validator = new Query($this->schema);
         $response = $validator->isValid(DatabaseQuery::parse('greaterThan("birthDay", "1960-01-01 10:10:10")'));
         $this->assertEquals(true, $response);
     }
 
-    public function testQueryLimit(): void    {
+    public function testQueryLimit(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('limit(25)'));
@@ -188,7 +196,8 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
     }
 
-    public function testQueryOffset(): void    {
+    public function testQueryOffset(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('offset(25)'));
@@ -204,7 +213,8 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
     }
 
-    public function testQueryOrder(): void    {
+    public function testQueryOrder(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('orderAsc("title")'));
@@ -220,7 +230,8 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
     }
 
-    public function testQueryCursor(): void    {
+    public function testQueryCursor(): void
+    {
         $validator = new Query($this->schema);
 
         $response = $validator->isValid(DatabaseQuery::parse('cursorAfter("asdf")'));

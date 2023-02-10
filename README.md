@@ -90,7 +90,7 @@ $database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true
 $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true);
 $database->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true);
 $database->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true);
-$database->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, true, true);
+$database->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, true, true);
 
 // Create an Index
 $database->createIndex('movies', 'index1', Database::INDEX_KEY, ['year'], [128], [Database::ORDER_ASC]);
@@ -119,8 +119,20 @@ static::getDatabase()->createDocument('movies', new Document([
     'year' => 2019,
     'price' => 25.99,
     'active' => true,
-    'generes' => ['science fiction', 'action', 'comics'],
+    'genres' => ['science fiction', 'action', 'comics'],
 ]));
+```
+
+**Get Document**:
+
+```php
+// Get document with all attributes
+$document = static::getDatabase()->getDocument('movies', '1');
+
+// Get document with a sub-set of attributes
+$document = static::getDatabase()->getDocument('movies', '1', [
+    Query::select(['name', 'director', 'year']),
+]);
 ```
 
 **Find:**

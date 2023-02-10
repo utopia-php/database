@@ -133,7 +133,8 @@ class OrderValidatorTest extends TestCase
     {
     }
 
-    public function testQuery(): void    {
+    public function testQuery(): void
+    {
         $validator = new OrderAttributes($this->schema, $this->indexesSchema);
 
         $this->assertEquals(true, $validator->isValid(['$id']));

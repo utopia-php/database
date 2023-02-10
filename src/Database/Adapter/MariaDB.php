@@ -753,6 +753,9 @@ class MariaDB extends SQL
         }
 
         foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
             $where[] = $this->getSQLCondition($query);
         }
 
@@ -764,10 +767,12 @@ class MariaDB extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        $selections = $this->getAttributeSelections($queries);
+
         $sql = "
-            SELECT table_main.*
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
+            {$sqlWhere}
             GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
@@ -928,6 +933,41 @@ class MariaDB extends SQL
     }
 
     /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param array<string> $selections
+     * @param string $prefix
+     * @return mixed
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    {
+        if (empty($selections)) {
+            if (!empty($prefix)) {
+                return "`{$prefix}`.*";
+            }
+            return '*';
+        }
+
+        $selections[] = '_uid';
+        $selections[] = '_id';
+        $selections[] = '_createdAt';
+        $selections[] = '_updatedAt';
+        $selections[] = '_permissions';
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "`{$prefix}`.`{$selection}`";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "`{$selection}`";
+            }
+        }
+
+        return \implode(', ', $selections);
+    }
+
+    /*
      * Get SQL Condition
      *
      * @param Query $query
@@ -946,7 +986,7 @@ class MariaDB extends SQL
         $attribute = "`{$query->getAttribute()}`" ;
         $placeholder = $this->getSQLPlaceholder($query);
 
-        switch ($query->getMethod()){
+        switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.

@@ -1121,59 +1121,6 @@ class MariaDB extends SQL
         return true;
     }
 
-
-    /**
-     * Get SQL Condition
-     *
-     * @param Query $query
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLCondition(Query $query): string
-    {
-        $query->setAttribute(match ($query->getAttribute()) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $query->getAttribute()
-        });
-
-        $attribute = "`{$query->getAttribute()}`" ;
-        $placeholder = $this->getSQLPlaceholder($query);
-
-        switch ($query->getMethod()){
-            case Query::TYPE_SLEEP:
-                return 'sleep('.$query->getValue().') = 0';
-
-            case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = "'{$value}*'";
-                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
-
-            case Query::TYPE_BETWEEN:
-                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
-
-            case Query::TYPE_IS_NULL:
-            case Query::TYPE_IS_NOT_NULL:
-                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
-
-            default:
-                $conditions = [];
-                foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).':'.$placeholder.'_'.$key;
-                }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
-        }
-    }
-
-
     /**
      * Returns Max Execution Time
      * @param string $sql

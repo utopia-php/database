@@ -657,6 +657,7 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param Query[] $queries
+     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -740,33 +741,11 @@ class MariaDB extends SQL
             }
         }
 
-        foreach ($queries as $i => $query) {
-            $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $query->getAttribute()
-            });
-
-            $conditions = [];
-
-            switch ($query->getMethod()) {
-                case Query::TYPE_IS_NULL:
-                case Query::TYPE_IS_NOT_NULL:
-                    $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), null, null);
-                    break;
-                default:
-                    $attributeIndex = 0;
-                    foreach ($query->getValues() as $key => $value) {
-                        $bindKey = 'key_' . $attributeIndex;
-                        $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                        $attributeIndex++;
-                    }
-                    break;
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
             }
-
-            $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '(' . $condition . ')';
+            $where[] = $this->getSQLCondition($query);
         }
 
         $order = 'ORDER BY ' . implode(', ', $orders);
@@ -777,28 +756,20 @@ class MariaDB extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        $selections = $this->getAttributeSelections($queries);
+
         $sql = "
-            SELECT table_main.*
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
+            {$sqlWhere}
             GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
         ";
 
         $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH || empty($query->getValues())) {
-                continue;
-            }
-
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
-            }
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
@@ -819,7 +790,6 @@ class MariaDB extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-
         $stmt->execute();
 
         $results = $stmt->fetchAll();
@@ -864,24 +834,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $i => $query) {
-            $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $query->getAttribute()
-            });
-
-            $conditions = [];
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                $attributeIndex++;
-            }
-
-            $condition = implode(' OR ', $conditions);
-            $where[] = empty($condition) ? '' : '(' . $condition . ')';
+        foreach ($queries as $query) {
+            $where[] = $this->getSQLCondition($query);
         }
 
         if (Authorization::$status) {
@@ -899,15 +853,8 @@ class MariaDB extends SQL
                 ) table_count
         ";
         $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
-            }
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
         }
 
         if ($max !== 0) {
@@ -940,23 +887,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = ($max === 0) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $i => $query) {
-            $query->setAttribute(match ($query->getAttribute()) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $query->getAttribute()
-            });
-
-            $conditions = [];
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $conditions[] = $this->getSQLCondition('table_main.`' . $query->getAttribute() . '`', $query->getMethod(), ':attribute_' . $i . '_' . $key . '_' . $bindKey, $value);
-                $attributeIndex++;
-            }
-
-            $where[] = implode(' OR ', $conditions);
+        foreach ($queries as $query) {
+            $where[] = $this->getSQLCondition($query);
         }
 
         if (Authorization::$status) {
@@ -975,14 +907,8 @@ class MariaDB extends SQL
             ) table_count
         ");
 
-        foreach ($queries as $i => $query) {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            $attributeIndex = 0;
-            foreach ($query->getValues() as $key => $value) {
-                $bindKey = 'key_' . $attributeIndex;
-                $stmt->bindValue(':attribute_' . $i . '_' . $key . '_' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
-            }
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
         }
 
         if ($max !== 0) {
@@ -995,6 +921,89 @@ class MariaDB extends SQL
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): string
+    {
+        if (empty($selections)) {
+            if (!empty($prefix)) {
+                return "`{$prefix}`.*";
+            }
+            return '*';
+        }
+
+        $selections[] = '_uid';
+        $selections[] = '_id';
+        $selections[] = '_createdAt';
+        $selections[] = '_updatedAt';
+        $selections[] = '_permissions';
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "`{$prefix}`.`{$selection}`";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "`{$selection}`";
+            }
+        }
+
+        return \implode(', ', $selections);
+    }
+
+    /*
+     * Get SQL Condition
+     *
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    protected function getSQLCondition(Query $query): string
+    {
+        $query->setAttribute(match ($query->getAttribute()) {
+            '$id' => '_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $query->getAttribute()
+        });
+
+        $attribute = "`{$query->getAttribute()}`" ;
+        $placeholder = $this->getSQLPlaceholder($query);
+
+        switch ($query->getMethod()){
+            case Query::TYPE_SEARCH:
+                /**
+                 * Replace reserved chars with space.
+                 */
+                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
+                /**
+                 * Prepend wildcard by default on the back.
+                 */
+                $value = $this->getSQLValue($query->getMethod(), $value);
+                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+
+            case Query::TYPE_BETWEEN:
+                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Query::TYPE_IS_NULL:
+            case Query::TYPE_IS_NOT_NULL:
+                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
+            default:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                }
+                $condition = implode(' OR ', $conditions);
+                return empty($condition) ? '' : '(' . $condition . ')';
+        }
     }
 
     /**
@@ -1053,42 +1062,6 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get SQL Conditions
-     *
-     * @param string $attribute
-     * @param string $method
-     * @param string $placeholder
-     * @param mixed $value
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLCondition(string $attribute, string $method, ?string $placeholder, mixed $value): string
-    {
-        switch ($method) {
-            case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $value));
-
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = "'{$value}*'";
-
-                return 'MATCH(' . $attribute . ') AGAINST(' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
-            default:
-                $condition = $attribute . ' ' . $this->getSQLOperator($method);
-
-                if (!empty($placeholder)) {
-                    $condition .= ' ' . $placeholder; // Using `attrubute_` to avoid conflicts with custom names;
-                }
-
-                return $condition;
-        }
-    }
-
-    /**
      * Get SQL Index
      *
      * @param string $collection
@@ -1100,24 +1073,12 @@ class MariaDB extends SQL
      */
     protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
     {
-        switch ($type) {
-            case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
-                $type = 'INDEX';
-                break;
-
-            case Database::INDEX_UNIQUE:
-                $type = 'UNIQUE INDEX';
-                break;
-
-            case Database::INDEX_FULLTEXT:
-                $type = 'FULLTEXT INDEX';
-                break;
-
-            default:
-                throw new Exception('Unknown Index Type:' . $type);
-                break;
-        }
+        $type = match ($type) {
+            Database::INDEX_KEY, Database::INDEX_ARRAY => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
+            default => throw new Exception('Unknown Index Type:' . $type),
+        };
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
     }
@@ -1131,23 +1092,12 @@ class MariaDB extends SQL
      */
     protected function getPDOType(mixed $value): int
     {
-        switch (gettype($value)) {
-            case 'double':
-            case 'string':
-                return PDO::PARAM_STR;
-
-            case 'integer':
-            case 'boolean':
-                return PDO::PARAM_INT;
-
-                //case 'float': // (for historical reasons "double" is returned in case of a float, and not simply "float")
-
-            case 'NULL':
-                return PDO::PARAM_NULL;
-
-            default:
-                throw new Exception('Unknown PDO Type for ' . gettype($value));
-        }
+        return match (gettype($value)) {
+            'double', 'string' => PDO::PARAM_STR,
+            'integer', 'boolean' => PDO::PARAM_INT,
+            'NULL' => PDO::PARAM_NULL,
+            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+        };
     }
 
     /**

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -104,16 +105,18 @@ abstract class SQL extends Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param Query[] $queries
      * @return Document
      * @throws Exception
-     * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
 
+        $selections = $this->getAttributeSelections($queries);
+
         $stmt = $this->getPDO()->prepare("
-            SELECT * 
+            SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");
@@ -674,6 +677,23 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * @param PDOStatement $stmt
+     * @param Query $query
+     * @return void
+     */
+    protected function bindConditionValue(PDOStatement $stmt, Query $query): void
+    {
+        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
+            return;
+        }
+        foreach ($query->getValues() as $key => $value) {
+            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+            $value = $this->getSQLValue($query->getMethod(), $value);
+            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+        }
+    }
+
+    /**
      * Get SQL Operator
      *
      * @param string $method
@@ -685,31 +705,51 @@ abstract class SQL extends Adapter
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
-
             case Query::TYPE_NOTEQUAL:
                 return '!=';
-
             case Query::TYPE_LESSER:
                 return '<';
-
             case Query::TYPE_LESSEREQUAL:
                 return '<=';
-
             case Query::TYPE_GREATER:
                 return '>';
-
             case Query::TYPE_GREATEREQUAL:
                 return '>=';
-
             case Query::TYPE_IS_NULL:
                 return 'IS NULL';
-
             case Query::TYPE_IS_NOT_NULL:
                 return 'IS NOT NULL';
-
+            case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_ENDS_WITH:
+                return 'LIKE';
             default:
                 throw new Exception('Unknown method:' . $method);
-                break;
+        }
+    }
+
+    /**
+     * @param Query $query
+     * @return string
+     */
+    protected function getSQLPlaceholder(Query $query): string
+    {
+        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+    }
+
+    protected function getSQLValue(string $method, mixed $value)
+    {
+        switch ($method) {
+            case Query::TYPE_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return "$value%";
+            case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return "%$value";
+            case Query::TYPE_SEARCH:
+                $value = $this->escapeWildcards($value);
+                return "'$value*'";
+            default:
+                return $value;
         }
     }
 

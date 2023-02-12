@@ -33,16 +33,6 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
 
-  cockroach:
-    image: cockroachdb/cockroach:v20.2.0
-    container_name: utopia-cockroach
-    command: start-single-node --insecure --logtostderr
-    networks:
-      - database
-    ports:
-      - "8704:26257"
-      - "8705:8080"
-
   mariadb:
     image: mariadb:10.5
     container_name: utopia-mariadb
@@ -83,6 +73,8 @@ services:
   redis:
     image: redis:6.0-alpine
     container_name: utopia-redis
+    ports:
+      - "8706:6379"
     networks:
       - database
 

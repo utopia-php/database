@@ -34,6 +34,7 @@ class Mongo extends Adapter
         '$or',
         '$and',
         '$match',
+        '$regex',
     ];
 
     protected Client $client;
@@ -385,15 +386,24 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Query[] $queries
      * @return Document
-     * @throws Exception
+     * @throws MongoException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $result = $this->client->find($name, ['_uid' => $id], ['limit' => 1])->cursor->firstBatch;
+        $filters = ['_uid' => $id];
+        $options = [];
+
+        $selections = $this->getAttributeSelections($queries);
+
+        if (!empty($selections)) {
+            $options['projection'] = $this->getAttributeProjection($selections);
+        }
+
+        $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
 
         if (empty($result)) {
             return new Document([]);
@@ -530,7 +540,7 @@ class Mongo extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param Query[] $queries
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -553,7 +563,16 @@ class Mongo extends Adapter
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        $options = ['limit' => $limit, 'skip' => $offset];
+        $options = [
+            'limit' => $limit,
+            'skip' => $offset
+        ];
+
+        $selections = $this->getAttributeSelections($queries);
+
+        if (!empty($selections)) {
+            $options['projection'] = $this->getAttributeProjection($selections);
+        }
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
@@ -941,7 +960,11 @@ class Mongo extends Adapter
     {
         $filters = [];
 
-        foreach ($queries as $i => $query) {
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
@@ -961,23 +984,28 @@ class Mongo extends Adapter
                 case Query::TYPE_IS_NULL:
                 case Query::TYPE_IS_NOT_NULL:
                     $value = null;
-
                     break;
                 default:
-                    $value = count($query->getValues()) > 1
-                        ? $query->getValues()
-                        : $query->getValues()[0];
-
+                    $value = $this->getQueryValue(
+                        $query->getMethod(),
+                        count($query->getValues()) > 1
+                            ? $query->getValues()
+                            : $query->getValues()[0]
+                    );
                     break;
             }
 
-            if (is_array($value) && $operator === '$eq') {
+            if ($operator == '$eq' && \is_array($value)) {
                 $filters[$attribute]['$in'] = $value;
-            } elseif ($operator === '$in') {
+            } else if ($operator == '$ne' && \is_array($value)) {
+                $filters[$attribute]['$nin'] = $value;
+            } else if($operator == '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
-            } elseif ($operator === '$search') {
-                // only one fulltext index per mongo collection, so attribute not necessary
+            } else if ($operator == '$search') {
                 $filters['$text'][$operator] = $value;
+            }  else if ($operator === Query::TYPE_BETWEEN) {
+                $filters[$attribute]['$lte'] = $value[1];
+                $filters[$attribute]['$gte'] = $value[0];
             } else {
                 $filters[$attribute][$operator] = $value;
             }
@@ -998,36 +1026,48 @@ class Mongo extends Adapter
         switch ($operator) {
             case Query::TYPE_EQUAL:
                 return '$eq';
-
             case Query::TYPE_NOTEQUAL:
                 return '$ne';
-
             case Query::TYPE_LESSER:
                 return '$lt';
-
             case Query::TYPE_LESSEREQUAL:
                 return '$lte';
-
             case Query::TYPE_GREATER:
                 return '$gt';
-
             case Query::TYPE_GREATEREQUAL:
                 return '$gte';
-
             case Query::TYPE_CONTAINS:
                 return '$in';
-
             case Query::TYPE_SEARCH:
                 return '$search';
 
+            case Query::TYPE_BETWEEN:
+                return 'between'; // this is not an operator will be replaced with $gte/$lte
+
             case Query::TYPE_IS_NULL:
                 return '$eq';
-
             case Query::TYPE_IS_NOT_NULL:
                 return '$ne';
+            case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_ENDS_WITH:
+                return '$regex';
 
             default:
                 throw new Exception('Unknown Operator:' . $operator);
+        }
+    }
+
+    protected function getQueryValue(string $method, mixed $value): mixed
+    {
+        switch ($method) {
+            case Query::TYPE_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return $value.'.*';
+            case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return '.*'.$value;
+            default:
+                return $value;
         }
     }
 
@@ -1046,6 +1086,23 @@ class Mongo extends Adapter
             Database::ORDER_DESC => -1,
             default => throw new Exception('Unknown sort order:' . $order),
         };
+    }
+
+    protected function getAttributeProjection(array $selections, string $prefix = ''): array
+    {
+        $projection = [];
+
+        foreach ($selections as $selection) {
+            $projection[$selection] = 1;
+        }
+
+        $projection['_uid'] = 1;
+        $projection['_id'] = 1;
+        $projection['_createdAt'] = 1;
+        $projection['_updatedAt'] = 1;
+        $projection['_permissions'] = 1;
+
+        return $projection;
     }
 
     /**

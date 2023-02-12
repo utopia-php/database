@@ -779,7 +779,6 @@ class Postgres extends SQL
             $sql = $this->setTimeout($sql, $timeout);
         }
 
-        var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             var_dump('-----------');
@@ -1023,48 +1022,6 @@ class Postgres extends SQL
                 return empty($condition) ? '' : '(' . $condition . ')';
         }
     }
-//
-//    /*
-//     * Get SQL Condition
-//     *
-//     * @param Query $query
-//     * @return string
-//     * @throws Exception
-//     */
-//    protected function getSQLCondition(Query $query): string
-//    {
-//        $query->setAttribute(match ($query->getAttribute()) {
-//            '$id' => '_uid',
-//            '$createdAt' => '_createdAt',
-//            '$updatedAt' => '_updatedAt',
-//            default => $query->getAttribute()
-//        });
-//
-//        $attribute = "\"{$query->getAttribute()}\"" ;
-//        $placeholder = $this->getSQLPlaceholder($query);
-//
-//        switch ($query->getMethod()){
-//            case Query::TYPE_SEARCH:
-//                $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
-//                $value = $this->getSQLValue($query->getMethod(), $value);
-//                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
-//
-//            case Query::TYPE_BETWEEN:
-//                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
-//
-//            case Query::TYPE_IS_NULL:
-//            case Query::TYPE_IS_NOT_NULL:
-//                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
-//
-//            default:
-//                $conditions = [];
-//                foreach ($query->getValues() as $key => $value) {
-//                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
-//                }
-//                $condition = implode(' OR ', $conditions);
-//                return empty($condition) ? '' : '(' . $condition . ')';
-//        }
-//    }
 
     /**
      * Get SQL Type

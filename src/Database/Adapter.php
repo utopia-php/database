@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use Utopia\Database\Exception\Timeout;
 
 abstract class Adapter
 {

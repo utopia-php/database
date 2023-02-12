@@ -779,6 +779,7 @@ class Postgres extends SQL
             $sql = $this->setTimeout($sql, $timeout);
         }
 
+        var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             var_dump('-----------');
@@ -1016,7 +1017,7 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key; //
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

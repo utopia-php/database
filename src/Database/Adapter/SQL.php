@@ -738,8 +738,6 @@ abstract class SQL extends Adapter
         }
     }
 
-
-
     protected function getSQLValue(string $method, mixed $value)
     {
         switch ($method) {

@@ -989,6 +989,9 @@ class MariaDB extends SQL
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()){
+            case Query::TYPE_SLEEP:
+                return 'sleep('.$query->getValue().') = 0';
+
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1010,7 +1013,7 @@ class MariaDB extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

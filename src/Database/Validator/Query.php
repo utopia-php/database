@@ -167,6 +167,14 @@ class Query extends Validator
         return true;
     }
 
+    protected function isValidSelect(array $attributes): bool {
+        foreach ($attributes as $attribute) {
+            if (!$this->isValidAttribute($attribute)) return false;
+        }
+
+        return true;
+    }
+
     /**
      * Is valid.
      *
@@ -222,6 +230,10 @@ class Query extends Validator
             case DatabaseQuery::TYPE_CONTAINS:
                 $values = $query->getValues();
                 return $this->isValidContains($attribute, $values);
+
+            case DatabaseQuery::TYPE_SELECT:
+                $attributes = $query->getValues();
+                return $this->isValidSelect($attributes);
 
             default:
                 // other filter queries

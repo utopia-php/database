@@ -60,9 +60,9 @@ abstract class Adapter
      *
      * @param string $namespace
      *
+     * @return bool
      * @throws Exception
      *
-     * @return bool
      */
     public function setNamespace(string $namespace): bool
     {
@@ -80,9 +80,9 @@ abstract class Adapter
      *
      * Get namespace of current set scope
      *
+     * @return string
      * @throws Exception
      *
-     * @return string
      */
     public function getNamespace(): string
     {
@@ -119,9 +119,9 @@ abstract class Adapter
      *
      * Get Database from current scope
      *
+     * @return string
      * @throws Exception
      *
-     * @return string
      */
     public function getDefaultDatabase(): string
     {
@@ -189,45 +189,45 @@ abstract class Adapter
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $name
-     * 
+     *
      * @return bool
      */
     abstract public function deleteCollection(string $name): bool;
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Update Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;
@@ -281,10 +281,10 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Query[] $selections
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id): Document;
+    abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
 
     /**
      * Create Document
@@ -336,7 +336,7 @@ abstract class Adapter
 
     /**
      * Sum an attribute
-     * 
+     *
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
@@ -348,7 +348,7 @@ abstract class Adapter
 
     /**
      * Count Documents
-     * 
+     *
      * @param string $collection
      * @param Query[] $queries
      * @param int $max
@@ -359,55 +359,56 @@ abstract class Adapter
 
     /**
      * Get max STRING limit
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForString(): int;
 
     /**
      * Get max INT limit
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForInt(): int;
 
     /**
      * Get maximum attributes limit.
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForAttributes(): int;
 
     /**
      * Get maximum index limit.
-     * 
+     *
      * @return int
      */
     abstract public function getLimitForIndexes(): int;
 
     /**
      * Is schemas supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForSchemas(): bool;
+
     /**
      * Is index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForIndex(): bool;
 
     /**
      * Is unique index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForUniqueIndex(): bool;
 
     /**
      * Is fulltext index supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForFulltextIndex(): bool;
@@ -422,7 +423,7 @@ abstract class Adapter
 
     /**
      * Does the adapter handle casting?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForCasting(): bool;
@@ -436,7 +437,7 @@ abstract class Adapter
 
     /**
      * Get current attribute count from collection document
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -444,7 +445,7 @@ abstract class Adapter
 
     /**
      * Get current index count from collection document
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -477,7 +478,7 @@ abstract class Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -485,10 +486,42 @@ abstract class Adapter
 
     /**
      * Get list of keywords that cannot be used
-     * 
+     *
      * @return string[]
      */
     abstract public function getKeywords(): array;
+
+    /**
+     * Get an attribute projection given a list of selected attributes
+     *
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string[]|string
+     */
+    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+
+    /**
+     * Get all selected attributes from queries
+     *
+     * @param Query[] $queries
+     * @return string[]
+     */
+    protected function getAttributeSelections(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    foreach ($query->getValues() as $value) {
+                        $selections[] = $value;
+                    }
+                    break;
+            }
+        }
+
+        return $selections;
+    }
 
     /**
      * Filter Keys
@@ -503,6 +536,33 @@ abstract class Adapter
 
         if (\is_null($value)) {
             throw new Exception('Failed to filter key');
+        }
+
+        return $value;
+    }
+
+    public function escapeWildcards(string $value): string
+    {
+        $wildcards = [
+            '%',
+            '_',
+            '[',
+            ']',
+            '^',
+            '-',
+            '.',
+            '*',
+            '+',
+            '?',
+            '(',
+            ')',
+            '{',
+            '}',
+            '|'
+        ];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
         }
 
         return $value;

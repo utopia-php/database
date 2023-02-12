@@ -4,6 +4,7 @@ namespace Utopia\Tests;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -705,6 +706,28 @@ abstract class Base extends TestCase
         $this->assertIsArray($document->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
+
+        return $document;
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testGetDocumentSelect(Document $document): Document
+    {
+        $document = static::getDatabase()->getDocument('documents', $document->getId(), [
+            Query::select(['string', 'integer']),
+        ]);
+
+        $this->assertNotEmpty(true, $document->getId());
+        $this->assertIsString($document->getAttribute('string'));
+        $this->assertEquals('text📝', $document->getAttribute('string'));
+        $this->assertIsInt($document->getAttribute('integer'));
+        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertArrayNotHasKey('float', $document->getAttributes());
+        $this->assertArrayNotHasKey('boolean', $document->getAttributes());
+        $this->assertArrayNotHasKey('colors', $document->getAttributes());
+        $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
 
         return $document;
     }
@@ -2026,6 +2049,66 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    public function testFindStartsWith()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::startsWith('name', 'Work'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+
+        if ($this->getDatabase()->getAdapter() instanceof SQL) {
+            $documents = static::getDatabase()->find('movies', [
+                Query::startsWith('name', '%ork'),
+            ]);
+        } else {
+            $documents = static::getDatabase()->find('movies', [
+                Query::startsWith('name', '.*ork'),
+            ]);
+        }
+
+        $this->assertEquals(0, count($documents));
+    }
+
+    public function testFindStartsWithWords()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::startsWith('name', 'Work in Progress'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+    }
+
+    public function testFindEndsWith()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::endsWith('name', 'Marvel'),
+        ]);
+
+        $this->assertEquals(1, count($documents));
+    }
+
+    public function testFindSelect()
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year'])
+        ]);
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayHasKey('$permissions', $document);
+
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+        }
     }
 
     /**

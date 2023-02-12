@@ -11,7 +11,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
-use Utopia\Database\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -661,6 +660,7 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param Query[] $queries
+     * @param string[] $selections
      * @param int $limit
      * @param int $offset
      * @param array $orderAttributes
@@ -744,6 +744,9 @@ class MariaDB extends SQL
         }
 
         foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
             $where[] = $this->getSQLCondition($query);
         }
 
@@ -755,10 +758,12 @@ class MariaDB extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
+        $selections = $this->getAttributeSelections($queries);
+
         $sql = "
-            SELECT table_main.*
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
-            " . $sqlWhere . "
+            {$sqlWhere}
             GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
@@ -927,6 +932,89 @@ class MariaDB extends SQL
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param string[] $selections
+     * @param string $prefix
+     * @return string
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): string
+    {
+        if (empty($selections)) {
+            if (!empty($prefix)) {
+                return "`{$prefix}`.*";
+            }
+            return '*';
+        }
+
+        $selections[] = '_uid';
+        $selections[] = '_id';
+        $selections[] = '_createdAt';
+        $selections[] = '_updatedAt';
+        $selections[] = '_permissions';
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "`{$prefix}`.`{$selection}`";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "`{$selection}`";
+            }
+        }
+
+        return \implode(', ', $selections);
+    }
+
+    /*
+     * Get SQL Condition
+     *
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    protected function getSQLCondition(Query $query): string
+    {
+        $query->setAttribute(match ($query->getAttribute()) {
+            '$id' => '_uid',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $query->getAttribute()
+        });
+
+        $attribute = "`{$query->getAttribute()}`" ;
+        $placeholder = $this->getSQLPlaceholder($query);
+
+        switch ($query->getMethod()){
+            case Query::TYPE_SEARCH:
+                /**
+                 * Replace reserved chars with space.
+                 */
+                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
+                /**
+                 * Prepend wildcard by default on the back.
+                 */
+                $value = $this->getSQLValue($query->getMethod(), $value);
+                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+
+            case Query::TYPE_BETWEEN:
+                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Query::TYPE_IS_NULL:
+            case Query::TYPE_IS_NOT_NULL:
+                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
+            default:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                }
+                $condition = implode(' OR ', $conditions);
+                return empty($condition) ? '' : '(' . $condition . ')';
+        }
     }
 
     /**

@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -13,10 +14,8 @@ use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-    /**
-     * @var PDO
-     */
-    protected $pdo;
+
+    protected PDO|PDOProxy $pdo;
 
     /**
      * Constructor.

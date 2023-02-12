@@ -1120,7 +1120,7 @@ class Postgres extends SQL
 
         switch ($query->getMethod()){
             case Query::TYPE_SLEEP:
-                return 'sleep('.$query->getValue().') = 0';
+                return "pg_sleep({$query->getValue()})::text = ''";
 
             case Query::TYPE_SEARCH:
                 $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
@@ -1152,12 +1152,7 @@ class Postgres extends SQL
      */
     protected function setTimeout(string $sql, int $milliseconds): string
     {
-        if(!$this->getSupportForTimeouts()){
-            return $sql;
-        }
-
-        $seconds = $milliseconds / 1000;
-        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+        return "SET statement_timeout = {$milliseconds};{$sql};SET statement_timeout = 0;";
     }
 
     /**
@@ -1167,12 +1162,12 @@ class Postgres extends SQL
     protected function processException(PDOException $e): void
     {
         // Regular PDO
-        if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
+        if($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7){
             Throw new Timeout($e->getMessage());
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
-        if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100'){
+        if($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014'){
             Throw new Timeout($e->getMessage());
         }
 

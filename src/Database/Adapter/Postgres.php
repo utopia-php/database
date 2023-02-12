@@ -781,9 +781,7 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
-            var_dump('-----------');
             $this->bindConditionValue($stmt, $query);
-            var_dump('-----------');
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {

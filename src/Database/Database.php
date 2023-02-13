@@ -2080,7 +2080,7 @@ class Database
 
         $max = $max ? $max - $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
@@ -2141,7 +2141,7 @@ class Database
 
         $min = $min ? $min + $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
         return $result;

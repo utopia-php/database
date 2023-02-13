@@ -18,6 +18,8 @@
         "utopia-php/mongo": "0.0.2"
     },
     "require-dev": {
+        "ext-redis": "*",
+        "ext-mongodb": "*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
         "mongodb/mongodb": "1.8.0",

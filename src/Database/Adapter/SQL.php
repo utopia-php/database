@@ -845,4 +845,5 @@ abstract class SQL extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
 }

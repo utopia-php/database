@@ -687,6 +687,83 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @throws ExceptionAuthorization
+     * @throws LimitException
+     * @throws DuplicateException
+     * @throws StructureException
+     * @throws Exception
+     */
+    public function testIncreaseDecrease()
+    {
+        $collection = 'increase_decrease';
+        static::getDatabase()->createCollection($collection);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'decrease', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase_text', Database::VAR_STRING, 255, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'increase_float', Database::VAR_FLOAT, 0, true));
+
+        $document = static::getDatabase()->createDocument($collection, new Document([
+            'increase' => 100,
+            'decrease' => 100,
+            'increase_float' => 100,
+            'increase_text' => "some text",
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]
+        ]));
+
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
+
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(101, $document->getAttribute('increase'));
+
+        $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(99, $document->getAttribute('decrease'));
+
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110));
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(105.5, $document->getAttribute('increase_float'));
+
+        $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
+        $document = static::getDatabase()->getDocument($collection, $document->getId());
+        $this->assertEquals(104.4, $document->getAttribute('increase_float'));
+
+        return $document;
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseLimitMax(Document $document)
+    {
+        $this->expectException(Exception::class);
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testDecreaseLimitMin(Document $document)
+    {
+        $this->expectException(Exception::class);
+        $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 10, 99));
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseTextAttribute(Document $document)
+    {
+        $this->expectException(Exception::class);
+        $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
+    }
+
+    /**
      * @depends testCreateDocument
      */
     public function testGetDocument(Document $document)
@@ -3450,6 +3527,8 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_FIND,
                 Database::EVENT_DOCUMENT_COUNT,
                 Database::EVENT_DOCUMENT_SUM,
+                Database::EVENT_DOCUMENT_INCREASE,
+                Database::EVENT_DOCUMENT_DECREASE,
                 Database::EVENT_INDEX_DELETE,
                 Database::EVENT_DOCUMENT_DELETE,
                 Database::EVENT_ATTRIBUTE_DELETE,
@@ -3499,6 +3578,8 @@ abstract class Base extends TestCase
             $database->findOne($collectionId);
             $database->count($collectionId);
             $database->sum($collectionId, 'attr1');
+            $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
 
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');

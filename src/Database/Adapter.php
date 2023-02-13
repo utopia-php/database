@@ -525,6 +525,7 @@ abstract class Adapter
     /**
      * Filter Keys
      *
+     * @param string $value
      * @return string
      * @throws Exception
      */
@@ -565,4 +566,18 @@ abstract class Adapter
 
         return $value;
     }
+
+    /**
+     * Increase and Decrease Attribute Value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int|float $value
+     * @param int|float|null $min
+     * @param int|float|null $max
+     * @return bool
+     * @throws Exception
+     */
+    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool;
 }

@@ -487,6 +487,39 @@ class Mongo extends Adapter
     }
 
     /**
+     * Increase or decrease an attribute value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int|float $value
+     * @param int|float|null $min
+     * @param int|float|null $max
+     * @return bool
+     * @throws Exception
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool {
+        $attribute = $this->filter($attribute);
+        $where = ['_uid' => $id];
+
+        if($max){
+            $where[$attribute] = ['$lte' => $max];
+        }
+
+        if($min){
+            $where[$attribute] = ['$gte' => $min];
+        }
+
+        $this->client->update(
+            $this->getNamespace() . '_' . $this->filter($collection),
+            $where,
+            ['$inc' => [$attribute => $value]],
+        );
+
+        return true;
+    }
+
+    /**
      * Delete Document
      *
      * @param string $collection
@@ -1381,38 +1414,5 @@ class Mongo extends Adapter
     public function getKeywords(): array 
     {
         return [];
-    }
-
-    /**
-     * Increase and Decrease Attribute Value
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param int|float|null $min
-     * @param int|float|null $max
-     * @return bool
-     * @throws Exception
-     */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool {
-        $attribute = $this->filter($attribute);
-        $where = ['_uid' => $id];
-
-        if($max){
-            $where[$attribute] = ['$lte' => $max];
-        }
-
-        if($min){
-            $where[$attribute] = ['$gte' => $min];
-        }
-
-        $this->client->update(
-            $this->getNamespace() . '_' . $this->filter($collection),
-            $where,
-            ['$inc' => [$attribute => $value]],
-        );
-
-        return true;
     }
 }

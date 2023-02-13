@@ -3534,7 +3534,6 @@ abstract class Base extends TestCase
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
                 Database::EVENT_DATABASE_DELETE,
-
             ];
 
             $database->on(Database::EVENT_ALL, function ($event, $data) use (&$events) {

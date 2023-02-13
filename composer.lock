@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2c6c34e8bb40d29122d8b6c4823f5dc9",
+    "content-hash": "a16219c13f1f3d13d83e0ae1fb243a3b",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -1245,6 +1245,40 @@
                 "source": "https://github.com/nullivex/lib-array2xml/tree/master"
             },
             "time": "2019-03-29T20:06:56+00:00"
+        },
+        {
+            "name": "pcov/clobber",
+            "version": "v2.0.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/krakjoe/pcov-clobber.git",
+                "reference": "4c30759e912e6e5d5bf833fb3d77b5bd51709f05"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/krakjoe/pcov-clobber/zipball/4c30759e912e6e5d5bf833fb3d77b5bd51709f05",
+                "reference": "4c30759e912e6e5d5bf833fb3d77b5bd51709f05",
+                "shasum": ""
+            },
+            "require": {
+                "ext-pcov": "^1.0",
+                "nikic/php-parser": "^4.2"
+            },
+            "bin": [
+                "bin/pcov"
+            ],
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "pcov\\Clobber\\": "src/pcov/clobber"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "support": {
+                "issues": "https://github.com/krakjoe/pcov-clobber/issues",
+                "source": "https://github.com/krakjoe/pcov-clobber/tree/v2.0.3"
+            },
+            "time": "2019-10-29T05:03:37+00:00"
         },
         {
             "name": "phar-io/manifest",
@@ -4167,10 +4201,6 @@
     "platform": {
         "php": ">=8.0"
     },
-    "platform-dev": {
-        "ext-pdo": "*",
-        "ext-redis": "*",
-        "ext-mongodb": "*"
-    },
-    "plugin-api-version": "2.2.0"
+    "platform-dev": [],
+    "plugin-api-version": "2.3.0"
 }

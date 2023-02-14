@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -677,11 +678,11 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param PDOStatement $stmt
+     * @param PDOStatement|PDOStatementProxy $stmt
      * @param Query $query
      * @return void
      */
-    protected function bindConditionValue(PDOStatement $stmt, Query $query): void
+    protected function bindConditionValue(PDOStatement|PDOStatementProxy $stmt, Query $query): void
     {
         if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
             return;

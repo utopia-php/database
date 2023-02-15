@@ -730,6 +730,15 @@ abstract class SQL extends Adapter
         }
     }
 
+    /**
+     * @param Query $query
+     * @return string
+     */
+    protected function getSQLPlaceholder(Query $query): string
+    {
+        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+    }
+
     protected function getSQLValue(string $method, mixed $value)
     {
         switch ($method) {

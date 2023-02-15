@@ -1750,12 +1750,12 @@ class Database
      *
      * @param string $collection
      * @param Query[] $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
@@ -1781,12 +1781,12 @@ class Database
      * @param string $collection
      * @param string $attribute
      * @param Query[] $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0)
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null)
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 

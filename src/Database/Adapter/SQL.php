@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOStatementProxy;
 use Swoole\Database\PDOProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
@@ -676,20 +677,11 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param Query $query
-     * @return string
-     */
-    protected function getSQLPlaceholder(Query $query): string
-    {
-        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
-    }
-
-    /**
-     * @param $stmt
+     * @param PDOStatement|PDOStatementProxy $stmt
      * @param Query $query
      * @return void
      */
-    public function bindConditionValue($stmt, Query $query): void
+    protected function bindConditionValue(PDOStatement|PDOStatementProxy $stmt, Query $query): void
     {
         /** @var PDOStatement $stmt */
         if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT, Query::TYPE_SLEEP])){
@@ -847,6 +839,4 @@ abstract class SQL extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
-
-
 }

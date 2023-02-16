@@ -2020,8 +2020,18 @@ abstract class Base extends TestCase
     public function testTimeout()
     {
         if($this->getDatabase()->getAdapter()->getSupportForTimeouts()){
+            static::getDatabase()->createCollection('timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'data', Database::VAR_STRING, 100000000, true));
+
+            static::getDatabase()->createDocument('timeouts', new Document(['data' => file_get_contents(__DIR__ . '/../longtext')]));
+
             $this->expectException(Timeout::class);
-            static::getDatabase()->find('movies', [ Query::sleep('bla', 1)], 1);
+            static::getDatabase()->find('timeouts', [
+                Query::endsWith('data', 'appwrite'),
+            ], 1);
+
+            //$this->expectException(Timeout::class);
+            //static::getDatabase()->find('movies', [ Query::sleep('bla', 1)], 1);
         }
 
         $this->assertEquals(true, true);

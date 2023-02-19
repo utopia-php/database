@@ -2027,7 +2027,8 @@ abstract class Base extends TestCase
 
             $this->expectException(Timeout::class);
             static::getDatabase()->find('timeouts', [
-                Query::endsWith('data', 'appwrite'),
+                Query::notEqual('data', 'appwrite1'),
+                Query::endsWith('data', 'appwrite2'),
             ], 1);
 
             //$this->expectException(Timeout::class);

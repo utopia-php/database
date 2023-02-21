@@ -677,11 +677,11 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param PDOStatement|PDOStatementProxy $stmt
+     * @param mixed $stmt
      * @param Query $query
      * @return void
      */
-    protected function bindConditionValue(PDOStatement|PDOStatementProxy $stmt, Query $query): void
+    protected function bindConditionValue(mixed $stmt, Query $query): void
     {
         if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
             return;

@@ -8,7 +8,7 @@ use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
@@ -685,13 +685,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @throws ExceptionAuthorization
-     * @throws LimitException
-     * @throws DuplicateException
-     * @throws StructureException
-     * @throws Exception
+     * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|\Throwable
      */
-    public function testIncreaseDecrease()
+    public function testIncreaseDecrease(): void
     {
         $collection = 'increase_decrease';
         static::getDatabase()->createCollection($collection);
@@ -730,14 +726,12 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
-
-        return $document;
     }
 
     /**
      * @depends testIncreaseDecrease
      */
-    public function testIncreaseLimitMax(Document $document)
+    public function testIncreaseLimitMax(Document $document): void
     {
         $this->expectException(Exception::class);
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
@@ -746,7 +740,7 @@ abstract class Base extends TestCase
     /**
      * @depends testIncreaseDecrease
      */
-    public function testDecreaseLimitMin(Document $document)
+    public function testDecreaseLimitMin(Document $document): void
     {
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 10, 99));
@@ -755,7 +749,7 @@ abstract class Base extends TestCase
     /**
      * @depends testIncreaseDecrease
      */
-    public function testIncreaseTextAttribute(Document $document)
+    public function testIncreaseTextAttribute(Document $document): void
     {
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
@@ -2613,7 +2607,7 @@ abstract class Base extends TestCase
      */
     public function testWritePermissionsUpdateFailure(Document $document): Document
     {
-        $this->expectException(ExceptionAuthorization::class);
+        $this->expectException(AuthorizationException::class);
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
@@ -3500,7 +3494,7 @@ abstract class Base extends TestCase
 
         try {
             $database->deleteDocument('animals', 'cat');
-        } catch (ExceptionAuthorization) {
+        } catch (AuthorizationException) {
             $didFail = true;
         }
 
@@ -3512,7 +3506,7 @@ abstract class Base extends TestCase
         try {
             $newDog = $dog->setAttribute('type', 'newDog');
             $database->updateDocument('animals', 'dog', $newDog);
-        } catch (ExceptionAuthorization) {
+        } catch (AuthorizationException) {
             $didFail = true;
         }
 

@@ -1,6 +1,6 @@
 {
     "name": "utopia-php/database",
-    "description": "A simple library to manage application persistency using multiple database adapters",
+    "description": "A simple library to manage application persistence using multiple database adapters",
     "type": "library",
     "keywords": ["php","framework", "upf", "utopia", "database"],
     "license": "MIT",
@@ -12,6 +12,18 @@
         "psr-4": {"Utopia\\Tests\\": "tests/Database"}
     },
     "scripts": {
+        "build": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose build"
+        ],
+        "start": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose up -d"
+        ],
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
+        ],
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M"
@@ -28,6 +40,7 @@
         "ext-mongodb": "*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
+        "pcov/clobber": "^2.0",
         "mongodb/mongodb": "1.8.0",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.14.0",

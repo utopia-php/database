@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use PhpParser\Comment\Doc;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -1540,7 +1541,7 @@ class Database
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
 
         /**
-         * @var $attr Document
+         * @var Document $attr
          */
         $attr = end($attr);
         if(!in_array($attr->getAttribute('type'), $whiteList)){
@@ -1601,7 +1602,7 @@ class Database
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
 
         /**
-         * @var $attr Document
+         * @var Document $attr
          */
         $attr = end($attr);
         if(!in_array($attr->getAttribute('type'), $whiteList)){

@@ -687,7 +687,7 @@ abstract class Base extends TestCase
     /**
      * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|\Throwable
      */
-    public function testIncreaseDecrease(): void
+    public function testIncreaseDecrease(): Document
     {
         $collection = 'increase_decrease';
         static::getDatabase()->createCollection($collection);
@@ -726,6 +726,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
+
+        return $document;
     }
 
     /**

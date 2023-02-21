@@ -76,7 +76,7 @@ class Query extends Validator
         return $this->message;
     }
 
-    protected function isValidLimit(int $limit): bool
+    protected function isValidLimit(?int $limit): bool
     {
         $validator = new Range(0, $this->maxLimit);
         if ($validator->isValid($limit)) {
@@ -87,7 +87,7 @@ class Query extends Validator
         return false;
     }
 
-    protected function isValidOffset(int $offset): bool
+    protected function isValidOffset(?int $offset): bool
     {
         $validator = new Range(0, $this->maxOffset);
         if ($validator->isValid($offset)) {
@@ -98,7 +98,7 @@ class Query extends Validator
         return false;
     }
 
-    protected function isValidCursor(?Document $cursor): bool
+    protected function isValidCursor(?string $cursor): bool
     {
         if ($cursor === null) {
             $this->message = 'Cursor must not be null';

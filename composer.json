@@ -24,6 +24,7 @@
             "Composer\\Config::disableProcessTimeout",
             "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
         ],
+        "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90",
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M"
@@ -45,7 +46,8 @@
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.14.0",
         "laravel/pint": "1.4.*",
-        "phpstan/phpstan": "1.9.*"
+        "phpstan/phpstan": "1.9.*",
+        "rregeer/phpunit-coverage-check": "^0.3.1"
     },
     "suggests": {
         "ext-mongodb": "Needed to support MongoDB Database Adapter",

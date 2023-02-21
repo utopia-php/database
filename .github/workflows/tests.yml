@@ -22,3 +22,6 @@ jobs:
 
     - name: Run Tests
       run: docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml
+
+    - name: Check Coverage
+      run: docker compose exec tests vendor/bin/coverage-check tmp/clover.xml 90

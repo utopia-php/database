@@ -2023,24 +2023,20 @@ abstract class Base extends TestCase
             static::getDatabase()->createCollection('timeouts');
             $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', '_data', Database::VAR_STRING, 100000000, true));
 
-            for($i = 0 ; $i < 5 ; $i++){
-                static::getDatabase()->createDocument('timeouts', new Document([
-                    '_data' => file_get_contents(__DIR__ . '/../longtext'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ],
-                ]));
-            }
+            static::getDatabase()->createDocument('timeouts', new Document([
+                '_data' => file_get_contents(__DIR__ . '/../longtext'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ]
+            ]));
 
             $this->expectException(Timeout::class);
+
             static::getDatabase()->find('timeouts', [
                 Query::notEqual('_data', 'appwrite'),
             ], 1);
-
-            //$this->expectException(Timeout::class);
-            //static::getDatabase()->find('movies', [ Query::sleep('bla', 1)], 1);
         }
 
         $this->assertEquals(true, true);

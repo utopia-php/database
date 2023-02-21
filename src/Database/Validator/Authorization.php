@@ -9,7 +9,7 @@ class Authorization extends Validator
     /**
      * @var array<string, bool>
      */
-    public static array $roles = [
+    private static array $roles = [
         'any' => true
     ];
 
@@ -26,7 +26,7 @@ class Authorization extends Validator
     /**
      * @param string $action
      */
-    public function __construct($action)
+    public function __construct(string $action)
     {
         $this->action = $action;
     }
@@ -153,6 +153,7 @@ class Authorization extends Validator
      *
      * Skips authorization for the code to be executed inside the callback
      *
+     * @param callable $callback
      * @return mixed
      */
     public static function skip(callable $callback): mixed

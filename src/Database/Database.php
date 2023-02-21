@@ -87,6 +87,8 @@ class Database
     public const EVENT_DOCUMENT_DELETE = 'document_delete';
     public const EVENT_DOCUMENT_COUNT = 'document_count';
     public const EVENT_DOCUMENT_SUM = 'document_sum';
+    public const EVENT_DOCUMENT_INCREASE = 'document_increase';
+    public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -516,6 +518,7 @@ class Database
      * @param array<Document> $indexes
      *
      * @return Document
+     * @throws DuplicateException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
@@ -659,6 +662,10 @@ class Database
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if($collection->isEmpty()){
+            throw new Exception('Collection not found');
+        }
 
         // attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
@@ -1338,6 +1345,7 @@ class Database
      * @param Query[] $queries
      *
      * @return Document
+     * @throws Exception|Throwable
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
@@ -1490,6 +1498,126 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
+    }
+
+    /**
+     * Increase a document attribute by a value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int|float $value
+     * @param int|float|null $max
+     * @return bool
+     *
+     * @throws AuthorizationException
+     * @throws Exception
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
+    {
+        if($value <= 0){ // Can be a float
+            throw new Exception('Value must be numeric and greater than 0');
+        }
+
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+
+        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($document->getUpdate())) {
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute){
+            return $a['$id'] === $attribute;
+        });
+
+        if (empty($attr)) {
+            throw new Exception('Attribute not found');
+        }
+
+        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+
+        /**
+         * @var $attr Document
+         */
+        $attr = end($attr);
+        if(!in_array($attr->getAttribute('type'), $whiteList)){
+            throw new Exception('Attribute type must be one of: ' . implode(',', $whiteList));
+        }
+
+        if($max && ($document->getAttribute($attribute) + $value > $max)){
+            throw new Exception('Attribute value exceeds maximum limit: ' . $max);
+        }
+
+        $max = $max ? $max - $value : null;
+        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
+
+        return $result;
+    }
+
+
+    /**
+     * Decrease a document attribute by a value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int|float $value
+     * @param int|float|null $min
+     * @return bool
+     *
+     * @throws AuthorizationException
+     * @throws Exception|Throwable
+     */
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
+    {
+        if($value <= 0){ // Can be a float
+            throw new Exception('Value must be numeric and greater than 0');
+        }
+
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+
+        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->getId() !== self::METADATA
+            && !$validator->isValid($document->getUpdate())) {
+            throw new AuthorizationException($validator->getDescription());
+        }
+
+        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute){
+            return $a['$id'] === $attribute;
+        });
+
+        if (empty($attr)) {
+            throw new Exception('Attribute not found');
+        }
+
+        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+
+        /**
+         * @var $attr Document
+         */
+        $attr = end($attr);
+        if(!in_array($attr->getAttribute('type'), $whiteList)){
+            throw new Exception('Attribute type must be one of: ' . implode(',', $whiteList));
+        }
+
+        if($min && ($document->getAttribute($attribute) - $value < $min)){
+            throw new Exception('Attribute value Exceeds minimum limit ' . $min);
+        }
+
+        $min = $min ? $min + $value : null;
+        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
+        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
+
+        return $result;
     }
 
     /**

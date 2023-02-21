@@ -263,6 +263,8 @@ class Structure extends Validator
                     $validator = new DatetimeValidator();
                     break;
 
+                case Database::VAR_RELATIONSHIP:
+                    return true;
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;

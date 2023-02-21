@@ -26,7 +26,7 @@ class Database
     const VAR_DATETIME = 'datetime';
 
     // Relationships Types
-    const VAR_DOCUMENT = 'document';
+    const VAR_RELATIONSHIP = 'relationship';
 
     // Index Types
     const INDEX_KEY = 'key';
@@ -34,6 +34,12 @@ class Database
     const INDEX_UNIQUE = 'unique';
     const INDEX_SPATIAL = 'spatial';
     const INDEX_ARRAY = 'array';
+
+    // Relations
+    const RELATION_ONE_TO_ONE = 'oneToOne';
+    const RELATION_ONE_TO_MANY = 'oneToMany';
+    const RELATION_MANY_TO_ONE = 'manyToOne';
+    const RELATION_MANY_TO_MANY = 'manyToMany';
 
     // Orders
     const ORDER_ASC = 'ASC';
@@ -645,7 +651,7 @@ class Database
      * @param string $type
      * @param int $size utf8mb4 chars length
      * @param bool $required
-     * @param null $default
+     * @param mixed $default
      * @param bool $signed
      * @param bool $array
      * @param string|null $format optional validation format of attribute
@@ -730,10 +736,10 @@ class Database
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
             case self::VAR_DATETIME:
+            case self::VAR_RELATIONSHIP:
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
 
         // only execute when $default is given
@@ -757,6 +763,134 @@ class Database
     }
 
     /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $id
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $twoWayId
+     * @param string $onUpdate
+     * @param string $onDelete
+     * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayId = '',
+        string $onUpdate = 'restrict',
+        string $onDelete = 'restrict'
+    ): bool
+    {
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+
+        if($collection->isEmpty()){
+            throw new Exception('Collection not found');
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        /** @var Document[] $attributes */
+        foreach ($attributes as $attribute) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists');
+            }
+        }
+
+        if (
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
+        ) {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
+        $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollection));
+
+        if ($relatedCollection->isEmpty()) {
+            throw new Exception('Related collection not found');
+        }
+
+        if (empty($id)) {
+            $id = $relatedCollection->getId();
+        }
+
+        if (empty($twoWayId)) {
+            $twoWayId = $collection->getId();
+        }
+
+        $collection->setAttribute('attributes', new Document([
+            '$id' => ID::custom($id),
+            'key' => $id,
+            'type' => Database::VAR_RELATIONSHIP,
+            'relatedCollection' => $relatedCollection->getId(),
+            'relationType' => $type,
+            'twoWay' => $twoWay,
+            'twoWayId' => $twoWayId,
+            'onUpdate' => $onUpdate,
+            'onDelete' => $onDelete,
+        ]), Document::SET_TYPE_APPEND);
+
+        if (
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
+        ) {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
+
+        if ($twoWay) {
+            switch ($type) {
+                case self::RELATION_ONE_TO_MANY:
+                    $type = self::RELATION_MANY_TO_ONE;
+                    break;
+                case self::RELATION_MANY_TO_ONE:
+                    $type = self::RELATION_ONE_TO_MANY;
+                    break;
+                default:
+                    break;
+            }
+
+            $relatedCollection->setAttribute('attributes', new Document([
+                '$id' => ID::custom($twoWayId),
+                'key' => $twoWayId,
+                'type' => Database::VAR_RELATIONSHIP,
+                'relatedCollection' => $collection->getId(),
+                'relationType' => $type,
+                'twoWay' => true,
+                'twoWayId' => $id,
+                'onUpdate' => 'restrict',
+                'onDelete' => 'restrict',
+            ]), Document::SET_TYPE_APPEND);
+        }
+
+        $relationship = $this->adapter->createRelationship(
+            $collection->getId(),
+            $id,
+            $type,
+            $relatedCollection->getId(),
+            $twoWay,
+            $twoWayId,
+            $onUpdate,
+            $onDelete,
+        );
+
+        $this->silent(function() use ($collection, $relatedCollection, $twoWay) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+
+            if ($twoWay) {
+                $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            }
+        });
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+
+        return $relationship;
+    }
+
+    /**
      * Get the list of required filters for each data type
      *
      * @param string $type Type of the attribute
@@ -766,11 +900,6 @@ class Database
     protected function getRequiredFilters(string $type): array
     {
         switch ($type) {
-            case self::VAR_STRING:
-            case self::VAR_INTEGER:
-            case self::VAR_FLOAT:
-            case self::VAR_BOOLEAN:
-                return [];
             case self::VAR_DATETIME:
                 return ['datetime'];
             default:
@@ -1435,6 +1564,45 @@ class Database
 
         if (!$validator->isValid($document)) {
             throw new StructureException($validator->getDescription());
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $relationships = \array_filter($attributes, function ($attribute) {
+            return ($attribute['type'] ?? '') === Database::VAR_RELATIONSHIP;
+        });
+
+        foreach ($relationships as $relationship) {
+            $value = $document->getAttribute($relationship['key']);
+            $relatedCollection = $this->getCollection($relationship['relatedCollection']);
+
+            switch (\gettype($value)) {
+                case 'array':
+                    if (\array_values($value) === $value) {
+                        $relatedDocuments = \array_map(function($item) use ($relatedCollection) {
+                            $relatedDocument = $this->createDocument($relatedCollection->getId(), new Document($item));
+                            return $relatedDocument->getId();
+                        }, $value);
+                        $document->setAttribute($relationship['key'], $relatedDocuments);
+                    } else {
+                        $relatedDocument = $this->createDocument($relatedCollection->getId(), new Document($value));
+                        $document->setAttribute($relationship['key'], $relatedDocument->getId());
+                    }
+                    break;
+                case 'object':
+                    if ($relationship['twoWay'] && $relationship['relationType'] === Database::RELATION_ONE_TO_ONE) {
+                        $value->setAttribute($relationship['twoWayId'], $document->getId());
+                    }
+
+                    $relatedDocument = $this->createDocument($relatedCollection->getId(), $value);
+                    $document->setAttribute($relationship['key'], $relatedDocument->getId());
+                    break;
+                case 'string':
+                case 'NULL':
+                    break;
+                default:
+                    throw new Exception('Invalid relationship value');
+            }
         }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);

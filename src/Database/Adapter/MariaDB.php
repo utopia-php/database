@@ -174,8 +174,95 @@ class MariaDB extends SQL
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                ADD COLUMN `{$id}` {$type};")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};")
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param string $relatedCollection
+     * @param bool $twoWay
+     * @param string $twoWayId
+     * @param string $onUpdate
+     * @param string $onDelete
+     * @return bool
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayId = '',
+        string $onUpdate = 'restrict',
+        string $onDelete = 'restrict'
+    ): bool
+    {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $id = $this->filter($id);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$this->getSQLTable($name)} 
+                            ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL, 
+                            ADD CONSTRAINT `{$id}_fk` 
+                                FOREIGN KEY (`{$id}`) 
+                                REFERENCES {$this->getSQLTable($relatedName)} (`_uid`)
+                                ON UPDATE {$onUpdate}
+                                ON DELETE {$onDelete};";
+
+                if ($twoWay) {
+                    $sql .= " ALTER TABLE {$this->getSQLTable($relatedName)} 
+                            ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $sql = "ALTER TABLE {$this->getSQLTable($relatedName)} 
+                            ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL, 
+                            ADD CONSTRAINT `{$twoWayId}_fk` 
+                                FOREIGN KEY (`{$twoWayId}`) 
+                                REFERENCES {$this->getSQLTable($name)} (`_uid`)
+                                ON UPDATE {$onUpdate}
+                                ON DELETE {$onDelete}";
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $sql = "ALTER TABLE {$this->getSQLTable($name)} 
+                            ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL, 
+                            ADD CONSTRAINT `{$id}_fk` 
+                                FOREIGN KEY (`{$id}`) 
+                                REFERENCES {$this->getSQLTable($relatedName)} (`_uid`)
+                                ON UPDATE {$onUpdate}
+                                ON DELETE {$onDelete}";
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $sql = "CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($name)}_{$relatedName}` (
+                            `_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                            `{$name}` VARCHAR(255) NOT NULL,
+                            `{$relatedName}` VARCHAR(255) NOT NULL,
+                            PRIMARY KEY (`_id`),
+                            KEY `{$name}` (`{$name}`),
+                            KEY `{$relatedName}` (`{$relatedName}`),
+                            CONSTRAINT `{$name}_{$relatedName}_fk` 
+                                FOREIGN KEY (`{$name}`) 
+                                REFERENCES {$this->getSQLTable($name)} (`_uid`) 
+                                ON UPDATE {$onUpdate}
+                                ON DELETE {$onDelete}
+                            CONSTRAINT `{$relatedName}_{$name}_fk` 
+                                FOREIGN KEY (`{$relatedName}`) 
+                                REFERENCES {$this->getSQLTable($relatedName)} (`_uid`) 
+                                ON UPDATE {$onUpdate}
+                                ON DELETE {$onDelete};
+                        )";
+                break;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
             ->execute();
     }
 
@@ -1079,8 +1166,8 @@ class MariaDB extends SQL
             case Database::VAR_BOOLEAN:
                 return 'TINYINT(1)';
 
-            case Database::VAR_DOCUMENT:
-                return 'CHAR(255)';
+            case Database::VAR_RELATIONSHIP:
+                return 'VARCHAR(255)';
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';

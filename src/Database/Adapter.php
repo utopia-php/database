@@ -202,8 +202,8 @@ abstract class Adapter
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
-     *
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
@@ -240,6 +240,19 @@ abstract class Adapter
      * @return bool
      */
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayId
+     * @param string $onUpdate
+     * @param string $onDelete
+     * @return bool
+     */
+    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayId = '', string $onUpdate = 'restrict', string $onDelete = 'restrict'): bool;
 
     /**
      * Rename Index

@@ -354,9 +354,9 @@ abstract class SQL extends Adapter
                     $total += 1;
                     break;
 
-                case Database::VAR_DOCUMENT:
-                    // CHAR(255)
-                    $total += 255;
+                case Database::VAR_RELATIONSHIP:
+                    // INT(11)
+                    $total += 4;
                     break;
 
                 case Database::VAR_DATETIME:

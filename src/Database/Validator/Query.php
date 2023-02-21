@@ -76,14 +76,6 @@ class Query extends Validator
         return $this->message;
     }
 
-    protected function isValidSleep($sleep): bool {
-        if ($sleep <= 0) {
-            $this->message = 'Sleep must by greater than 0';
-            return false;
-        }
-        return true;
-    }
-
     protected function isValidLimit($limit): bool {
         $validator = new Range(0, $this->maxLimit);
         if ($validator->isValid($limit)) return true;
@@ -205,9 +197,6 @@ class Query extends Validator
         $attribute = $query->getAttribute();
 
         switch ($method) {
-            case DatabaseQuery::TYPE_SLEEP:
-                return $this->isValidSleep($query->getValue());
-
             case DatabaseQuery::TYPE_LIMIT:
                 $limit = $query->getValue();
                 return $this->isValidLimit($limit);

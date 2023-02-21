@@ -1039,9 +1039,7 @@ class Mongo extends Adapter
                     break;
             }
 
-            if ($query->getMethod() === 'sleep') {
-                $filters['$where'] = 'sleep(' . ($value * 1000) . ') || true';
-            } else if ($operator == '$eq' && \is_array($value)) {
+            if ($operator == '$eq' && \is_array($value)) {
                 $filters[$attribute]['$in'] = $value;
             } else if ($operator == '$ne' && \is_array($value)) {
                 $filters[$attribute]['$nin'] = $value;
@@ -1087,10 +1085,8 @@ class Mongo extends Adapter
                 return '$in';
             case Query::TYPE_SEARCH:
                 return '$search';
-
             case Query::TYPE_BETWEEN:
                 return 'between'; // this is not an operator will be replaced with $gte/$lte
-
             case Query::TYPE_IS_NULL:
                 return '$eq';
             case Query::TYPE_IS_NOT_NULL:
@@ -1098,8 +1094,6 @@ class Mongo extends Adapter
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
                 return '$regex';
-            case Query::TYPE_SLEEP:
-                return '';
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }

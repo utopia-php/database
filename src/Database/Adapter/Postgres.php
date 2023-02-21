@@ -1025,9 +1025,6 @@ class Postgres extends SQL
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()){
-            case Query::TYPE_SLEEP:
-                return "pg_sleep({$query->getValue()})::text = ''";
-
             case Query::TYPE_SEARCH:
                 $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
                 $value = "'{$value}*'";

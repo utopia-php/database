@@ -125,7 +125,6 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('startsWith("title", "Fro")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('endsWith("title", "Zen")')));
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('select(["title", "description"])')));
-        $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('sleep("price", 1)')));
     }
 
     public function testInvalidMethod()

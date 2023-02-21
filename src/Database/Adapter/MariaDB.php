@@ -1018,9 +1018,6 @@ class MariaDB extends SQL
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()){
-            case Query::TYPE_SLEEP:
-                return 'sleep('.$query->getValue().') = 0';
-
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.

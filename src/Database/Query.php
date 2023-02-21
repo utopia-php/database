@@ -18,7 +18,6 @@ class Query
     const TYPE_IS_NULL = 'isNull';
     const TYPE_IS_NOT_NULL = 'isNotNull';
     const TYPE_BETWEEN = 'between';
-    const TYPE_SLEEP = 'sleep';
     const TYPE_STARTS_WITH = 'startsWith';
     const TYPE_ENDS_WITH = 'endsWith';
 
@@ -156,7 +155,7 @@ class Query
             self::TYPE_STARTS_WITH,
             self::TYPE_ENDS_WITH,
             self::TYPE_SELECT,
-            self::TYPE_SLEEP => true,
+            => true,
             default => false,
         };
 
@@ -302,7 +301,6 @@ class Query
 
         $method = static::getMethodFromAlias($method);
         switch ($method) {
-            case self::TYPE_SLEEP:
             case self::TYPE_EQUAL:
             case self::TYPE_NOTEQUAL:
             case self::TYPE_LESSER:
@@ -593,14 +591,6 @@ class Query
     public static function endsWith(string $attribute, string $value): self
     {
         return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
-    }
-
-    /**
-     * Helper method to create Query with SLEEP method
-     */
-    public static function sleep(string $attribute, int $milliseconds): self
-    {
-        return new self(self::TYPE_SLEEP, $attribute, [$milliseconds]);
     }
 
     /**

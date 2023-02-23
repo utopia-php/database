@@ -1173,12 +1173,12 @@ class MariaDB extends SQL
     {
         // Regular PDO
         if($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969){
-            Throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage());
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100'){
-            Throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage());
         }
 
         throw $e;

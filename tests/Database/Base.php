@@ -2021,11 +2021,11 @@ abstract class Base extends TestCase
     {
         if($this->getDatabase()->getAdapter()->getSupportForTimeouts()){
             static::getDatabase()->createCollection('timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', '_data', Database::VAR_STRING, 100000000, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
             for($i = 0 ; $i <= 3 ; $i++){
                 static::getDatabase()->createDocument('timeouts', new Document([
-                    '_data' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::update(Role::any()),
@@ -2037,11 +2037,11 @@ abstract class Base extends TestCase
             $this->expectException(Timeout::class);
 
             static::getDatabase()->find('timeouts', [
-                Query::notEqual('_data', 'appwrite'),
+                Query::notEqual('longtext', 'appwrite'),
             ], 1);
         }
 
-        $this->assertEquals(true, true);
+        $this->expectNotToPerformAssertions();
     }
 
     /**

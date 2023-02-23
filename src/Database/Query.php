@@ -154,8 +154,7 @@ class Query
             self::TYPE_BETWEEN,
             self::TYPE_STARTS_WITH,
             self::TYPE_ENDS_WITH,
-            self::TYPE_SELECT,
-            => true,
+            self::TYPE_SELECT => true,
             default => false,
         };
 

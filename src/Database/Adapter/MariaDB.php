@@ -1178,7 +1178,7 @@ class MariaDB extends SQL
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100'){
-            Throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage());
         }
 
         throw $e;

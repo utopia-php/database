@@ -702,12 +702,11 @@ class Postgres extends SQL
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     *
-     * @return array 
-     * @throws Exception 
-     * @throws PDOException 
+     * @param int|null $timeout
+     * @return array
+     * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, $timeout = null): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();

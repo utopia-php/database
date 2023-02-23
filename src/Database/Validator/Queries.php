@@ -132,6 +132,7 @@ class Queries extends Validator
             foreach ($filters as $filter) {
                 $filtersByAttribute[$filter->getAttribute()] = $filter->getMethod();
             }
+
             $found = null;
 
             foreach ($this->indexes as $index) {

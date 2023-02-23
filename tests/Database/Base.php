@@ -2025,7 +2025,7 @@ abstract class Base extends TestCase
 
             for($i = 0 ; $i <= 3 ; $i++){
                 static::getDatabase()->createDocument('timeouts', new Document([
-                    '_data' => file_get_contents(__DIR__ . '/../longtext'),
+                    '_data' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::update(Role::any()),

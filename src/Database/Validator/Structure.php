@@ -10,6 +10,7 @@ use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 
 class Structure extends Validator
 {

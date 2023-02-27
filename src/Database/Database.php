@@ -1019,10 +1019,6 @@ class Database
         return $this->updateAttributeMeta($collection->getId(), $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
             if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
                 $altering = true;
-                var_dump($type);
-                var_dump($size);
-                var_dump($signed);
-                var_dump($array);
                 if(is_null($type) && is_null($size) && is_null($signed) && is_null($array)){
                     $altering = false;
                 }

@@ -3265,8 +3265,9 @@ abstract class Base extends TestCase
         $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
         $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false, filters:['datetime']);
 
+        sleep(2);
         // Delete cache to force read from database with new schema
-        $database->deleteCachedDocument('flowers', 'LiliPriced');
+        //$database->deleteCachedDocument('flowers', 'LiliPriced');
 
         $doc = $database->getDocument('flowers', 'LiliPriced');
 
@@ -3274,7 +3275,7 @@ abstract class Base extends TestCase
         $this->assertEquals('500', $doc->getAttribute('price'));
 
         // String to Datetime
-        $database->deleteCachedDocument('flowers', 'flowerWithDate');
+        //$database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }

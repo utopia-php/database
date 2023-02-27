@@ -35,7 +35,6 @@ class Mongo extends Adapter
         '$or',
         '$and',
         '$match',
-        '$where',
         '$regex',
     ];
 

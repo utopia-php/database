@@ -3259,7 +3259,6 @@ abstract class Base extends TestCase
         $database = static::getDatabase();
 
         $collection = $database->getCollection('flowers');
-        var_dump($collection->getAttribute('attributes')[4]);
 
         $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
         $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);

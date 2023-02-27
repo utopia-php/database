@@ -846,7 +846,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
     }
 
@@ -855,15 +854,17 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $key Metadata key to update
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
      *
      * @return Document
+     * @throws Exception
      */
-    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
+    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
-        // Load
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->getId() === self::METADATA) {
+            throw new Exception('Can not update ' . self::METADATA);
+        }
 
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -879,11 +880,10 @@ class Database
         // Save
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
+        $document = $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
+        return $document;
     }
 
     /**
@@ -893,11 +893,12 @@ class Database
      * @param string $id
      * @param bool $required
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeRequired(string $collection, string $id, bool $required): void
+    public function updateAttributeRequired(string $collection, string $id, bool $required): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($required) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($required) {
             $attribute->setAttribute('required', $required);
         });
     }
@@ -909,11 +910,12 @@ class Database
      * @param string $id
      * @param string $format validation format of attribute
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeFormat(string $collection, string $id, string $format): void
+    public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
                 throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
             }
@@ -929,11 +931,12 @@ class Database
      * @param string $id
      * @param array $formatOptions assoc array with custom options that can be passed for the format validation
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): void
+    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($formatOptions) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($formatOptions) {
             $attribute->setAttribute('formatOptions', $formatOptions);
         });
     }
@@ -945,11 +948,12 @@ class Database
      * @param string $id
      * @param array $filters
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeFilters(string $collection, string $id, array $filters): void
+    public function updateAttributeFilters(string $collection, string $id, array $filters): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($filters) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($filters) {
             $attribute->setAttribute('filters', $filters);
         });
     }
@@ -959,13 +963,14 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param mixed $default
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeDefault(string $collection, string $id, $default = null): void
+    public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
             if ($attribute->getAttribute('required') === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
@@ -981,16 +986,19 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
+     * @param string|null $type
+     * @param int|null $size utf8mb4 chars length
      * @param bool $signed
      * @param bool $array
      *
      * To update attribute key (ID), use renameAttribute instead.
-     *
-     * @return bool
+     * @param string|null $format
+     * @param array $formatOptions
+     * @param array $filters
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
     {
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
@@ -1004,7 +1012,7 @@ class Database
             }
         }
 
-        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
             if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
@@ -1059,8 +1067,6 @@ class Database
                 $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
             }
         });
-
-        return true;
     }
 
     /**

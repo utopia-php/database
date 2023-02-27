@@ -3276,7 +3276,6 @@ abstract class Base extends TestCase
         // String to Datetime
         $database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
-        //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 

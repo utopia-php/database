@@ -684,7 +684,7 @@ class Database
      * @throws LimitException
      * @throws Exception
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required = false, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
@@ -976,27 +976,26 @@ class Database
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     *
+     * To update attribute key (ID), use renameAttribute instead.
      * @param string $collection
      * @param string $id
      * @param string|null $type
      * @param int|null $size utf8mb4 chars length
+     * @param bool|null $required
+     * @param null $default
      * @param bool $signed
      * @param bool $array
-     *
-     * To update attribute key (ID), use renameAttribute instead.
      * @param string|null $format
      * @param array $formatOptions
      * @param array $filters
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
     {
         $collectionName = $collection;
-
         if ($collectionName === self::METADATA) {
-            throw new Exception('Can not update ' . self::METADATA);
+            throw new Exception('Update ' . self::METADATA . 'is prohibited');
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
@@ -1016,7 +1015,15 @@ class Database
             }
         }
 
-        return $this->updateAttributeMeta($collection->getId(), $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
+        if (!\is_null($default)) {
+            if ($required === true) {
+                throw new Exception('Cannot set a default value on a required attribute');
+            }
+
+            $this->validateDefaultTypes($type, $default);
+        }
+
+        return $this->updateAttributeMeta($collection->getId(), $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, &$success) {
             if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
                 $altering = true;
                 if(is_null($type) && is_null($size) && is_null($signed) && is_null($array)){
@@ -1025,6 +1032,8 @@ class Database
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
+                $required ??= $attribute->getAttribute('required');
+                $default ??= $attribute->getAttribute('default');
                 $array ??= $attribute->getAttribute('array');
                 $format ??= $attribute->getAttribute('format');
                 $formatOptions ??= $attribute->getAttribute('formatOptions');
@@ -1058,7 +1067,9 @@ class Database
                     ->setAttribute('array', $array)
                     ->setAttribute('format', $format)
                     ->setAttribute('formatOptions', $formatOptions)
-                    ->setAttribute('filters', $filters);
+                    ->setAttribute('filters', $filters)
+                    ->setAttribute('required', $required)
+                    ->setAttribute('default', $default);
 
                 $attributes = $collectionDoc->getAttribute('attributes');
                 $attributes[$attributeIndex] = $attribute;

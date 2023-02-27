@@ -203,62 +203,37 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
         $id = $this->filter($id);
         $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$this->getSQLTable($name)} 
-                            ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL, 
-                            ADD CONSTRAINT `{$id}_fk` 
-                                FOREIGN KEY (`{$id}`) 
-                                REFERENCES {$this->getSQLTable($relatedName)} (`_uid`)
-                                ON UPDATE {$onUpdate}
-                                ON DELETE {$onDelete};";
+                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
 
                 if ($twoWay) {
-                    $sql .= " ALTER TABLE {$this->getSQLTable($relatedName)} 
-                            ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL;";
+                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL;";
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                $sql = "ALTER TABLE {$this->getSQLTable($relatedName)} 
-                            ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL, 
-                            ADD CONSTRAINT `{$twoWayId}_fk` 
-                                FOREIGN KEY (`{$twoWayId}`) 
-                                REFERENCES {$this->getSQLTable($name)} (`_uid`)
-                                ON UPDATE {$onUpdate}
-                                ON DELETE {$onDelete}";
+                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL;";
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                $sql = "ALTER TABLE {$this->getSQLTable($name)} 
-                            ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL, 
-                            ADD CONSTRAINT `{$id}_fk` 
-                                FOREIGN KEY (`{$id}`) 
-                                REFERENCES {$this->getSQLTable($relatedName)} (`_uid`)
-                                ON UPDATE {$onUpdate}
-                                ON DELETE {$onDelete}";
+                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $sql = "CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($name)}_{$relatedName}` (
+                $sql = "CREATE TABLE IF NOT EXISTS `{$table}_{$relatedName}` (
                             `_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
                             `{$name}` VARCHAR(255) NOT NULL,
                             `{$relatedName}` VARCHAR(255) NOT NULL,
                             PRIMARY KEY (`_id`),
                             KEY `{$name}` (`{$name}`),
-                            KEY `{$relatedName}` (`{$relatedName}`),
-                            CONSTRAINT `{$name}_{$relatedName}_fk` 
-                                FOREIGN KEY (`{$name}`) 
-                                REFERENCES {$this->getSQLTable($name)} (`_uid`) 
-                                ON UPDATE {$onUpdate}
-                                ON DELETE {$onDelete}
-                            CONSTRAINT `{$relatedName}_{$name}_fk` 
-                                FOREIGN KEY (`{$relatedName}`) 
-                                REFERENCES {$this->getSQLTable($relatedName)} (`_uid`) 
-                                ON UPDATE {$onUpdate}
-                                ON DELETE {$onDelete};
-                        )";
+                            KEY `{$relatedName}` (`{$relatedName}`)
+                        );";
                 break;
+            default:
+                throw new Exception('Invalid relationship type.');
         }
 
         return $this->getPDO()

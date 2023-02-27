@@ -683,7 +683,6 @@ abstract class SQL extends Adapter
      */
     protected function bindConditionValue(PDOStatement|PDOStatementProxy $stmt, Query $query): void
     {
-        /** @var PDOStatement $stmt */
         if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT])){
             return;
         }

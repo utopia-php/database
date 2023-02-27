@@ -1026,7 +1026,7 @@ class Postgres extends SQL
         switch ($query->getMethod()){
             case Query::TYPE_SEARCH:
                 $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
-                $value = "'{$value}*'";
+                $value = $this->getSQLValue($query->getMethod(), $value);
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE({$value}, '\|+','|','g'),'|'))";
 
             case Query::TYPE_BETWEEN:
@@ -1039,7 +1039,7 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key; //
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

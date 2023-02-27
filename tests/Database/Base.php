@@ -2023,7 +2023,7 @@ abstract class Base extends TestCase
             static::getDatabase()->createCollection('timeouts');
             $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-            for($i = 0 ; $i <= 3 ; $i++){
+            for($i = 0 ; $i <= 5 ; $i++){
                 static::getDatabase()->createDocument('timeouts', new Document([
                     'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [

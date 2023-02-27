@@ -3258,13 +3258,24 @@ abstract class Base extends TestCase
 
         $database = static::getDatabase();
 
+        $collection = $database->getCollection('flowers');
+        var_dump($collection->getAttribute('attributes')[4]);
+
+        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
+        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
+        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
+
         $doc = $database->getDocument('flowers', 'LiliPriced');
         $this->assertIsNumeric($doc->getAttribute('price'));
         $this->assertEquals(500, $doc->getAttribute('price'));
 
-        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255,false, null, true, false);
+        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, true, null, false, false);
         $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, true, null, false, filters:['datetime']);
 
+        $collection = $database->getCollection('flowers');
+        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['signed']);
+        $this->assertEquals(255, $collection->getAttribute('attributes')[4]['size']);
+        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['required']);
 
         $doc = $database->getDocument('flowers', 'LiliPriced');
 

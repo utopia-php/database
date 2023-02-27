@@ -786,23 +786,16 @@ class Database
     /**
      * Get the list of required filters for each data type
      *
-     * @param string $type Type of the attribute
+     * @param string|null $type Type of the attribute
      *
      * @return array
      */
-    protected function getRequiredFilters(string $type): array
+    protected function getRequiredFilters(?string $type): array
     {
-        switch ($type) {
-            case self::VAR_STRING:
-            case self::VAR_INTEGER:
-            case self::VAR_FLOAT:
-            case self::VAR_BOOLEAN:
-                return [];
-            case self::VAR_DATETIME:
-                return ['datetime'];
-            default:
-                return [];
-        }
+        return match ($type) {
+            self::VAR_DATETIME => ['datetime'],
+            default => [],
+        };
     }
 
     /**
@@ -1000,6 +993,17 @@ class Database
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
     {
+        $collectionName = $collection;
+
+        if ($collectionName === self::METADATA) {
+            throw new Exception('Can not update ' . self::METADATA);
+        }
+
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->isEmpty()) {
+            throw new Exception("Collection `$collectionName` not found ");
+        }
+
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
         if (!empty(array_diff($requiredFilters, $filters))) {
@@ -1012,8 +1016,16 @@ class Database
             }
         }
 
-        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
+        return $this->updateAttributeMeta($collection->getId(), $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
             if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
+                $altering = true;
+                var_dump($type);
+                var_dump($size);
+                var_dump($signed);
+                var_dump($array);
+                if(is_null($type) && is_null($size) && is_null($signed) && is_null($array)){
+                    $altering = false;
+                }
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
@@ -1063,7 +1075,12 @@ class Database
                     throw new LimitException('Row width limit reached. Cannot create new attribute.');
                 }
 
-                $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                if($altering === true){
+                    $this->adapter->updateAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+                    $this->deleteCachedCollection($collection->getId());
+                }
+
+                $this->deleteCachedDocument(self::METADATA, $collection->getId());
             }
         });
     }
@@ -1090,7 +1107,6 @@ class Database
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
-            return false;
         }
 
         if (
@@ -1098,7 +1114,6 @@ class Database
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
-            return false;
         }
 
         return true;
@@ -1145,9 +1160,9 @@ class Database
      *
      * @param string $collection
      * @param string $old Current attribute ID
-     * @param string $name New attribute ID
-     *
+     * @param string $new
      * @return bool
+     * @throws DuplicateException
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {

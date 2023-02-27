@@ -222,7 +222,8 @@ class MariaDB extends SQL
         if ($array) {
             $type = 'LONGTEXT';
         }
-
+var_dump("ALTER TABLE {$this->getSQLTable($name)}
+                MODIFY `{$id}` {$type};");
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 MODIFY `{$id}` {$type};")

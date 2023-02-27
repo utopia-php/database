@@ -1041,7 +1041,6 @@ class Database
                         break;
                     default:
                         throw new Exception('Unknown attribute type: ' . $type);
-                        break;
                 }
 
                 $attribute

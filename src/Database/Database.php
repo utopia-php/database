@@ -1680,7 +1680,7 @@ class Database
      */
     public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
-        if(!is_null($timeout) and $timeout <= 0){
+        if(!is_null($timeout) && $timeout <= 0){
             throw new Exception("Timeout must be greater than 0");
         }
 

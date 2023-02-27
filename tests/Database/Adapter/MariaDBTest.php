@@ -14,6 +14,8 @@ use Utopia\Database\Exception\Authorization;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Exception\Structure;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
@@ -59,6 +61,10 @@ class MariaDBTest extends Base
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
+        if (!$database->exists('utopiaTests')) {
+            $database->create();
+        }
+
         return self::$database = $database;
     }
 
@@ -84,13 +90,13 @@ class MariaDBTest extends Base
 
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'library') {
+                $this->assertEquals('relationship', $attribute['type']);
                 $this->assertEquals('library', $attribute['$id']);
                 $this->assertEquals('library', $attribute['key']);
-                $this->assertEquals('library', $attribute['relatedCollection']);
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['relationType']);
-                $this->assertEquals(false, $attribute['twoWay']);
-                $this->assertEquals('person', $attribute['twoWayId']);
+                $this->assertEquals('library', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('person', $attribute['options']['twoWayId']);
             }
         }
 
@@ -154,13 +160,13 @@ class MariaDBTest extends Base
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'city') {
+                $this->assertEquals('relationship', $attribute['type']);
                 $this->assertEquals('city', $attribute['$id']);
                 $this->assertEquals('city', $attribute['key']);
-                $this->assertEquals('city', $attribute['relatedCollection']);
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['relationType']);
-                $this->assertEquals(true, $attribute['twoWay']);
-                $this->assertEquals('country', $attribute['twoWayId']);
+                $this->assertEquals('city', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('country', $attribute['options']['twoWayId']);
             }
         }
 
@@ -168,27 +174,40 @@ class MariaDBTest extends Base
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'country') {
+                $this->assertEquals('relationship', $attribute['type']);
                 $this->assertEquals('country', $attribute['$id']);
                 $this->assertEquals('country', $attribute['key']);
-                $this->assertEquals('country', $attribute['relatedCollection']);
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['relationType']);
-                $this->assertEquals(true, $attribute['twoWay']);
-                $this->assertEquals('city', $attribute['twoWayId']);
+                $this->assertEquals('country', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('city', $attribute['options']['twoWayId']);
             }
         }
 
         // Create document with relationship with nested data
         static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
             'city' => [
-                '$id' => 'city1'
+                '$id' => 'city1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
             ],
         ]));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('city', new Document([
             '$id' => 'city2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]
         ]));
         static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country2',
@@ -197,12 +216,10 @@ class MariaDBTest extends Base
 
         // Get document with relationship
         $city = static::getDatabase()->getDocument('city', 'city1');
-        $country = $city->getAttribute('country', []);
-        $this->assertEquals('country1', $country['$id']);
+        $this->assertEquals('country1', $city['country']['$id']);
 
-        // Get related document
+        // Get inverse document with relationship
         $country = static::getDatabase()->getDocument('country', 'country1');
-        $city = $country->getAttribute('city', []);
-        $this->assertEquals('city1', $city['$id']);
+        $this->assertEquals('city1', $country['city']['$id']);
     }
 }

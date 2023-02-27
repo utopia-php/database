@@ -793,6 +793,20 @@ class Database
             throw new Exception('Collection not found');
         }
 
+        $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollection));
+
+        if ($relatedCollection->isEmpty()) {
+            throw new Exception('Related collection not found');
+        }
+
+        if (empty($id)) {
+            $id = $relatedCollection->getId();
+        }
+
+        if (empty($twoWayId)) {
+            $twoWayId = $collection->getId();
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
         foreach ($attributes as $attribute) {
@@ -808,30 +822,18 @@ class Database
             throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
-        $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollection));
-
-        if ($relatedCollection->isEmpty()) {
-            throw new Exception('Related collection not found');
-        }
-
-        if (empty($id)) {
-            $id = $relatedCollection->getId();
-        }
-
-        if (empty($twoWayId)) {
-            $twoWayId = $collection->getId();
-        }
-
         $collection->setAttribute('attributes', new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => Database::VAR_RELATIONSHIP,
-            'relatedCollection' => $relatedCollection->getId(),
-            'relationType' => $type,
-            'twoWay' => $twoWay,
-            'twoWayId' => $twoWayId,
-            'onUpdate' => $onUpdate,
-            'onDelete' => $onDelete,
+            'options' => [
+                'relatedCollection' => $relatedCollection->getId(),
+                'relationType' => $type,
+                'twoWay' => $twoWay,
+                'twoWayId' => $twoWayId,
+                'onUpdate' => $onUpdate,
+                'onDelete' => $onDelete,
+            ],
         ]), Document::SET_TYPE_APPEND);
 
         if (
@@ -857,21 +859,23 @@ class Database
                 '$id' => ID::custom($twoWayId),
                 'key' => $twoWayId,
                 'type' => Database::VAR_RELATIONSHIP,
-                'relatedCollection' => $collection->getId(),
-                'relationType' => $type,
-                'twoWay' => true,
-                'twoWayId' => $id,
-                'onUpdate' => 'restrict',
-                'onDelete' => 'restrict',
+                'options' => [
+                    'relatedCollection' => $collection->getId(),
+                    'relationType' => $type,
+                    'twoWay' => true,
+                    'twoWayId' => $id,
+                    'onUpdate' => 'restrict',
+                    'onDelete' => 'restrict',
+                ],
             ]), Document::SET_TYPE_APPEND);
         }
 
         $relationship = $this->adapter->createRelationship(
             $collection->getId(),
-            $id,
-            $type,
             $relatedCollection->getId(),
+            $type,
             $twoWay,
+            $id,
             $twoWayId,
             $onUpdate,
             $onDelete,
@@ -1524,6 +1528,45 @@ class Database
             return new Document();
         }
 
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $relationships = \array_filter($attributes, function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
+
+        static $fetchDepth = 0;
+
+        foreach ($relationships as $relationship) {
+            $key = $relationship['key'];
+            $value = $document->getAttribute($key);
+            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+            $relationType = $relationship['options']['relationType'];
+            $twoWay = $relationship['options']['twoWay'];
+            $twoWayId = $relationship['options']['twoWayId'];
+
+            switch($relationType) {
+                case Database::RELATION_ONE_TO_ONE:
+                    if ($value != null) {
+                        if ($fetchDepth > 0) {
+                            break;
+                        }
+                        $fetchDepth++;
+                        $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
+                        $fetchDepth = 0;
+                        $document->setAttribute($key, $relatedDocument);
+                    }
+                    break;
+                case Database::RELATION_ONE_TO_MANY:
+                    $relatedDocuments = $this->find($relatedCollection->getId(), [
+                        Query::equal($twoWayId,  [$value]),
+                    ]);
+                    $document->setAttribute($key, $relatedDocuments);
+                    break;
+                case Database::RELATION_MANY_TO_MANY:
+                    break;
+            }
+        }
+
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
 
@@ -1569,36 +1612,58 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter($attributes, function ($attribute) {
-            return ($attribute['type'] ?? '') === Database::VAR_RELATIONSHIP;
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
         foreach ($relationships as $relationship) {
-            $value = $document->getAttribute($relationship['key']);
-            $relatedCollection = $this->getCollection($relationship['relatedCollection']);
+            $key = $relationship['key'];
+            $value = $document->getAttribute($key);
+            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+            $relationType = $relationship['options']['relationType'];
+            $twoWay = $relationship['options']['twoWay'];
+            $twoWayId = $relationship['options']['twoWayId'];
 
             switch (\gettype($value)) {
                 case 'array':
-                    if (\array_values($value) === $value) {
-                        $relatedDocuments = \array_map(function($item) use ($relatedCollection) {
-                            $relatedDocument = $this->createDocument($relatedCollection->getId(), new Document($item));
-                            return $relatedDocument->getId();
-                        }, $value);
-                        $document->setAttribute($relationship['key'], $relatedDocuments);
-                    } else {
-                        $relatedDocument = $this->createDocument($relatedCollection->getId(), new Document($value));
-                        $document->setAttribute($relationship['key'], $relatedDocument->getId());
-                    }
+                    // List of document IDs
+                    $relatedDocuments = \array_map(function($item) use ($relatedCollection) {
+                        $relatedDocument = $this->createDocument($relatedCollection->getId(), new Document($item));
+                        return $relatedDocument->getId();
+                    }, $value);
+                    $document->setAttribute($key, $relatedDocuments);
                     break;
                 case 'object':
-                    if ($relationship['twoWay'] && $relationship['relationType'] === Database::RELATION_ONE_TO_ONE) {
-                        $value->setAttribute($relationship['twoWayId'], $document->getId());
+                    // Single document
+                    if ($twoWay && $relationType === Database::RELATION_ONE_TO_ONE) {
+                        $value->setAttribute($twoWayId, $document->getId());
                     }
 
-                    $relatedDocument = $this->createDocument($relatedCollection->getId(), $value);
-                    $document->setAttribute($relationship['key'], $relatedDocument->getId());
+                    $relatedDocument = $this->getDocument($relatedCollection->getId(), $value->getId());
+
+                    if ($relatedDocument->isEmpty()) {
+                        $relatedDocument = $this->createDocument($relatedCollection->getId(), $value);
+                    } else if (empty(\array_diff($value->getArrayCopy(), $relatedDocument->getArrayCopy()))) {
+                        $relatedDocument = $this->updateDocument($relatedCollection->getId(), $value->getId(), $value);
+                    }
+
+                    $document->setAttribute($key, $relatedDocument->getId());
                     break;
                 case 'string':
+                    // Single document ID
+                    $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
+
+                    if (
+                        !$relatedDocument->isEmpty()
+                        && $twoWay
+                        && $relationType === Database::RELATION_ONE_TO_ONE
+                    ) {
+                        $relatedDocument->setAttribute($twoWayId, $document->getId());
+                        $this->updateDocument($relatedCollection->getId(), $value, $relatedDocument);
+                    }
+
+                    break;
                 case 'NULL':
+                    // No related document
                     break;
                 default:
                     throw new Exception('Invalid relationship value');

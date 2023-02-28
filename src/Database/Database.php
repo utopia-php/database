@@ -856,7 +856,7 @@ class Database
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
         if ($collection->getId() === self::METADATA) {
-            throw new Exception('Can not update ' . self::METADATA);
+            throw new Exception('Can not update metadata attributes');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -994,7 +994,7 @@ class Database
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
     {
         if ($collection === self::METADATA) {
-            throw new Exception('Update ' . self::METADATA . 'is prohibited');
+            throw new Exception('Can not update metadata attributes');
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));

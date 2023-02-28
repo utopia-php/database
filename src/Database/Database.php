@@ -1546,15 +1546,18 @@ class Database
 
             switch($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
-                    if ($value != null) {
-                        if ($fetchDepth > 0) {
-                            break;
-                        }
-                        $fetchDepth++;
-                        $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
-                        $fetchDepth = 0;
-                        $document->setAttribute($key, $relatedDocument);
+                    if (\is_null($value)) {
+                        break;
                     }
+                    // FIXME: This is a temporary fix for circular references
+                    if ($twoWay && $fetchDepth === 2) {
+                        $fetchDepth = 0;
+                        break;
+                    }
+                    $fetchDepth++;
+                    $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
+                    $fetchDepth = 0;
+                    $document->setAttribute($key, $relatedDocument);
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     $relatedDocuments = $this->find($relatedCollection->getId(), [

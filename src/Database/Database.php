@@ -856,7 +856,7 @@ class Database
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
         if ($collection->getId() === self::METADATA) {
-            throw new Exception('Can not update ' . self::METADATA);
+            throw new Exception('Can not update metadata attributes');
         }
 
         $attributes = $collection->getAttribute('attributes', []);

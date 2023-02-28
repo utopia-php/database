@@ -9,6 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
@@ -16,7 +17,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\DatetimeValidator;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -911,6 +912,37 @@ abstract class Base extends TestCase
         $this->assertNotContains('guests', $new->getDelete());
 
         return $document;
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testUpdateDocumentConflict(Document $document)
+    {
+        $document->setAttribute('integer', 7);
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function() use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+        $this->assertEquals(7, $result->getAttribute('integer'));
+
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $document->setAttribute('integer', 8);
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testDeleteDocumentConflict(Document $document)
+    { 
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
+            return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
+        });
     }
 
     /**

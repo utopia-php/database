@@ -6,7 +6,7 @@ use Utopia\Database\Database;
 use Utopia\Validator;
 use Utopia\Database\Document;
 
-class IndexValidator extends Validator
+class Index extends Validator
 {
     protected string $message = 'Invalid Index';
     protected Document $collection;

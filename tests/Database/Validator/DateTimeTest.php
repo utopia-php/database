@@ -4,7 +4,7 @@ namespace Utopia\Tests\Validator;
 
 use Utopia\Database\DateTime;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Validator\DatetimeValidator;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 
 class DateTimeTest extends TestCase
 {

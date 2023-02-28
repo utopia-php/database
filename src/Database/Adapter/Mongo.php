@@ -498,15 +498,16 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool {
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    {
         $attribute = $this->filter($attribute);
         $where = ['_uid' => $id];
 
-        if($max){
+        if ($max) {
             $where[$attribute] = ['$lte' => $max];
         }
 
-        if($min){
+        if ($min) {
             $where[$attribute] = ['$gte' => $min];
         }
 

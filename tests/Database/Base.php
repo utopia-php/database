@@ -917,10 +917,10 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateDocument
      */
-    public function testUpdateDocumentConflict(Document $document)
+    public function testUpdateDocumentConflict(Document $document): void
     {
         $document->setAttribute('integer', 7);
-        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function() use ($document) {
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
         $this->assertEquals(7, $result->getAttribute('integer'));
@@ -928,7 +928,7 @@ abstract class Base extends TestCase
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $document->setAttribute('integer', 8);
         $this->expectException(ConflictException::class);
-        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
     }
@@ -936,11 +936,11 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateDocument
      */
-    public function testDeleteDocumentConflict(Document $document)
-    { 
+    public function testDeleteDocumentConflict(Document $document): void
+    {
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $this->expectException(ConflictException::class);
-        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
             return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
         });
     }

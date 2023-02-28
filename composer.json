@@ -24,10 +24,10 @@
             "Composer\\Config::disableProcessTimeout",
             "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
         ],
-        "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90",
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",
-        "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M"
+        "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M",
+        "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
         "ext-pdo": "*",

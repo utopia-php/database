@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use PhpParser\Comment\Doc;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -370,13 +369,13 @@ class Database
 
     /**
      * Executes $callback with $timestamp set to $requestTimestamp
-     * 
+     *
      * @template T
      * @param ?\DateTime $requestTimestamp
      * @param callable(): T $callback
      * @return T
      */
-    function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
+    public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
     {
         $previous = $this->timestamp;
         $this->timestamp = $requestTimestamp;
@@ -691,7 +690,7 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if($collection->isEmpty()){
+        if ($collection->isEmpty()) {
             throw new Exception('Collection not found');
         }
 
@@ -1549,21 +1548,21 @@ class Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
-        if($value <= 0){ // Can be a float
+        if ($value <= 0) { // Can be a float
             throw new Exception('Value must be numeric and greater than 0');
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA
             && !$validator->isValid($document->getUpdate())) {
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute){
+        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
             return $a['$id'] === $attribute;
         });
 
@@ -1577,11 +1576,11 @@ class Database
          * @var Document $attr
          */
         $attr = end($attr);
-        if(!in_array($attr->getAttribute('type'), $whiteList)){
+        if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new Exception('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
-        if($max && ($document->getAttribute($attribute) + $value > $max)){
+        if ($max && ($document->getAttribute($attribute) + $value > $max)) {
             throw new Exception('Attribute value exceeds maximum limit: ' . $max);
         }
 
@@ -1610,21 +1609,21 @@ class Database
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
     {
-        if($value <= 0){ // Can be a float
+        if ($value <= 0) { // Can be a float
             throw new Exception('Value must be numeric and greater than 0');
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $document = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA
             && !$validator->isValid($document->getUpdate())) {
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute){
+        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
             return $a['$id'] === $attribute;
         });
 
@@ -1638,11 +1637,11 @@ class Database
          * @var Document $attr
          */
         $attr = end($attr);
-        if(!in_array($attr->getAttribute('type'), $whiteList)){
+        if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new Exception('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
-        if($min && ($document->getAttribute($attribute) - $value < $min)){
+        if ($min && ($document->getAttribute($attribute) - $value < $min)) {
             throw new Exception('Attribute value Exceeds minimum limit ' . $min);
         }
 

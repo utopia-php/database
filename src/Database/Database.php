@@ -995,7 +995,7 @@ class Database
     {
         $collectionName = $collection;
         if ($collectionName === self::METADATA) {
-            throw new Exception('Update ' . self::METADATA . 'is prohibited');
+            throw new Exception('Can not update metadata attributes');
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));

@@ -697,7 +697,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = null, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();

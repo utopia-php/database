@@ -17,8 +17,9 @@ jobs:
 
     - name: Build image
       run:  |
-        docker compose up -d -build
-        sleep 10
+        docker compose build
+        docker compose up -d
+        sleep 5
 
     - name: Run Tests
       run: docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml

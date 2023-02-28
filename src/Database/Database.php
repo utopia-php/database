@@ -873,10 +873,10 @@ class Database
         // Save
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
-        $document = $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
-        return $document;
+        return $attributes[$attributeIndex];
     }
 
     /**
@@ -991,16 +991,15 @@ class Database
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
     {
-        $collectionName = $collection;
-        if ($collectionName === self::METADATA) {
+        if ($collection === self::METADATA) {
             throw new Exception('Update ' . self::METADATA . 'is prohibited');
         }
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
         if ($collection->isEmpty()) {
-            throw new Exception("Collection `$collectionName` not found ");
+            throw new Exception("Collection not found ");
         }
 
         /** Ensure required filters for the attribute are passed */

@@ -986,108 +986,98 @@ class Database
      * @param bool $signed
      * @param bool $array
      * @param string|null $format
-     * @param array $formatOptions
-     * @param array $filters
+     * @param array|null $formatOptions
+     * @param array|null $filters
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): Document
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
     {
-        if ($collection === self::METADATA) {
-            throw new Exception('Can not update metadata attributes');
-        }
-
-        $collection = $this->silent(fn() => $this->getCollection($collection));
-        if ($collection->isEmpty()) {
-            throw new Exception("Collection not found ");
-        }
-
-        /** Ensure required filters for the attribute are passed */
-        $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(array_diff($requiredFilters, $filters))) {
-            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
-        }
-
-        if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, &$success) {
+            $altering = true;
+            if(is_null($type) && is_null($size) && is_null($signed) && is_null($array)){
+                $altering = false;
             }
-        }
+            $type ??= $attribute->getAttribute('type');
+            $size ??= $attribute->getAttribute('size');
+            $signed ??= $attribute->getAttribute('signed');
+            $required ??= $attribute->getAttribute('required');
+            $default ??= $attribute->getAttribute('default');
+            $array ??= $attribute->getAttribute('array');
+            $format = is_null($format) ? $attribute->getAttribute('format') : ($format === '' ? '' : $format);
+            $formatOptions ??= $attribute->getAttribute('formatOptions');
+            $filters ??= $attribute->getAttribute('filters');
 
-        if (!\is_null($default)) {
-            if ($required === true) {
-                throw new Exception('Cannot set a default value on a required attribute');
+            switch ($type) {
+                case self::VAR_STRING:
+                    if ($size > $this->adapter->getLimitForString()) {
+                        throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                    }
+                    break;
+
+                case self::VAR_INTEGER:
+                    $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
+                    if ($size > $limit) {
+                        throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                    }
+                    break;
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                case self::VAR_DATETIME:
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type: ' . $type);
             }
 
-            $this->validateDefaultTypes($type, $default);
-        }
-
-        return $this->updateAttributeMeta($collection->getId(), $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, &$success) {
-            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
-                $altering = true;
-                if(is_null($type) && is_null($size) && is_null($signed) && is_null($array)){
-                    $altering = false;
-                }
-                $type ??= $attribute->getAttribute('type');
-                $size ??= $attribute->getAttribute('size');
-                $signed ??= $attribute->getAttribute('signed');
-                $required ??= $attribute->getAttribute('required');
-                $default ??= $attribute->getAttribute('default');
-                $array ??= $attribute->getAttribute('array');
-                $format ??= $attribute->getAttribute('format');
-                $formatOptions ??= $attribute->getAttribute('formatOptions');
-                $filters ??= $attribute->getAttribute('filters');
-
-                switch ($type) {
-                    case self::VAR_STRING:
-                        if ($size > $this->adapter->getLimitForString()) {
-                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
-                        }
-                        break;
-
-                    case self::VAR_INTEGER:
-                        $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
-                        if ($size > $limit) {
-                            throw new Exception('Max size allowed for int is: ' . number_format($limit));
-                        }
-                        break;
-                    case self::VAR_FLOAT:
-                    case self::VAR_BOOLEAN:
-                    case self::VAR_DATETIME:
-                        break;
-                    default:
-                        throw new Exception('Unknown attribute type: ' . $type);
-                }
-
-                $attribute
-                    ->setAttribute('type', $type)
-                    ->setAttribute('size', $size)
-                    ->setAttribute('signed', $signed)
-                    ->setAttribute('array', $array)
-                    ->setAttribute('format', $format)
-                    ->setAttribute('formatOptions', $formatOptions)
-                    ->setAttribute('filters', $filters)
-                    ->setAttribute('required', $required)
-                    ->setAttribute('default', $default);
-
-                $attributes = $collectionDoc->getAttribute('attributes');
-                $attributes[$attributeIndex] = $attribute;
-                $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
-
-                if (
-                    $this->adapter->getDocumentSizeLimit() > 0 &&
-                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
-                ) {
-                    throw new LimitException('Row width limit reached. Cannot create new attribute.');
-                }
-
-                if($altering === true){
-                    $this->adapter->updateAttribute($collection->getId(), $id, $type, $size, $signed, $array);
-                    $this->deleteCachedCollection($collection->getId());
-                }
-
-                $this->deleteCachedDocument(self::METADATA, $collection->getId());
+            /** Ensure required filters for the attribute are passed */
+            $requiredFilters = $this->getRequiredFilters($type);
+            if (!empty(array_diff($requiredFilters, $filters))) {
+                throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
             }
+
+            if ($format) {
+                if (!Structure::hasFormat($format, $type)) {
+                    throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+                }
+            }
+
+            if (!\is_null($default)) {
+                if ($required === true) {
+                    throw new Exception('Cannot set a default value on a required attribute');
+                }
+
+                $this->validateDefaultTypes($type, $default);
+            }
+
+            $attribute
+                ->setAttribute('type', $type)
+                ->setAttribute('size', $size)
+                ->setAttribute('signed', $signed)
+                ->setAttribute('array', $array)
+                ->setAttribute('format', $format)
+                ->setAttribute('formatOptions', $formatOptions)
+                ->setAttribute('filters', $filters)
+                ->setAttribute('required', $required)
+                ->setAttribute('default', $default);
+
+            $attributes = $collectionDoc->getAttribute('attributes');
+            $attributes[$attributeIndex] = $attribute;
+            $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+
+            if (
+                $this->adapter->getDocumentSizeLimit() > 0 &&
+                $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
+            ) {
+                throw new LimitException('Row width limit reached. Cannot create new attribute.');
+            }
+
+            if($altering === true){
+                $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                $this->deleteCachedCollection($collection);
+            }
+
+            $this->deleteCachedDocument(self::METADATA, $collection);
+
         });
     }
 

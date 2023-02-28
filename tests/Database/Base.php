@@ -3591,6 +3591,7 @@ abstract class Base extends TestCase
         });
     }
 
+    // Relationships
     public function testOneToOneOneWayRelationship(): void
     {
         static::getDatabase()->createCollection('person');
@@ -3617,13 +3618,6 @@ abstract class Base extends TestCase
                 $this->assertEquals('person', $attribute['options']['twoWayId']);
             }
         }
-
-//        // Check metadata for related collection
-//        $collection = static::getDatabase()->getCollection('library');
-//        $attributes = $collection->getAttribute('attributes', []);
-//        foreach ($attributes as $attribute) {
-//            $this->assertNotEquals('person', $attribute['key']);
-//        }
 
         // Create document with relationship with nested data
         static::getDatabase()->createDocument('person', new Document([
@@ -3774,13 +3768,6 @@ abstract class Base extends TestCase
             }
         }
 
-//        // Check metadata for related collection
-//        $collection = static::getDatabase()->getCollection('album');
-//        $attributes = $collection->getAttribute('attributes', []);
-//        foreach ($attributes as $attribute) {
-//            $this->assertNotEquals('artist', $attribute['key']);
-//        }
-
         // Create document with relationship with nested data
         static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist1',
@@ -3803,7 +3790,6 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-                Permission::delete(Role::any()),
             ]
         ]));
         static::getDatabase()->createDocument('artist', new Document([
@@ -3822,6 +3808,9 @@ abstract class Base extends TestCase
         $album = static::getDatabase()->getDocument('album', 'album1');
         $artist = $album->getAttribute('artist');
         $this->assertEquals(null, $artist);
+
+        static::getDatabase()->deleteCollection('artist');
+        static::getDatabase()->deleteCollection('album');
     }
 
     public function testOneToManyTwoWayRelationship(): void
@@ -3847,7 +3836,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('albums', $attribute['key']);
                 $this->assertEquals('album', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('artist', $attribute['options']['twoWayId']);
             }
         }
@@ -3870,16 +3859,26 @@ abstract class Base extends TestCase
         // Create document with relationship with nested data
         static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
             'albums' => [
                 [
-                    '$id' => 'album1'
+                    '$id' => 'album1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
                 ],
             ],
         ]));
 
         // Create document with relationship with related ID
-        static::getDatabase()->createDocument('albums', new Document([
+        static::getDatabase()->createDocument('album', new Document([
             '$id' => 'album2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
         ]));
         static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist2',
@@ -3889,13 +3888,13 @@ abstract class Base extends TestCase
         ]));
 
         // Get document with relationship
-        $person = static::getDatabase()->getDocument('artist', 'artist1');
-        $albums = $person->getAttribute('albums', []);
+        $artist = static::getDatabase()->getDocument('artist', 'artist1');
+        $albums = $artist->getAttribute('albums', []);
         $this->assertEquals('album1', $albums[0]['$id']);
 
         // Get related document
-        $library = static::getDatabase()->getDocument('album', 'album1');
-        $artist = $library->getAttribute('artist');
+        $album = static::getDatabase()->getDocument('album', 'album1');
+        $artist = $album->getAttribute('artist');
         $this->assertEquals('artist1', $artist['$id']);
     }
 

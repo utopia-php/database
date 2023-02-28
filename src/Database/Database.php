@@ -1551,8 +1551,14 @@ class Database
                     $document->setAttribute($key, $relatedDocument);
                     break;
                 case Database::RELATION_ONE_TO_MANY:
-                    if (!$twoWay && $side == 'child') {
-                        $document->removeAttribute($key);
+                    if ($side == 'child') {
+                        if (!$twoWay) {
+                            $document->removeAttribute($key);
+                        }
+                        if ($twoWay && !\is_null($value)) {
+                            $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
+                            $document->setAttribute($key, $relatedDocument);
+                        }
                         break;
                     }
 
@@ -1635,7 +1641,7 @@ class Database
                     $relation->setAttribute($twoWayId, $document->getId());
                 }
 
-                // Get the related document
+                // Try to get the related document
                 $related = $this->getDocument($relatedCollectionId, $relation->getId());
 
                 if ($related->isEmpty()) {

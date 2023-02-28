@@ -9,7 +9,9 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
+use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -3587,5 +3589,445 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
+    }
+
+    public function testOneToOneOneWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('person');
+        static::getDatabase()->createCollection('library');
+
+        static::getDatabase()->createRelationship(
+            collection: 'person',
+            relatedCollection: 'library',
+            type: Database::RELATION_ONE_TO_ONE
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('person');
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'library') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('library', $attribute['$id']);
+                $this->assertEquals('library', $attribute['key']);
+                $this->assertEquals('library', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('person', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('library');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $this->assertNotEquals('person', $attribute['key']);
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('person', new Document([
+            '$id' => 'person1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'library' => [
+                '$id' => 'library1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('library', new Document([
+            '$id' => 'library2',
+        ]));
+        static::getDatabase()->createDocument('person', new Document([
+            '$id' => 'person2',
+            'library' => 'library2'
+        ]));
+
+        // Get document with relationship
+        $person = static::getDatabase()->getDocument('person', 'person1');
+        $library = $person->getAttribute('library');
+        $this->assertEquals('library1', $library['$id']);
+
+        // Get related document
+        $library = static::getDatabase()->getDocument('library', 'library1');
+        $person = $library->getAttribute('person');
+        $this->assertEquals(null, $person);
+
+        static::getDatabase()->deleteCollection('person');
+        static::getDatabase()->deleteCollection('library');
+    }
+
+    public function testOneToOneTwoWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('country');
+        static::getDatabase()->createCollection('city');
+
+        static::getDatabase()->createRelationship(
+            collection: 'country',
+            relatedCollection: 'city',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true
+        );
+
+        $collection = static::getDatabase()->getCollection('country');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'city') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('city', $attribute['$id']);
+                $this->assertEquals('city', $attribute['key']);
+                $this->assertEquals('city', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('country', $attribute['options']['twoWayId']);
+            }
+        }
+
+        $collection = static::getDatabase()->getCollection('city');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'country') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('country', $attribute['$id']);
+                $this->assertEquals('country', $attribute['key']);
+                $this->assertEquals('country', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('city', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('country', new Document([
+            '$id' => 'country1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'city' => [
+                '$id' => 'city1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]
+        ]));
+        static::getDatabase()->createDocument('country', new Document([
+            '$id' => 'country2',
+            'city' => 'city2'
+        ]));
+
+        // Get document with relationship
+        $city = static::getDatabase()->getDocument('city', 'city1');
+        $country = $city->getAttribute('country');
+        $this->assertEquals('country1', $country['$id']);
+
+        // Get inverse document with relationship
+        $country = static::getDatabase()->getDocument('country', 'country1');
+        $city = $country->getAttribute('city');
+        $this->assertEquals('city1', $city['$id']);
+
+        static::getDatabase()->deleteCollection('country');
+        static::getDatabase()->deleteCollection('city');
+    }
+
+    public function testOneToManyOneWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('artist');
+        static::getDatabase()->createCollection('album');
+
+        static::getDatabase()->createRelationship(
+            collection: 'artist',
+            relatedCollection: 'album',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'albums'
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('artist');
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'albums') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('albums', $attribute['$id']);
+                $this->assertEquals('albums', $attribute['key']);
+                $this->assertEquals('album', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('artist', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('album');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $this->assertNotEquals('artist', $attribute['key']);
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('artist', new Document([
+            '$id' => 'artist1',
+            'albums' => [
+                [
+                    '$id' => 'album1'
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('albums', new Document([
+            '$id' => 'album2',
+        ]));
+        static::getDatabase()->createDocument('artist', new Document([
+            '$id' => 'artist2',
+            'albums' => [
+                'album2'
+            ]
+        ]));
+
+        // Get document with relationship
+        $person = static::getDatabase()->getDocument('artist', 'artist1');
+        $albums = $person->getAttribute('albums', []);
+        $this->assertEquals('album1', $albums[0]['$id']);
+
+        // Get related document
+        $library = static::getDatabase()->getDocument('album', 'album1');
+        $artist = $library->getAttribute('artist');
+        $this->assertEquals(null, $artist);
+    }
+
+    public function testOneToManyTwoWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('artist');
+        static::getDatabase()->createCollection('album');
+
+        static::getDatabase()->createRelationship(
+            collection: 'artist',
+            relatedCollection: 'album',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'albums',
+            twoWay: true
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('artist');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'albums') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('albums', $attribute['$id']);
+                $this->assertEquals('albums', $attribute['key']);
+                $this->assertEquals('album', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('artist', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('album');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'artist') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('artist', $attribute['$id']);
+                $this->assertEquals('artist', $attribute['key']);
+                $this->assertEquals('artist', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('albums', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('artist', new Document([
+            '$id' => 'artist1',
+            'albums' => [
+                [
+                    '$id' => 'album1'
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('albums', new Document([
+            '$id' => 'album2',
+        ]));
+        static::getDatabase()->createDocument('artist', new Document([
+            '$id' => 'artist2',
+            'albums' => [
+                'album2'
+            ]
+        ]));
+
+        // Get document with relationship
+        $person = static::getDatabase()->getDocument('artist', 'artist1');
+        $albums = $person->getAttribute('albums', []);
+        $this->assertEquals('album1', $albums[0]['$id']);
+
+        // Get related document
+        $library = static::getDatabase()->getDocument('album', 'album1');
+        $artist = $library->getAttribute('artist');
+        $this->assertEquals('artist1', $artist['$id']);
+    }
+
+    public function testManyToManyOneWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('song');
+        static::getDatabase()->createCollection('playlist');
+
+        static::getDatabase()->createRelationship(
+            collection: 'song',
+            relatedCollection: 'playlist',
+            type: Database::RELATION_MANY_TO_MANY,
+            id: 'playlists',
+            twoWayId: 'songs'
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('song');
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'playlists') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('playlists', $attribute['$id']);
+                $this->assertEquals('playlists', $attribute['key']);
+                $this->assertEquals('playlist', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('songs', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('playlist');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $this->assertNotEquals('songs', $attribute['key']);
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('song', new Document([
+            '$id' => 'song1',
+            'playlists' => [
+                [
+                    '$id' => 'playlist1'
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('playlists', new Document([
+            '$id' => 'playlist2',
+        ]));
+        static::getDatabase()->createDocument('song', new Document([
+            '$id' => 'song2',
+            'playlists' => [
+                'playlist2'
+            ]
+        ]));
+
+        // Get document with relationship
+        $person = static::getDatabase()->getDocument('song', 'song1');
+        $playlists = $person->getAttribute('albums', []);
+        $this->assertEquals('playlist1', $playlists[0]['$id']);
+
+        // Get related document
+        $library = static::getDatabase()->getDocument('playlist', 'playlist1');
+        $songs = $library->getAttribute('songs');
+        $this->assertEquals(null, $songs);
+
+        static::getDatabase()->deleteCollection('song');
+        static::getDatabase()->deleteCollection('playlist');
+    }
+
+    public function testManyToManyTwoWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('song');
+        static::getDatabase()->createCollection('playlist');
+
+        static::getDatabase()->createRelationship(
+            collection: 'song',
+            relatedCollection: 'playlist',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'playlists',
+            twoWayId: 'songs'
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('song');
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'playlists') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('playlists', $attribute['$id']);
+                $this->assertEquals('playlists', $attribute['key']);
+                $this->assertEquals('playlist', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('songs', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('playlist');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $this->assertNotEquals('songs', $attribute['key']);
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('song', new Document([
+            '$id' => 'song1',
+            'playlists' => [
+                [
+                    '$id' => 'playlist1'
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('playlists', new Document([
+            '$id' => 'playlist2',
+        ]));
+        static::getDatabase()->createDocument('song', new Document([
+            '$id' => 'song2',
+            'playlists' => [
+                'playlist2'
+            ]
+        ]));
+
+        // Get document with relationship
+        $person = static::getDatabase()->getDocument('song', 'song1');
+        $playlists = $person->getAttribute('albums', []);
+        $this->assertEquals('playlist1', $playlists[0]['$id']);
+
+        // Get related document
+        $library = static::getDatabase()->getDocument('playlist', 'playlist1');
+        $songs = $library->getAttribute('songs');
+        $this->assertEquals('song1', $songs[0]['$id']);
+
+        static::getDatabase()->deleteCollection('song');
+        static::getDatabase()->deleteCollection('playlist');
     }
 }

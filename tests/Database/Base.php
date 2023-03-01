@@ -3936,6 +3936,9 @@ abstract class Base extends TestCase
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('song', new Document([
             '$id' => 'song2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
         ]));
         static::getDatabase()->createDocument('playlist', new Document([
             '$id' => 'playlist2',
@@ -3957,73 +3960,84 @@ abstract class Base extends TestCase
 
     public function testManyToManyTwoWayRelationship(): void
     {
-        static::getDatabase()->createCollection('song');
-        static::getDatabase()->createCollection('playlist');
+        static::getDatabase()->createCollection('students');
+        static::getDatabase()->createCollection('classes');
 
         static::getDatabase()->createRelationship(
-            collection: 'song',
-            relatedCollection: 'playlist',
+            collection: 'students',
+            relatedCollection: 'classes',
             type: Database::RELATION_MANY_TO_MANY,
             twoWay: true,
-            id: 'playlists',
-            twoWayId: 'songs'
         );
 
         // Check metadata for collection
-        $collection = static::getDatabase()->getCollection('song');
+        $collection = static::getDatabase()->getCollection('students');
         $attributes = $collection->getAttribute('attributes', []);
-
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'playlists') {
+            if ($attribute['key'] === 'students') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('playlists', $attribute['$id']);
-                $this->assertEquals('playlists', $attribute['key']);
-                $this->assertEquals('playlist', $attribute['options']['relatedCollection']);
+                $this->assertEquals('students', $attribute['$id']);
+                $this->assertEquals('students', $attribute['key']);
+                $this->assertEquals('students', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('songs', $attribute['options']['twoWayId']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('classes', $attribute['options']['twoWayId']);
             }
         }
 
         // Check metadata for related collection
-        $collection = static::getDatabase()->getCollection('playlist');
+        $collection = static::getDatabase()->getCollection('classes');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            $this->assertNotEquals('songs', $attribute['key']);
+            if ($attribute['key'] === 'customer') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('classes', $attribute['$id']);
+                $this->assertEquals('classes', $attribute['key']);
+                $this->assertEquals('classes', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('students', $attribute['options']['twoWayId']);
+            }
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('song', new Document([
-            '$id' => 'song1',
-            'playlists' => [
+        static::getDatabase()->createDocument('students', new Document([
+            '$id' => 'student1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'classes' => [
                 [
-                    '$id' => 'playlist1'
+                    '$id' => 'class1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
                 ],
             ],
         ]));
 
         // Create document with relationship with related ID
-        static::getDatabase()->createDocument('playlists', new Document([
-            '$id' => 'playlist2',
+        static::getDatabase()->createDocument('classes', new Document([
+            '$id' => 'class2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
         ]));
-        static::getDatabase()->createDocument('song', new Document([
-            '$id' => 'song2',
-            'playlists' => [
-                'playlist2'
+        static::getDatabase()->createDocument('students', new Document([
+            '$id' => 'student2',
+            'classes' => [
+                'class2'
             ]
         ]));
 
         // Get document with relationship
-        $person = static::getDatabase()->getDocument('song', 'song1');
-        $playlists = $person->getAttribute('albums', []);
-        $this->assertEquals('playlist1', $playlists[0]['$id']);
+        $student = static::getDatabase()->getDocument('students', 'student1');
+        $classes = $student->getAttribute('classes', []);
+        $this->assertEquals('class1', $classes[0]['$id']);
 
         // Get related document
-        $library = static::getDatabase()->getDocument('playlist', 'playlist1');
-        $songs = $library->getAttribute('songs');
-        $this->assertEquals('song1', $songs[0]['$id']);
-
-        static::getDatabase()->deleteCollection('song');
-        static::getDatabase()->deleteCollection('playlist');
+        $class = static::getDatabase()->getDocument('classes', 'class1');
+        $student = $class->getAttribute('students');
+        $this->assertEquals('student1', $student[0]['$id']);
     }
 }

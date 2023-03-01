@@ -1565,24 +1565,24 @@ class Database
                     if (\is_null($value)) {
                         break;
                     }
-                    // FIXME: This is a temporary fix for circular references
+                    // FIXME: This is a hacky fix for circular references
                     if ($twoWay && $fetchDepth === 2) {
                         $fetchDepth = 0;
                         break;
                     }
                     $fetchDepth++;
-                    $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
+                    $related = $this->getDocument($relatedCollection->getId(), $value);
                     $fetchDepth = 0;
-                    $document->setAttribute($key, $relatedDocument);
+                    $document->setAttribute($key, $related);
                     break;
                 case Database::RELATION_ONE_TO_MANY:
-                    if ($side == 'child') {
+                    if ($side === 'child') {
                         if (!$twoWay) {
                             $document->removeAttribute($key);
                         }
                         if ($twoWay && !\is_null($value)) {
-                            $relatedDocument = $this->getDocument($relatedCollection->getId(), $value);
-                            $document->setAttribute($key, $relatedDocument);
+                            $related = $this->getDocument($relatedCollection->getId(), $value);
+                            $document->setAttribute($key, $related);
                         }
                         break;
                     }
@@ -1591,13 +1591,44 @@ class Database
                         Query::equal($twoWayId,  [$document->getId()]),
                     ]);
 
-                    foreach ($relatedDocuments as $relatedDocument) {
-                        $relatedDocument->removeAttribute($twoWayId);
+                    foreach ($relatedDocuments as $related) {
+                        $related->removeAttribute($twoWayId);
                     }
 
                     $document->setAttribute($key, $relatedDocuments);
                     break;
                 case Database::RELATION_MANY_TO_MANY:
+                    if (!$twoWay && $side === 'child') {
+                        break;
+                    }
+
+                    // FIXME: This is a hacky fix for circular references
+                    if ($twoWay && $fetchDepth === 2) {
+                        $fetchDepth = 0;
+                        break;
+                    }
+
+                    $fetchDepth++;
+
+                    $junction = $side === 'child'
+                        ? $relatedCollection->getId() . '_' . $collection->getId()
+                        : $collection->getId() . '_' . $relatedCollection->getId();
+
+                    $junctions = $this->find($junction, [
+                        Query::equal($twoWayId, [$document->getId()]),
+                    ]);
+
+                    $related = [];
+                    foreach ($junctions as $junction) {
+                        $related[] = $this->getDocument(
+                            $relatedCollection->getId(),
+                            $junction->getAttribute($key)
+                        );
+                    }
+
+                    $fetchDepth = 0;
+
+                    $document->setAttribute($key, $related);
                     break;
             }
         }
@@ -1664,20 +1695,22 @@ class Database
                     foreach ($value as $related) {
                         switch(\gettype($related)) {
                             case 'object':
-                                $this->createRelationshipWithDocument(
+                                $this->relateDocuments(
                                     $collection->getId(),
                                     $relatedCollection->getId(),
+                                    $key,
                                     $document,
                                     $related,
-                                    $key,
                                     $relationType,
                                     $twoWay,
                                     $twoWayId
                                 );
                                 break;
                             case 'string':
-                                $this->createRealtionshipWithDocumentId(
+                                $this->relateDocumentsById(
+                                    $collection->getId(),
                                     $relatedCollection->getId(),
+                                    $key,
                                     $document->getId(),
                                     $related,
                                     $relationType,
@@ -1685,18 +1718,20 @@ class Database
                                     $twoWayId
                                 );
                                 break;
+                            default:
+                                throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
                     }
                     $document->removeAttribute($key);
                     break;
                 case 'object':
                     // Single document
-                    $relatedId = $this->createRelationshipWithDocument(
+                    $relatedId = $this->relateDocuments(
                         $collection->getId(),
                         $relatedCollection->getId(),
+                        $key,
                         $document,
                         $value,
-                        $key,
                         $relationType,
                         $twoWay,
                         $twoWayId
@@ -1705,8 +1740,10 @@ class Database
                     break;
                 case 'string':
                     // Single document ID
-                    $this->createRealtionshipWithDocumentId(
+                    $this->relateDocumentsById(
+                        $collection->getId(),
                         $relatedCollection->getId(),
+                        $key,
                         $document->getId(),
                         $value,
                         $relationType,
@@ -1731,12 +1768,12 @@ class Database
         return $document;
     }
 
-    private function createRelationshipWithDocument(
+    private function relateDocuments(
         string $collection,
         string $relatedCollection,
+        string $key,
         Document $document,
         Document $relation,
-        string $key,
         string $relationType,
         bool $twoWay,
         string $twoWayId
@@ -1765,18 +1802,24 @@ class Database
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
             $junction = $collection . '_' . $relatedCollection;
-            
+
             $this->createDocument($junction, new Document([
-                $key => $document->getId(),
-                $twoWayId => $related->getId(),
+                $key => $related->getId(),
+                $twoWayId => $document->getId(),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::write(Role::any()),
+                ]
             ]));
         }
 
         return $related->getId();
     }
 
-    private function createRealtionshipWithDocumentId(
+    private function relateDocumentsById(
+        string $collection,
         string $relatedCollection,
+        string $key,
         string $documentId,
         string $relationId,
         string $relationType,
@@ -1786,9 +1829,32 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->getDocument($relatedCollection, $relationId);
 
-        if (!$related->isEmpty() && (($twoWay && $relationType === Database::RELATION_ONE_TO_ONE) || $relationType === Database::RELATION_ONE_TO_MANY)) {
-            $related->setAttribute($twoWayId, $documentId);
-            $this->updateDocument($relatedCollection, $relationId, $related);
+        if ($related->isEmpty()) {
+            return '';
+        }
+
+        switch ($relationType) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($twoWay) {
+                    $related->setAttribute($twoWayId, $documentId);
+                    $this->updateDocument($relatedCollection, $relationId, $related);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $related->setAttribute($twoWayId, $documentId);
+                $this->updateDocument($relatedCollection, $relationId, $related);
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $collection . '_' . $relatedCollection;
+
+                $this->createDocument($junction, new Document([
+                    $key => $related->getId(),
+                    $twoWayId => $documentId,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::write(Role::any()),
+                    ]
+                ]));
         }
 
         return $related->getId();
@@ -2241,7 +2307,9 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
-        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            return $attribute['type'] !== self::VAR_RELATIONSHIP;
+        });
         $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';

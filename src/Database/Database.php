@@ -213,6 +213,16 @@ class Database
                 'array' => false,
                 'filters' => ['json'],
             ],
+            [
+                '$id' => 'private',
+                'key' => 'private',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ],
         ],
         'indexes' => [],
     ];
@@ -463,6 +473,7 @@ class Database
             ['name', self::VAR_STRING, 512, true],
             ['attributes', self::VAR_STRING, 1000000, false],
             ['indexes', self::VAR_STRING, 1000000, false],
+            ['private', self::VAR_BOOLEAN, 0, false],
         ]);
 
         $this->silent(fn() => $this->createCollection(self::METADATA, $attributes));
@@ -526,7 +537,7 @@ class Database
      * @return Document
      * @throws DuplicateException
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], bool $private = false): Document
     {
         $collection = $this->silent(fn() => $this->getCollection($id));
 
@@ -551,6 +562,7 @@ class Database
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
+            'private' => $private,
         ]);
 
         // Check index limits, if given
@@ -862,6 +874,35 @@ class Database
                 'side' => 'child',
             ],
         ]), Document::SET_TYPE_APPEND);
+
+        if ($type === self::RELATION_MANY_TO_MANY) {
+            $this->createCollection(
+                id: $collection->getId() . '_' . $relatedCollection->getId(),
+                attributes: [
+                    new Document([
+                        '$id' => $id,
+                        'key' => $id,
+                        'type' => self::VAR_STRING,
+                        'size' => 36,
+                        'required' => true,
+                        'signed' => true,
+                        'array' => false,
+                        'filters' => [],
+                    ]),
+                    new Document([
+                        '$id' => $twoWayId,
+                        'key' => $twoWayId,
+                        'type' => self::VAR_STRING,
+                        'size' => 36,
+                        'required' => true,
+                        'signed' => true,
+                        'array' => false,
+                        'filters' => [],
+                    ]),
+                ],
+                private: true
+            );
+        }
 
         $relationship = $this->adapter->createRelationship(
             $collection->getId(),
@@ -1655,6 +1696,13 @@ class Database
                     // If the related document exists and the data is not the same, update it
                     $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
                 }
+
+                if ($relationType === Database::RELATION_MANY_TO_MANY) {
+                    $junction = $collection . '_' . $relatedCollection;
+                    $this->createDocument($junction, new Document([
+                        $key => $document->getId(),
+                        $twoWayId => $related->getId(),
+                    ]));
                 }
 
                 return $related->getId();

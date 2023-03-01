@@ -205,7 +205,6 @@ class MariaDB extends SQL
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
-        $junctionTable = $this->getSQLTable($name . '_' . $relatedName);
         $id = $this->filter($id);
         $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
 
@@ -224,15 +223,7 @@ class MariaDB extends SQL
                 $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $sql = "CREATE TABLE IF NOT EXISTS {$junctionTable} (
-                            `_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-                            `{$name}` VARCHAR(255) NOT NULL,
-                            `{$relatedName}` VARCHAR(255) NOT NULL,
-                            PRIMARY KEY (`_id`),
-                            KEY `{$name}` (`{$name}`),
-                            KEY `{$relatedName}` (`{$relatedName}`)
-                        );";
-                break;
+                return true;
             default:
                 throw new Exception('Invalid relationship type.');
         }

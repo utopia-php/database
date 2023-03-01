@@ -551,7 +551,6 @@ class Database
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
-            'private' => $private,
         ]);
 
         // Check index limits, if given

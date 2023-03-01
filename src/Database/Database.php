@@ -1633,37 +1633,42 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayId = $relationship['options']['twoWayId'];
 
-            $handleDocumentReference = function (string $relatedCollectionId, Document $document, Document $relation, string $key, string $relationType, bool $twoWay, string $twoWayId): string {
-                if (
-                    ($twoWay && $relationType === Database::RELATION_ONE_TO_ONE)
-                    || $relationType === Database::RELATION_ONE_TO_MANY
-                ) {
-                    $relation->setAttribute($twoWayId, $document->getId());
+            $handleDocumentReference = function (string $collection, string $relatedCollection, Document $document, Document $relation, string $key, string $relationType, bool $twoWay, string $twoWayId): string {
+                switch ($relationType) {
+                    case Database::RELATION_ONE_TO_ONE:
+                        if ($twoWay) {
+                            $relation->setAttribute($twoWayId, $document->getId());
+                        }
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                        $relation->setAttribute($twoWayId, $document->getId());
+                        break;
                 }
 
                 // Try to get the related document
-                $related = $this->getDocument($relatedCollectionId, $relation->getId());
+                $related = $this->getDocument($relatedCollection, $relation->getId());
 
                 if ($related->isEmpty()) {
                     // If the related document doesn't exist, create it
-                    $related = $this->createDocument($relatedCollectionId, $relation);
-                } else if (!empty(\array_diff($relation->getArrayCopy(), $related->getArrayCopy()))) {
+                    $related = $this->createDocument($relatedCollection, $relation);
+                } else if ($relation->getArrayCopy() != $related->getArrayCopy()) {
                     // If the related document exists and the data is not the same, update it
-                    $related = $this->updateDocument($relatedCollectionId, $relation->getId(), $relation);
+                    $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
+                }
                 }
 
                 return $related->getId();
             };
 
-            $handleIDReference = function (string $relatedCollectionId, string $documentId, string $relationId, string $relationType, bool $twoWay, string $twoWayId): string {
+            $handleIDReference = function (string $relatedCollection, string $documentId, string $relationId, string $relationType, bool $twoWay, string $twoWayId): string {
                 // Get the related document, will be empty on permissions failure
-                $related = $this->getDocument($relatedCollectionId, $relationId);
+                $related = $this->getDocument($relatedCollection, $relationId);
 
                 if (
                     !$related->isEmpty() && (($twoWay && $relationType === Database::RELATION_ONE_TO_ONE) || $relationType === Database::RELATION_ONE_TO_MANY)
                 ) {
                     $related->setAttribute($twoWayId, $documentId);
-                    $this->updateDocument($relatedCollectionId, $relationId, $related);
+                    $this->updateDocument($relatedCollection, $relationId, $related);
                 }
 
                 return $related->getId();
@@ -1676,6 +1681,7 @@ class Database
                         switch(\gettype($related)) {
                             case 'object':
                                 $handleDocumentReference(
+                                    $collection->getId(),
                                     $relatedCollection->getId(),
                                     $document,
                                     $related,
@@ -1702,6 +1708,7 @@ class Database
                 case 'object':
                     // Single document
                     $relatedId = $handleDocumentReference(
+                        $collection->getId(),
                         $relatedCollection->getId(),
                         $document,
                         $value,

@@ -1674,61 +1674,13 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayId = $relationship['options']['twoWayId'];
 
-            $handleDocumentReference = function (string $collection, string $relatedCollection, Document $document, Document $relation, string $key, string $relationType, bool $twoWay, string $twoWayId): string {
-                switch ($relationType) {
-                    case Database::RELATION_ONE_TO_ONE:
-                        if ($twoWay) {
-                            $relation->setAttribute($twoWayId, $document->getId());
-                        }
-                        break;
-                    case Database::RELATION_ONE_TO_MANY:
-                        $relation->setAttribute($twoWayId, $document->getId());
-                        break;
-                }
-
-                // Try to get the related document
-                $related = $this->getDocument($relatedCollection, $relation->getId());
-
-                if ($related->isEmpty()) {
-                    // If the related document doesn't exist, create it
-                    $related = $this->createDocument($relatedCollection, $relation);
-                } else if ($relation->getArrayCopy() != $related->getArrayCopy()) {
-                    // If the related document exists and the data is not the same, update it
-                    $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
-                }
-
-                if ($relationType === Database::RELATION_MANY_TO_MANY) {
-                    $junction = $collection . '_' . $relatedCollection;
-                    $this->createDocument($junction, new Document([
-                        $key => $document->getId(),
-                        $twoWayId => $related->getId(),
-                    ]));
-                }
-
-                return $related->getId();
-            };
-
-            $handleIDReference = function (string $relatedCollection, string $documentId, string $relationId, string $relationType, bool $twoWay, string $twoWayId): string {
-                // Get the related document, will be empty on permissions failure
-                $related = $this->getDocument($relatedCollection, $relationId);
-
-                if (
-                    !$related->isEmpty() && (($twoWay && $relationType === Database::RELATION_ONE_TO_ONE) || $relationType === Database::RELATION_ONE_TO_MANY)
-                ) {
-                    $related->setAttribute($twoWayId, $documentId);
-                    $this->updateDocument($relatedCollection, $relationId, $related);
-                }
-
-                return $related->getId();
-            };
-
             switch (\gettype($value)) {
                 case 'array':
                     // List of documents or IDs
                     foreach ($value as $related) {
                         switch(\gettype($related)) {
                             case 'object':
-                                $handleDocumentReference(
+                                $this->createRelationshipWithDocument(
                                     $collection->getId(),
                                     $relatedCollection->getId(),
                                     $document,
@@ -1740,7 +1692,7 @@ class Database
                                 );
                                 break;
                             case 'string':
-                                $handleIDReference(
+                                $this->createRealtionshipWithDocumentId(
                                     $relatedCollection->getId(),
                                     $document->getId(),
                                     $related,
@@ -1755,7 +1707,7 @@ class Database
                     break;
                 case 'object':
                     // Single document
-                    $relatedId = $handleDocumentReference(
+                    $relatedId = $this->createRelationshipWithDocument(
                         $collection->getId(),
                         $relatedCollection->getId(),
                         $document,
@@ -1769,7 +1721,7 @@ class Database
                     break;
                 case 'string':
                     // Single document ID
-                    $handleIDReference(
+                    $this->createRealtionshipWithDocumentId(
                         $relatedCollection->getId(),
                         $document->getId(),
                         $value,
@@ -1793,6 +1745,69 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
         return $document;
+    }
+
+    private function createRelationshipWithDocument(
+        string $collection,
+        string $relatedCollection,
+        Document $document,
+        Document $relation,
+        string $key,
+        string $relationType,
+        bool $twoWay,
+        string $twoWayId
+    ): string {
+        switch ($relationType) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($twoWay) {
+                    $relation->setAttribute($twoWayId, $document->getId());
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $relation->setAttribute($twoWayId, $document->getId());
+                break;
+        }
+
+        // Try to get the related document
+        $related = $this->getDocument($relatedCollection, $relation->getId());
+
+        if ($related->isEmpty()) {
+            // If the related document doesn't exist, create it
+            $related = $this->createDocument($relatedCollection, $relation);
+        } else if ($relation->getArrayCopy() != $related->getArrayCopy()) {
+            // If the related document exists and the data is not the same, update it
+            $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
+        }
+
+        if ($relationType === Database::RELATION_MANY_TO_MANY) {
+            $junction = $collection . '_' . $relatedCollection;
+            
+            $this->createDocument($junction, new Document([
+                $key => $document->getId(),
+                $twoWayId => $related->getId(),
+            ]));
+        }
+
+        return $related->getId();
+    }
+
+    private function createRealtionshipWithDocumentId(
+        string $relatedCollection,
+        string $documentId,
+        string $relationId,
+        string $relationType,
+        bool $twoWay,
+        string $twoWayId
+    ): string {
+        // Get the related document, will be empty on permissions failure
+        $related = $this->getDocument($relatedCollection, $relationId);
+
+        if (!$related->isEmpty() && (($twoWay && $relationType === Database::RELATION_ONE_TO_ONE) || $relationType === Database::RELATION_ONE_TO_MANY)) {
+            $related->setAttribute($twoWayId, $documentId);
+            $this->updateDocument($relatedCollection, $relationId, $related);
+        }
+
+        return $related->getId();
     }
 
     /**

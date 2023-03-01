@@ -3651,9 +3651,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('library', 'library1');
         $person = $library->getAttribute('person');
         $this->assertEquals(null, $person);
-
-        static::getDatabase()->deleteCollection('person');
-        static::getDatabase()->deleteCollection('library');
     }
 
     public function testOneToOneTwoWayRelationship(): void
@@ -3735,9 +3732,6 @@ abstract class Base extends TestCase
         $country = static::getDatabase()->getDocument('country', 'country1');
         $city = $country->getAttribute('city');
         $this->assertEquals('city1', $city['$id']);
-
-        static::getDatabase()->deleteCollection('country');
-        static::getDatabase()->deleteCollection('city');
     }
 
     public function testOneToManyOneWayRelationship(): void
@@ -3808,9 +3802,6 @@ abstract class Base extends TestCase
         $album = static::getDatabase()->getDocument('album', 'album1');
         $artist = $album->getAttribute('artist');
         $this->assertEquals(null, $artist);
-
-        static::getDatabase()->deleteCollection('artist');
-        static::getDatabase()->deleteCollection('album');
     }
 
     public function testOneToManyTwoWayRelationship(): void
@@ -3896,9 +3887,6 @@ abstract class Base extends TestCase
         $account = static::getDatabase()->getDocument('account', 'account1');
         $customer = $account->getAttribute('customer');
         $this->assertEquals('customer1', $customer['$id']);
-
-        static::getDatabase()->deleteCollection('customer');
-        static::getDatabase()->deleteCollection('account');
     }
 
     public function testManyToManyOneWayRelationship(): void
@@ -3965,9 +3953,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('song', 'song1');
         $songs = $library->getAttribute('playlist');
         $this->assertEquals(null, $songs);
-
-        static::getDatabase()->deleteCollection('song');
-        static::getDatabase()->deleteCollection('playlist');
     }
 
     public function testManyToManyTwoWayRelationship(): void

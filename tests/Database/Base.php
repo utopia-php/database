@@ -3277,7 +3277,6 @@ abstract class Base extends TestCase
         $this->assertEquals('priceRange', $collection->getAttribute('attributes')[4]['format']);
         $this->assertEquals(['min'=>1, 'max'=>10000], $collection->getAttribute('attributes')[4]['formatOptions']);
 
-
         $doc = $database->getDocument('flowers', 'LiliPriced');
         $this->assertIsNumeric($doc->getAttribute('price'));
         $this->assertEquals(500, $doc->getAttribute('price'));

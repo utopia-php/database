@@ -694,7 +694,6 @@ abstract class SQL extends Adapter
         }
     }
 
-
     /**
      * Get SQL Operator
      *

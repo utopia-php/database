@@ -10,6 +10,7 @@ use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 
 class Structure extends Validator
 {
@@ -244,7 +245,7 @@ class Structure extends Validator
             switch ($type) {
                 case Database::VAR_STRING:
                     $size = $attribute['size'] ?? 0;
-                    $validator = new Text($size);
+                    $validator = new Text($size, min: 0);
                     break;
 
                 case Database::VAR_INTEGER:

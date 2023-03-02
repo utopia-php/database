@@ -684,7 +684,7 @@ class Database
      * @throws LimitException
      * @throws Exception
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required = false, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 

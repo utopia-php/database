@@ -1575,6 +1575,27 @@ class Database
                     $fetchDepth = 0;
                     $document->setAttribute($key, $related);
                     break;
+                case Database::RELATION_MANY_TO_ONE:
+                    if ($side === 'parent') {
+                        $related = $this->getDocument($relatedCollection->getId(), $value);
+                        $document->setAttribute($key, $related);
+                        break;
+                    }
+                    if (!$twoWay) {
+                        $document->removeAttribute($key);
+                        break;
+                    }
+
+                    $relatedDocuments = $this->find($relatedCollection->getId(), [
+                        Query::equal($twoWayId,  [$document->getId()]),
+                    ]);
+
+                    foreach ($relatedDocuments as $related) {
+                        $related->removeAttribute($twoWayId);
+                    }
+
+                    $document->setAttribute($key, $relatedDocuments);
+                    break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === 'child') {
                         if (!$twoWay) {

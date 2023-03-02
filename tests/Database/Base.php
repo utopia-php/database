@@ -3889,6 +3889,167 @@ abstract class Base extends TestCase
         $this->assertEquals('customer1', $customer['$id']);
     }
 
+    public function testManyToOneOneWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('review');
+        static::getDatabase()->createCollection('movie');
+
+        static::getDatabase()->createRelationship(
+            collection: 'review',
+            relatedCollection: 'movie',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWayId: 'reviews'
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('review');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'movies') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('movies', $attribute['$id']);
+                $this->assertEquals('movies', $attribute['key']);
+                $this->assertEquals('movie', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('review', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('movie');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'review') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('review', $attribute['$id']);
+                $this->assertEquals('review', $attribute['key']);
+                $this->assertEquals('review', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('movies', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('review', new Document([
+            '$id' => 'review1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'movie' => [
+                '$id' => 'movie1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('movie', new Document([
+            '$id' => 'movie2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+        static::getDatabase()->createDocument('review', new Document([
+            '$id' => 'review2',
+            'movie' => 'movie2',
+        ]));
+
+        // Get document with relationship
+        $review = static::getDatabase()->getDocument('review', 'review1');
+        $movie = $review->getAttribute('movie', []);
+        $this->assertEquals('movie1', $movie['$id']);
+
+        // Get related document
+        $movie = static::getDatabase()->getDocument('movie', 'movie1');
+        $reviews = $movie->getAttribute('reviews');
+        $this->assertEquals(null, $reviews);
+    }
+
+    public function testManyToOneTwoWayRelationship(): void
+    {
+        static::getDatabase()->createCollection('product');
+        static::getDatabase()->createCollection('store');
+
+        static::getDatabase()->createRelationship(
+            collection: 'product',
+            relatedCollection: 'store',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            twoWayId: 'products'
+        );
+
+        // Check metadata for collection
+        $collection = static::getDatabase()->getCollection('product');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'stores') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('stores', $attribute['$id']);
+                $this->assertEquals('stores', $attribute['key']);
+                $this->assertEquals('store', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('product', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Check metadata for related collection
+        $collection = static::getDatabase()->getCollection('store');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'product') {
+                $this->assertEquals('relationship', $attribute['type']);
+                $this->assertEquals('product', $attribute['$id']);
+                $this->assertEquals('product', $attribute['key']);
+                $this->assertEquals('product', $attribute['options']['relatedCollection']);
+                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(false, $attribute['options']['twoWay']);
+                $this->assertEquals('stores', $attribute['options']['twoWayId']);
+            }
+        }
+
+        // Create document with relationship with nested data
+        static::getDatabase()->createDocument('product', new Document([
+            '$id' => 'product1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'store' => [
+                '$id' => 'store1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+            ],
+        ]));
+
+        // Create document with relationship with related ID
+        static::getDatabase()->createDocument('store', new Document([
+            '$id' => 'store2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+        static::getDatabase()->createDocument('product', new Document([
+            '$id' => 'product2',
+            'store' => 'store2',
+        ]));
+
+        // Get document with relationship
+        $product = static::getDatabase()->getDocument('product', 'product1');
+        $store = $product->getAttribute('store', []);
+        $this->assertEquals('store1', $store['$id']);
+
+        // Get related document
+        $store = static::getDatabase()->getDocument('store', 'store1');
+        $products = $store->getAttribute('products');
+        $this->assertEquals('product1', $products[0]['$id']);
+    }
+
     public function testManyToManyOneWayRelationship(): void
     {
         static::getDatabase()->createCollection('playlist');

@@ -1004,7 +1004,7 @@ class Database
             $required ??= $attribute->getAttribute('required');
             $default ??= $attribute->getAttribute('default');
             $array ??= $attribute->getAttribute('array');
-            $format = is_null($format) ? $attribute->getAttribute('format') : ($format === '' ? '' : $format);
+            $format ??= $attribute->getAttribute('format');
             $formatOptions ??= $attribute->getAttribute('formatOptions');
             $filters ??= $attribute->getAttribute('filters');
 

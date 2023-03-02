@@ -215,6 +215,7 @@ abstract class Adapter
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
      *
      * @return bool
@@ -247,12 +248,27 @@ abstract class Adapter
      * @param string $type
      * @param bool $twoWay
      * @param string $id
-     * @param string $twoWayId
+     * @param string $twoWayKey
      * @param string $onUpdate
      * @param string $onDelete
      * @return bool
      */
-    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayId = '', string $onUpdate = 'restrict', string $onDelete = 'restrict'): bool;
+    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '', string $onUpdate = 'restrict', string $onDelete = 'restrict'): bool;
+
+    /**
+     * Update Relationship
+     *
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return mixed
+     */
+    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
 
     /**
      * Rename Index

@@ -763,153 +763,6 @@ class Database
     }
 
     /**
-     * @param string $collection
-     * @param string $relatedCollection
-     * @param string $id
-     * @param string $type
-     * @param bool $twoWay
-     * @param string $twoWayId
-     * @param string $onUpdate
-     * @param string $onDelete
-     * @return bool
-     * @throws DuplicateException
-     * @throws LimitException
-     * @throws Exception
-     */
-    public function createRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay = false,
-        string $id = '',
-        string $twoWayId = '',
-        string $onUpdate = 'restrict',
-        string $onDelete = 'restrict'
-    ): bool
-    {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
-
-        if($collection->isEmpty()){
-            throw new Exception('Collection not found');
-        }
-
-        $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollection));
-
-        if ($relatedCollection->isEmpty()) {
-            throw new Exception('Related collection not found');
-        }
-
-        if (empty($id)) {
-            $id = $relatedCollection->getId();
-        }
-
-        if (empty($twoWayId)) {
-            $twoWayId = $collection->getId();
-        }
-
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var Document[] $attributes */
-        foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists');
-            }
-        }
-
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
-
-        $collection->setAttribute('attributes', new Document([
-            '$id' => ID::custom($id),
-            'key' => $id,
-            'type' => Database::VAR_RELATIONSHIP,
-            'required' => false,
-            'default' => null,
-            'options' => [
-                'relatedCollection' => $relatedCollection->getId(),
-                'relationType' => $type,
-                'twoWay' => $twoWay,
-                'twoWayId' => $twoWayId,
-                'onUpdate' => $onUpdate,
-                'onDelete' => $onDelete,
-                'side' => 'parent',
-            ],
-        ]), Document::SET_TYPE_APPEND);
-
-        $relatedCollection->setAttribute('attributes', new Document([
-            '$id' => ID::custom($twoWayId),
-            'key' => $twoWayId,
-            'type' => Database::VAR_RELATIONSHIP,
-            'required' => false,
-            'default' => null,
-            'options' => [
-                'relatedCollection' => $collection->getId(),
-                'relationType' => $type,
-                'twoWay' => $twoWay,
-                'twoWayId' => $id,
-                'onUpdate' => 'restrict',
-                'onDelete' => 'restrict',
-                'side' => 'child',
-            ],
-        ]), Document::SET_TYPE_APPEND);
-
-        if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->createCollection($collection->getId() . '_' . $relatedCollection->getId(), [
-                new Document([
-                    '$id' => $id,
-                    'key' => $id,
-                    'type' => self::VAR_STRING,
-                    'size' => 36,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => $twoWayId,
-                    'key' => $twoWayId,
-                    'type' => self::VAR_STRING,
-                    'size' => 36,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ]);
-        }
-
-        $relationship = $this->adapter->createRelationship(
-            $collection->getId(),
-            $relatedCollection->getId(),
-            $type,
-            $twoWay,
-            $id,
-            $twoWayId,
-            $onUpdate,
-            $onDelete,
-        );
-
-        $this->silent(function() use ($collection, $relatedCollection) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-        });
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
-
-        return $relationship;
-    }
-
-    /**
      * Get the list of required filters for each data type
      *
      * @param string $type Type of the attribute
@@ -1111,7 +964,7 @@ class Database
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = [], array $options = []): bool
     {
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
@@ -1125,8 +978,8 @@ class Database
             }
         }
 
-        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
-            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
+        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, $options, &$success) {
+            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null || $options != null) {
                 $type ??= $attribute->getAttribute('type');
                 $size ??= $attribute->getAttribute('size');
                 $signed ??= $attribute->getAttribute('signed');
@@ -1134,6 +987,7 @@ class Database
                 $format ??= $attribute->getAttribute('format');
                 $formatOptions ??= $attribute->getAttribute('formatOptions');
                 $filters ??= $attribute->getAttribute('filters');
+                $options ??= $attribute->getAttribute('options');
 
                 switch ($type) {
                     case self::VAR_STRING:
@@ -1164,7 +1018,8 @@ class Database
                     ->setAttribute('array', $array)
                     ->setAttribute('format', $format)
                     ->setAttribute('formatOptions', $formatOptions)
-                    ->setAttribute('filters', $filters);
+                    ->setAttribute('filters', $filters)
+                    ->setAttribute('options', $options);
 
                 $attributes = $collectionDoc->getAttribute('attributes');
                 $attributes[$attributeIndex] = $attribute;
@@ -1312,6 +1167,241 @@ class Database
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
 
         return $renamed;
+    }
+
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $id
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @param string $onUpdate
+     * @param string $onDelete
+     * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayKey = '',
+        string $onUpdate = 'restrict',
+        string $onDelete = 'restrict'
+    ): bool
+    {
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+
+        if($collection->isEmpty()){
+            throw new Exception('Collection not found');
+        }
+
+        $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollection));
+
+        if ($relatedCollection->isEmpty()) {
+            throw new Exception('Related collection not found');
+        }
+
+        if (empty($id)) {
+            $id = $relatedCollection->getId();
+        }
+
+        if (empty($twoWayKey)) {
+            $twoWayKey = $collection->getId();
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        /** @var Document[] $attributes */
+        foreach ($attributes as $attribute) {
+            if (\strtolower($attribute->getId()) === \strtolower($id)) {
+                throw new DuplicateException('Attribute already exists');
+            }
+        }
+
+        if (
+            $this->adapter->getLimitForAttributes() > 0 &&
+            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
+        ) {
+            throw new LimitException('Column limit reached. Cannot create new attribute.');
+        }
+
+        if (
+            $this->adapter->getDocumentSizeLimit() > 0 &&
+            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
+        ) {
+            throw new LimitException('Row width limit reached. Cannot create new attribute.');
+        }
+
+        $collection->setAttribute('attributes', new Document([
+            '$id' => ID::custom($id),
+            'key' => $id,
+            'type' => Database::VAR_RELATIONSHIP,
+            'required' => false,
+            'default' => null,
+            'options' => [
+                'relatedCollection' => $relatedCollection->getId(),
+                'relationType' => $type,
+                'twoWay' => $twoWay,
+                'twoWayKey' => $twoWayKey,
+                'onUpdate' => $onUpdate,
+                'onDelete' => $onDelete,
+                'side' => 'parent',
+            ],
+        ]), Document::SET_TYPE_APPEND);
+
+        $relatedCollection->setAttribute('attributes', new Document([
+            '$id' => ID::custom($twoWayKey),
+            'key' => $twoWayKey,
+            'type' => Database::VAR_RELATIONSHIP,
+            'required' => false,
+            'default' => null,
+            'options' => [
+                'relatedCollection' => $collection->getId(),
+                'relationType' => $type,
+                'twoWay' => $twoWay,
+                'twoWayKey' => $id,
+                'onUpdate' => 'restrict',
+                'onDelete' => 'restrict',
+                'side' => 'child',
+            ],
+        ]), Document::SET_TYPE_APPEND);
+
+        if ($type === self::RELATION_MANY_TO_MANY) {
+            $this->createCollection($collection->getId() . '_' . $relatedCollection->getId(), [
+                new Document([
+                    '$id' => $id,
+                    'key' => $id,
+                    'type' => self::VAR_STRING,
+                    'size' => 36,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => $twoWayKey,
+                    'key' => $twoWayKey,
+                    'type' => self::VAR_STRING,
+                    'size' => 36,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ]);
+        }
+
+        $relationship = $this->adapter->createRelationship(
+            $collection->getId(),
+            $relatedCollection->getId(),
+            $type,
+            $twoWay,
+            $id,
+            $twoWayKey,
+            $onUpdate,
+            $onDelete,
+        );
+
+        $this->silent(function() use ($collection, $relatedCollection) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+        });
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+
+        return $relationship;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $id
+     * @param string|null $relatedCollection
+     * @param string|null $type
+     * @param bool|null $twoWay
+     * @param string|null $key
+     * @param string|null $newTwoWayKey
+     * @param string|null $onUpdate
+     * @param string|null $onDelete
+     * @return bool
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string  $collection,
+        string  $key,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+        ?string $onUpdate = null,
+        ?string $onDelete = null
+    ): bool
+    {
+        $this->updateAttributeMeta($collection, $key, function($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete, &$success) {
+            $altering = !\is_null($newKey) || !\is_null($newTwoWayKey);
+
+            $relatedCollection = $attribute['options']['relatedCollection'];
+            $type = $attribute['options']['relationType'];
+            $twoWay = $attribute['options']['twoWay'];
+            $side = $attribute['options']['side'];
+
+            $newKey ??= $attribute['options']['key'];
+            $twoWayKey = $attribute['options']['twoWayKey'];
+            $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+            $onUpdate ??= $attribute['options']['onUpdate'];
+            $onDelete ??= $attribute['options']['onDelete'];
+
+            $attribute->setAttribute('$id', $newKey);
+            $attribute->setAttribute('key', $newKey);
+            $attribute->setAttribute('options', [
+                'relatedCollection' => $relatedCollection,
+                'relationType' => $type,
+                'twoWay' => $twoWay,
+                'twoWayKey' => $newTwoWayKey,
+                'onUpdate' => $onUpdate,
+                'onDelete' => $onDelete,
+                'side' => $side,
+            ]);
+
+            if (!\is_null($newTwoWayKey)) {
+                $this->updateAttributeMeta($relatedCollection, $twoWayKey, function($twoWayAttribute) use ($newKey, $newTwoWayKey) {
+                    $options = $twoWayAttribute->getAttribute('options', []);
+
+                    if (!\is_null($newKey)) {
+                        $options['twoWayKey'] = $newKey;
+                    }
+
+                    $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
+                    $twoWayAttribute->setAttribute('key', $newTwoWayKey);
+                    $twoWayAttribute->setAttribute('options', $options);
+                });
+            }
+
+            if ($type === self::RELATION_MANY_TO_MANY) {
+                $junction = $collection . '_' . $relatedCollection;
+
+                $this->updateAttributeMeta($junction, $key, function($junctionAttribute) use ($newKey) {
+                    $junctionAttribute->setAttribute('$id', $newKey);
+                    $junctionAttribute->setAttribute('key', $newKey);
+                });
+                $this->updateAttributeMeta($junction, $twoWayKey, function($junctionAttribute) use ($newTwoWayKey) {
+                    $junctionAttribute->setAttribute('$id', $newTwoWayKey);
+                    $junctionAttribute->setAttribute('key', $newTwoWayKey);
+                });
+
+                $this->deleteCachedCollection($junction);
+            }
+
+            if ($altering) {
+                $this->adapter->updateRelationship($collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $newKey, $newTwoWayKey);
+                $this->deleteCachedCollection($collection);
+                $this->deleteCachedCollection($relatedCollection);
+            }
+        });
+        
+        return true;
     }
 
     /**
@@ -1557,7 +1647,7 @@ class Database
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = $relationship['options']['relationType'];
             $twoWay = $relationship['options']['twoWay'];
-            $twoWayId = $relationship['options']['twoWayId'];
+            $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
             switch($relationType) {
@@ -1587,11 +1677,11 @@ class Database
                     }
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayId,  [$document->getId()]),
+                        Query::equal($twoWayKey,  [$document->getId()]),
                     ]);
 
                     foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayId);
+                        $related->removeAttribute($twoWayKey);
                     }
 
                     $document->setAttribute($key, $relatedDocuments);
@@ -1609,11 +1699,11 @@ class Database
                     }
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayId,  [$document->getId()]),
+                        Query::equal($twoWayKey,  [$document->getId()]),
                     ]);
 
                     foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayId);
+                        $related->removeAttribute($twoWayKey);
                     }
 
                     $document->setAttribute($key, $relatedDocuments);
@@ -1636,7 +1726,7 @@ class Database
                         : $collection->getId() . '_' . $relatedCollection->getId();
 
                     $junctions = $this->find($junction, [
-                        Query::equal($twoWayId, [$document->getId()]),
+                        Query::equal($twoWayKey, [$document->getId()]),
                     ]);
 
                     $related = [];
@@ -1708,7 +1798,7 @@ class Database
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = $relationship['options']['relationType'];
             $twoWay = $relationship['options']['twoWay'];
-            $twoWayId = $relationship['options']['twoWayId'];
+            $twoWayKey = $relationship['options']['twoWayKey'];
 
             switch (\gettype($value)) {
                 case 'array':
@@ -1724,7 +1814,7 @@ class Database
                                     $related,
                                     $relationType,
                                     $twoWay,
-                                    $twoWayId
+                                    $twoWayKey
                                 );
                                 break;
                             case 'string':
@@ -1736,7 +1826,7 @@ class Database
                                     $related,
                                     $relationType,
                                     $twoWay,
-                                    $twoWayId
+                                    $twoWayKey
                                 );
                                 break;
                             default:
@@ -1755,7 +1845,7 @@ class Database
                         $value,
                         $relationType,
                         $twoWay,
-                        $twoWayId
+                        $twoWayKey
                     );
                     $document->setAttribute($key, $relatedId);
                     break;
@@ -1769,7 +1859,7 @@ class Database
                         $value,
                         $relationType,
                         $twoWay,
-                        $twoWayId
+                        $twoWayKey
                     );
                     break;
                 case 'NULL':
@@ -1797,16 +1887,16 @@ class Database
         Document $relation,
         string $relationType,
         bool $twoWay,
-        string $twoWayId
+        string $twoWayKey
     ): string {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
-                    $relation->setAttribute($twoWayId, $document->getId());
+                    $relation->setAttribute($twoWayKey, $document->getId());
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                $relation->setAttribute($twoWayId, $document->getId());
+                $relation->setAttribute($twoWayKey, $document->getId());
                 break;
         }
 
@@ -1826,7 +1916,7 @@ class Database
 
             $this->createDocument($junction, new Document([
                 $key => $related->getId(),
-                $twoWayId => $document->getId(),
+                $twoWayKey => $document->getId(),
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::write(Role::any()),
@@ -1845,7 +1935,7 @@ class Database
         string $relationId,
         string $relationType,
         bool $twoWay,
-        string $twoWayId
+        string $twoWayKey
     ): string {
         // Get the related document, will be empty on permissions failure
         $related = $this->getDocument($relatedCollection, $relationId);
@@ -1857,12 +1947,12 @@ class Database
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
-                    $related->setAttribute($twoWayId, $documentId);
+                    $related->setAttribute($twoWayKey, $documentId);
                     $this->updateDocument($relatedCollection, $relationId, $related);
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                $related->setAttribute($twoWayId, $documentId);
+                $related->setAttribute($twoWayKey, $documentId);
                 $this->updateDocument($relatedCollection, $relationId, $related);
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -1870,7 +1960,7 @@ class Database
 
                 $this->createDocument($junction, new Document([
                     $key => $related->getId(),
-                    $twoWayId => $documentId,
+                    $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::write(Role::any()),

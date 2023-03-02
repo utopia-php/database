@@ -3615,7 +3615,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('library', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('person', $attribute['options']['twoWayId']);
+                $this->assertEquals('person', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3651,6 +3651,18 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('library', 'library1');
         $person = $library->getAttribute('person');
         $this->assertEquals(null, $person);
+        
+        // Rename relationship key
+        static::getDatabase()->updateRelationship(
+            'person',
+            'library',
+            'newLibrary'
+        );
+
+        // Get document with again
+        $person = static::getDatabase()->getDocument('person', 'person1');
+        $library = $person->getAttribute('newLibrary');
+        $this->assertEquals('library1', $library['$id']);
     }
 
     public function testOneToOneTwoWayRelationship(): void
@@ -3675,7 +3687,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('city', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('country', $attribute['options']['twoWayId']);
+                $this->assertEquals('country', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3689,7 +3701,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('country', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('city', $attribute['options']['twoWayId']);
+                $this->assertEquals('city', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3732,6 +3744,24 @@ abstract class Base extends TestCase
         $country = static::getDatabase()->getDocument('country', 'country1');
         $city = $country->getAttribute('city');
         $this->assertEquals('city1', $city['$id']);
+
+        // Rename relationship keys on both sides
+        static::getDatabase()->updateRelationship(
+            'city',
+            'country',
+            'newCountry',
+            'newCity'
+        );
+
+        // Get document with new relationship key
+        $city = static::getDatabase()->getDocument('city', 'city1');
+        $country = $city->getAttribute('newCountry');
+        $this->assertEquals('country1', $country['$id']);
+
+        // Get inverse document with new relationship key
+        $country = static::getDatabase()->getDocument('country', 'country1');
+        $city = $country->getAttribute('newCity');
+        $this->assertEquals('city1', $city['$id']);
     }
 
     public function testOneToManyOneWayRelationship(): void
@@ -3758,7 +3788,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('album', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('artist', $attribute['options']['twoWayId']);
+                $this->assertEquals('artist', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3802,6 +3832,18 @@ abstract class Base extends TestCase
         $album = static::getDatabase()->getDocument('album', 'album1');
         $artist = $album->getAttribute('artist');
         $this->assertEquals(null, $artist);
+
+        // Rename relationship key
+        static::getDatabase()->updateRelationship(
+            'artist',
+            'albums',
+            'newAlbums'
+        );
+
+        // Get document with new relationship key
+        $artist = static::getDatabase()->getDocument('artist', 'artist1');
+        $albums = $artist->getAttribute('newAlbums');
+        $this->assertEquals('album1', $albums[0]['$id']);
     }
 
     public function testOneToManyTwoWayRelationship(): void
@@ -3813,8 +3855,8 @@ abstract class Base extends TestCase
             collection: 'customer',
             relatedCollection: 'account',
             type: Database::RELATION_ONE_TO_MANY,
-            id: 'accounts',
-            twoWay: true
+            twoWay: true,
+            id: 'accounts'
         );
 
         // Check metadata for collection
@@ -3828,7 +3870,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('account', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('customer', $attribute['options']['twoWayId']);
+                $this->assertEquals('customer', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3843,7 +3885,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('customer', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('accounts', $attribute['options']['twoWayId']);
+                $this->assertEquals('accounts', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3887,6 +3929,24 @@ abstract class Base extends TestCase
         $account = static::getDatabase()->getDocument('account', 'account1');
         $customer = $account->getAttribute('customer');
         $this->assertEquals('customer1', $customer['$id']);
+
+        // Rename relationship keys on both sides
+        static::getDatabase()->updateRelationship(
+            'customer',
+            'accounts',
+            'newAccounts',
+            'newCustomer'
+        );
+
+        // Get document with new relationship key
+        $customer = static::getDatabase()->getDocument('customer', 'customer1');
+        $accounts = $customer->getAttribute('newAccounts');
+        $this->assertEquals('account1', $accounts[0]['$id']);
+
+        // Get inverse document with new relationship key
+        $account = static::getDatabase()->getDocument('account', 'account1');
+        $customer = $account->getAttribute('newCustomer');
+        $this->assertEquals('customer1', $customer['$id']);
     }
 
     public function testManyToOneOneWayRelationship(): void
@@ -3898,7 +3958,7 @@ abstract class Base extends TestCase
             collection: 'review',
             relatedCollection: 'movie',
             type: Database::RELATION_MANY_TO_ONE,
-            twoWayId: 'reviews'
+            twoWayKey: 'reviews'
         );
 
         // Check metadata for collection
@@ -3912,7 +3972,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('movie', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('review', $attribute['options']['twoWayId']);
+                $this->assertEquals('review', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3927,7 +3987,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('review', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('movies', $attribute['options']['twoWayId']);
+                $this->assertEquals('movies', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -3967,6 +4027,18 @@ abstract class Base extends TestCase
         $movie = static::getDatabase()->getDocument('movie', 'movie1');
         $reviews = $movie->getAttribute('reviews');
         $this->assertEquals(null, $reviews);
+
+        // Rename relationship keys on both sides
+        static::getDatabase()->updateRelationship(
+            'review',
+            'movie',
+            'newMovie',
+        );
+
+        // Get document with new relationship key
+        $review = static::getDatabase()->getDocument('review', 'review1');
+        $movie = $review->getAttribute('newMovie');
+        $this->assertEquals('movie1', $movie['$id']);
     }
 
     public function testManyToOneTwoWayRelationship(): void
@@ -3979,7 +4051,7 @@ abstract class Base extends TestCase
             relatedCollection: 'store',
             type: Database::RELATION_MANY_TO_ONE,
             twoWay: true,
-            twoWayId: 'products'
+            twoWayKey: 'products'
         );
 
         // Check metadata for collection
@@ -3993,7 +4065,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('store', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('product', $attribute['options']['twoWayId']);
+                $this->assertEquals('product', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -4008,7 +4080,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('product', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('stores', $attribute['options']['twoWayId']);
+                $this->assertEquals('stores', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -4048,6 +4120,24 @@ abstract class Base extends TestCase
         $store = static::getDatabase()->getDocument('store', 'store1');
         $products = $store->getAttribute('products');
         $this->assertEquals('product1', $products[0]['$id']);
+
+        // Rename relationship keys on both sides
+        static::getDatabase()->updateRelationship(
+            'store',
+            'products',
+            'newProducts',
+            'newStore'
+        );
+
+        // Get document with new relationship key
+        $store = static::getDatabase()->getDocument('store', 'store1');
+        $products = $store->getAttribute('newProducts');
+        $this->assertEquals('product1', $products[0]['$id']);
+
+        // Get inverse document with new relationship key
+        $product = static::getDatabase()->getDocument('product', 'product1');
+        $store = $product->getAttribute('newStore');
+        $this->assertEquals('store1', $store['$id']);
     }
 
     public function testManyToManyOneWayRelationship(): void
@@ -4074,7 +4164,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('song', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('playlist', $attribute['options']['twoWayId']);
+                $this->assertEquals('playlist', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -4117,6 +4207,18 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('song', 'song1');
         $songs = $library->getAttribute('playlist');
         $this->assertEquals(null, $songs);
+
+        // Rename relationship keys on both sides
+        static::getDatabase()->updateRelationship(
+            'playlist',
+            'songs',
+            'newSongs'
+        );
+
+        // Get document with new relationship key
+        $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');
+        $songs = $playlist->getAttribute('newSongs');
+        $this->assertEquals('song1', $songs[0]['$id']);
     }
 
     public function testManyToManyTwoWayRelationship(): void
@@ -4142,7 +4244,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('students', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('classes', $attribute['options']['twoWayId']);
+                $this->assertEquals('classes', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -4157,7 +4259,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('classes', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('students', $attribute['options']['twoWayId']);
+                $this->assertEquals('students', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -4200,5 +4302,23 @@ abstract class Base extends TestCase
         $class = static::getDatabase()->getDocument('classes', 'class1');
         $student = $class->getAttribute('students');
         $this->assertEquals('student1', $student[0]['$id']);
+
+        // Rename relationship keys on both sides
+        static::getDatabase()->updateRelationship(
+            'students',
+            'classes',
+            'newClasses',
+            'newStudents'
+        );
+
+        // Get document with new relationship key
+        $students = static::getDatabase()->getDocument('students', 'student1');
+        $classes = $students->getAttribute('newClasses');
+        $this->assertEquals('class1', $classes[0]['$id']);
+
+        // Get inverse document with new relationship key
+        $class = static::getDatabase()->getDocument('classes', 'class1');
+        $students = $class->getAttribute('newStudents');
+        $this->assertEquals('student1', $students[0]['$id']);
     }
 }

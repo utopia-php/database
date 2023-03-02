@@ -179,82 +179,6 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param string $relatedCollection
-     * @param bool $twoWay
-     * @param string $twoWayId
-     * @param string $onUpdate
-     * @param string $onDelete
-     * @return bool
-     * @throws Exception
-     */
-    public function createRelationship(
-        string $collection,
-        string $relatedCollection,
-        string $type,
-        bool $twoWay = false,
-        string $id = '',
-        string $twoWayId = '',
-        string $onUpdate = 'restrict',
-        string $onDelete = 'restrict'
-    ): bool
-    {
-        $name = $this->filter($collection);
-        $relatedName = $this->filter($relatedCollection);
-        $table = $this->getSQLTable($name);
-        $relatedTable = $this->getSQLTable($relatedName);
-        $id = $this->filter($id);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
-
-        switch ($type) {
-            case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
-
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL;";
-                }
-                break;
-            case Database::RELATION_ONE_TO_MANY:
-                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayId}` {$sqlType} DEFAULT NULL;";
-                break;
-            case Database::RELATION_MANY_TO_ONE:
-                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
-                break;
-            case Database::RELATION_MANY_TO_MANY:
-                return true;
-            default:
-                throw new Exception('Invalid relationship type.');
-        }
-
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
-            ->execute();
-    }
-
-    /**
      * Update Attribute
      *
      * @param string $collection
@@ -280,6 +204,164 @@ class MariaDB extends SQL
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($name)}
                 MODIFY `{$id}` {$type};")
+            ->execute();
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param string $relatedCollection
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @param string $onUpdate
+     * @param string $onDelete
+     * @return bool
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayKey = '',
+        string $onUpdate = 'restrict',
+        string $onDelete = 'restrict'
+    ): bool
+    {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $id = $this->filter($id);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
+
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                return true;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+    ): bool
+    {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+
+        if (!\is_null($newKey)) {
+            $newKey = $this->filter($newKey);
+        }
+        if (!\is_null($newTwoWayKey)) {
+            $newTwoWayKey = $this->filter($newTwoWayKey);
+        }
+
+        $sql = '';
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $this->getSQLTable($collection . '_' . $relatedCollection);
+                
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$junction} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        if (empty($sql)) {
+            return true;
+        }
+        
+        return $this->getPDO()
+            ->prepare($sql)
             ->execute();
     }
 

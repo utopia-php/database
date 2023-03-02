@@ -3663,6 +3663,17 @@ abstract class Base extends TestCase
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('newLibrary');
         $this->assertEquals('library1', $library['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'person',
+            'newLibrary'
+        );
+
+        // Try to get document again
+        $person = static::getDatabase()->getDocument('person', 'person1');
+        $library = $person->getAttribute('newLibrary');
+        $this->assertEquals(null, $library);
     }
 
     public function testOneToOneTwoWayRelationship(): void
@@ -3762,6 +3773,22 @@ abstract class Base extends TestCase
         $country = static::getDatabase()->getDocument('country', 'country1');
         $city = $country->getAttribute('newCity');
         $this->assertEquals('city1', $city['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'city',
+            'newCountry'
+        );
+
+        // Try to get document again
+        $city = static::getDatabase()->getDocument('city', 'city1');
+        $country = $city->getAttribute('newCountry');
+        $this->assertEquals(null, $country);
+
+        // Try to get inverse document again
+        $country = static::getDatabase()->getDocument('country', 'country1');
+        $city = $country->getAttribute('newCity');
+        $this->assertEquals(null, $city);
     }
 
     public function testOneToManyOneWayRelationship(): void

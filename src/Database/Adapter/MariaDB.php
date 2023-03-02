@@ -208,6 +208,27 @@ class MariaDB extends SQL
     }
 
     /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
+                DROP COLUMN `{$id}`;")
+            ->execute();
+    }
+
+    /**
      * Rename Attribute
      *
      * @param string $collection
@@ -365,6 +386,47 @@ class MariaDB extends SQL
             ->execute();
     }
 
+    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey): bool
+    {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+
+        $sql = '';
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $this->getSQLTable($collection . '_' . $relatedCollection);
+                $sql = "DROP TABLE {$junction};";
+                break;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        if (empty($sql)) {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
     /**
      * Rename Index
      *
@@ -383,27 +445,6 @@ class MariaDB extends SQL
 
         return $this->getPDO()
             ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
-            ->execute();
-    }
-
-    /**
-     * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param bool $array
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP COLUMN `{$id}`;")
             ->execute();
     }
 

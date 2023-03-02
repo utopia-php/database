@@ -1098,6 +1098,10 @@ class Database
             }
         }
 
+        if (\is_null($attribute)) {
+            throw new Exception('Attribute not found');
+        }
+
         $collection->setAttribute('attributes', $attributes);
 
         if ($collection->getId() !== self::METADATA) {
@@ -1319,11 +1323,8 @@ class Database
 
     /**
      * @param string $collection
-     * @param string $id
-     * @param string|null $relatedCollection
-     * @param string|null $type
-     * @param bool|null $twoWay
-     * @param string|null $key
+     * @param string $key
+     * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @param string|null $onUpdate
      * @param string|null $onDelete
@@ -1339,7 +1340,7 @@ class Database
         ?string $onDelete = null
     ): bool
     {
-        $this->updateAttributeMeta($collection, $key, function($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete, &$success) {
+        $this->updateAttributeMeta($collection, $key, function($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete) {
             $altering = !\is_null($newKey) || !\is_null($newTwoWayKey);
 
             $relatedCollection = $attribute['options']['relatedCollection'];
@@ -1402,6 +1403,65 @@ class Database
         });
         
         return true;
+    }
+
+    public function deleteRelationship(string $collection, string $key): bool
+    {
+        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $attributes = $collection->getAttribute('attributes', []);
+        $relationship = null;
+
+        foreach ($attributes as $name => $attribute) {
+            if ($attribute['$id'] === $key) {
+                $relationship = $attribute;
+                unset($attributes[$name]);
+            }
+        }
+
+        $collection->setAttribute('attributes', $attributes);
+
+        if (\is_null($relationship)) {
+            throw new Exception('Attribute not found');
+        }
+
+        $relatedCollection = $relationship['options']['relatedCollection'];
+        $type = $relationship['options']['relationType'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+
+        $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
+        $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+
+        foreach ($relatedAttributes as $name => $attribute) {
+            if ($attribute['$id'] === $twoWayKey) {
+                unset($relatedAttributes[$name]);
+            }
+        }
+
+        $relatedCollection->setAttribute('attributes', $relatedAttributes);
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(function () use ($collection, $relatedCollection) {
+                $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            });
+        }
+
+        $deleted = $this->adapter->deleteRelationship(
+            $collection->getId(),
+            $relatedCollection->getId(),
+            $type,
+            $twoWay,
+            $key,
+            $twoWayKey
+        );
+
+        $this->deleteCachedCollection($collection->getId());
+        $this->deleteCachedCollection($relatedCollection->getId());
+
+        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
+
+        return $deleted;
     }
 
     /**

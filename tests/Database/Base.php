@@ -3758,10 +3758,10 @@ abstract class Base extends TestCase
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
-            'city',
             'country',
-            'newCountry',
-            'newCity'
+            'city',
+            'newCity',
+            'newCountry'
         );
 
         // Get document with new relationship key
@@ -3776,19 +3776,19 @@ abstract class Base extends TestCase
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
-            'city',
-            'newCountry'
+            'country',
+            'newCity'
         );
 
         // Try to get document again
-        $city = static::getDatabase()->getDocument('city', 'city1');
-        $country = $city->getAttribute('newCountry');
-        $this->assertEquals(null, $country);
-
-        // Try to get inverse document again
         $country = static::getDatabase()->getDocument('country', 'country1');
         $city = $country->getAttribute('newCity');
         $this->assertEquals(null, $city);
+
+        // Try to get inverse document again
+        $city = static::getDatabase()->getDocument('city', 'city1');
+        $country = $city->getAttribute('newCountry');
+        $this->assertEquals(null, $country);
     }
 
     public function testOneToManyOneWayRelationship(): void
@@ -3871,6 +3871,17 @@ abstract class Base extends TestCase
         $artist = static::getDatabase()->getDocument('artist', 'artist1');
         $albums = $artist->getAttribute('newAlbums');
         $this->assertEquals('album1', $albums[0]['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'artist',
+            'newAlbums'
+        );
+
+        // Try to get document again
+        $artist = static::getDatabase()->getDocument('artist', 'artist1');
+        $albums = $artist->getAttribute('newAlbums');
+        $this->assertEquals(null, $albums);
     }
 
     public function testOneToManyTwoWayRelationship(): void
@@ -3974,6 +3985,22 @@ abstract class Base extends TestCase
         $account = static::getDatabase()->getDocument('account', 'account1');
         $customer = $account->getAttribute('newCustomer');
         $this->assertEquals('customer1', $customer['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'customer',
+            'newAccounts'
+        );
+
+        // Try to get document again
+        $customer = static::getDatabase()->getDocument('customer', 'customer1');
+        $accounts = $customer->getAttribute('newAccounts');
+        $this->assertEquals(null, $accounts);
+
+        // Try to get inverse document again
+        $accounts = static::getDatabase()->getDocument('account', 'account1');
+        $customer = $accounts->getAttribute('newCustomer');
+        $this->assertEquals(null, $customer);
     }
 
     public function testManyToOneOneWayRelationship(): void
@@ -4066,6 +4093,17 @@ abstract class Base extends TestCase
         $review = static::getDatabase()->getDocument('review', 'review1');
         $movie = $review->getAttribute('newMovie');
         $this->assertEquals('movie1', $movie['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'review',
+            'newMovie'
+        );
+
+        // Try to get document again
+        $review = static::getDatabase()->getDocument('review', 'review1');
+        $movie = $review->getAttribute('newMovie');
+        $this->assertEquals(null, $movie);
     }
 
     public function testManyToOneTwoWayRelationship(): void
@@ -4150,10 +4188,10 @@ abstract class Base extends TestCase
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
+            'product',
             'store',
-            'products',
-            'newProducts',
-            'newStore'
+            'newStore',
+            'newProducts'
         );
 
         // Get document with new relationship key
@@ -4165,6 +4203,22 @@ abstract class Base extends TestCase
         $product = static::getDatabase()->getDocument('product', 'product1');
         $store = $product->getAttribute('newStore');
         $this->assertEquals('store1', $store['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'product',
+            'newStore'
+        );
+
+        // Try to get document again
+        $products = static::getDatabase()->getDocument('product', 'product1');
+        $store = $products->getAttribute('newStore');
+        $this->assertEquals(null, $store);
+
+        // Try to get inverse document again
+        $store = static::getDatabase()->getDocument('store', 'store1');
+        $products = $store->getAttribute('newProducts');
+        $this->assertEquals(null, $products);
     }
 
     public function testManyToManyOneWayRelationship(): void
@@ -4246,6 +4300,17 @@ abstract class Base extends TestCase
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');
         $songs = $playlist->getAttribute('newSongs');
         $this->assertEquals('song1', $songs[0]['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'playlist',
+            'newSongs'
+        );
+
+        // Try to get document again
+        $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');
+        $songs = $playlist->getAttribute('newSongs');
+        $this->assertEquals(null, $songs);
     }
 
     public function testManyToManyTwoWayRelationship(): void
@@ -4347,5 +4412,20 @@ abstract class Base extends TestCase
         $class = static::getDatabase()->getDocument('classes', 'class1');
         $students = $class->getAttribute('newStudents');
         $this->assertEquals('student1', $students[0]['$id']);
+
+        // Delete relationship
+        static::getDatabase()->deleteRelationship(
+            'students',
+            'newClasses'
+        );
+
+        // Try to get document again
+        $student = static::getDatabase()->getDocument('students', 'student1');
+        $classes = $student->getAttribute('newClasses');
+        $this->assertEquals(null, $classes);
+
+        $classes = static::getDatabase()->getDocument('classes', 'class1');
+        $students = $classes->getAttribute('newStudents');
+        $this->assertEquals(null, $students);
     }
 }

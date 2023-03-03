@@ -354,9 +354,6 @@ class MariaDB extends SQL
                 if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
-                }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($twoWay && !\is_null($newTwoWayKey)) {
@@ -406,9 +403,7 @@ class MariaDB extends SQL
                 $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                if ($twoWay) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
-                }
+                $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $this->getSQLTable($collection . '_' . $relatedCollection);

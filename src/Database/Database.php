@@ -1297,8 +1297,22 @@ class Database
                     'array' => false,
                     'filters' => [],
                 ]),
+            ], [
+                new Document([
+                    '$id' => $id,
+                    'key' => $id,
+                    'type' => self::INDEX_KEY,
+                    'attributes' => [$id],
+                ]),
+                new Document([
+                    '$id' => $twoWayKey,
+                    'key' => $twoWayKey,
+                    'type' => self::INDEX_KEY,
+                    'attributes' => [$twoWayKey],
+                ]),
             ]);
         }
+
 
         $relationship = $this->adapter->createRelationship(
             $collection->getId(),
@@ -1311,9 +1325,29 @@ class Database
             $onDelete,
         );
 
-        $this->silent(function() use ($collection, $relatedCollection) {
+        $this->silent(function() use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+
+            switch ($type) {
+                case self::RELATION_ONE_TO_ONE:
+                    $this->createIndex($collection->getId(), $id, self::INDEX_KEY, [$id]);
+                    if ($twoWay) {
+                        $this->createIndex($relatedCollection->getId(), $twoWayKey, self::INDEX_KEY, [$twoWayKey]);
+                    }
+                    break;
+                case self::RELATION_ONE_TO_MANY:
+                    $this->createIndex($relatedCollection->getId(), $twoWayKey, self::INDEX_KEY, [$twoWayKey]);
+                    break;
+                case self::RELATION_MANY_TO_ONE:
+                    $this->createIndex($collection->getId(), $id, self::INDEX_KEY, [$id]);
+                    break;
+                case self::RELATION_MANY_TO_MANY:
+                    // Handled on junction collection creation
+                    break;
+                default:
+                    throw new Exception('Invalid relation type');
+            }
         });
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
@@ -1397,22 +1431,57 @@ class Database
 
             if ($altering) {
                 $this->adapter->updateRelationship($collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $newKey, $newTwoWayKey);
-                $this->deleteCachedCollection($collection);
-                $this->deleteCachedCollection($relatedCollection);
             }
+
+            $this->deleteCachedCollection($collection);
+            $this->deleteCachedCollection($relatedCollection);
+
+            $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $key, $newKey, $twoWayKey, $newTwoWayKey) {
+                switch ($type) {
+                    case self::RELATION_ONE_TO_ONE:
+                        if ($key !== $newKey) {
+                            $this->renameIndex($collection, $key, $newKey);
+                        }
+                        if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                            $this->renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                        }
+                        break;
+                    case self::RELATION_ONE_TO_MANY:
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $this->renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                        }
+                        break;
+                    case self::RELATION_MANY_TO_ONE:
+                        if ($key !== $newKey) {
+                            $this->renameIndex($collection, $key, $newKey);
+                        }
+                        break;
+                    case self::RELATION_MANY_TO_MANY:
+                        $junction = $collection . '_' . $relatedCollection;
+                        if ($key !== $newKey) {
+                            $this->renameIndex($junction, $key, $newKey);
+                        }
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $this->renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                        }
+                        break;
+                    default:
+                        throw new Exception('Invalid relation type');
+                }
+            });
         });
         
         return true;
     }
 
-    public function deleteRelationship(string $collection, string $key): bool
+    public function deleteRelationship(string $collection, string $id): bool
     {
         $collection = $this->silent(fn()=>$this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
 
         foreach ($attributes as $name => $attribute) {
-            if ($attribute['$id'] === $key) {
+            if ($attribute['$id'] === $id) {
                 $relationship = $attribute;
                 unset($attributes[$name]);
             }
@@ -1440,19 +1509,36 @@ class Database
 
         $relatedCollection->setAttribute('attributes', $relatedAttributes);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(function () use ($collection, $relatedCollection) {
-                $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-            });
-        }
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
+            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+
+            switch ($type) {
+                case self::RELATION_ONE_TO_ONE:
+                    $this->deleteIndex($collection->getId(), $id);
+                    if ($twoWay) {
+                        $this->deleteIndex($relatedCollection->getId(), $twoWayKey);
+                    }
+                    break;
+                case self::RELATION_ONE_TO_MANY:
+                    $this->deleteIndex($relatedCollection->getId(), $twoWayKey);
+                    break;
+                case self::RELATION_MANY_TO_ONE:
+                    $this->deleteIndex($collection->getId(), $id);
+                    break;
+                case self::RELATION_MANY_TO_MANY:
+                    break;
+                default:
+                    throw new Exception('Invalid relation type');
+            }
+        });
 
         $deleted = $this->adapter->deleteRelationship(
             $collection->getId(),
             $relatedCollection->getId(),
             $type,
             $twoWay,
-            $key,
+            $id,
             $twoWayKey
         );
 
@@ -1710,7 +1796,7 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
-            switch($relationType) {
+            switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
                     if (\is_null($value)) {
                         break;
@@ -1737,7 +1823,7 @@ class Database
                     }
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey,  [$document->getId()]),
+                        Query::equal($twoWayKey, [$document->getId()]),
                     ]);
 
                     foreach ($relatedDocuments as $related) {
@@ -1759,7 +1845,7 @@ class Database
                     }
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey,  [$document->getId()]),
+                        Query::equal($twoWayKey, [$document->getId()]),
                     ]);
 
                     foreach ($relatedDocuments as $related) {

@@ -1250,6 +1250,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1435,16 +1445,6 @@ class Mongo extends Adapter
         }
 
         throw $e;
-    }
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTimeouts(): bool
-    {
-        return true;
     }
 
 }

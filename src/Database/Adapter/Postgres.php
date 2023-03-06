@@ -1211,6 +1211,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
      * Returns Max Execution Time
      * @param string $sql
      * @param int $milliseconds
@@ -1240,13 +1250,4 @@ class Postgres extends SQL
         throw $e;
     }
 
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    public function getSupportForTimeouts(): bool
-    {
-        return true;
-    }
 }

@@ -1444,7 +1444,7 @@ class Mongo extends Adapter
      */
     public function getSupportForTimeouts(): bool
     {
-        return true; // todo: temporary
+        return true;
     }
 
 }

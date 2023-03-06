@@ -435,6 +435,13 @@ abstract class Adapter
     abstract public function getSupportForQueryContains(): bool;
 
     /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTimeouts(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -580,12 +587,5 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool;
-
-    /**
-     * Are timeouts supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForTimeouts(): bool;
 
 }

@@ -1779,6 +1779,20 @@ class Database
             return new Document();
         }
 
+        $this->getRelationships($collection, $document, $selections);
+
+        $document = $this->casting($collection, $document);
+        $document = $this->decode($collection, $document, $selections);
+
+        $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
+
+        $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
+        return $document;
+    }
+
+    private function getRelationships(Document $collection, Document $document, array $selections): Document
+    {
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter($attributes, function ($attribute) {
@@ -1801,14 +1815,17 @@ class Database
                     if (\is_null($value)) {
                         break;
                     }
-                    // FIXME: This is a hacky fix for circular references
                     if ($twoWay && $fetchDepth === 2) {
                         $fetchDepth = 0;
                         break;
                     }
+
                     $fetchDepth++;
+
                     $related = $this->getDocument($relatedCollection->getId(), $value);
+
                     $fetchDepth = 0;
+
                     $document->setAttribute($key, $related);
                     break;
                 case Database::RELATION_MANY_TO_ONE:
@@ -1822,6 +1839,13 @@ class Database
                         break;
                     }
 
+                    if ($twoWay && $fetchDepth === 2) {
+                        $fetchDepth = 0;
+                        break;
+                    }
+
+                    $fetchDepth++;
+
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
@@ -1830,6 +1854,8 @@ class Database
                     foreach ($relatedDocuments as $related) {
                         $related->removeAttribute($twoWayKey);
                     }
+
+                    $fetchDepth = 0;
 
                     $document->setAttribute($key, $relatedDocuments);
                     break;
@@ -1845,6 +1871,13 @@ class Database
                         break;
                     }
 
+                    if ($twoWay && $fetchDepth === 2) {
+                        $fetchDepth = 0;
+                        break;
+                    }
+
+                    $fetchDepth++;
+
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
@@ -1854,6 +1887,8 @@ class Database
                         $related->removeAttribute($twoWayKey);
                     }
 
+                    $fetchDepth = 0;
+
                     $document->setAttribute($key, $relatedDocuments);
                     break;
                 case Database::RELATION_MANY_TO_MANY:
@@ -1861,7 +1896,6 @@ class Database
                         break;
                     }
 
-                    // FIXME: This is a hacky fix for circular references
                     if ($twoWay && $fetchDepth === 2) {
                         $fetchDepth = 0;
                         break;
@@ -1891,13 +1925,6 @@ class Database
                     break;
             }
         }
-
-        $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document, $selections);
-
-        $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
-
-        $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
     }
@@ -2390,6 +2417,7 @@ class Database
         );
 
         foreach ($results as &$node) {
+            $node = $this->getRelationships($collection, $node, $selections);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());

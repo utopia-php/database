@@ -22,6 +22,7 @@ class Database
     const VAR_STRING = 'string';
     // Simple Types
     const VAR_INTEGER = 'integer';
+    const VAR_INTSTRING = 'intstring';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
     const VAR_DATETIME = 'datetime';
@@ -757,7 +758,8 @@ class Database
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
             case self::VAR_DATETIME:
-                break;
+            case self::VAR_INTSTRING:
+            break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
                 break;
@@ -1994,6 +1996,9 @@ class Database
                         break;
                     case self::VAR_INTEGER:
                         $node = (int)$node;
+                        break;
+                    case self::VAR_INTSTRING:
+                        // let's keeps it string at this point as it comes out from the DB can be used by all
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;

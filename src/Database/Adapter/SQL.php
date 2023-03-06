@@ -362,6 +362,10 @@ abstract class SQL extends Adapter
                 case Database::VAR_DATETIME:
                     $total += 19; // 2022-06-26 14:46:24
                     break;
+
+                case Database::VAR_INTSTRING:
+                    $total += 8;
+                    break;
                 default:
                     throw new Exception('Unknown Type');
                     break;

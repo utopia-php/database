@@ -1057,6 +1057,7 @@ class Postgres extends SQL
                 return "VARCHAR({$size})";
                 break;
 
+            case Database::VAR_INTSTRING:
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
 
                 if ($size >= 8) { // INT = 4 bytes, BIGINT = 8 bytes

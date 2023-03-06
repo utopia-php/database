@@ -336,6 +336,15 @@ abstract class Base extends TestCase
                 'array' => false,
                 'filters' => [],
             ]),
+            new Document([
+                '$id' => ID::custom('collection_id'),
+                'type' => Database::VAR_INTSTRING,
+                'size' => 8,
+                'required' => true,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ]),
         ];
 
         $indexes = [
@@ -360,6 +369,13 @@ abstract class Base extends TestCase
                 'lengths' => [],
                 'orders' => ['DESC', 'ASC'],
             ]),
+            new Document([
+                '$id' => ID::custom('index4'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['collection_id'],
+                'lengths' => [],
+                'orders' => ['DESC', 'ASC'],
+            ]),
         ];
 
         $collection = static::getDatabase()->createCollection('withSchema', $attributes, $indexes);
@@ -368,7 +384,7 @@ abstract class Base extends TestCase
         $this->assertEquals('withSchema', $collection->getId());
 
         $this->assertIsArray($collection->getAttribute('attributes'));
-        $this->assertCount(3, $collection->getAttribute('attributes'));
+        $this->assertCount(4, $collection->getAttribute('attributes'));
         $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
         $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
         $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
@@ -377,13 +393,19 @@ abstract class Base extends TestCase
         $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
 
         $this->assertIsArray($collection->getAttribute('indexes'));
-        $this->assertCount(3, $collection->getAttribute('indexes'));
+        $this->assertCount(4, $collection->getAttribute('indexes'));
         $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
         $this->assertEquals('index2', $collection->getAttribute('indexes')[1]['$id']);
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[1]['type']);
         $this->assertEquals('index3', $collection->getAttribute('indexes')[2]['$id']);
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
+
+        $doc = static::getDatabase()->createDocument('withSchema', new Document([
+            'collection_id' => $collection->getInternalId()
+        ]));
+
+        $this->assertIsString($doc->getAttribute('collection_id'));
 
         static::getDatabase()->deleteCollection('withSchema');
 

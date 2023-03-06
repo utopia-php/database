@@ -1824,6 +1824,7 @@ class Database
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX),
                     ]);
 
                     foreach ($relatedDocuments as $related) {
@@ -1846,6 +1847,7 @@ class Database
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX),
                     ]);
 
                     foreach ($relatedDocuments as $related) {

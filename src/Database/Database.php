@@ -1779,7 +1779,7 @@ class Database
             return new Document();
         }
 
-        $this->getRelationships($collection, $document, $selections);
+        $this->getDocumentRelationships($collection, $document, $selections);
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
@@ -1791,7 +1791,7 @@ class Database
         return $document;
     }
 
-    private function getRelationships(Document $collection, Document $document, array $selections): Document
+    private function getDocumentRelationships(Document $collection, Document $document, array $selections): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1961,6 +1961,25 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        $this->createDocumentsRelationships($collection, $document);
+
+        $document = $this->adapter->createDocument($collection->getId(), $document);
+
+        $document = $this->decode($collection, $document);
+
+        $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
+
+        return $document;
+    }
+
+    /**
+     * @param mixed $collection
+     * @param Document $document
+     * @return void
+     * @throws Exception
+     */
+    private function createDocumentsRelationships(Document $collection, Document $document): void
+    {
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter($attributes, function ($attribute) {
@@ -1979,7 +1998,7 @@ class Database
                 case 'array':
                     // List of documents or IDs
                     foreach ($value as $related) {
-                        switch(\gettype($related)) {
+                        switch (\gettype($related)) {
                             case 'object':
                                 $this->relateDocuments(
                                     $collection->getId(),
@@ -2044,14 +2063,6 @@ class Database
                     throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
             }
         }
-
-        $document = $this->adapter->createDocument($collection->getId(), $document);
-
-        $document = $this->decode($collection, $document);
-
-        $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
-
-        return $document;
     }
 
     private function relateDocuments(
@@ -2183,7 +2194,10 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        $this->updateDocumentRelationships($collection, $document);
+
         $document = $this->adapter->updateDocument($collection->getId(), $document);
+
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
@@ -2191,6 +2205,100 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
+    }
+
+    /**
+     * @param Document $collection
+     * @param Document $document
+     * @return void
+     * @throws Throwable
+     */
+    private function updateDocumentRelationships(Document $collection, Document $document): void
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $relationships = \array_filter($attributes, function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
+
+        foreach ($relationships as $relationship) {
+            $key = $relationship['key'];
+            $value = $document->getAttribute($key);
+            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+            $relationType = $relationship['options']['relationType'];
+            $twoWay = $relationship['options']['twoWay'];
+            $twoWayKey = $relationship['options']['twoWayKey'];
+            $side = $relationship['options']['side'];
+
+            switch ($relationType) {
+                case Database::RELATION_ONE_TO_ONE:
+                    break;
+                case Database::RELATION_ONE_TO_MANY:
+                    if ($side === 'parent') {
+                        if (!\is_array($value)) {
+                            throw new Exception('Invalid value for relationship');
+                        }
+                        foreach ($value as $relation) {
+                            if (!\is_string($relation)) {
+                                throw new Exception('Invalid value for relationship');
+                            }
+
+                            $related = $this->getDocument($relatedCollection->getId(), $relation);
+
+                            $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $related->getId(),
+                                $related->setAttribute($twoWayKey, $document->getId())
+                            );
+                        }
+                        break;
+                    }
+
+                    if (!\is_string($value)) {
+                        throw new Exception('Invalid value for relationship');
+                    }
+
+                    $related = $this->getDocument($collection->getId(), $relation);
+
+                    $this->updateDocument(
+                        $relatedCollection->getId(),
+                        $related->getId(),
+                        $related->setAttribute($twoWayKey, $document->getId())
+                    );
+
+                    $this->relateDocumentsById(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $key,
+                        $document->getId(),
+                        $value,
+                        $relationType,
+                        $twoWay,
+                        $twoWayKey
+                    );
+                    break;
+                case Database::RELATION_MANY_TO_MANY:
+                    if (!\is_array($value)) {
+                        throw new Exception('Invalid value for relationship');
+                    }
+                    foreach ($value as $relation) {
+                        if (!\is_string($relation)) {
+                            throw new Exception('Invalid value for relationship');
+                        }
+                        $this->relateDocumentsById(
+                            $collection->getId(),
+                            $relatedCollection->getId(),
+                            $key,
+                            $document->getId(),
+                            $relation,
+                            $relationType,
+                            $twoWay,
+                            $twoWayKey
+                        );
+                    }
+                    break;
+            }
+        }
     }
 
     /**
@@ -2431,7 +2539,7 @@ class Database
         });
 
         foreach ($results as $index => &$node) {
-            $node = $this->getRelationships($collection, $node, $selections);
+            $node = $this->getDocumentRelationships($collection, $node, $selections);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());

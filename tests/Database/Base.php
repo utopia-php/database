@@ -3545,10 +3545,11 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('person', new Document([
+        $person1 = static::getDatabase()->createDocument('person', new Document([
             '$id' => 'person1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'library' => [
                 '$id' => 'library1',
@@ -3601,6 +3602,20 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($people));
 
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'person',
+            $person1->getId(),
+            $person1->setAttribute('library', 'library2')
+        );
+
+        // Query related document again
+        $people = static::getDatabase()->find('person', [
+            Query::equal('library.name', ['John2'])
+        ]);
+
+        $this->assertEquals(2, \count($people));
+
         // Rename relationship key
         static::getDatabase()->updateRelationship(
             'person',
@@ -3611,7 +3626,7 @@ abstract class Base extends TestCase
         // Get document with again
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('newLibrary');
-        $this->assertEquals('library1', $library['$id']);
+        $this->assertEquals('library2', $library['$id']);
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
@@ -3674,7 +3689,7 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('country', new Document([
+        $country1 = static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -3734,6 +3749,20 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($countries));
 
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'country',
+            $country1->getId(),
+            $country1->setAttribute('city', 'city2')
+        );
+
+        // Query related document again
+        $people = static::getDatabase()->find('country', [
+            Query::equal('city.name', ['Paris'])
+        ]);
+
+        $this->assertEquals(2, \count($people));
+
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
             'country',
@@ -3750,7 +3779,7 @@ abstract class Base extends TestCase
         // Get inverse document with new relationship key
         $country = static::getDatabase()->getDocument('country', 'country1');
         $city = $country->getAttribute('newCity');
-        $this->assertEquals('city1', $city['$id']);
+        $this->assertEquals('city2', $city['$id']);
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
@@ -3806,10 +3835,11 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('artist', new Document([
+        $artist1 = static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist1',
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'albums' => [
                 [
@@ -3866,6 +3896,20 @@ abstract class Base extends TestCase
         $artists = static::getDatabase()->find('artist');
 
         $this->assertEquals(2, \count($artists));
+
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'artist',
+            $artist1->getId(),
+            $artist1->setAttribute('albums', ['album2'])
+        );
+
+        // Query related document again
+        $people = static::getDatabase()->find('artist', [
+            Query::equal('album.name', ['Album 1'])
+        ]);
+
+        $this->assertEquals(2, \count($people));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(

@@ -2405,6 +2405,14 @@ class Database
 
         $selections = $this->validateSelections($collection, $selections);
 
+        $nested = [];
+        foreach ($queries as $index => $query) {
+            if (\str_contains($query->getAttribute(), '.')) {
+                $nested[] = $query;
+                unset($queries[$index]);
+            }
+        }
+
         $results = $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -2416,12 +2424,114 @@ class Database
             $cursorDirection ?? Database::CURSOR_AFTER,
         );
 
-        foreach ($results as &$node) {
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $relationships = \array_filter($attributes, function (Document $attribute) {
+            return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
+        });
+
+        foreach ($results as $index => &$node) {
             $node = $this->getRelationships($collection, $node, $selections);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
+
+            // Post apply nested queries
+            foreach ($nested as $query) {
+                $path = \explode('.', $query->getAttribute());
+
+                if (\count($path) == 1) {
+                    continue;
+                }
+
+                $matched = false;
+                foreach ($relationships as $relationship) {
+                    if ($relationship->getId() === $path[0]) {
+                        $matched = true;
+                        break;
+                    }
+                }
+
+                if (!$matched) {
+                    continue;
+                }
+
+                $value = $node->getAttribute($path[0]);
+
+                $levels = \count($path);
+                for ($i = 1; $i < $levels; $i++) {
+                    if ($value instanceof Document) {
+                        $value = $value->getAttribute($path[$i]);
+                    }
+                }
+
+                if (\is_array($value)) {
+                    $values = \array_map(function ($value) use ($path, $levels) {
+                        return $value[$path[$levels - 1]];
+                    }, $value);
+                } else {
+                    $values = [$value];
+                }
+
+                foreach($values as $value) {
+                    $matched = false;
+                    switch ($query->getMethod()) {
+                        case Query::TYPE_EQUAL:
+                            foreach ($query->getValues() as $queryValue) {
+                                if ($value === $queryValue) {
+                                    $matched = true;
+                                    break;
+                                }
+                            }
+                            break;
+                        case Query::TYPE_NOTEQUAL:
+                            $matched = $value !== $query->getValue();
+                            break;
+                        case Query::TYPE_GREATER:
+                            $matched = $value > $query->getValue();
+                            break;
+                        case Query::TYPE_GREATEREQUAL:
+                            $matched = $value >= $query->getValue();
+                            break;
+                        case Query::TYPE_LESSER:
+                            $matched = $value < $query->getValue();
+                            break;
+                        case Query::TYPE_LESSEREQUAL:
+                            $matched = $value <= $query->getValue();
+                            break;
+                        case Query::TYPE_CONTAINS:
+                            $matched = \in_array($query->getValue(), $value);
+                            break;
+                        case Query::TYPE_SEARCH:
+                            $matched = \str_contains($value, $query->getValue());
+                            break;
+                        case Query::TYPE_IS_NULL:
+                            $matched = $value == null;
+                            break;
+                        case Query::TYPE_IS_NOT_NULL:
+                            $matched = $value != null;
+                            break;
+                        case Query::TYPE_BETWEEN:
+                            $matched = $value >= $query->getValues()[0] && $value <= $query->getValues()[1];
+                            break;
+                        case Query::TYPE_STARTS_WITH:
+                            $matched = \str_starts_with($value, $query->getValue());
+                            break;
+                        case Query::TYPE_ENDS_WITH:
+                            $matched = \str_ends_with($value, $query->getValue());
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                if (!$matched) {
+                    unset($results[$index]);
+                }
+            }
         }
+
+        $results = \array_values($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 

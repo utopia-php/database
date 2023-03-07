@@ -375,7 +375,7 @@ class Database
      * @param callable(): T $callback
      * @return T
      */
-    function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
+    public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
     {
         $previous = $this->timestamp;
         $this->timestamp = $requestTimestamp;

@@ -35,11 +35,17 @@ class Database
     const INDEX_SPATIAL = 'spatial';
     const INDEX_ARRAY = 'array';
 
-    // Relations
+    // Relation Types
     const RELATION_ONE_TO_ONE = 'oneToOne';
     const RELATION_ONE_TO_MANY = 'oneToMany';
     const RELATION_MANY_TO_ONE = 'manyToOne';
     const RELATION_MANY_TO_MANY = 'manyToMany';
+
+    // Relation Actions
+    const ON_DELETE_CASCADE = 'cascade';
+    const ON_DELETE_RESTRICT = 'restrict';
+    const ON_DELETE_SET_NULL = 'setNull';
+
 
     // Orders
     const ORDER_ASC = 'ASC';
@@ -2529,6 +2535,10 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
+        if ($this->resolveRelationships) {
+            $this->deleteDocumentRelationships($collection, $document);
+        }
+
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
@@ -2536,6 +2546,102 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
         return $deleted;
+    }
+
+    private function deleteDocumentRelationships(Document $collection, Document $document): void
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $relationships = \array_filter($attributes, function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
+
+        foreach ($relationships as $relationship) {
+            $key = $relationship['key'];
+            $value = $document->getAttribute($key);
+            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+            $relationType = $relationship['options']['relationType'];
+            $twoWay = $relationship['options']['twoWay'];
+            $twoWayKey = $relationship['options']['twoWayKey'];
+            $onDelete = $relationship['options']['onDelete'];
+            $side = $relationship['options']['side'];
+
+            switch ($onDelete) {
+                case Database::ON_DELETE_RESTRICT:
+                    if (!\is_null($value)) {
+                        throw new Exception('Cannot delete document because it has at least one related document.');
+                    }
+                    break;
+                case Database::ON_DELETE_SET_NULL:
+                    switch ($relationType) {
+                        case Database::RELATION_ONE_TO_ONE:
+                            $related = $this->getDocument($relatedCollection->getId(), $value);
+                            $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $related->getId(),
+                                $related->setAttribute($twoWayKey, null)
+                            );
+                            break;
+                        case Database::RELATION_ONE_TO_MANY:
+                            if ($side === 'child') {
+                                break;
+                            }
+                            foreach ($value as $relation) {
+                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
+                                $this->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $related->getId(),
+                                    $related->setAttribute($twoWayKey, null)
+                                );
+                            }
+                            break;
+                        case Database::RELATION_MANY_TO_ONE:
+                            if ($side === 'parent') {
+                                break;
+                            }
+                            foreach ($value as $relation) {
+                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
+                                $this->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $related->getId(),
+                                    $related->setAttribute($twoWayKey, null)
+                                );
+                            }
+                            break;
+                        case Database::RELATION_MANY_TO_MANY:
+                            break;
+                    }
+                    break;
+                case Database::ON_DELETE_CASCADE:
+                    if (\is_null($value)) {
+                        break;
+                    }
+                    switch ($relationType) {
+                        case Database::RELATION_ONE_TO_ONE:
+                            $this->deleteDocument($relatedCollection->getId(), $value);
+                            break;
+                        case Database::RELATION_ONE_TO_MANY:
+                            if ($side === 'child') {
+                                break;
+                            }
+                            foreach ($value as $relation) {
+                                $this->deleteDocument($relatedCollection->getId(), $relation->getId());
+                            }
+                            break;
+                        case Database::RELATION_MANY_TO_ONE:
+                            if ($side === 'parent') {
+                                break;
+                            }
+                            foreach ($value as $relation) {
+                                $this->deleteDocument($relatedCollection->getId(), $relation->getId());
+                            }
+                            break;
+                        case Database::RELATION_MANY_TO_MANY:
+                            break;
+                    }
+                    break;
+            }
+        }
     }
 
     /**

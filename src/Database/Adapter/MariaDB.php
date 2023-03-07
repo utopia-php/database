@@ -1064,6 +1064,8 @@ class MariaDB extends SQL
                 return "VARCHAR({$size})";
 
             case Database::VAR_INTSTRING:
+                return 'INT(11) UNSIGNED'; // Same as Primary Key
+
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
                 $signed = ($signed) ? '' : ' UNSIGNED';
 

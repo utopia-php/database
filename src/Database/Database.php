@@ -1331,9 +1331,9 @@ class Database
 
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
-                    $this->createIndex($collection->getId(), $id, self::INDEX_KEY, [$id]);
+                    $this->createIndex($collection->getId(), $id, self::INDEX_UNIQUE, [$id]);
                     if ($twoWay) {
-                        $this->createIndex($relatedCollection->getId(), $twoWayKey, self::INDEX_KEY, [$twoWayKey]);
+                        $this->createIndex($relatedCollection->getId(), $twoWayKey, self::INDEX_UNIQUE, [$twoWayKey]);
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
@@ -1343,7 +1343,7 @@ class Database
                     $this->createIndex($collection->getId(), $id, self::INDEX_KEY, [$id]);
                     break;
                 case self::RELATION_MANY_TO_MANY:
-                    // Handled on junction collection creation
+                    // Indexes created on junction collection creation
                     break;
                 default:
                     throw new Exception('Invalid relation type');

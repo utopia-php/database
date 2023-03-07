@@ -240,6 +240,11 @@ class Database
     protected bool $silentEvents = false;
 
     /**
+     * @var bool
+     */
+    protected bool $resolveRelationships = true;
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      */
@@ -342,9 +347,30 @@ class Database
     public function silent(callable $callback): mixed {
         $previous = $this->silentEvents;
         $this->silentEvents = true;
-        $result = $callback();
-        $this->silentEvents = $previous;
-        return $result;
+
+        try {
+            return $callback();
+        } finally {
+            $this->silentEvents = $previous;
+        }
+    }
+
+    /**
+     * Skip relationships for all the calls inside the callback
+     *
+     * @param callable $callback
+     * @return mixed
+     */
+    public function skipRelationships(callable $callback): mixed
+    {
+        $previous = $this->resolveRelationships;
+        $this->resolveRelationships = false;
+
+        try {
+            return $callback();
+        } finally {
+            $this->resolveRelationships = $previous;
+        }
     }
 
     /**
@@ -1779,7 +1805,9 @@ class Database
             return new Document();
         }
 
-        $this->getDocumentRelationships($collection, $document, $selections);
+        if ($this->resolveRelationships) {
+            $this->silent(fn() => $this->getDocumentRelationships($collection, $document, $selections));
+        }
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
@@ -1903,9 +1931,9 @@ class Database
 
                     $fetchDepth++;
 
-                    $junction = $side === 'child'
-                        ? $relatedCollection->getId() . '_' . $collection->getId()
-                        : $collection->getId() . '_' . $relatedCollection->getId();
+                    $junction = $side === 'parent'
+                        ? $collection->getId() . '_' . $relatedCollection->getId()
+                        : $relatedCollection->getId() . '_' . $collection->getId();
 
                     $junctions = $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -1961,7 +1989,9 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $this->createDocumentsRelationships($collection, $document);
+        if ($this->resolveRelationships) {
+            $this->silent(fn() => $this->createDocumentRelationships($collection, $document));
+        }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
@@ -1978,7 +2008,7 @@ class Database
      * @return void
      * @throws Exception
      */
-    private function createDocumentsRelationships(Document $collection, Document $document): void
+    private function createDocumentRelationships(Document $collection, Document $document): void
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2094,7 +2124,9 @@ class Database
             $related = $this->createDocument($relatedCollection, $relation);
         } else if ($relation->getArrayCopy() != $related->getArrayCopy()) {
             // If the related document exists and the data is not the same, update it
-            $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
+            $related = $this->skipRelationships(fn() =>
+                $this->updateDocument($relatedCollection, $relation->getId(), $relation)
+            );
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
@@ -2105,7 +2137,8 @@ class Database
                 $twoWayKey => $document->getId(),
                 '$permissions' => [
                     Permission::read(Role::any()),
-                    Permission::write(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
                 ]
             ]));
         }
@@ -2134,12 +2167,16 @@ class Database
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->updateDocument($relatedCollection, $relationId, $related);
+                    $this->skipRelationships(fn () =>
+                        $this->updateDocument($relatedCollection, $relationId, $related)
+                    );
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 $related->setAttribute($twoWayKey, $documentId);
-                $this->updateDocument($relatedCollection, $relationId, $related);
+                $this->skipRelationships(fn () =>
+                    $this->updateDocument($relatedCollection, $relationId, $related)
+                );
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $collection . '_' . $relatedCollection;
@@ -2149,7 +2186,8 @@ class Database
                     $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),
-                        Permission::write(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
                     ]
                 ]));
         }
@@ -2162,10 +2200,12 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Document $document
      * @return Document
      *
-     * @throws Exception
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Throwable
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
@@ -2194,7 +2234,9 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $this->updateDocumentRelationships($collection, $document);
+        if ($this->resolveRelationships) {
+            $this->silent(fn() => $this->updateDocumentRelationships($collection, $document));
+        }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
 
@@ -2232,6 +2274,24 @@ class Database
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
+                    if (!$twoWay) {
+                        break;
+                    }
+                    if (!\is_string($value)) {
+                        throw new Exception('Invalid value for relationship');
+                    }
+
+                    $related = $this->getDocument($relatedCollection->getId(), $value);
+
+                    if ($related->isEmpty()) {
+                        break;
+                    }
+
+                    $this->skipRelationships(fn() => $this->updateDocument(
+                        $relatedCollection->getId(),
+                        $related->getId(),
+                        $related->setAttribute($twoWayKey, $document->getId())
+                    ));
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === 'parent') {
@@ -2245,12 +2305,14 @@ class Database
 
                             $related = $this->getDocument($relatedCollection->getId(), $relation);
 
-                            $this->updateDocument(
+                            $this->skipRelationships(fn() => $this->updateDocument(
                                 $relatedCollection->getId(),
                                 $related->getId(),
                                 $related->setAttribute($twoWayKey, $document->getId())
-                            );
+                            ));
                         }
+
+                        $document->removeAttribute($key);
                         break;
                     }
 
@@ -2258,24 +2320,34 @@ class Database
                         throw new Exception('Invalid value for relationship');
                     }
 
-                    $related = $this->getDocument($collection->getId(), $relation);
+                    // TODO: Validate exists?
+                    break;
+                case Database::RELATION_MANY_TO_ONE:
+                    if ($side === 'child') {
+                        if (!\is_array($value)) {
+                            throw new Exception('Invalid value for relationship');
+                        }
+                        foreach ($value as $relation) {
+                            if (!\is_string($relation)) {
+                                throw new Exception('Invalid value for relationship');
+                            }
 
-                    $this->updateDocument(
-                        $relatedCollection->getId(),
-                        $related->getId(),
-                        $related->setAttribute($twoWayKey, $document->getId())
-                    );
+                            $related = $this->getDocument($relatedCollection->getId(), $relation);
 
-                    $this->relateDocumentsById(
-                        $collection->getId(),
-                        $relatedCollection->getId(),
-                        $key,
-                        $document->getId(),
-                        $value,
-                        $relationType,
-                        $twoWay,
-                        $twoWayKey
-                    );
+                            $this->skipRelationships(fn() => $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $related->getId(),
+                                $related->setAttribute($twoWayKey, $document->getId())
+                            ));
+                        }
+
+                        $document->removeAttribute($key);
+                        break;
+                    }
+
+                    if (!\is_string($value)) {
+                        throw new Exception('Invalid value for relationship');
+                    }
                     break;
                 case Database::RELATION_MANY_TO_MANY:
                     if (!\is_array($value)) {
@@ -2285,17 +2357,31 @@ class Database
                         if (!\is_string($relation)) {
                             throw new Exception('Invalid value for relationship');
                         }
-                        $this->relateDocumentsById(
-                            $collection->getId(),
-                            $relatedCollection->getId(),
-                            $key,
-                            $document->getId(),
-                            $relation,
-                            $relationType,
-                            $twoWay,
-                            $twoWayKey
-                        );
+
+                        $junction = $side === 'parent'
+                            ? $collection->getId() . '_' . $relatedCollection->getId()
+                            : $relatedCollection->getId() . '_' . $collection->getId();
+
+                        $queryKey = $side === 'parent' ? $twoWayKey : $key;
+                        $queryValue = $side === 'parent' ? $document->getId() : $relation;
+
+                        $attrKey = $side === 'parent' ? $key : $twoWayKey;
+                        $attrValue = $side === 'parent' ? $relation : $document->getId();
+
+                        $junctions = $this->find($junction, [
+                            Query::equal($queryKey, [$queryValue]),
+                        ]);
+
+                        foreach ($junctions as $junction) {
+                            $this->skipRelationships(fn() => $this->updateDocument(
+                                $junction->getCollection(),
+                                $junction->getId(),
+                                $junction->setAttribute($attrKey, $attrValue)
+                            ));
+                        }
                     }
+
+                    $document->removeAttribute($key);
                     break;
             }
         }
@@ -2534,12 +2620,14 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function (Document $attribute) {
+        $relationships = $this->resolveRelationships ? \array_filter($attributes, function (Document $attribute) {
             return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
-        });
+        }): [];
 
         foreach ($results as $index => &$node) {
-            $node = $this->getDocumentRelationships($collection, $node, $selections);
+            if ($this->resolveRelationships) {
+                $node = $this->getDocumentRelationships($collection, $node, $selections);
+            }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
@@ -2581,14 +2669,14 @@ class Database
                     $values = [$value];
                 }
 
+                $matched = false;
                 foreach($values as $value) {
-                    $matched = false;
                     switch ($query->getMethod()) {
                         case Query::TYPE_EQUAL:
                             foreach ($query->getValues() as $queryValue) {
                                 if ($value === $queryValue) {
                                     $matched = true;
-                                    break;
+                                    break 2;
                                 }
                             }
                             break;
@@ -2952,43 +3040,11 @@ class Database
     }
 
     /**
-     * Get adapter attribute limit, accounting for internal metadata
-     * Returns 0 to indicate no limit
-     *
-     * @return int
-     */
-    public function getLimitForAttributes()
-    {
-        // If negative, return 0
-        // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
-    }
-
-    /**
-     * Get adapter index limit
-     *
-     * @return int
-     */
-    public function getLimitForIndexes()
-    {
-        return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
-    }
-
-    /**
-     * Get list of keywords that cannot be used
-     *
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return $this->adapter->getKeywords();
-    }
-
-    /**
      * Validate if a set of attributes can be selected from the collection
      *
      * @param Document $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
+     * @return array<string>
      * @throws Exception
      */
     private function validateSelections(Document $collection, array $queries): array
@@ -3025,6 +3081,39 @@ class Database
         $selections[] = '$permissions';
 
         return $selections;
+    }
+
+    /**
+     * Get adapter attribute limit, accounting for internal metadata
+     * Returns 0 to indicate no limit
+     *
+     * @return int
+     */
+    public function getLimitForAttributes()
+    {
+        // If negative, return 0
+        // -1 ==> virtual columns count as total, so treat as buffer
+        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
+    }
+
+    /**
+     * Get adapter index limit
+     *
+     * @return int
+     */
+    public function getLimitForIndexes()
+    {
+        return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     *
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return $this->adapter->getKeywords();
     }
 
     /**

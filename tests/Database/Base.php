@@ -20,7 +20,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\DatetimeValidator;
 use Utopia\Database\Validator\Structure;
-use Utopia\Validator;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
 
@@ -3556,7 +3555,7 @@ abstract class Base extends TestCase
                 '$permissions' => [
                     Permission::read(Role::any()),
                 ],
-                'name' => 'John1',
+                'name' => 'Library 1',
             ],
         ]));
 
@@ -3566,7 +3565,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
-            'name' => 'John2',
+            'name' => 'Library 2',
         ]));
         static::getDatabase()->createDocument('person', new Document([
             '$id' => 'person2',
@@ -3588,12 +3587,12 @@ abstract class Base extends TestCase
 
         // Query related document
         $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['John2'])
+            Query::equal('library.name', ['Library 2'])
         ]);
 
         $this->assertEquals(1, \count($people));
 
-        $this->assertEquals('John2', $people[0]
+        $this->assertEquals('Library 2', $people[0]
             ->getAttribute('library')
             ->getAttribute('name')
         );
@@ -3602,19 +3601,37 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($people));
 
-        // Update document with new related document
+        // Duplicate relationship
+        $this->expectException(Duplicate::class);
+
         static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
             $person1->setAttribute('library', 'library2')
         );
 
-        // Query related document again
+        // Create new document
+        static::getDatabase()->createDocument('library', new Document([
+            '$id' => 'library3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Library 3',
+        ]));
+
+        // Update existing document with new related document
+        static::getDatabase()->updateDocument(
+            'person',
+            $person1->getId(),
+            $person1->setAttribute('library', 'library3')
+        );
+
+        // Query new related document
         $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['John2'])
+            Query::equal('library.name', ['Library 3'])
         ]);
 
-        $this->assertEquals(2, \count($people));
+        $this->assertEquals(1, \count($people));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -3647,6 +3664,14 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createAttribute(
             collection: 'city',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: true,
+        );
+
+        static::getDatabase()->createAttribute(
+            collection: 'country',
             id: 'name',
             type: Database::VAR_STRING,
             size: 255,
@@ -3696,6 +3721,7 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
+            'name' => 'England',
             'city' => [
                 '$id' => 'city1',
                 '$permissions' => [
@@ -3720,6 +3746,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
+            'name' => 'France',
             'city' => 'city2',
         ]));
 
@@ -3749,19 +3776,65 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($countries));
 
-        // Update document with new related document
+        // Update document with existing document relation
+        // Will throw as one-to-one relationship can only have one related document
+        $this->expectException(Duplicate::class);
+
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
             $country1->setAttribute('city', 'city2')
         );
 
-        // Query related document again
-        $people = static::getDatabase()->find('country', [
-            Query::equal('city.name', ['Paris'])
+        // Create a new city with no relation
+        static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Copenhagen'
+        ]));
+
+        // Successful update
+        $city3 = static::getDatabase()->updateDocument(
+            'country',
+            $country1->getId(),
+            $country1->setAttribute('city', 'city3')
+        );
+
+        // Query new relationship
+        $countries = static::getDatabase()->find('country', [
+            Query::equal('city.name', ['Copenhagen'])
         ]);
 
-        $this->assertEquals(2, \count($people));
+        $this->assertEquals(1, \count($countries));
+
+        // Create a new city with no relation
+        static::getDatabase()->createDocument('country', new Document([
+            '$id' => 'country3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Denmark'
+        ]));
+
+        // Update inverse document with new related document
+        static::getDatabase()->updateDocument(
+            'city',
+            $city3->getId(),
+            $city3->setAttribute('country', 'country3')
+        );
+
+        // Query inverse related document again
+        $people = static::getDatabase()->find('city', [
+            Query::equal('country.name', ['Denmark'])
+        ]);
+
+        $this->assertEquals(1, \count($people));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -3887,6 +3960,7 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, \count($artists));
+        $this->assertEquals(1, \count($artists[0]['albums']));
 
         $this->assertEquals('Album 2', $artists[0]
             ->getAttribute('albums')[0]
@@ -3905,11 +3979,12 @@ abstract class Base extends TestCase
         );
 
         // Query related document again
-        $people = static::getDatabase()->find('artist', [
-            Query::equal('album.name', ['Album 1'])
+        $artists = static::getDatabase()->find('artist', [
+            Query::equal('albums.name', ['Album 2'])
         ]);
 
-        $this->assertEquals(2, \count($people));
+        $this->assertEquals(1, \count($artists));
+        $this->assertEquals(2, \count($artists[0]['albums']));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -3942,6 +4017,14 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createAttribute(
             collection: 'account',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: true,
+        );
+
+        static::getDatabase()->createAttribute(
+            collection: 'customer',
             id: 'name',
             type: Database::VAR_STRING,
             size: 255,
@@ -3987,16 +4070,19 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('customer', new Document([
+        $customer1 = static::getDatabase()->createDocument('customer', new Document([
             '$id' => 'customer1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
+            'name' => 'Customer 1',
             'accounts' => [
                 [
                     '$id' => 'account1',
                     '$permissions' => [
                         Permission::read(Role::any()),
+                        Permission::update(Role::any()),
                     ],
                     'name' => 'Account 1',
                 ],
@@ -4004,7 +4090,7 @@ abstract class Base extends TestCase
         ]));
 
         // Create document with relationship with related ID
-        static::getDatabase()->createDocument('account', new Document([
+        $account2 = static::getDatabase()->createDocument('account', new Document([
             '$id' => 'account2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -4012,11 +4098,14 @@ abstract class Base extends TestCase
             ],
             'name' => 'Account 2'
         ]));
+
         static::getDatabase()->createDocument('customer', new Document([
             '$id' => 'customer2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
+            'name' => 'Customer 2',
             'accounts' => [
                 'account2'
             ]
@@ -4047,6 +4136,43 @@ abstract class Base extends TestCase
         $customers = static::getDatabase()->find('customer');
 
         $this->assertEquals(2, \count($customers));
+
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'customer',
+            $customer1->getId(),
+            $customer1->setAttribute('accounts', ['account2'])
+        );
+
+        // Query related document again
+        $customers = static::getDatabase()->find('customer', [
+            Query::equal('accounts.name', ['Account 2'])
+        ]);
+
+        $this->assertEquals(1, \count($customers));
+        $this->assertEquals(2, \count($customers[0]['accounts']));
+
+        // Update inverse document
+        static::getDatabase()->updateDocument(
+            'account',
+            $account2->getId(),
+            $account2->setAttribute('customer', 'customer2')
+        );
+
+        // Query related document again
+        $customers = static::getDatabase()->find('customer', [
+            Query::equal('accounts.name', ['Account 2'])
+        ]);
+
+        $this->assertEquals(1, \count($customers));
+        $this->assertEquals(1, \count($customers[0]['accounts']));
+
+        // Query inverse document again
+        $customers = static::getDatabase()->find('account', [
+            Query::equal('customer.name', ['Customer 2'])
+        ]);
+
+        $this->assertEquals(1, \count($customers));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -4134,15 +4260,17 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('review', new Document([
+        $review1 = static::getDatabase()->createDocument('review', new Document([
             '$id' => 'review1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'movie' => [
                 '$id' => 'movie1',
                 '$permissions' => [
                     Permission::read(Role::any()),
+                    Permission::update(Role::any()),
                 ],
                 'name' => 'Movie 1',
             ],
@@ -4161,6 +4289,7 @@ abstract class Base extends TestCase
             '$id' => 'review2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'movie' => 'movie2',
         ]));
@@ -4191,6 +4320,20 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($reviews));
 
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'review',
+            $review1->getId(),
+            $review1->setAttribute('movie', 'movie2')
+        );
+
+        // Query related document again
+        $reviews = static::getDatabase()->find('review', [
+            Query::equal('movie.name', ['Movie 2'])
+        ]);
+
+        $this->assertEquals(2, \count($reviews));
+
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
             'review',
@@ -4201,7 +4344,7 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $review = static::getDatabase()->getDocument('review', 'review1');
         $movie = $review->getAttribute('newMovie');
-        $this->assertEquals('movie1', $movie['$id']);
+        $this->assertEquals('movie2', $movie['$id']);
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
@@ -4222,6 +4365,14 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createAttribute(
             collection: 'store',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: true
+        );
+
+        static::getDatabase()->createAttribute(
+            collection: 'product',
             id: 'name',
             type: Database::VAR_STRING,
             size: 255,
@@ -4267,22 +4418,25 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('product', new Document([
+        $product1 = static::getDatabase()->createDocument('product', new Document([
             '$id' => 'product1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
+            'name' => 'Product 1',
             'store' => [
                 '$id' => 'store1',
                 '$permissions' => [
                     Permission::read(Role::any()),
+                    Permission::update(Role::any()),
                 ],
                 'name' => 'Store 1',
             ],
         ]));
 
         // Create document with relationship with related ID
-        static::getDatabase()->createDocument('store', new Document([
+        $store2 = static::getDatabase()->createDocument('store', new Document([
             '$id' => 'store2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -4294,7 +4448,9 @@ abstract class Base extends TestCase
             '$id' => 'product2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
+            'name' => 'Product 2',
             'store' => 'store2',
         ]));
 
@@ -4323,6 +4479,44 @@ abstract class Base extends TestCase
         $products = static::getDatabase()->find('product');
 
         $this->assertEquals(2, \count($products));
+
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'product',
+            $product1->getId(),
+            $product1->setAttribute('store', 'store2')
+        );
+
+        // Query related document again
+        $products = static::getDatabase()->find('product', [
+            Query::equal('store.name', ['Store 2'])
+        ]);
+
+        $this->assertEquals(2, \count($products));
+
+        $store1 = static::getDatabase()->getDocument('store', 'store1');
+
+        // Update inverse document
+        static::getDatabase()->updateDocument(
+            'store',
+            $store1->getId(),
+            $store1->setAttribute('products', ['product1'])
+        );
+
+        // Query related document again
+        $stores = static::getDatabase()->find('store', [
+            Query::equal('products.name', ['Product 2'])
+        ]);
+
+        $this->assertEquals(1, \count($stores));
+        $this->assertEquals(1, \count($stores[0]['products']));
+
+        // Query inverse document again
+        $products = static::getDatabase()->find('product', [
+            Query::equal('store.name', ['Store 2'])
+        ]);
+
+        $this->assertEquals(1, \count($products));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -4396,16 +4590,18 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('playlist', new Document([
+        $playlist1 = static::getDatabase()->createDocument('playlist', new Document([
             '$id' => 'playlist1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'songs' => [
                 [
                     '$id' => 'song1',
                     '$permissions' => [
                         Permission::read(Role::any()),
+                        Permission::update(Role::any()),
                     ],
                     'name' => 'Song 1',
                 ],
@@ -4413,10 +4609,11 @@ abstract class Base extends TestCase
         ]));
 
         // Create document with relationship with related ID
-        static::getDatabase()->createDocument('song', new Document([
+        $song2 = static::getDatabase()->createDocument('song', new Document([
             '$id' => 'song2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Song 2',
         ]));
@@ -4424,6 +4621,7 @@ abstract class Base extends TestCase
             '$id' => 'playlist2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'songs' => [
                 'song2'
@@ -4456,7 +4654,22 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($playlists));
 
-        // Rename relationship keys on both sides
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'playlist',
+            $playlist1->getId(),
+            $playlist1->setAttribute('songs', ['song2'])
+        );
+
+        // Query related document again
+        $playlists = static::getDatabase()->find('playlist', [
+            Query::equal('songs.name', ['Song 2'])
+        ]);
+
+        $this->assertEquals(2, \count($playlists));
+        $this->assertEquals(1, \count($playlists[0]['songs']));
+
+        // Rename relationship key
         static::getDatabase()->updateRelationship(
             'playlist',
             'songs',
@@ -4466,7 +4679,7 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');
         $songs = $playlist->getAttribute('newSongs');
-        $this->assertEquals('song1', $songs[0]['$id']);
+        $this->assertEquals('song2', $songs[0]['$id']);
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
@@ -4484,6 +4697,14 @@ abstract class Base extends TestCase
     {
         static::getDatabase()->createCollection('students');
         static::getDatabase()->createCollection('classes');
+
+        static::getDatabase()->createAttribute(
+            collection: 'students',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: true
+        );
 
         static::getDatabase()->createAttribute(
             collection: 'classes',
@@ -4531,16 +4752,20 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('students', new Document([
+        $student1 = static::getDatabase()->createDocument('students', new Document([
             '$id' => 'student1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
+            'name' => 'Student 1',
             'classes' => [
                 [
                     '$id' => 'class1',
                     '$permissions' => [
                         Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+
                     ],
                     'name' => 'Class 1',
                 ],
@@ -4548,10 +4773,12 @@ abstract class Base extends TestCase
         ]));
 
         // Create document with relationship with related ID
-        static::getDatabase()->createDocument('classes', new Document([
+        $class2 = static::getDatabase()->createDocument('classes', new Document([
             '$id' => 'class2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
+
             ],
             'name' => 'Class 2',
         ]));
@@ -4559,7 +4786,9 @@ abstract class Base extends TestCase
             '$id' => 'student2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
+            'name' => 'Student 2',
             'classes' => [
                 'class2'
             ],
@@ -4590,6 +4819,45 @@ abstract class Base extends TestCase
         $students = static::getDatabase()->find('students');
 
         $this->assertEquals(2, \count($students));
+
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'students',
+            $student1->getId(),
+            $student1->setAttribute('classes', ['class2'])
+        );
+
+        // Query related document again
+        $students = static::getDatabase()->find('students', [
+            Query::equal('classes.name', ['Class 2'])
+        ]);
+
+        $this->assertEquals(2, \count($students));
+        $this->assertEquals(1, \count($students[0]['classes']));
+
+        $class1 = static::getDatabase()->getDocument('classes', 'class1');
+
+        // Update inverse document
+        static::getDatabase()->updateDocument(
+            'classes',
+            $class1->getId(),
+            $class1->setAttribute('students', ['student1'])
+        );
+
+        // Query related document again
+        $students = static::getDatabase()->find('students', [
+            Query::equal('classes.name', ['Class 2'])
+        ]);
+
+        $this->assertEquals(1, \count($students));
+        $this->assertEquals(1, \count($students[0]['classes']));
+
+        // Query inverse document again
+        $customers = static::getDatabase()->find('classes', [
+            Query::equal('students.name', ['Student 2'])
+        ]);
+
+        $this->assertEquals(1, \count($customers));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(

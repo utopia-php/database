@@ -1053,7 +1053,7 @@ class Database
             }
 
             if (!\is_null($default)) {
-                if ($required === true) {
+                if ($required) {
                     throw new Exception('Cannot set a default value on a required attribute');
                 }
 

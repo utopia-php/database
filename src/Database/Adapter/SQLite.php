@@ -594,6 +594,16 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get SQL Index Type
      *
      * @param string $type

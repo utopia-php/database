@@ -10,6 +10,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
@@ -581,11 +582,13 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws Exception
+     * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -601,6 +604,10 @@ class Mongo extends Adapter
             'limit' => $limit,
             'skip' => $offset
         ];
+
+        if ($timeout) {
+            $options['maxTimeMS'] = $timeout;
+        }
 
         $selections = $this->getAttributeSelections($queries);
 
@@ -697,7 +704,12 @@ class Mongo extends Adapter
          * @var array<Document>
          */
         $found = [];
-        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+
+        try {
+            $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
 
         foreach ($this->client->toArray($results) as $i => $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
@@ -1050,6 +1062,7 @@ class Mongo extends Adapter
      * @param string $operator
      *
      * @return string
+     * @throws Exception
      */
     protected function getQueryOperator(string $operator): string
     {
@@ -1070,10 +1083,8 @@ class Mongo extends Adapter
                 return '$in';
             case Query::TYPE_SEARCH:
                 return '$search';
-
             case Query::TYPE_BETWEEN:
                 return 'between'; // this is not an operator will be replaced with $gte/$lte
-
             case Query::TYPE_IS_NULL:
                 return '$eq';
             case Query::TYPE_IS_NOT_NULL:
@@ -1081,7 +1092,6 @@ class Mongo extends Adapter
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
                 return '$regex';
-
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }
@@ -1239,6 +1249,16 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForQueryContains(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
     {
         return true;
     }
@@ -1422,5 +1442,18 @@ class Mongo extends Adapter
     public function getKeywords(): array
     {
         return [];
+    }
+
+    /**
+     * @throws Timeout
+     * @throws Exception
+     */
+    protected function processException(Exception $e): void
+    {
+        if ($e->getCode() === 50) {
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
     }
 }

@@ -8,6 +8,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -701,7 +702,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -807,6 +808,10 @@ class MariaDB extends SQL
             LIMIT :offset, :limit;
         ";
 
+        if ($timeout) {
+            $sql = $this->setTimeout($sql, $timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -830,7 +835,12 @@ class MariaDB extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+        }
 
         $results = $stmt->fetchAll();
 
@@ -1037,7 +1047,7 @@ class MariaDB extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1146,5 +1156,50 @@ class MariaDB extends SQL
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return true;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param int $milliseconds
+     * @return string
+     */
+    protected function setTimeout(string $sql, int $milliseconds): string
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return $sql;
+        }
+
+        $seconds = $milliseconds / 1000;
+        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+    }
+
+    /**
+     * @param PDOException $e
+     * @throws Timeout
+     */
+    protected function processException(PDOException $e): void
+    {
+        // Regular PDO
+        if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
+            throw new Timeout($e->getMessage());
+        }
+
+        // PDOProxy switches errorInfo PDOProxy.php line 64
+        if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
     }
 }

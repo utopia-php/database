@@ -249,6 +249,14 @@ class QueriesTest extends TestCase
                         'rating'
                     ],
                     'orders' => []
+                ]),
+                new Document([
+                    '$id' => 'key-price',
+                    'type' => 'key',
+                    'attributes' => [
+                        'price'
+                    ],
+                    'orders' => []
                 ])
             ],
             true,

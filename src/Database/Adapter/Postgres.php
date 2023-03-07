@@ -9,6 +9,7 @@ use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -698,12 +699,14 @@ class Postgres extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws Exception
      * @throws PDOException
+     * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -802,6 +805,10 @@ class Postgres extends SQL
             LIMIT :limit OFFSET :offset;
         ";
 
+        if ($timeout) {
+            $sql = $this->setTimeout($sql, $timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -825,7 +832,11 @@ class Postgres extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+        }
 
         $results = $stmt->fetchAll();
 
@@ -991,7 +1002,8 @@ class Postgres extends SQL
         return \implode(', ', $selections);
     }
 
-    /*
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1026,7 +1038,7 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1189,5 +1201,45 @@ class Postgres extends SQL
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param int $milliseconds
+     * @return string
+     */
+    protected function setTimeout(string $sql, int $milliseconds): string
+    {
+        return "SET statement_timeout = {$milliseconds};{$sql};SET statement_timeout = 0;";
+    }
+
+    /**
+     * @param PDOException $e
+     * @throws Timeout
+     */
+    protected function processException(PDOException $e): void
+    {
+        // Regular PDO
+        if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new Timeout($e->getMessage());
+        }
+
+        // PDOProxy switches errorInfo PDOProxy.php line 64
+        if ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
     }
 }

@@ -329,10 +329,11 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param int|null $timeout
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
 
     /**
      * Sum an attribute
@@ -434,6 +435,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForQueryContains(): bool;
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForTimeouts(): bool;
 
     /**
      * Get current attribute count from collection document

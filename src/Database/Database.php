@@ -994,10 +994,10 @@ class Database
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, &$success) {
-            $altering = true;
-            if(is_null($type) && is_null($size) && is_null($signed) && is_null($array)){
-                $altering = false;
-            }
+            $altering = !\is_null($type) 
+                || !\is_null($size) 
+                || !\is_null($signed) 
+                || !\is_null($array);
             $type ??= $attribute->getAttribute('type');
             $size ??= $attribute->getAttribute('size');
             $signed ??= $attribute->getAttribute('signed');

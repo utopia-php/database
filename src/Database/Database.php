@@ -1008,6 +1008,10 @@ class Database
             $formatOptions ??= $attribute->getAttribute('formatOptions');
             $filters ??= $attribute->getAttribute('filters');
 
+            if ($required === true && !\is_null($default)) {
+                $default = null;
+            }
+
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {

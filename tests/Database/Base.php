@@ -945,7 +945,7 @@ abstract class Base extends TestCase
      * @depends testUpdateDocument
      */
     public function testDeleteDocumentConflict(Document $document)
-    { 
+    {
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $this->expectException(ConflictException::class);
         $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
@@ -2101,7 +2101,7 @@ abstract class Base extends TestCase
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
         /**
-         * Check `equals` query 
+         * Check `equals` query
          */
         foreach ($values as $value) {
             $documents = static::getDatabase()->find($collection, [
@@ -3267,104 +3267,129 @@ abstract class Base extends TestCase
 
         // price attribute
         $collection = $database->getCollection('flowers');
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('priceRange', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('priceRange', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
 
-        $doc = $database->getDocument('flowers', 'LiliPriced');
-        $this->assertIsNumeric($doc->getAttribute('price'));
-        $this->assertEquals(500, $doc->getAttribute('price'));
+        $database->updateAttribute('flowers', 'price', default: 100);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('priceRange', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
 
-//        $database->updateAttribute('flowers', 'price', array: true);
-//        $collection = $database->getCollection('flowers');
-//        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['array']);
 
         $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('integer', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('priceRangeNew', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('priceRangeNew', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: '');
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('integer', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: ['min' => 1, 'max' => 999]);
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('integer', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals(['min'=>1, 'max'=>999], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>999], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: []);
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('integer', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals([], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', signed: false);
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('integer', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals([], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(false, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', required: true);
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('integer', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[4]['format']);
-        $this->assertEquals([], $collection->getAttribute('attributes')[4]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(false, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(true, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
 
-        $database->updateAttribute('flowers', 'price', type: Database::VAR_STRING, size: Database::LENGTH_KEY);
+        $database->updateAttribute('flowers', 'price', type: Database::VAR_STRING, size: Database::LENGTH_KEY, format: '');
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('string', $collection->getAttribute('attributes')[4]['type']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['signed']);
-        $this->assertEquals(255, $collection->getAttribute('attributes')[4]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[4]['array']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[4]['required']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[4]['format']);
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('string', $attribute['type']);
+        $this->assertEquals(false, $attribute['signed']);
+        $this->assertEquals(255, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(true, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
         $this->assertEquals([], $collection->getAttribute('attributes')[4]['formatOptions']);
 
         // Date attribute
-        $this->assertEquals('date', $collection->getAttribute('attributes')[2]['key']);
-        $this->assertEquals('string', $collection->getAttribute('attributes')[2]['type']);
+        $attribute = $collection->getAttribute('attributes')[2];
+        $this->assertEquals('date', $attribute['key']);
+        $this->assertEquals('string', $attribute['type']);
+        $this->assertEquals(null, $attribute['default']);
 
         $database->updateAttribute('flowers', 'date', type: Database::VAR_DATETIME, size: 0, filters: ['datetime']);
         $collection = $database->getCollection('flowers');
-        $this->assertEquals('datetime', $collection->getAttribute('attributes')[2]['type']);
-        $this->assertEquals(0, $collection->getAttribute('attributes')[2]['size']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[2]['required']);
-        $this->assertEquals(true, $collection->getAttribute('attributes')[2]['signed']);
-        $this->assertEquals(false, $collection->getAttribute('attributes')[2]['array']);
-        $this->assertEquals('', $collection->getAttribute('attributes')[2]['format']);
-        $this->assertEquals([], $collection->getAttribute('attributes')[2]['formatOptions']);
+        $attribute = $collection->getAttribute('attributes')[2];
+        $this->assertEquals('datetime', $attribute['type']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
 
         $doc = $database->getDocument('flowers', 'LiliPriced');
         $this->assertIsString($doc->getAttribute('price'));

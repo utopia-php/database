@@ -2066,7 +2066,7 @@ abstract class Base extends TestCase
         ]);
     }
 
-    public function testTimeout()
+    public function testTimeout(): void
     {
         if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             static::getDatabase()->createCollection('timeouts');

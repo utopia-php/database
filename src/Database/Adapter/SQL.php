@@ -13,7 +13,7 @@ use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-    protected PDO|PDOProxy $pdo;
+    protected PDO $pdo;
 
     /**
      * Constructor.
@@ -22,7 +22,7 @@ abstract class SQL extends Adapter
      *
      * @param PDO $pdo
      */
-    public function __construct($pdo)
+    public function __construct(mixed $pdo)
     {
         $this->pdo = $pdo;
     }

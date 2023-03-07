@@ -711,7 +711,11 @@ class Mongo extends Adapter
             $this->processException($e);
         }
 
-        foreach ($this->client->toArray($results) as $i => $result) {
+        if (empty($results)) {
+            return $found;
+        }
+
+        foreach ($this->client->toArray($results) as $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
             $record = $this->timeToDocument($record);
 

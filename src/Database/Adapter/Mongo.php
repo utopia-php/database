@@ -10,6 +10,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
@@ -159,7 +160,7 @@ class Mongo extends Adapter
         if($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
-        
+
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
@@ -580,11 +581,11 @@ class Mongo extends Adapter
      * @param array $orderTypes
      * @param array $cursor
      * @param string $cursorDirection
-     *
+     * @param int|null $timeout
      * @return Document[]
-     * @throws Exception
+     * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -601,6 +602,10 @@ class Mongo extends Adapter
             'skip' => $offset
         ];
 
+        if($timeout){
+            $options['maxTimeMS'] = $timeout;
+        }
+
         $selections = $this->getAttributeSelections($queries);
 
         if (!empty($selections)) {
@@ -611,7 +616,7 @@ class Mongo extends Adapter
         foreach ($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            
+
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
@@ -647,7 +652,7 @@ class Mongo extends Adapter
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
-                
+
                 $options['sort']['_id'] = $this->getOrder($orderType);
             }
         }
@@ -696,12 +701,17 @@ class Mongo extends Adapter
          * @var Document[]
          */
         $found = [];
-        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+
+        try {
+            $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+        } catch (MongoException $e){
+            $this->processException($e);
+        }
 
         foreach ($this->client->toArray($results) as $i => $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
             $record = $this->timeToDocument($record);
-    
+
             $found[] = new Document($record);
         }
 
@@ -721,7 +731,7 @@ class Mongo extends Adapter
      * @return array
      * @throws Exception
      */
-    private function timeFilter(array $filters):array 
+    private function timeFilter(array $filters):array
     {
         $results = $filters;
 
@@ -746,9 +756,9 @@ class Mongo extends Adapter
 
     /**
      * Converts timestamp base fields to Utopia\Document format.
-     * 
+     *
      * @param array $record
-     * 
+     *
      * @return array
      */
     private function timeToDocument(array $record):array
@@ -805,9 +815,9 @@ class Mongo extends Adapter
             if (false == in_array($key, $exclude)) {
                 $key = str_replace($from, $to, $key);
             }
-            
-            $result[$key] = is_array($value) 
-                ? $this->recursiveReplace($value, $from, $to, $exclude) 
+
+            $result[$key] = is_array($value)
+                ? $this->recursiveReplace($value, $from, $to, $exclude)
                 : $value;
         }
 
@@ -979,7 +989,7 @@ class Mongo extends Adapter
             }
         }
 
-        return $result;        
+        return $result;
     }
 
     /**
@@ -1009,7 +1019,7 @@ class Mongo extends Adapter
             if ($query->getAttribute() === '$updatedAt') {
                 $query->setAttribute('_updatedAt');
             }
-            
+
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
 
@@ -1049,10 +1059,11 @@ class Mongo extends Adapter
 
     /**
      * Get Query Operator
-     * 
+     *
      * @param string $operator
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getQueryOperator(string $operator): string
     {
@@ -1073,10 +1084,8 @@ class Mongo extends Adapter
                 return '$in';
             case Query::TYPE_SEARCH:
                 return '$search';
-
             case Query::TYPE_BETWEEN:
                 return 'between'; // this is not an operator will be replaced with $gte/$lte
-
             case Query::TYPE_IS_NULL:
                 return '$eq';
             case Query::TYPE_IS_NOT_NULL:
@@ -1084,7 +1093,6 @@ class Mongo extends Adapter
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
                 return '$regex';
-
             default:
                 throw new Exception('Unknown Operator:' . $operator);
         }
@@ -1237,6 +1245,16 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForQueryContains(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
     {
         return true;
     }
@@ -1411,8 +1429,22 @@ class Mongo extends Adapter
         return $cleaned;
     }
 
-    public function getKeywords(): array 
+    public function getKeywords(): array
     {
         return [];
     }
+
+    /**
+     * @throws Timeout
+     * @throws Exception
+     */
+    protected function processException(Exception $e): void
+    {
+        if($e->getCode() === 50){
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
+    }
+
 }

@@ -1713,12 +1713,16 @@ class Database
      *
      * @param string $collection
      * @param Query[] $queries
-     *
+     * @param int|null $timeout
      * @return Document[]
-     * @throws Exception
+     * @throws Throwable
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
+        if(!is_null($timeout) && $timeout <= 0){
+            throw new Exception("Timeout must be greater than 0");
+        }
+
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $grouped = Query::groupByType($queries);
@@ -1753,6 +1757,7 @@ class Database
             $orderTypes,
             $cursor ?? [],
             $cursorDirection ?? Database::CURSOR_AFTER,
+            $timeout
         );
 
         foreach ($results as &$node) {

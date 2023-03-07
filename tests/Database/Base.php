@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
@@ -2047,6 +2048,33 @@ abstract class Base extends TestCase
         ]);
     }
 
+    public function testTimeout()
+    {
+        if($this->getDatabase()->getAdapter()->getSupportForTimeouts()){
+            static::getDatabase()->createCollection('timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for($i = 0 ; $i <= 5 ; $i++){
+                static::getDatabase()->createDocument('timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+
+            static::getDatabase()->find('timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ], 1);
+        }
+
+        $this->expectNotToPerformAssertions();
+    }
+
     /**
      * @depends testUpdateDocument
      */
@@ -3276,7 +3304,7 @@ abstract class Base extends TestCase
         // String to Datetime
         $database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
-        //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
+
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 

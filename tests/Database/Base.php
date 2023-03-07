@@ -3288,7 +3288,6 @@ abstract class Base extends TestCase
         $this->assertEquals('priceRange', $attribute['format']);
         $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
 
-
         $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
         $collection = $database->getCollection('flowers');
         $attribute = $collection->getAttribute('attributes')[4];

@@ -1010,6 +1010,10 @@ class Database
 
             switch ($type) {
                 case self::VAR_STRING:
+                    if (empty($size)) {
+                        throw new Exception('Size length is required');
+                    }
+
                     if ($size > $this->adapter->getLimitForString()) {
                         throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                     }
@@ -1024,6 +1028,9 @@ class Database
                 case self::VAR_FLOAT:
                 case self::VAR_BOOLEAN:
                 case self::VAR_DATETIME:
+                    if (!empty($size)) {
+                        throw new Exception('Size must be empty');
+                    }
                     break;
                 default:
                     throw new Exception('Unknown attribute type: ' . $type);

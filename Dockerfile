@@ -86,6 +86,7 @@ COPY --from=mongodb /usr/local/lib/php/extensions/no-debug-non-zts-20200930/mong
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20200930/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 
 # Add Source Code
-COPY . /usr/src/code
+COPY ./bin /usr/src/code/bin
+COPY ./src /usr/src/code/src
 
 CMD [ "tail", "-f", "/dev/null" ]

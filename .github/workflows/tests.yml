@@ -16,13 +16,22 @@ jobs:
     - run: git checkout HEAD^2
 
     - name: Build image
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        push: false
+        tags: database-dev
+        load: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Start Databases
       run:  |
-        docker compose build
         docker compose up -d
-        sleep 5
+        sleep 10
 
     - name: Run Tests
-      run: docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml
+      run: docker compose exec -T tests vendor/bin/phpunit --configuration phpunit.xml
 
     - name: Check Coverage
-      run: docker compose exec tests vendor/bin/coverage-check tmp/clover.xml 90
+      run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 90

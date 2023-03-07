@@ -1082,7 +1082,7 @@ class Database
                 throw new LimitException('Row width limit reached. Cannot create new attribute.');
             }
 
-            if($altering === true){
+            if($altering) {
                 $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
                 $this->deleteCachedCollection($collection);
             }

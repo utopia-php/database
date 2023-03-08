@@ -338,7 +338,7 @@ abstract class Base extends TestCase
             ]),
             new Document([
                 '$id' => ID::custom('collection_id'),
-                'type' => Database::VAR_INTSTRING,
+                'type' => Database::VAR_ID,
                 'size' => 0,
                 'required' => true,
                 'signed' => false,

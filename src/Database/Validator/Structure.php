@@ -252,8 +252,8 @@ class Structure extends Validator
                     $validator = new Integer();
                     break;
 
-                case Database::VAR_INTSTRING:
-                    $validator = new Text(50, min: 0);
+                case Database::VAR_ID:
+                    $validator = new Text(20, min: 0);
                     break;
 
                 case Database::VAR_FLOAT:

@@ -344,6 +344,11 @@ abstract class SQL extends Adapter
                         $total += 4; // INT takes 4 bytes
                     }
                     break;
+
+                case Database::VAR_ID:
+                    $total += 4;
+                    break;
+
                 case Database::VAR_FLOAT:
                     // DOUBLE takes 8 bytes
                     $total += 8;
@@ -363,9 +368,6 @@ abstract class SQL extends Adapter
                     $total += 19; // 2022-06-26 14:46:24
                     break;
 
-                case Database::VAR_INTSTRING:
-                    $total += 8;
-                    break;
                 default:
                     throw new Exception('Unknown Type');
                     break;

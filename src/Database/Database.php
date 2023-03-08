@@ -22,10 +22,10 @@ class Database
     const VAR_STRING = 'string';
     // Simple Types
     const VAR_INTEGER = 'integer';
-    const VAR_INTSTRING = 'intstring';
     const VAR_FLOAT = 'double';
     const VAR_BOOLEAN = 'boolean';
     const VAR_DATETIME = 'datetime';
+    const VAR_ID = 'id';
 
     // Relationships Types
     const VAR_DOCUMENT = 'document';
@@ -758,7 +758,7 @@ class Database
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
             case self::VAR_DATETIME:
-            case self::VAR_INTSTRING:
+            case self::VAR_ID:
             break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
@@ -1997,8 +1997,8 @@ class Database
                     case self::VAR_INTEGER:
                         $node = (int)$node;
                         break;
-                    case self::VAR_INTSTRING:
-                        // let's keeps it string at this point as it comes out from the DB can be used by all
+                    case self::VAR_ID:
+                        // Not sure, maybe string as it fetched from DB?
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;

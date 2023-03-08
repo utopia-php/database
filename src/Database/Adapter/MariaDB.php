@@ -8,6 +8,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -51,8 +52,8 @@ class MariaDB extends SQL
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -63,6 +64,12 @@ class MariaDB extends SQL
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+
+        /** @var array<string> $indexStrings */
+        $indexStrings = [];
+
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
@@ -71,7 +78,7 @@ class MariaDB extends SQL
                 $attrType = 'LONGTEXT';
             }
 
-            $attributes[$key] = "`{$attrId}` {$attrType}, ";
+            $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
         foreach ($indexes as $key => $index) {
@@ -92,7 +99,7 @@ class MariaDB extends SQL
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
             }
 
-            $indexes[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+            $indexStrings[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
         }
 
         try {
@@ -103,9 +110,9 @@ class MariaDB extends SQL
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributes) . "
+                        " . \implode(' ', $attributeStrings) . "
                         PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexes) . "
+                        " . \implode(' ', $indexStrings) . "
                         UNIQUE KEY `_uid` (`_uid`),
                         KEY `_created_at` (`_createdAt`),
                         KEY `_updated_at` (`_updatedAt`)
@@ -277,9 +284,9 @@ class MariaDB extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      * @return bool
      * @throws Exception
      * @throws PDOException
@@ -587,25 +594,23 @@ class MariaDB extends SQL
             $attributeIndex++;
         }
 
-        if (!empty($attributes)) {
-            try {
-                $stmt->execute();
-                if (isset($stmtRemovePermissions)) {
-                    $stmtRemovePermissions->execute();
-                }
-                if (isset($stmtAddPermissions)) {
-                    $stmtAddPermissions->execute();
-                }
-            } catch (PDOException $e) {
-                $this->getPDO()->rollBack();
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+        try {
+            $stmt->execute();
+            if (isset($stmtRemovePermissions)) {
+                $stmtRemovePermissions->execute();
+            }
+            if (isset($stmtAddPermissions)) {
+                $stmtAddPermissions->execute();
+            }
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                    default:
-                        throw $e;
-                }
+                default:
+                    throw $e;
             }
         }
 
@@ -685,20 +690,19 @@ class MariaDB extends SQL
      * Find Documents
      *
      * @param string $collection
-     * @param Query[] $queries
-     * @param string[] $selections
+     * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      *
-     * @return Document[]
+     * @return array<Document>
      * @throws Exception
      * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -740,7 +744,7 @@ class MariaDB extends SQL
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
-            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
@@ -750,9 +754,17 @@ class MariaDB extends SQL
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
-            );
+
+            if ($cursorDirection === Database::CURSOR_AFTER) {
+                $orderMethod = $orderType === Database::ORDER_DESC
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+            } else {
+                $orderMethod = $orderType === Database::ORDER_DESC
+                    ? Query::TYPE_GREATER
+                    : Query::TYPE_LESSER;
+            }
+
             $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
 
@@ -796,6 +808,10 @@ class MariaDB extends SQL
             LIMIT :offset, :limit;
         ";
 
+        if ($timeout) {
+            $sql = $this->setTimeout($sql, $timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -819,7 +835,12 @@ class MariaDB extends SQL
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+        }
 
         $results = $stmt->fetchAll();
 
@@ -850,7 +871,7 @@ class MariaDB extends SQL
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      * @return int
      * @throws Exception
@@ -892,7 +913,6 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -903,7 +923,7 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      * @return int|float
      * @throws Exception
@@ -946,7 +966,6 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -955,11 +974,11 @@ class MariaDB extends SQL
     /**
      * Get the SQL projection given the selected attributes
      *
-     * @param string[] $selections
+     * @param array<string> $selections
      * @param string $prefix
-     * @return string
+     * @return mixed
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): string
+    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
         if (empty($selections)) {
             if (!empty($prefix)) {
@@ -1006,7 +1025,7 @@ class MariaDB extends SQL
         $attribute = "`{$query->getAttribute()}`" ;
         $placeholder = $this->getSQLPlaceholder($query);
 
-        switch ($query->getMethod()){
+        switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1028,7 +1047,7 @@ class MariaDB extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1099,11 +1118,11 @@ class MariaDB extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array<string> $attributes
      * @return string
      * @throws Exception
      */
-    protected function getSQLIndex(string $collection, string $id,  string $type, array $attributes): string
+    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $type = match ($type) {
             Database::INDEX_KEY, Database::INDEX_ARRAY => 'INDEX',
@@ -1140,5 +1159,50 @@ class MariaDB extends SQL
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return true;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param int $milliseconds
+     * @return string
+     */
+    protected function setTimeout(string $sql, int $milliseconds): string
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return $sql;
+        }
+
+        $seconds = $milliseconds / 1000;
+        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+    }
+
+    /**
+     * @param PDOException $e
+     * @throws Timeout
+     */
+    protected function processException(PDOException $e): void
+    {
+        // Regular PDO
+        if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
+            throw new Timeout($e->getMessage());
+        }
+
+        // PDOProxy switches errorInfo PDOProxy.php line 64
+        if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
     }
 }

@@ -13,4 +13,14 @@
             <directory>./tests/</directory>
         </testsuite>
     </testsuites>
+    <coverage processUncoveredFiles="true">
+        <include>
+            <directory suffix=".php">./src/</directory>
+            <directory suffix=".php">./tests/</directory>
+        </include>
+        <report>
+            <clover outputFile="tmp/clover.xml"/>
+            <html outputDirectory="tmp/coverage"/>
+        </report>
+    </coverage>
 </phpunit>

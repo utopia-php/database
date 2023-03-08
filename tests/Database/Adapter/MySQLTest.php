@@ -12,10 +12,7 @@ use Utopia\Tests\Base;
 
 class MySQLTest extends Base
 {
-    /**
-     * @var Database
-     */
-    static $database = null;
+    public static ?Database $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -24,7 +21,7 @@ class MySQLTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
         return "mysql";
     }
@@ -33,7 +30,7 @@ class MySQLTest extends Base
      *
      * @return int
      */
-    static function getUsedIndexes(): int
+    public static function getUsedIndexes(): int
     {
         return MySQL::getCountOfDefaultIndexes();
     }
@@ -41,9 +38,9 @@ class MySQLTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 

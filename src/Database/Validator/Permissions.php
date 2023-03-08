@@ -9,6 +9,9 @@ class Permissions extends Roles
 {
     protected string $message = 'Permissions Error';
 
+    /**
+     * @var array<string>
+     */
     protected array $allowed;
 
     protected int $length;
@@ -17,7 +20,7 @@ class Permissions extends Roles
      * Permissions constructor.
      *
      * @param int $length maximum amount of permissions. 0 means unlimited.
-     * @param array $allowed allowed permissions. Defaults to all available.
+     * @param array<string> $allowed allowed permissions. Defaults to all available.
      */
     public function __construct(int $length = 0, array $allowed = [...Database::PERMISSIONS, Database::PERMISSION_WRITE])
     {

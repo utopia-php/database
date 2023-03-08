@@ -36,7 +36,6 @@ $cli
     ->param('limit', '', new Numeric(), 'Total number of records to add to database', false)
     ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
     ->action(function ($adapter, $limit, $name) {
-
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
@@ -46,7 +45,7 @@ $cli
         Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
             case 'mariadb':
-                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mariadb';
                     $dbPort = '3306';
@@ -79,12 +78,13 @@ $cli
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
+                            ->withPassword('password'),
+                        128
+                    );
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache, $namespace) {
+                        go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
@@ -101,12 +101,11 @@ $cli
                             $database = null;
                         });
                     }
-
                 });
                 break;
 
-            case 'mysql': 
-                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
+            case 'mysql':
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mysql';
                     $dbPort = '3307';
@@ -140,12 +139,13 @@ $cli
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
+                            ->withPassword('password'),
+                        128
+                    );
 
                     // A coroutine is assigned per 1000 documents
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache, $namespace) {
+                        go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MySQL($pdo), $cache);
@@ -162,12 +162,11 @@ $cli
                             $database = null;
                         });
                     }
-
                 });
                 break;
 
             case 'mongodb':
-                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
                     $client = new Client(
                         $name,
                         'mongo',
@@ -175,8 +174,8 @@ $cli
                         'root',
                         'example',
                         false
-                     );
-  
+                    );
+
                     $database = new Database(new Mongo($client), $cache);
                     $database->setDefaultDatabase($name);
                     $database->setNamespace($namespace);
@@ -190,7 +189,7 @@ $cli
                     $start = microtime(true);
 
                     for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($client, $faker, $name, $namespace, $cache) {
+                        go(function () use ($client, $faker, $name, $namespace, $cache) {
                             $database = new Database(new Mongo($client), $cache);
                             $database->setDefaultDatabase($name);
                             $database->setNamespace($namespace);
@@ -225,8 +224,9 @@ $cli
     });
 
 
-function createSchema(Database $database) {
-    if($database->exists($database->getDefaultDatabase())){
+function createSchema(Database $database): void
+{
+    if ($database->exists($database->getDefaultDatabase())) {
         $database->delete($database->getDefaultDatabase());
     }
     $database->create();
@@ -239,7 +239,8 @@ function createSchema(Database $database) {
     $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
 }
 
-function addArticle($database, Generator $faker) {
+function addArticle($database, Generator $faker): void
+{
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
         // Three random users out of 10,000 get mutate access
@@ -267,4 +268,3 @@ function addArticle($database, Generator $faker) {
         'views' => $faker->randomNumber(6)
     ]));
 }
-

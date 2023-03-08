@@ -2042,7 +2042,7 @@ class Database
                         $node = (int)$node;
                         break;
                     case self::VAR_ID:
-                        // String? since int can be string, but string can't be int?
+                        // Default as fetched is string, int can be string, but string can't be int
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;

@@ -983,18 +983,18 @@ class Database
      * @param string|null $type
      * @param int|null $size utf8mb4 chars length
      * @param bool|null $required
-     * @param null $default
+     * @param mixed $default
      * @param bool $signed
      * @param bool $array
      * @param string|null $format
-     * @param array|null $formatOptions
-     * @param array|null $filters
+     * @param array<string, mixed>|null $formatOptions
+     * @param array<string>|null $filters
      * @return Document
      * @throws Exception
      */
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, &$success) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters) {
             $altering = !\is_null($type)
                 || !\is_null($size)
                 || !\is_null($signed)

@@ -1067,7 +1067,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > 16383) {
+                if ($size > 16120) {
                     return 'TEXT';
                 }
 

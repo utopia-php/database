@@ -22,7 +22,6 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Validator\Text;
 
 
 abstract class Base extends TestCase

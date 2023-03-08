@@ -138,7 +138,7 @@ class SQLite extends MariaDB
 
             $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
         }
-        
+
         $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
                     `_id` INTEGER PRIMARY KEY AUTOINCREMENT,

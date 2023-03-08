@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
@@ -945,7 +946,7 @@ abstract class Base extends TestCase
      * @depends testUpdateDocument
      */
     public function testDeleteDocumentConflict(Document $document)
-    {
+    { 
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $this->expectException(ConflictException::class);
         $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
@@ -2048,6 +2049,33 @@ abstract class Base extends TestCase
         ]);
     }
 
+    public function testTimeout()
+    {
+        if($this->getDatabase()->getAdapter()->getSupportForTimeouts()){
+            static::getDatabase()->createCollection('timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for($i = 0 ; $i <= 5 ; $i++){
+                static::getDatabase()->createDocument('timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+
+            static::getDatabase()->find('timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ], 1);
+        }
+
+        $this->expectNotToPerformAssertions();
+    }
+
     /**
      * @depends testUpdateDocument
      */
@@ -2101,7 +2129,7 @@ abstract class Base extends TestCase
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
         /**
-         * Check `equals` query
+         * Check `equals` query 
          */
         foreach ($values as $value) {
             $documents = static::getDatabase()->find($collection, [

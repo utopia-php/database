@@ -25,7 +25,7 @@ class Format extends Text
     {
         return 'Value must be a valid email address';
     }
-    
+
     /**
      * Is valid
      *

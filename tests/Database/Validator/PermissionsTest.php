@@ -12,10 +12,8 @@ use Utopia\Database\Validator\Roles;
 
 class PermissionsTest extends TestCase
 {
-
     public function setUp(): void
     {
-
     }
 
     public function tearDown(): void
@@ -25,7 +23,7 @@ class PermissionsTest extends TestCase
     /**
      * @throws \Exception
      */
-    public function testSingleMethodSingleValue()
+    public function testSingleMethodSingleValue(): void
     {
         $object = new Permissions();
 
@@ -94,7 +92,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodSingleValue()
+    public function testMultipleMethodSingleValue(): void
     {
         $object = new Permissions();
 
@@ -152,7 +150,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodMultipleValues()
+    public function testMultipleMethodMultipleValues(): void
     {
         $object = new Permissions();
 
@@ -188,7 +186,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testInvalidPermissions()
+    public function testInvalidPermissions(): void
     {
         $object = new Permissions();
 
@@ -279,7 +277,7 @@ class PermissionsTest extends TestCase
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd/')))]));
         $this->assertEquals('Dimension must not be empty.', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''),'abcd'))]));
+        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''), 'abcd'))]));
         $this->assertEquals('Role "team" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), '/efgh'))]));
         $this->assertEquals('Only one dimension can be provided.', $object->getDescription());

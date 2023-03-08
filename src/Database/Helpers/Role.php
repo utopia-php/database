@@ -8,8 +8,7 @@ class Role
         private string $role,
         private string $identifier = '',
         private string $dimension = '',
-    )
-    {
+    ) {
     }
 
     /**
@@ -76,7 +75,7 @@ class Role
             return new self($role, $identifier);
         }
 
-        if (!$hasIdentifier && $hasDimension) {
+        if (!$hasIdentifier) {
             $dimensionParts = \explode('/', $role);
             if (\count($dimensionParts) !== 2) {
                 throw new \Exception('Only one dimension can be provided.');
@@ -113,7 +112,7 @@ class Role
      * @param string $status
      * @return Role
      */
-    public static function user(string $identifier, string $status = '')
+    public static function user(string $identifier, string $status = ''): Role
     {
         return new self('user', $identifier, $status);
     }
@@ -165,5 +164,4 @@ class Role
     {
         return new self('member', $identifier);
     }
-
 }

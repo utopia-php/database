@@ -30,7 +30,6 @@ $cli
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->param('limit', 25, new Numeric(), 'Limit on queried documents', true)
     ->action(function (string $adapter, string $name, int $limit) {
-
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
@@ -41,8 +40,8 @@ $cli
                     'mongo',
                     27017,
                     'root',
-                    'example'
-                    , false
+                    'example',
+                    false
                 );
 
                 $database = new Database(new Mongo($client), $cache);
@@ -132,12 +131,12 @@ $cli
     });
 
 
-    $cli
-    ->error()
-    ->inject('error')
-    ->action(function (Exception $error) {
-        Console::error($error->getMessage());
-    });
+$cli
+->error()
+->inject('error')
+->action(function (Exception $error) {
+    Console::error($error->getMessage());
+});
 
 
 function runQueries(Database $database, int $limit)
@@ -185,10 +184,10 @@ function addRoles($faker, $count)
 
 function runQuery(array $query, Database $database)
 {
-    $info = array_map(function ($q){
+    $info = array_map(function ($q) {
         /** @var $q Query */
-        return $q->getAttribute() . ' : ' . $q->getMethod() . ' : ' . implode(',',$q->getValues());
-    } , $query);
+        return $q->getAttribute() . ' : ' . $q->getMethod() . ' : ' . implode(',', $q->getValues());
+    }, $query);
 
     Console::log('Running query: [' . implode(', ', $info) . ']');
     $start = microtime(true);
@@ -197,4 +196,3 @@ function runQuery(array $query, Database $database)
     Console::success("{$time} s");
     return $time;
 }
-

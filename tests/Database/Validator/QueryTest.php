@@ -11,14 +11,14 @@ use Utopia\Database\Query as DatabaseQuery;
 class QueryTest extends TestCase
 {
     /**
-     * @var Document[]
+     * @var array<Document>
      */
-    protected $schema;
+    protected array $schema;
 
     /**
-     * @var array
+     * @var array<array<string, mixed>>
      */
-    protected $attributes = [
+    protected array $attributes = [
         [
             '$id' => 'title',
             'key' => 'title',
@@ -93,7 +93,7 @@ class QueryTest extends TestCase
 
     public function setUp(): void
     {
-        // Query validator expects Document[]
+        // Query validator expects array<Document>
         foreach ($this->attributes as $attribute) {
             $this->schema[] = new Document($attribute);
         }
@@ -103,7 +103,7 @@ class QueryTest extends TestCase
     {
     }
 
-    public function testQuery()
+    public function testQuery(): void
     {
         $validator = new Query($this->schema);
 
@@ -127,7 +127,7 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid(DatabaseQuery::parse('select(["title", "description"])')));
     }
 
-    public function testInvalidMethod()
+    public function testInvalidMethod(): void
     {
         $validator = new Query($this->schema);
 
@@ -137,7 +137,7 @@ class QueryTest extends TestCase
         $this->assertEquals('Query method invalid: eqqual', $validator->getDescription());
     }
 
-    public function testAttributeNotFound()
+    public function testAttributeNotFound(): void
     {
         $validator = new Query($this->schema);
 
@@ -152,7 +152,7 @@ class QueryTest extends TestCase
         $this->assertEquals('Attribute not found in schema: name', $validator->getDescription());
     }
 
-    public function testAttributeWrongType()
+    public function testAttributeWrongType(): void
     {
         $validator = new Query($this->schema);
 
@@ -162,7 +162,7 @@ class QueryTest extends TestCase
         $this->assertEquals('Query type does not match expected: string', $validator->getDescription());
     }
 
-    public function testMethodWrongType()
+    public function testMethodWrongType(): void
     {
         $validator = new Query($this->schema);
 
@@ -172,14 +172,14 @@ class QueryTest extends TestCase
         $this->assertEquals('Query method only supported on array attributes: contains', $validator->getDescription());
     }
 
-    public function testQueryDate()
+    public function testQueryDate(): void
     {
         $validator = new Query($this->schema);
         $response = $validator->isValid(DatabaseQuery::parse('greaterThan("birthDay", "1960-01-01 10:10:10")'));
         $this->assertEquals(true, $response);
     }
 
-    public function testQueryLimit()
+    public function testQueryLimit(): void
     {
         $validator = new Query($this->schema);
 
@@ -196,7 +196,7 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
     }
 
-    public function testQueryOffset()
+    public function testQueryOffset(): void
     {
         $validator = new Query($this->schema);
 
@@ -213,7 +213,7 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
     }
 
-    public function testQueryOrder()
+    public function testQueryOrder(): void
     {
         $validator = new Query($this->schema);
 
@@ -230,7 +230,7 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
     }
 
-    public function testQueryCursor()
+    public function testQueryCursor(): void
     {
         $validator = new Query($this->schema);
 

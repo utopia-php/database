@@ -1998,7 +1998,7 @@ class Database
                         $node = (int)$node;
                         break;
                     case self::VAR_ID:
-                        // Not sure, maybe string as it fetched from DB?
+                        // String? since int can be string, but string can't be int?
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;

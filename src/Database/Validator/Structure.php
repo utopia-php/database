@@ -253,7 +253,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_ID:
-                    $validator = new Text(20, min: 0);
+                    $validator = new Text(24, min: 0); // Mongo Id length
                     break;
 
                 case Database::VAR_FLOAT:

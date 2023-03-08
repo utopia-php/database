@@ -5,9 +5,6 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use PDOStatement;
-use Swoole\Database\PDOStatementProxy;
-use Swoole\Database\PDOProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -15,8 +12,7 @@ use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-
-    protected PDO|PDOProxy $pdo;
+    protected PDO $pdo;
 
     /**
      * Constructor.
@@ -25,7 +21,7 @@ abstract class SQL extends Adapter
      *
      * @param PDO $pdo
      */
-    public function __construct($pdo)
+    public function __construct(mixed $pdo)
     {
         $this->pdo = $pdo;
     }
@@ -92,8 +88,8 @@ abstract class SQL extends Adapter
 
     /**
      * List Databases
-     * 
-     * @return array
+     *
+     * @return array<Document>
      */
     public function list(): array
     {
@@ -124,8 +120,8 @@ abstract class SQL extends Adapter
         $stmt->bindValue(':_uid', $id);
         $stmt->execute();
 
-        /** @var array $document */
         $document = $stmt->fetch();
+
         if (empty($document)) {
             return new Document([]);
         }
@@ -301,8 +297,8 @@ abstract class SQL extends Adapter
         // but this number seems to vary, so we give a +500 byte buffer
         $total = 1500;
 
-        /** @var array $attributes */
         $attributes = $collection->getAttributes()['attributes'];
+
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
@@ -363,7 +359,6 @@ abstract class SQL extends Adapter
                     break;
                 default:
                     throw new Exception('Unknown Type');
-                    break;
             }
         }
 
@@ -373,8 +368,8 @@ abstract class SQL extends Adapter
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
-     * @return string[]
+     *
+     * @return array<string>
      */
     public function getKeywords(): array
     {
@@ -677,13 +672,13 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param PDOStatement|PDOStatementProxy $stmt
+     * @param mixed $stmt
      * @param Query $query
      * @return void
      */
-    protected function bindConditionValue(PDOStatement|PDOStatementProxy $stmt, Query $query): void
+    protected function bindConditionValue(mixed $stmt, Query $query): void
     {
-        if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT])){
+        if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT])) {
             return;
         }
 
@@ -731,13 +726,20 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @return string
+     * @throws Exception
      */
     protected function getSQLPlaceholder(Query $query): string
     {
-        return md5(json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]));
+        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
+
+        if ($json === false) {
+            throw new Exception('Failed to encode query');
+        }
+
+        return \md5($json);
     }
 
-    protected function getSQLValue(string $method, mixed $value)
+    protected function getSQLValue(string $method, mixed $value): mixed
     {
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
@@ -782,10 +784,10 @@ abstract class SQL extends Adapter
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array<string> $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -801,7 +803,7 @@ abstract class SQL extends Adapter
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -815,8 +817,8 @@ abstract class SQL extends Adapter
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -825,15 +827,26 @@ abstract class SQL extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return PDO
      */
-    protected function getPDO()
+    protected function getPDO(): PDO
     {
         return $this->pdo;
     }
 
     /**
+     * Get PDO Type
+     *
+     * @param mixed $value
+     * @return int
+     * @throws Exception
+     */
+    abstract protected function getPDOType(mixed $value): int;
+
+    /**
      * Returns default PDO configuration
+     *
+     * @return array<int, mixed>
      */
     public static function getPDOAttributes(): array
     {

@@ -2,48 +2,40 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Validator;
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Validator\Query as QueryValidator;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query as QueryValidator;
+use Utopia\Validator;
 
 class Queries extends Validator
 {
-    /**
-     * @var string
-     */
-    protected $message = 'Invalid queries';
+    protected string $message = 'Invalid queries';
+
+    protected QueryValidator $validator;
 
     /**
-     * @var QueryValidator
+     * @var array<Document>
      */
-    protected $validator;
+    protected array $attributes = [];
 
     /**
-     * @var Document[]
+     * @var array<Document>
      */
-    protected $attributes = [];
-
-    /**
-     * @var Document[]
-     */
-    protected $indexes = [];
-
-    /**
-     * @var bool
-     */
-    protected $strict;
+    protected array $indexes = [];
+    protected bool $strict;
 
     /**
      * Queries constructor
      *
      * @param QueryValidator $validator used to validate each query
-     * @param Document[] $attributes allowed attributes to be queried
-     * @param Document[] $indexes available for strict query matching
+     * @param array<Document>|null $attributes allowed attributes to be queried
+     * @param array<Document>|null $indexes available for strict query matching
      * @param bool $strict
+     * @throws Exception
      */
-    public function __construct(QueryValidator $validator, array $attributes, array $indexes, bool $strict = true)
+    public function __construct(QueryValidator $validator, ?array $attributes, ?array $indexes, bool $strict = true)
     {
         $this->validator = $validator;
         $this->attributes = $attributes;
@@ -87,13 +79,13 @@ class Queries extends Validator
      *
      * Returns false if:
      * 1. any query in $value is invalid based on $validator
-     * 
+     *
      * In addition, if $strict is true, this returns false if:
      * 1. there is no index with an exact match of the filters
      * 2. there is no index with an exact match of the order attributes
-     * 
+     *
      * Otherwise, returns true.
-     * 
+     *
      * @param mixed $value
      * @return bool
      */
@@ -101,7 +93,7 @@ class Queries extends Validator
     {
         $queries = [];
         foreach ($value as $query) {
-            if (!$query instanceof Query){
+            if (!$query instanceof Query) {
                 try {
                     $query = Query::parse($query);
                 } catch (\Throwable $th) {
@@ -123,8 +115,10 @@ class Queries extends Validator
         }
 
         $grouped = Query::groupByType($queries);
-        /** @var Query[] */ $filters = $grouped['filters'];
-        /** @var string[] */ $orderAttributes = $grouped['orderAttributes'];
+        /** @var array<Query> $filters */
+        $filters = $grouped['filters'];
+        /** @var array<string> $orderAttributes */
+        $orderAttributes = $grouped['orderAttributes'];
 
         // Check filter queries for exact index match
         if (count($filters) > 0) {
@@ -136,7 +130,7 @@ class Queries extends Validator
             $found = null;
 
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index->getAttribute('attributes'),  array_keys($filtersByAttribute))) {
+                if ($this->arrayMatch($index->getAttribute('attributes'), array_keys($filtersByAttribute))) {
                     $found = $index;
                 }
             }
@@ -162,6 +156,7 @@ class Queries extends Validator
 
         return true;
     }
+
     /**
      * Is array
      *
@@ -201,8 +196,8 @@ class Queries extends Validator
     /**
      * Check if indexed array $indexes matches $queries
      *
-     * @param array $indexes
-     * @param array $queries
+     * @param array<string> $indexes
+     * @param array<string> $queries
      *
      * @return bool
      */

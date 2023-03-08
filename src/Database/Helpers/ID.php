@@ -4,7 +4,6 @@ namespace Utopia\Database\Helpers;
 
 class ID
 {
-
     /**
      * Create a new unique ID
      *
@@ -15,7 +14,7 @@ class ID
         $uniqid = \uniqid();
 
         if ($padding > 0) {
-            $bytes = \random_bytes(\ceil($padding / 2)); // one byte expands to two chars
+            $bytes = \random_bytes(\max(1, (int)\ceil(($padding / 2)))); // one byte expands to two chars
             $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
         }
 

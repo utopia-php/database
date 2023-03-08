@@ -10,16 +10,14 @@ class DateTimeTest extends TestCase
 {
     public function setUp(): void
     {
-
     }
 
     public function tearDown(): void
     {
     }
 
-    public function testCreateDatetime()
+    public function testCreateDatetime(): void
     {
-
         $dateValidator = new DatetimeValidator();
 
         $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());

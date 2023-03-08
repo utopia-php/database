@@ -17,7 +17,7 @@ abstract class Adapter
     protected string $defaultDatabase = '';
 
     /**
-     * @var array
+     * @var array<string, mixed>
      */
     protected array $debug = [];
 
@@ -35,7 +35,7 @@ abstract class Adapter
     }
 
     /**
-     * @return array
+     * @return array<string, mixed>
      */
     public function getDebug(): array
     {
@@ -100,6 +100,7 @@ abstract class Adapter
      * @param string $name
      * @param bool $reset
      *
+     * @return bool
      * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
@@ -134,8 +135,6 @@ abstract class Adapter
     /**
      * Ping Database
      *
-     * @param string $name
-     *
      * @return bool
      */
     abstract public function ping(): bool;
@@ -163,7 +162,7 @@ abstract class Adapter
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      */
     abstract public function list(): array;
 
@@ -180,8 +179,8 @@ abstract class Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes (optional)
+     * @param array<Document> $indexes (optional)
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
@@ -299,9 +298,9 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      *
      * @return bool
      */
@@ -322,7 +321,7 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     * @param Query[] $selections
+     * @param array<Query> $queries
      * @return Document
      */
     abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
@@ -363,15 +362,16 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $limit
      * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param int|null $timeout
-     * @return Document[]
+     *
+     * @return array<Document>
      */
     abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
 
@@ -380,18 +380,18 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0);
+    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int;
 
     /**
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int $max
      *
      * @return int
@@ -535,16 +535,16 @@ abstract class Adapter
     /**
      * Get list of keywords that cannot be used
      *
-     * @return string[]
+     * @return array<string>
      */
     abstract public function getKeywords(): array;
 
     /**
      * Get an attribute projection given a list of selected attributes
      *
-     * @param string[] $selections
+     * @param array<string> $selections
      * @param string $prefix
-     * @return string[]|string
+     * @return mixed
      */
     abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
 
@@ -628,6 +628,5 @@ abstract class Adapter
      * @return bool
      * @throws Exception
      */
-    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool;
-
+    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool;
 }

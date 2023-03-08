@@ -42,12 +42,12 @@ class Index extends Validator
             return false;
         }
 
-        if($indexType === Database::INDEX_FULLTEXT){
+        if ($indexType === Database::INDEX_FULLTEXT) {
             $collectionAttributes = $this->collection->getAttributes()['attributes'];
             foreach ($collectionAttributes as $collectionAttribute) {
                 foreach ($indexAttributes as $indexAttribute) {
-                    if($indexAttribute === $collectionAttribute['key']){
-                        if($collectionAttribute['type'] !== Database::VAR_STRING){
+                    if ($indexAttribute === $collectionAttribute['key']) {
+                        if ($collectionAttribute['type'] !== Database::VAR_STRING) {
                             $this->message = 'Attribute "'.$collectionAttribute['key'].'" cannot be part of a FULLTEXT index';
                             return false;
                         }

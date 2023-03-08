@@ -7,6 +7,7 @@ use PDO;
 use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
+use Swoole\Database\PDOProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -14,10 +15,8 @@ use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-    /**
-     * @var PDO
-     */
-    protected $pdo;
+
+    protected PDO|PDOProxy $pdo;
 
     /**
      * Constructor.
@@ -684,9 +683,10 @@ abstract class SQL extends Adapter
      */
     protected function bindConditionValue(PDOStatement|PDOStatementProxy $stmt, Query $query): void
     {
-        if ($query->getMethod() === Query::TYPE_SEARCH || $query->getMethod() === Query::TYPE_SELECT) {
+        if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT])){
             return;
         }
+
         foreach ($query->getValues() as $key => $value) {
             $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
             $value = $this->getSQLValue($query->getMethod(), $value);
@@ -846,5 +846,4 @@ abstract class SQL extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
-
 }

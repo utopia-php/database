@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -13,7 +14,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\IndexValidator;
+use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -246,6 +247,12 @@ class Database
     protected bool $silentEvents = false;
 
     /**
+     * Timestamp for the current request
+     * @var ?\DateTime
+     */
+    protected ?\DateTime $timestamp = null;
+
+    /**
      * @var bool
      */
     protected bool $resolveRelationships = true;
@@ -396,6 +403,26 @@ class Database
         foreach(($this->listeners[$event] ?? []) as $callback) {
             call_user_func($callback, $event, $args);
         }
+    }
+
+    /**
+     * Executes $callback with $timestamp set to $requestTimestamp
+     * 
+     * @template T
+     * @param ?\DateTime $requestTimestamp
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
+    {
+        $previous = $this->timestamp;
+        $this->timestamp = $requestTimestamp;
+        try {
+            $result = $callback();
+        } finally {
+            $this->timestamp = $previous;
+        }
+        return $result;
     }
 
     /**
@@ -2232,6 +2259,12 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
+        // Check if document was updated after the request timestamp
+        $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            throw new ConflictException('Document was updated after the request timestamp');
+        }
+
         $document = $this->encode($collection, $document);
 
         $validator = new Structure($collection);
@@ -2535,6 +2568,12 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
+        // Check if document was updated after the request timestamp
+        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            throw new ConflictException('Document was updated after the request timestamp');
+        }
+
         if ($this->resolveRelationships) {
             $this->deleteDocumentRelationships($collection, $document);
         }
@@ -2674,16 +2713,20 @@ class Database
      *
      * @param string $collection
      * @param Query[] $queries
-     *
+     * @param int|null $timeout
      * @return Document[]
-     * @throws Exception
+     * @throws Throwable
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
+        if(!is_null($timeout) && $timeout <= 0){
+            throw new Exception("Timeout must be greater than 0");
+        }
+
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
         $grouped = Query::groupByType($queries);
-        /** @var $filters Query[] */ $filters = $grouped['filters'];
+        /** @var Query[] $filters */ $filters = $grouped['filters'];
         /** @var Query[] $selections */ $selections = $grouped['selections'];
         /** @var int $limit */ $limit = $grouped['limit'];
         /** @var int $offset */ $offset = $grouped['offset'];
@@ -2722,6 +2765,7 @@ class Database
             $orderTypes,
             $cursor ?? [],
             $cursorDirection ?? Database::CURSOR_AFTER,
+            $timeout
         );
 
         $attributes = $collection->getAttribute('attributes', []);

@@ -9,16 +9,17 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
-use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\DatetimeValidator;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -920,6 +921,37 @@ abstract class Base extends TestCase
         $this->assertNotContains('guests', $new->getDelete());
 
         return $document;
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testUpdateDocumentConflict(Document $document)
+    {
+        $document->setAttribute('integer', 7);
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function() use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+        $this->assertEquals(7, $result->getAttribute('integer'));
+
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $document->setAttribute('integer', 8);
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testDeleteDocumentConflict(Document $document)
+    { 
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function() use ($document) {
+            return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
+        });
     }
 
     /**
@@ -2015,6 +2047,33 @@ abstract class Base extends TestCase
             Query::offset(0),
             Query::cursorAfter($document)
         ]);
+    }
+
+    public function testTimeout()
+    {
+        if($this->getDatabase()->getAdapter()->getSupportForTimeouts()){
+            static::getDatabase()->createCollection('timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for($i = 0 ; $i <= 5 ; $i++){
+                static::getDatabase()->createDocument('timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+
+            static::getDatabase()->find('timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ], 1);
+        }
+
+        $this->expectNotToPerformAssertions();
     }
 
     /**
@@ -3246,7 +3305,7 @@ abstract class Base extends TestCase
         // String to Datetime
         $database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
-        //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
+
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 

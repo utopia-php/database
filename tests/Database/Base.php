@@ -582,7 +582,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'collection_id', Database::VAR_ID, 4, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'collection_id', Database::VAR_ID, 0, false));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [

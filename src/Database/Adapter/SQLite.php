@@ -138,19 +138,15 @@ class SQLite extends MariaDB
 
             $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
         }
-
-        try {
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
-                        `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-                        `_type` VARCHAR(12) NOT NULL,
-                        `_permission` VARCHAR(255) NOT NULL,
-                        `_document` VARCHAR(255) NOT NULL
-                    )")
-                ->execute();
-        } catch (\Throwable $th) {
-            var_dump($th->getMessage());
-        }
+        
+        $this->getPDO()
+            ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
+                    `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+                    `_type` VARCHAR(12) NOT NULL,
+                    `_permission` VARCHAR(255) NOT NULL,
+                    `_document` VARCHAR(255) NOT NULL
+                )")
+            ->execute();
 
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
         $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission'], [], []);

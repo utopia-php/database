@@ -572,7 +572,7 @@ abstract class Base extends TestCase
 
     public function testCreateDocument(): Document
     {
-        static::getDatabase()->createCollection('documents');
+        $collection = static::getDatabase()->createCollection('documents');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0, true));
@@ -582,6 +582,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'collection_id', Database::VAR_ID, 4, false));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
@@ -606,6 +607,7 @@ abstract class Base extends TestCase
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
+            'collection_id' => $collection->getInternalId(),
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -623,6 +625,7 @@ abstract class Base extends TestCase
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertEquals($collection->getInternalId(), $document->getAttribute('collection_id'));
 
         return $document;
     }

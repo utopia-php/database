@@ -786,23 +786,16 @@ class Database
     /**
      * Get the list of required filters for each data type
      *
-     * @param string $type Type of the attribute
+     * @param string|null $type Type of the attribute
      *
      * @return array
      */
-    protected function getRequiredFilters(string $type): array
+    protected function getRequiredFilters(?string $type): array
     {
-        switch ($type) {
-            case self::VAR_STRING:
-            case self::VAR_INTEGER:
-            case self::VAR_FLOAT:
-            case self::VAR_BOOLEAN:
-                return [];
-            case self::VAR_DATETIME:
-                return ['datetime'];
-            default:
-                return [];
-        }
+        return match ($type) {
+            self::VAR_DATETIME => ['datetime'],
+            default => [],
+        };
     }
 
     /**
@@ -846,7 +839,6 @@ class Database
                 break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
-                break;
         }
     }
 
@@ -855,15 +847,17 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param string $key Metadata key to update
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
      *
      * @return Document
+     * @throws Exception
      */
-    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): void
+    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
-        // Load
         $collection = $this->silent(fn() => $this->getCollection($collection));
+        if ($collection->getId() === self::METADATA) {
+            throw new Exception('Can not update metadata attributes');
+        }
 
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -879,11 +873,10 @@ class Database
         // Save
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
+        $this->silent(fn() => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
+        return $attributes[$attributeIndex];
     }
 
     /**
@@ -893,11 +886,12 @@ class Database
      * @param string $id
      * @param bool $required
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeRequired(string $collection, string $id, bool $required): void
+    public function updateAttributeRequired(string $collection, string $id, bool $required): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($required) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($required) {
             $attribute->setAttribute('required', $required);
         });
     }
@@ -909,11 +903,12 @@ class Database
      * @param string $id
      * @param string $format validation format of attribute
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeFormat(string $collection, string $id, string $format): void
+    public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
                 throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
             }
@@ -929,11 +924,12 @@ class Database
      * @param string $id
      * @param array $formatOptions assoc array with custom options that can be passed for the format validation
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): void
+    public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($formatOptions) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($formatOptions) {
             $attribute->setAttribute('formatOptions', $formatOptions);
         });
     }
@@ -945,11 +941,12 @@ class Database
      * @param string $id
      * @param array $filters
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeFilters(string $collection, string $id, array $filters): void
+    public function updateAttributeFilters(string $collection, string $id, array $filters): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($filters) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($filters) {
             $attribute->setAttribute('filters', $filters);
         });
     }
@@ -959,13 +956,14 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param array|bool|callable|int|float|object|resource|string|null $default
+     * @param mixed $default
      *
-     * @return void
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttributeDefault(string $collection, string $id, $default = null): void
+    public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
     {
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
             if ($attribute->getAttribute('required') === true) {
                 throw new Exception('Cannot set a default value on a required attribute');
             }
@@ -978,89 +976,120 @@ class Database
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     *
+     * To update attribute key (ID), use renameAttribute instead.
      * @param string $collection
      * @param string $id
-     * @param string $type
-     * @param int $size utf8mb4 chars length
+     * @param string|null $type
+     * @param int|null $size utf8mb4 chars length
+     * @param bool|null $required
+     * @param null $default
      * @param bool $signed
      * @param bool $array
-     *
-     * To update attribute key (ID), use renameAttribute instead.
-     *
-     * @return bool
+     * @param string|null $format
+     * @param array|null $formatOptions
+     * @param array|null $filters
+     * @return Document
+     * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $signed = null, bool $array = null, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
     {
-        /** Ensure required filters for the attribute are passed */
-        $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(array_diff($requiredFilters, $filters))) {
-            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
-        }
+        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, &$success) {
+            $altering = !\is_null($type) 
+                || !\is_null($size) 
+                || !\is_null($signed) 
+                || !\is_null($array);
+            $type ??= $attribute->getAttribute('type');
+            $size ??= $attribute->getAttribute('size');
+            $signed ??= $attribute->getAttribute('signed');
+            $required ??= $attribute->getAttribute('required');
+            $default ??= $attribute->getAttribute('default');
+            $array ??= $attribute->getAttribute('array');
+            $format ??= $attribute->getAttribute('format');
+            $formatOptions ??= $attribute->getAttribute('formatOptions');
+            $filters ??= $attribute->getAttribute('filters');
 
-        if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+            if ($required === true && !\is_null($default)) {
+                $default = null;
             }
-        }
 
-        $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $signed, $array, $format, $formatOptions, $filters, &$success) {
-            if ($type !== null || $size !== null || $signed !== null || $array !== null || $format !== null || $formatOptions !== null || $filters !== null) {
-                $type ??= $attribute->getAttribute('type');
-                $size ??= $attribute->getAttribute('size');
-                $signed ??= $attribute->getAttribute('signed');
-                $array ??= $attribute->getAttribute('array');
-                $format ??= $attribute->getAttribute('format');
-                $formatOptions ??= $attribute->getAttribute('formatOptions');
-                $filters ??= $attribute->getAttribute('filters');
+            switch ($type) {
+                case self::VAR_STRING:
+                    if (empty($size)) {
+                        throw new Exception('Size length is required');
+                    }
 
-                switch ($type) {
-                    case self::VAR_STRING:
-                        if ($size > $this->adapter->getLimitForString()) {
-                            throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
-                        }
-                        break;
+                    if ($size > $this->adapter->getLimitForString()) {
+                        throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                    }
+                    break;
 
-                    case self::VAR_INTEGER:
-                        $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
-                        if ($size > $limit) {
-                            throw new Exception('Max size allowed for int is: ' . number_format($limit));
-                        }
-                        break;
-                    case self::VAR_FLOAT:
-                    case self::VAR_BOOLEAN:
-                    case self::VAR_DATETIME:
-                        break;
-                    default:
-                        throw new Exception('Unknown attribute type: ' . $type);
-                        break;
+                case self::VAR_INTEGER:
+                    $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
+                    if ($size > $limit) {
+                        throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                    }
+                    break;
+                case self::VAR_FLOAT:
+                case self::VAR_BOOLEAN:
+                case self::VAR_DATETIME:
+                    if (!empty($size)) {
+                        throw new Exception('Size must be empty');
+                    }
+                    break;
+                default:
+                    throw new Exception('Unknown attribute type: ' . $type);
+            }
+
+            /** Ensure required filters for the attribute are passed */
+            $requiredFilters = $this->getRequiredFilters($type);
+            if (!empty(array_diff($requiredFilters, $filters))) {
+                throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+            }
+
+            if ($format) {
+                if (!Structure::hasFormat($format, $type)) {
+                    throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+                }
+            }
+
+            if (!\is_null($default)) {
+                if ($required) {
+                    throw new Exception('Cannot set a default value on a required attribute');
                 }
 
-                $attribute
-                    ->setAttribute('type', $type)
-                    ->setAttribute('size', $size)
-                    ->setAttribute('signed', $signed)
-                    ->setAttribute('array', $array)
-                    ->setAttribute('format', $format)
-                    ->setAttribute('formatOptions', $formatOptions)
-                    ->setAttribute('filters', $filters);
+                $this->validateDefaultTypes($type, $default);
+            }
 
-                $attributes = $collectionDoc->getAttribute('attributes');
-                $attributes[$attributeIndex] = $attribute;
-                $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+            $attribute
+                ->setAttribute('type', $type)
+                ->setAttribute('size', $size)
+                ->setAttribute('signed', $signed)
+                ->setAttribute('array', $array)
+                ->setAttribute('format', $format)
+                ->setAttribute('formatOptions', $formatOptions)
+                ->setAttribute('filters', $filters)
+                ->setAttribute('required', $required)
+                ->setAttribute('default', $default);
 
-                if (
-                    $this->adapter->getDocumentSizeLimit() > 0 &&
-                    $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
-                ) {
-                    throw new LimitException('Row width limit reached. Cannot create new attribute.');
-                }
+            $attributes = $collectionDoc->getAttribute('attributes');
+            $attributes[$attributeIndex] = $attribute;
+            $collectionDoc->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
+            if (
+                $this->adapter->getDocumentSizeLimit() > 0 &&
+                $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
+            ) {
+                throw new LimitException('Row width limit reached. Cannot create new attribute.');
+            }
+
+            if($altering) {
                 $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                $this->deleteCachedCollection($collection);
             }
-        });
 
-        return true;
+            $this->deleteCachedDocument(self::METADATA, $collection);
+
+        });
     }
 
     /**
@@ -1085,7 +1114,6 @@ class Database
             $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
         ) {
             throw new LimitException('Column limit reached. Cannot create new attribute.');
-            return false;
         }
 
         if (
@@ -1093,7 +1121,6 @@ class Database
             $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
         ) {
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
-            return false;
         }
 
         return true;
@@ -1140,9 +1167,9 @@ class Database
      *
      * @param string $collection
      * @param string $old Current attribute ID
-     * @param string $name New attribute ID
-     *
+     * @param string $new
      * @return bool
+     * @throws DuplicateException
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {

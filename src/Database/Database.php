@@ -1472,7 +1472,7 @@ class Database
             $twoWay = $attribute['options']['twoWay'];
             $side = $attribute['options']['side'];
 
-            $newKey ??= $attribute['options']['key'];
+            $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
             $newTwoWayKey ??= $attribute['options']['twoWayKey'];
             $onUpdate ??= $attribute['options']['onUpdate'];
@@ -1490,19 +1490,16 @@ class Database
                 'side' => $side,
             ]);
 
-            if (!\is_null($newTwoWayKey)) {
-                $this->updateAttributeMeta($relatedCollection, $twoWayKey, function($twoWayAttribute) use ($newKey, $newTwoWayKey) {
-                    $options = $twoWayAttribute->getAttribute('options', []);
+            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function($twoWayAttribute) use ($newKey, $newTwoWayKey, $onUpdate, $onDelete) {
+                $options = $twoWayAttribute->getAttribute('options', []);
+                $options['twoWayKey'] = $newKey;
+                $options['onUpdate'] = $onUpdate;
+                $options['onDelete'] = $onDelete;
 
-                    if (!\is_null($newKey)) {
-                        $options['twoWayKey'] = $newKey;
-                    }
-
-                    $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
-                    $twoWayAttribute->setAttribute('key', $newTwoWayKey);
-                    $twoWayAttribute->setAttribute('options', $options);
-                });
-            }
+                $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
+                $twoWayAttribute->setAttribute('key', $newTwoWayKey);
+                $twoWayAttribute->setAttribute('options', $options);
+            });
 
             if ($type === self::RELATION_MANY_TO_MANY) {
                 $junction = $collection . '_' . $relatedCollection;

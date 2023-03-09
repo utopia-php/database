@@ -265,7 +265,7 @@ abstract class Adapter
      * @param string $twoWayKey
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
-     * @return mixed
+     * @return bool
      */
     abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
 

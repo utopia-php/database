@@ -1888,6 +1888,13 @@ class Database
         return $document;
     }
 
+    /**
+     * @param Document $collection
+     * @param Document $document
+     * @param array<string> $selections
+     * @return Document
+     * @throws Throwable
+     */
     private function getDocumentRelationships(Document $collection, Document $document, array $selections): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
@@ -1936,7 +1943,7 @@ class Database
                         break;
                     }
 
-                    if ($twoWay && $fetchDepth === 2) {
+                    if ($fetchDepth === 2) {
                         $fetchDepth = 0;
                         break;
                     }
@@ -2072,7 +2079,7 @@ class Database
     }
 
     /**
-     * @param mixed $collection
+     * @param Document $collection
      * @param Document $document
      * @return void
      * @throws Exception
@@ -2099,6 +2106,9 @@ class Database
                     foreach ($value as $related) {
                         switch (\gettype($related)) {
                             case 'object':
+                                if (!$related instanceof Document) {
+                                    throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                                }
                                 $this->relateDocuments(
                                     $collection->getId(),
                                     $relatedCollection->getId(),
@@ -2129,7 +2139,9 @@ class Database
                     $document->removeAttribute($key);
                     break;
                 case 'object':
-                    // Single document
+                    if (!$value instanceof Document) {
+                        throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                    }
                     $relatedId = $this->relateDocuments(
                         $collection->getId(),
                         $relatedCollection->getId(),
@@ -2675,6 +2687,10 @@ class Database
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
                     }
 
+                    if (!$related instanceof Document) {
+                        return;
+                    }
+
                     $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
@@ -2687,7 +2703,7 @@ class Database
                     break;
                 }
                 foreach ($value as $relation) {
-                    Authorization::skip(function () use ($value, $relatedCollection, $twoWayKey, $relation) {
+                    Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
                         $this->updateDocument(
                             $relatedCollection->getId(),
@@ -2702,7 +2718,7 @@ class Database
                     break;
                 }
                 foreach ($value as $relation) {
-                    Authorization::skip(function () use ($value, $relatedCollection, $twoWayKey, $relation) {
+                    Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
                         $this->updateDocument(
                             $relatedCollection->getId(),
@@ -2729,7 +2745,7 @@ class Database
         }
     }
 
-    private function relateCascade(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, bool $side)
+    private function relateCascade(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:

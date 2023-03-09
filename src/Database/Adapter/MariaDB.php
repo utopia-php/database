@@ -397,8 +397,6 @@ class MariaDB extends SQL
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
 
-        $sql = '';
-
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
                 $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
@@ -418,10 +416,6 @@ class MariaDB extends SQL
                 break;
             default:
                 throw new Exception('Invalid relationship type.');
-        }
-
-        if (empty($sql)) {
-            return true;
         }
 
         return $this->getPDO()

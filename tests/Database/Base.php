@@ -5147,7 +5147,7 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $students);
     }
 
-    public function testEvents()
+    public function testEvents(): void
     {
         Authorization::skip(function () {
             $database = static::getDatabase();

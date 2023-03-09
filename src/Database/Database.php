@@ -1932,6 +1932,9 @@ class Database
                     break;
                 case Database::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {
+                        if (\is_null($value)) {
+                            break;
+                        }
                         $related = $this->getDocument($relatedCollection->getId(), $value);
                         $document->setAttribute($key, $related);
                         break;
@@ -2323,7 +2326,7 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->updateDocumentRelationships($collection, $document));
+            $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
@@ -2343,7 +2346,7 @@ class Database
      * @return void
      * @throws Throwable
      */
-    private function updateDocumentRelationships(Document $collection, Document $document): void
+    private function updateDocumentRelationships(Document $collection, Document $old, Document $document): void
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2365,8 +2368,17 @@ class Database
                     if (!$twoWay) {
                         break;
                     }
+
+                    $newValue = \is_null($value) ? null : $document->getId();
+
+                    if (\is_null($value)) {
+                        $value = $old
+                            ->getAttribute($key)
+                            ->getId();
+                    }
+
                     if (!\is_string($value)) {
-                        throw new Exception('Invalid value for relationship');
+                        throw new Exception('Invalid type for relationship. Must be either an existing document ID or null.');
                     }
 
                     $related = $this->getDocument($relatedCollection->getId(), $value);
@@ -2378,7 +2390,7 @@ class Database
                     $this->skipRelationships(fn () => $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
-                        $related->setAttribute($twoWayKey, $document->getId())
+                        $related->setAttribute($twoWayKey, $newValue)
                     ));
                     break;
                 case Database::RELATION_ONE_TO_MANY:
@@ -2409,6 +2421,7 @@ class Database
                     }
 
                     // TODO: Validate exists?
+
                     break;
                 case Database::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_CHILD) {
@@ -2656,9 +2669,7 @@ class Database
 
             switch ($onDelete) {
                 case Database::RELATION_MUTATE_RESTRICT:
-                    if (!\is_null($value)) {
-                        throw new Exception('Can not delete document because it has at least one related document.');
-                    }
+                    $this->relateRestrict($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
                     $this->relateSetNull($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
@@ -2666,6 +2677,27 @@ class Database
                 case Database::RELATION_MUTATE_CASCADE:
                     $this->relateCascade($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
                     break;
+            }
+        }
+    }
+
+    private function relateRestrict(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, string $side)
+    {
+        if (!\is_null($value)) {
+            throw new Exception('Can not delete document because it has at least one related document.');
+        }
+
+        if (
+            !$twoWay
+            && $relationType === Database::RELATION_MANY_TO_ONE
+            && $side === Database::RELATION_SIDE_CHILD
+        ) {
+            $related = $this->findOne($relatedCollection->getId(), [
+                Query::equal($twoWayKey, [$document->getId()])
+            ]);
+
+            if ($related) {
+                throw new Exception('Can not delete document because it has at least one related document.');
             }
         }
     }
@@ -2692,11 +2724,11 @@ class Database
                         return;
                     }
 
-                    $this->updateDocument(
+                    $this->skipRelationships(fn () => $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
                         $related->setAttribute($twoWayKey, null)
-                    );
+                    ));
                 });
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -2706,11 +2738,12 @@ class Database
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-                        $this->updateDocument(
+
+                        $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $related->getId(),
                             $related->setAttribute($twoWayKey, null)
-                        );
+                        ));
                     });
                 }
                 break;
@@ -2718,14 +2751,22 @@ class Database
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     break;
                 }
+
+                if (!$twoWay) {
+                    $value = $this->find($relatedCollection->getId(), [
+                        Query::equal($twoWayKey, [$document->getId()])
+                    ]);
+                }
+
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-                        $this->updateDocument(
+
+                        $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $related->getId(),
                             $related->setAttribute($twoWayKey, null)
-                        );
+                        ));
                     });
                 }
 
@@ -2740,7 +2781,11 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->deleteDocument($junction, $document->getId());
+                    $this->skipRelationships(fn () =>
+                        $this->deleteDocument(
+                            $junction,
+                            $document->getId()
+                        ));
                 }
                 break;
         }
@@ -2750,22 +2795,39 @@ class Database
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
-                $this->skipRelationships(fn () =>$this->deleteDocument($relatedCollection->getId(), $value->getId()));
+                $this->skipRelationships(fn () =>
+                    $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $value->getId()
+                    ));
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
                 foreach ($value as $relation) {
-                    $this->deleteDocument($relatedCollection->getId(), $relation->getId());
+                    $this->skipRelationships(fn () =>
+                        $this->deleteDocument(
+                            $relatedCollection->getId(),
+                            $relation->getId()
+                        ));
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     break;
                 }
+
+                $value = $this->find($relatedCollection->getId(), [
+                    Query::equal($twoWayKey, [$document->getId()])
+                ]);
+
                 foreach ($value as $relation) {
-                    $this->deleteDocument($relatedCollection->getId(), $relation->getId());
+                    $this->skipRelationships(fn () =>
+                        $this->deleteDocument(
+                            $relatedCollection->getId(),
+                            $relation->getId()
+                        ));
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -2778,14 +2840,16 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->deleteDocument(
-                        $junction,
-                        $document->getId()
-                    );
-                    $this->deleteDocument(
-                        $relatedCollection->getId(),
-                        $document->getAttribute($twoWayKey)
-                    );
+                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $twoWayKey) {
+                        $this->deleteDocument(
+                            $junction,
+                            $document->getId()
+                        );
+                        $this->deleteDocument(
+                            $relatedCollection->getId(),
+                            $document->getAttribute($twoWayKey)
+                        );
+                    });
                 }
                 break;
         }

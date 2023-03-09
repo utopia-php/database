@@ -37,15 +37,19 @@ class Database
     public const INDEX_ARRAY = 'array';
 
     // Relation Types
-    const RELATION_ONE_TO_ONE = 'oneToOne';
-    const RELATION_ONE_TO_MANY = 'oneToMany';
-    const RELATION_MANY_TO_ONE = 'manyToOne';
-    const RELATION_MANY_TO_MANY = 'manyToMany';
+    public const RELATION_ONE_TO_ONE = 'oneToOne';
+    public const RELATION_ONE_TO_MANY = 'oneToMany';
+    public const RELATION_MANY_TO_ONE = 'manyToOne';
+    public const RELATION_MANY_TO_MANY = 'manyToMany';
 
     // Relation Actions
-    const ON_DELETE_CASCADE = 'cascade';
-    const ON_DELETE_RESTRICT = 'restrict';
-    const ON_DELETE_SET_NULL = 'setNull';
+    public const RELATION_MUTATE_CASCADE = 'cascade';
+    public const RELATION_MUTATE_RESTRICT = 'restrict';
+    public const RELATION_MUTATE_SET_NULL = 'setNull';
+    
+    // Relation Sides
+    public const RELATION_SIDE_PARENT = 'parent';
+    public const RELATION_SIDE_CHILD = 'child';
 
 
     // Orders
@@ -1263,7 +1267,6 @@ class Database
         return $renamed;
     }
 
-
     /**
      * @param string $collection
      * @param string $relatedCollection
@@ -1344,7 +1347,7 @@ class Database
                 'twoWayKey' => $twoWayKey,
                 'onUpdate' => $onUpdate,
                 'onDelete' => $onDelete,
-                'side' => 'parent',
+                'side' => Database::RELATION_SIDE_PARENT,
             ],
         ]), Document::SET_TYPE_APPEND);
 
@@ -1361,7 +1364,7 @@ class Database
                 'twoWayKey' => $id,
                 'onUpdate' => 'restrict',
                 'onDelete' => 'restrict',
-                'side' => 'child',
+                'side' => Database::RELATION_SIDE_CHILD,
             ],
         ]), Document::SET_TYPE_APPEND);
 
@@ -1923,7 +1926,7 @@ class Database
                     $document->setAttribute($key, $related);
                     break;
                 case Database::RELATION_MANY_TO_ONE:
-                    if ($side === 'parent') {
+                    if ($side === Database::RELATION_SIDE_PARENT) {
                         $related = $this->getDocument($relatedCollection->getId(), $value);
                         $document->setAttribute($key, $related);
                         break;
@@ -1954,7 +1957,7 @@ class Database
                     $document->setAttribute($key, $relatedDocuments);
                     break;
                 case Database::RELATION_ONE_TO_MANY:
-                    if ($side === 'child') {
+                    if ($side === Database::RELATION_SIDE_CHILD) {
                         if (!$twoWay) {
                             $document->removeAttribute($key);
                         }
@@ -1986,7 +1989,7 @@ class Database
                     $document->setAttribute($key, $relatedDocuments);
                     break;
                 case Database::RELATION_MANY_TO_MANY:
-                    if (!$twoWay && $side === 'child') {
+                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
                         break;
                     }
 
@@ -1997,7 +2000,7 @@ class Database
 
                     $fetchDepth++;
 
-                    $junction = $side === 'parent'
+                    $junction = $side === Database::RELATION_SIDE_PARENT
                         ? $collection->getId() . '_' . $relatedCollection->getId()
                         : $relatedCollection->getId() . '_' . $collection->getId();
 
@@ -2366,7 +2369,7 @@ class Database
                     ));
                     break;
                 case Database::RELATION_ONE_TO_MANY:
-                    if ($side === 'parent') {
+                    if ($side === Database::RELATION_SIDE_PARENT) {
                         if (!\is_array($value)) {
                             throw new Exception('Invalid value for relationship');
                         }
@@ -2395,7 +2398,7 @@ class Database
                     // TODO: Validate exists?
                     break;
                 case Database::RELATION_MANY_TO_ONE:
-                    if ($side === 'child') {
+                    if ($side === Database::RELATION_SIDE_CHILD) {
                         if (!\is_array($value)) {
                             throw new Exception('Invalid value for relationship');
                         }
@@ -2430,15 +2433,15 @@ class Database
                             throw new Exception('Invalid value for relationship');
                         }
 
-                        $junction = $side === 'parent'
+                        $junction = $side === Database::RELATION_SIDE_PARENT
                             ? $collection->getId() . '_' . $relatedCollection->getId()
                             : $relatedCollection->getId() . '_' . $collection->getId();
 
-                        $queryKey = $side === 'parent' ? $twoWayKey : $key;
-                        $queryValue = $side === 'parent' ? $document->getId() : $relation;
+                        $queryKey = $side === Database::RELATION_SIDE_PARENT ? $twoWayKey : $key;
+                        $queryValue = $side === Database::RELATION_SIDE_PARENT ? $document->getId() : $relation;
 
-                        $attrKey = $side === 'parent' ? $key : $twoWayKey;
-                        $attrValue = $side === 'parent' ? $relation : $document->getId();
+                        $attrKey = $side === Database::RELATION_SIDE_PARENT ? $key : $twoWayKey;
+                        $attrValue = $side === Database::RELATION_SIDE_PARENT ? $relation : $document->getId();
 
                         $junctions = $this->find($junction, [
                             Query::equal($queryKey, [$queryValue]),
@@ -2639,80 +2642,135 @@ class Database
             $side = $relationship['options']['side'];
 
             switch ($onDelete) {
-                case Database::ON_DELETE_RESTRICT:
+                case Database::RELATION_MUTATE_RESTRICT:
                     if (!\is_null($value)) {
-                        throw new Exception('Cannot delete document because it has at least one related document.');
+                        throw new Exception('Can not delete document because it has at least one related document.');
                     }
                     break;
-                case Database::ON_DELETE_SET_NULL:
-                    switch ($relationType) {
-                        case Database::RELATION_ONE_TO_ONE:
-                            $related = $this->getDocument($relatedCollection->getId(), $value);
-                            $this->updateDocument(
-                                $relatedCollection->getId(),
-                                $related->getId(),
-                                $related->setAttribute($twoWayKey, null)
-                            );
-                            break;
-                        case Database::RELATION_ONE_TO_MANY:
-                            if ($side === 'child') {
-                                break;
-                            }
-                            foreach ($value as $relation) {
-                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-                                $this->updateDocument(
-                                    $relatedCollection->getId(),
-                                    $related->getId(),
-                                    $related->setAttribute($twoWayKey, null)
-                                );
-                            }
-                            break;
-                        case Database::RELATION_MANY_TO_ONE:
-                            if ($side === 'parent') {
-                                break;
-                            }
-                            foreach ($value as $relation) {
-                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-                                $this->updateDocument(
-                                    $relatedCollection->getId(),
-                                    $related->getId(),
-                                    $related->setAttribute($twoWayKey, null)
-                                );
-                            }
-                            break;
-                        case Database::RELATION_MANY_TO_MANY:
-                            break;
-                    }
+                case Database::RELATION_MUTATE_SET_NULL:
+                    $this->relateSetNull($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
                     break;
-                case Database::ON_DELETE_CASCADE:
-                    if (\is_null($value)) {
-                        break;
-                    }
-                    switch ($relationType) {
-                        case Database::RELATION_ONE_TO_ONE:
-                            $this->deleteDocument($relatedCollection->getId(), $value);
-                            break;
-                        case Database::RELATION_ONE_TO_MANY:
-                            if ($side === 'child') {
-                                break;
-                            }
-                            foreach ($value as $relation) {
-                                $this->deleteDocument($relatedCollection->getId(), $relation->getId());
-                            }
-                            break;
-                        case Database::RELATION_MANY_TO_ONE:
-                            if ($side === 'parent') {
-                                break;
-                            }
-                            foreach ($value as $relation) {
-                                $this->deleteDocument($relatedCollection->getId(), $relation->getId());
-                            }
-                            break;
-                        case Database::RELATION_MANY_TO_MANY:
-                            break;
-                    }
+                case Database::RELATION_MUTATE_CASCADE:
+                    $this->relateCascade($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
                     break;
             }
+        }
+    }
+
+    private function relateSetNull(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
+    {
+        switch ($relationType) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!$twoWay && $side === Database::RELATION_SIDE_PARENT) {
+                    break;
+                }
+
+                // Shouldn't need read or update permission to delete
+                Authorization::skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
+                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                        $related = $this->findOne($relatedCollection->getId(), [
+                            Query::equal($twoWayKey, [$document->getId()])
+                        ]);
+                    } else {
+                        $related = $this->getDocument($relatedCollection->getId(), $value->getId());
+                    }
+
+                    $this->updateDocument(
+                        $relatedCollection->getId(),
+                        $related->getId(),
+                        $related->setAttribute($twoWayKey, null)
+                    );
+                });
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    break;
+                }
+                foreach ($value as $relation) {
+                    Authorization::skip(function () use ($value, $relatedCollection, $twoWayKey, $relation) {
+                        $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
+                        $this->updateDocument(
+                            $relatedCollection->getId(),
+                            $related->getId(),
+                            $related->setAttribute($twoWayKey, null)
+                        );
+                    });
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    break;
+                }
+                foreach ($value as $relation) {
+                    Authorization::skip(function () use ($value, $relatedCollection, $twoWayKey, $relation) {
+                        $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
+                        $this->updateDocument(
+                            $relatedCollection->getId(),
+                            $related->getId(),
+                            $related->setAttribute($twoWayKey, null)
+                        );
+                    });
+                }
+
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $collection->getId() . '_' . $relatedCollection->getId()
+                    : $relatedCollection->getId() . '_' . $collection->getId();
+
+                $junctions = $this->find($junction, [
+                    Query::equal($twoWayKey, [$document->getId()]),
+                ]);
+
+                foreach ($junctions as $document) {
+                    $this->deleteDocument($junction, $document->getId());
+                }
+                break;
+        }
+    }
+
+    private function relateCascade(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, bool $side)
+    {
+        switch ($relationType) {
+            case Database::RELATION_ONE_TO_ONE:
+                $this->skipRelationships(fn () =>$this->deleteDocument($relatedCollection->getId(), $value->getId()));
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    break;
+                }
+                foreach ($value as $relation) {
+                    $this->deleteDocument($relatedCollection->getId(), $relation->getId());
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    break;
+                }
+                foreach ($value as $relation) {
+                    $this->deleteDocument($relatedCollection->getId(), $relation->getId());
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $collection->getId() . '_' . $relatedCollection->getId()
+                    : $relatedCollection->getId() . '_' . $collection->getId();
+
+                $junctions = $this->find($junction, [
+                    Query::equal($twoWayKey, [$document->getId()]),
+                ]);
+
+                foreach ($junctions as $document) {
+                    $this->deleteDocument(
+                        $junction,
+                        $document->getId()
+                    );
+                    $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $document->getAttribute($twoWayKey)
+                    );
+                }
+                break;
         }
     }
 

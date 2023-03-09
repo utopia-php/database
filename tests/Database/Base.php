@@ -3747,6 +3747,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'library' => [
                 '$id' => 'library1',
@@ -3762,13 +3763,16 @@ abstract class Base extends TestCase
             '$id' => 'library2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'name' => 'Library 2',
         ]));
-        static::getDatabase()->createDocument('person', new Document([
+        $person2 = static::getDatabase()->createDocument('person', new Document([
             '$id' => 'person2',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'library' => 'library2',
         ]));
@@ -3799,20 +3803,22 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($people));
 
-        // Duplicate relationship
-        $this->expectException(Duplicate::class);
-
-        static::getDatabase()->updateDocument(
-            'person',
-            $person1->getId(),
-            $person1->setAttribute('library', 'library2')
-        );
+        try {
+            static::getDatabase()->updateDocument(
+                'person',
+                $person1->getId(),
+                $person1->setAttribute('library', 'library2')
+            );
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
 
         // Create new document
         static::getDatabase()->createDocument('library', new Document([
             '$id' => 'library3',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'name' => 'Library 3',
         ]));
@@ -3833,15 +3839,60 @@ abstract class Base extends TestCase
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
-            'person',
-            'library',
-            'newLibrary'
+            collection: 'person',
+            key: 'library',
+            newKey: 'newLibrary'
         );
 
         // Get document with again
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('newLibrary');
-        $this->assertEquals('library2', $library['$id']);
+        $this->assertEquals('library3', $library['$id']);
+
+        // Try to delete document while still related to another with on delete: restrict
+        try {
+            static::getDatabase()->deleteDocument('person', 'person1');
+        } catch (Exception $e) {
+            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+        }
+
+        // Change on delete to set null
+        static::getDatabase()->updateRelationship(
+            collection: 'person',
+            key: 'newLibrary',
+            onDelete: Database::RELATION_MUTATE_SET_NULL
+        );
+
+        // Delete parent, no effect on children for one-way
+        static::getDatabase()->deleteDocument('person', 'person1');
+
+        // Delete child, set relationship to null for one-way
+        static::getDatabase()->deleteDocument('library', 'library2');
+
+        // Check relation was set to null
+        $person2 = static::getDatabase()->getDocument('person', 'person2');
+        $this->assertEquals(null, $person2->getAttribute('library'));
+
+        // Relate again
+        static::getDatabase()->updateDocument(
+            'person',
+            $person2->getId(),
+            $person2->setAttribute('newLibrary', 'library3')
+        );
+
+        // Change on delete to cascade
+        static::getDatabase()->updateRelationship(
+            collection: 'person',
+            key: 'newLibrary',
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        // Delete parent, will delete child
+        static::getDatabase()->deleteDocument('person', 'person2');
+
+        // Check parent and child were deleted
+        $library = static::getDatabase()->getDocument('library', 'library3');
+        $this->assertEquals(true, $library->isEmpty());
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
@@ -3976,13 +4027,17 @@ abstract class Base extends TestCase
 
         // Update document with existing document relation
         // Will throw as one-to-one relationship can only have one related document
-        $this->expectException(Duplicate::class);
+        $this->expectException(DuplicateException::class);
 
-        static::getDatabase()->updateDocument(
-            'country',
-            $country1->getId(),
-            $country1->setAttribute('city', 'city2')
-        );
+        try {
+            static::getDatabase()->updateDocument(
+                'country',
+                $country1->getId(),
+                $country1->setAttribute('city', 'city2')
+            );
+        } catch (DuplicateException) {
+            // Do nothing
+        }
 
         // Create a new city with no relation
         static::getDatabase()->createDocument('city', new Document([

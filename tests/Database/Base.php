@@ -3794,7 +3794,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($people));
 
-        $this->assertEquals('Library 2', $people[0]
+        $this->assertEquals(
+            'Library 2',
+            $people[0]
             ->getAttribute('library')
             ->getAttribute('name')
         );
@@ -4016,7 +4018,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($countries));
 
-        $this->assertEquals('Paris', $countries[0]
+        $this->assertEquals(
+            'Paris',
+            $countries[0]
             ->getAttribute('city')
             ->getAttribute('name')
         );
@@ -4215,7 +4219,9 @@ abstract class Base extends TestCase
         $this->assertEquals(1, \count($artists));
         $this->assertEquals(1, \count($artists[0]['albums']));
 
-        $this->assertEquals('Album 2', $artists[0]
+        $this->assertEquals(
+            'Album 2',
+            $artists[0]
             ->getAttribute('albums')[0]
             ->getAttribute('name')
         );
@@ -4381,7 +4387,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($customers));
 
-        $this->assertEquals('Account 2', $customers[0]
+        $this->assertEquals(
+            'Account 2',
+            $customers[0]
             ->getAttribute('accounts')[0]
             ->getAttribute('name')
         );
@@ -4564,7 +4572,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($reviews));
 
-        $this->assertEquals('Movie 2', $reviews[0]
+        $this->assertEquals(
+            'Movie 2',
+            $reviews[0]
             ->getAttribute('movie')
             ->getAttribute('name')
         );
@@ -4724,7 +4734,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($products));
 
-        $this->assertEquals('Store 2', $products[0]
+        $this->assertEquals(
+            'Store 2',
+            $products[0]
             ->getAttribute('store')
             ->getAttribute('name')
         );
@@ -4898,7 +4910,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($playlists));
 
-        $this->assertEquals('Song 2', $playlists[0]
+        $this->assertEquals(
+            'Song 2',
+            $playlists[0]
             ->getAttribute('songs')[0]
             ->getAttribute('name')
         );
@@ -5064,7 +5078,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($students));
 
-        $this->assertEquals('Class 2', $students[0]
+        $this->assertEquals(
+            'Class 2',
+            $students[0]
             ->getAttribute('classes')[0]
             ->getAttribute('name')
         );

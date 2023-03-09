@@ -4,18 +4,10 @@ namespace Utopia\Tests\Adapter;
 
 use PDO;
 use Redis;
-use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
-use Utopia\Database\Document;
-use Utopia\Database\Exception\Authorization;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Limit;
-use Utopia\Database\Exception\Structure;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 use Utopia\Tests\Base;
 
 class MariaDBTest extends Base

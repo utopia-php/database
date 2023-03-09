@@ -46,7 +46,7 @@ class Database
     public const RELATION_MUTATE_CASCADE = 'cascade';
     public const RELATION_MUTATE_RESTRICT = 'restrict';
     public const RELATION_MUTATE_SET_NULL = 'setNull';
-    
+
     // Relation Sides
     public const RELATION_SIDE_PARENT = 'parent';
     public const RELATION_SIDE_CHILD = 'child';
@@ -1290,15 +1290,14 @@ class Database
         string $twoWayKey = '',
         string $onUpdate = 'restrict',
         string $onDelete = 'restrict'
-    ): bool
-    {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+    ): bool {
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if($collection->isEmpty()){
+        if ($collection->isEmpty()) {
             throw new Exception('Collection not found');
         }
 
-        $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollection));
+        $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
 
         if ($relatedCollection->isEmpty()) {
             throw new Exception('Related collection not found');
@@ -1418,7 +1417,7 @@ class Database
             $onDelete,
         );
 
-        $this->silent(function() use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
 
@@ -1465,9 +1464,8 @@ class Database
         ?string $newTwoWayKey = null,
         ?string $onUpdate = null,
         ?string $onDelete = null
-    ): bool
-    {
-        $this->updateAttributeMeta($collection, $key, function($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete) {
+    ): bool {
+        $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete) {
             $altering = !\is_null($newKey) || !\is_null($newTwoWayKey);
 
             $relatedCollection = $attribute['options']['relatedCollection'];
@@ -1493,7 +1491,7 @@ class Database
                 'side' => $side,
             ]);
 
-            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function($twoWayAttribute) use ($newKey, $newTwoWayKey, $onUpdate, $onDelete) {
+            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $onUpdate, $onDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $newKey;
                 $options['onUpdate'] = $onUpdate;
@@ -1507,11 +1505,11 @@ class Database
             if ($type === self::RELATION_MANY_TO_MANY) {
                 $junction = $collection . '_' . $relatedCollection;
 
-                $this->updateAttributeMeta($junction, $key, function($junctionAttribute) use ($newKey) {
+                $this->updateAttributeMeta($junction, $key, function ($junctionAttribute) use ($newKey) {
                     $junctionAttribute->setAttribute('$id', $newKey);
                     $junctionAttribute->setAttribute('key', $newKey);
                 });
-                $this->updateAttributeMeta($junction, $twoWayKey, function($junctionAttribute) use ($newTwoWayKey) {
+                $this->updateAttributeMeta($junction, $twoWayKey, function ($junctionAttribute) use ($newTwoWayKey) {
                     $junctionAttribute->setAttribute('$id', $newTwoWayKey);
                     $junctionAttribute->setAttribute('key', $newTwoWayKey);
                 });
@@ -1560,13 +1558,13 @@ class Database
                 }
             });
         });
-        
+
         return true;
     }
 
     public function deleteRelationship(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn()=>$this->getCollection($collection));
+        $collection = $this->silent(fn () =>$this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
 
@@ -1875,7 +1873,7 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn() => $this->getDocumentRelationships($collection, $document, $selections));
+            $this->silent(fn () => $this->getDocumentRelationships($collection, $document, $selections));
         }
 
         $document = $this->casting($collection, $document);
@@ -2066,7 +2064,7 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn() => $this->createDocumentRelationships($collection, $document));
+            $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
         }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
@@ -2203,9 +2201,10 @@ class Database
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it
             $related = $this->createDocument($relatedCollection, $relation);
-        } else if ($relation->getArrayCopy() != $related->getArrayCopy()) {
+        } elseif ($relation->getArrayCopy() != $related->getArrayCopy()) {
             // If the related document exists and the data is not the same, update it
-            $related = $this->skipRelationships(fn() =>
+            $related = $this->skipRelationships(
+                fn () =>
                 $this->updateDocument($relatedCollection, $relation->getId(), $relation)
             );
         }
@@ -2248,14 +2247,16 @@ class Database
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->skipRelationships(fn () =>
+                    $this->skipRelationships(
+                        fn () =>
                         $this->updateDocument($relatedCollection, $relationId, $related)
                     );
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 $related->setAttribute($twoWayKey, $documentId);
-                $this->skipRelationships(fn () =>
+                $this->skipRelationships(
+                    fn () =>
                     $this->updateDocument($relatedCollection, $relationId, $related)
                 );
                 break;
@@ -2322,7 +2323,7 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn() => $this->updateDocumentRelationships($collection, $document));
+            $this->silent(fn () => $this->updateDocumentRelationships($collection, $document));
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
@@ -2374,7 +2375,7 @@ class Database
                         break;
                     }
 
-                    $this->skipRelationships(fn() => $this->updateDocument(
+                    $this->skipRelationships(fn () => $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
                         $related->setAttribute($twoWayKey, $document->getId())
@@ -2392,7 +2393,7 @@ class Database
 
                             $related = $this->getDocument($relatedCollection->getId(), $relation);
 
-                            $this->skipRelationships(fn() => $this->updateDocument(
+                            $this->skipRelationships(fn () => $this->updateDocument(
                                 $relatedCollection->getId(),
                                 $related->getId(),
                                 $related->setAttribute($twoWayKey, $document->getId())
@@ -2421,7 +2422,7 @@ class Database
 
                             $related = $this->getDocument($relatedCollection->getId(), $relation);
 
-                            $this->skipRelationships(fn() => $this->updateDocument(
+                            $this->skipRelationships(fn () => $this->updateDocument(
                                 $relatedCollection->getId(),
                                 $related->getId(),
                                 $related->setAttribute($twoWayKey, $document->getId())
@@ -2460,7 +2461,7 @@ class Database
                         ]);
 
                         foreach ($junctions as $junction) {
-                            $this->skipRelationships(fn() => $this->updateDocument(
+                            $this->skipRelationships(fn () => $this->updateDocument(
                                 $junction->getCollection(),
                                 $junction->getId(),
                                 $junction->setAttribute($attrKey, $attrValue)
@@ -2880,7 +2881,7 @@ class Database
 
         $relationships = $this->resolveRelationships ? \array_filter($attributes, function (Document $attribute) {
             return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
-        }): [];
+        }) : [];
 
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships) {
@@ -2928,7 +2929,7 @@ class Database
                 }
 
                 $matched = false;
-                foreach($values as $value) {
+                foreach ($values as $value) {
                     switch ($query->getMethod()) {
                         case Query::TYPE_EQUAL:
                             foreach ($query->getValues() as $queryValue) {

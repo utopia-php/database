@@ -277,8 +277,7 @@ class MariaDB extends SQL
         string $twoWayKey = '',
         string $onUpdate = 'restrict',
         string $onDelete = 'restrict'
-    ): bool
-    {
+    ): bool {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
@@ -332,8 +331,7 @@ class MariaDB extends SQL
         string $twoWayKey,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
-    ): bool
-    {
+    ): bool {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
@@ -369,7 +367,7 @@ class MariaDB extends SQL
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $this->getSQLTable($collection . '_' . $relatedCollection);
-                
+
                 if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`;";
                 }
@@ -384,7 +382,7 @@ class MariaDB extends SQL
         if (empty($sql)) {
             return true;
         }
-        
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();

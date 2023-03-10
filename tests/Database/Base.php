@@ -5497,7 +5497,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('classes', 'class2');
         $this->assertEquals(true, $library->isEmpty());
 
-
         // Delete relationship
         static::getDatabase()->deleteRelationship(
             'students',

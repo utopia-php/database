@@ -2669,19 +2669,19 @@ class Database
 
             switch ($onDelete) {
                 case Database::RELATION_MUTATE_RESTRICT:
-                    $this->relateRestrict($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
-                    $this->relateSetNull($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
-                    $this->relateCascade($collection, $document, $key, $value, $relatedCollection, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
             }
         }
     }
 
-    private function relateRestrict(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, string $side)
+    private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side)
     {
         if (!\is_null($value)) {
             throw new Exception('Can not delete document because it has at least one related document.');
@@ -2702,7 +2702,7 @@ class Database
         }
     }
 
-    private function relateSetNull(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
@@ -2791,7 +2791,7 @@ class Database
         }
     }
 
-    private function relateCascade(Document $collection, Document $document, string $key, mixed $value, Document $relatedCollection, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
+    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:

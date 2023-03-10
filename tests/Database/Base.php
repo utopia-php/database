@@ -5220,12 +5220,19 @@ abstract class Base extends TestCase
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
-        // Delete child, set parent relationship to null
-        static::getDatabase()->deleteDocument('playlist', 'playlist1');
+        // Reset relationships
+        static::getDatabase()->updateDocument(
+            'playlist',
+            $playlist1->getId(),
+            $playlist1->setAttribute('newSongs', ['song1'])
+        );
+
+        // Delete child, will delete junction
+        static::getDatabase()->deleteDocument('song', 'song1');
 
         // Check relation was set to null
-        $song1 = static::getDatabase()->getDocument('song', 'song1');
-        $this->assertEquals(null, $song1->getAttribute('playlist'));
+        $playlist1 = static::getDatabase()->getDocument('playlist', 'playlist1');
+        $this->assertEquals([], $playlist1->getAttribute('newSongs'));
 
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
@@ -5234,9 +5241,7 @@ abstract class Base extends TestCase
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
-        exit;
-
-        // Delete child, will delete parent
+        // Delete parent, will delete child
         static::getDatabase()->deleteDocument('playlist', 'playlist2');
 
         // Check parent and child were deleted
@@ -5245,10 +5250,6 @@ abstract class Base extends TestCase
 
         $library = static::getDatabase()->getDocument('song', 'song2');
         $this->assertEquals(true, $library->isEmpty());
-
-
-
-
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(
@@ -5326,6 +5327,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'name' => 'Student 1',
             'classes' => [
@@ -5334,7 +5336,7 @@ abstract class Base extends TestCase
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::update(Role::any()),
-
+                        Permission::delete(Role::any()),
                     ],
                     'name' => 'Class 1',
                 ],
@@ -5347,6 +5349,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
+                Permission::delete(Role::any()),
 
             ],
             'name' => 'Class 2',
@@ -5356,6 +5359,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'name' => 'Student 2',
             'classes' => [
@@ -5447,6 +5451,52 @@ abstract class Base extends TestCase
         $class = static::getDatabase()->getDocument('classes', 'class1');
         $students = $class->getAttribute('newStudents');
         $this->assertEquals('student1', $students[0]['$id']);
+
+        // Try to delete document while still related to another with on delete: restrict
+        try {
+            static::getDatabase()->deleteDocument('students', 'student1');
+        } catch (Exception $e) {
+            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+        }
+
+        // Change on delete to set null
+        static::getDatabase()->updateRelationship(
+            collection: 'students',
+            key: 'newClasses',
+            onDelete: Database::RELATION_MUTATE_SET_NULL
+        );
+
+        // Reset relationships
+        static::getDatabase()->updateDocument(
+            'students',
+            $student1->getId(),
+            $student1->setAttribute('newClasses', ['class1'])
+        );
+
+        // Delete child, will delete junction
+        static::getDatabase()->deleteDocument('classes', 'class1');
+
+        // Check relation was set to null
+        $student1 = static::getDatabase()->getDocument('students', 'student1');
+        $this->assertEquals([], $student1->getAttribute('newClasses'));
+
+        // Change on delete to cascade
+        static::getDatabase()->updateRelationship(
+            collection: 'students',
+            key: 'newClasses',
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        // Delete parent, will delete child
+        static::getDatabase()->deleteDocument('students', 'student2');
+
+        // Check parent and child were deleted
+        $library = static::getDatabase()->getDocument('students', 'student2');
+        $this->assertEquals(true, $library->isEmpty());
+
+        $library = static::getDatabase()->getDocument('classes', 'class2');
+        $this->assertEquals(true, $library->isEmpty());
+
 
         // Delete relationship
         static::getDatabase()->deleteRelationship(

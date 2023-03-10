@@ -2840,14 +2840,14 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $twoWayKey) {
+                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key, $twoWayKey) {
+                        $this->deleteDocument(
+                            $relatedCollection->getId(),
+                            $document->getAttribute($key)
+                        );
                         $this->deleteDocument(
                             $junction,
                             $document->getId()
-                        );
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $document->getAttribute($twoWayKey)
                         );
                     });
                 }

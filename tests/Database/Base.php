@@ -5514,6 +5514,89 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $students);
     }
 
+    public function testSelectRelationshipAttributes(): void
+    {
+        $coll = static::getDatabase()->createCollection('make');
+        static::getDatabase()->createCollection('model');
+
+        static::getDatabase()->createAttribute('make', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('model', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('model', 'year', Database::VAR_INTEGER, 0, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'make',
+            relatedCollection: 'model',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'models'
+        );
+
+        static::getDatabase()->createDocument('make', new Document([
+            '$id' => 'ford',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Ford',
+            'models' => [
+                [
+                    '$id' => 'fiesta',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Fiesta',
+                    'year' => 2010,
+                ],
+                [
+                    '$id' => 'focus',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Focus',
+                    'year' => 2011,
+                ],
+            ],
+        ]));
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', 'models.name']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals(2, \count($make['models']));
+        $this->assertEquals('Fiesta', $make['models'][0]['name']);
+        $this->assertEquals('Focus', $make['models'][1]['name']);
+        $this->assertEquals(null, $make['models'][0]['year']);
+        $this->assertEquals(null, $make['models'][1]['year']);
+//
+//        $make = static::getDatabase()->findOne('make', [
+//            Query::select(['models.year']),
+//        ]);
+//
+//        $this->assertEquals(null, $make['name']);
+//        $this->assertEquals(2, \count($make['models']));
+//        $this->assertEquals(null, $make['models'][0]['name']);
+//        $this->assertEquals(null, $make['models'][1]['name']);
+//        $this->assertEquals(2010, $make['models'][0]['year']);
+//        $this->assertEquals(2011, $make['models'][1]['year']);
+//
+//        $make = static::getDatabase()->findOne('make', [
+//            Query::select(['models.*']),
+//        ]);
+//
+//        $this->assertEquals(null, $make['name']);
+//        $this->assertEquals(2, \count($make['models']));
+//        $this->assertEquals('Fiesta', $make['models'][0]['name']);
+//        $this->assertEquals('Focus', $make['models'][1]['name']);
+//        $this->assertEquals(2010, $make['models'][0]['year']);
+//        $this->assertEquals(2011, $make['models'][1]['year']);
+//
+//        $make = static::getDatabase()->findOne('make', [
+//            Query::select(['name']),
+//        ]);
+//
+//        $this->assertEquals('Ford', $make['name']);
+//        $this->assertEquals(null, $make['models']);
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

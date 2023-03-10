@@ -1889,11 +1889,10 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @param array<string> $selections
      * @return Document
      * @throws Throwable
      */
-    private function getDocumentRelationships(Document $collection, Document $document, array $selections): Document
+    private function getDocumentRelationships(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2687,6 +2686,10 @@ class Database
             throw new Exception('Can not delete document because it has at least one related document.');
         }
 
+        /**
+         * When many-to-one and not two-way, deleting the child (one) should be restricted
+         * if there is at least one parent (many) that relates to the child
+        */
         if (
             !$twoWay
             && $relationType === Database::RELATION_MANY_TO_ONE
@@ -2923,9 +2926,21 @@ class Database
 
         $nested = [];
         foreach ($queries as $index => $query) {
-            if (\str_contains($query->getAttribute(), '.')) {
-                $nested[] = $query;
-                unset($queries[$index]);
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    foreach ($query->getValues() as $value) {
+                        if (\str_contains($value, '.')) {
+                            unset($queries[$index]);
+                            break;
+                        }
+                    }
+                    break;
+                default:
+                    if (\str_contains($query->getAttribute(), '.')) {
+                        $nested[] = $query;
+                        unset($queries[$index]);
+                    }
+                    break;
             }
         }
 
@@ -2949,8 +2964,9 @@ class Database
 
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships) {
-                $node = $this->getDocumentRelationships($collection, $node, $selections);
+                $node = $this->getDocumentRelationships($collection, $node);
             }
+
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
@@ -3225,9 +3241,13 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
-        $attributes = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
-            return $attribute['type'] !== self::VAR_RELATIONSHIP;
-        });
+        $attributes = [];
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
+                $attributes[] = $attribute;
+            }
+        }
+
         $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -3246,6 +3266,55 @@ class Database
             if (empty($selections) || \in_array($key, $selections)) {
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
+        }
+
+        $filteredArray = [];
+        foreach ($selections as $path) {
+            $keys = \explode('.', $path);
+            $currentArray = $document->getArrayCopy();
+            $tempArray = &$filteredArray;
+            $wildcardIndex = \array_search('*', $keys, true);
+
+            if ($wildcardIndex !== false) {
+                $wildcardKeys = \array_slice($keys, $wildcardIndex + 1);
+                $keys = \array_slice($keys, 0, $wildcardIndex);
+            } else {
+                $wildcardKeys = [];
+            }
+
+            foreach ($keys as $key) {
+                if (!\array_key_exists($key, $currentArray)) {
+                    continue 2;
+                }
+                $currentArray = $currentArray[$key];
+                if (!isset($tempArray[$key])) {
+                    $tempArray[$key] = [];
+                }
+                $tempArray = &$tempArray[$key];
+            }
+
+            if (empty($wildcardKeys)) {
+                $tempArray = $currentArray;
+                break;
+            }
+
+            foreach ($currentArray as $subArray) {
+                $tempSubArray = &$tempArray;
+                foreach ($wildcardKeys as $wildcardKey) {
+                    if (!\array_key_exists($wildcardKey, $subArray)) {
+                        continue 2;
+                    }
+                    if (!isset($tempSubArray[$wildcardKey])) {
+                        $tempSubArray[$wildcardKey] = [];
+                    }
+                    $tempSubArray = &$tempSubArray[$wildcardKey];
+                }
+                $tempSubArray = $subArray;
+            }
+        }
+
+        if (!empty($selections)) {
+            $document = new Document($filteredArray);
         }
 
         return $document;
@@ -3381,23 +3450,50 @@ class Database
         }
 
         $selections = [];
+        $relationshipSelections = [];
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 foreach ($query->getValues() as $value) {
+                    if (\str_contains($value, '.')) {
+                        $relationshipSelections[] = $value;
+                        continue;
+                    }
                     $selections[] = $value;
                 }
             }
         }
 
         $attributes = [];
+        $relationships = [];
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            if ($attribute['type'] === self::VAR_RELATIONSHIP) {
+                $relationships[] = $attribute['key'];
+                continue;
+            }
             $attributes[] = $attribute['key'];
         }
 
         $invalid = \array_diff($selections, $attributes);
-
         if (!empty($invalid)) {
             throw new \Exception('Cannot select attributes: ' . \implode(', ', $invalid));
+        }
+
+        foreach ($relationshipSelections as $relationshipSelection) {
+            $path = \explode('.', $relationshipSelection);
+
+            $matched = false;
+            foreach ($relationships as $relationship) {
+                if ($relationship === $path[0]) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if (!$matched) {
+                throw new \Exception('Cannot select relationship attribute: ' . $path[0]);
+            }
+
+            $selections[] = $relationshipSelection;
         }
 
         $selections[] = '$id';

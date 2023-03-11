@@ -2229,8 +2229,7 @@ class Database
             $related = $this->createDocument($relatedCollection, $relation);
         } elseif ($relation->getArrayCopy() != $related->getArrayCopy()) {
             // If the related document exists and the data is not the same, update it
-            $related = $this->skipRelationships(
-                fn () =>
+            $related = $this->skipRelationships(fn () =>
                 $this->updateDocument($relatedCollection, $relation->getId(), $relation)
             );
         }
@@ -2261,30 +2260,31 @@ class Database
         string $relationType,
         bool $twoWay,
         string $twoWayKey
-    ): string {
+    ): void {
         // Get the related document, will be empty on permissions failure
         $related = $this->getDocument($relatedCollection, $relationId);
 
         if ($related->isEmpty()) {
-            return '';
+            return;
         }
 
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->skipRelationships(
-                        fn () =>
+                    $this->skipRelationships(fn () =>
                         $this->updateDocument($relatedCollection, $relationId, $related)
                     );
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 $related->setAttribute($twoWayKey, $documentId);
-                $this->skipRelationships(
-                    fn () =>
+                $this->skipRelationships(fn () =>
                     $this->updateDocument($relatedCollection, $relationId, $related)
                 );
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $this->deleteCachedDocument($relatedCollection, $relationId);
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $collection . '_' . $relatedCollection;
@@ -2298,9 +2298,8 @@ class Database
                         Permission::delete(Role::any()),
                     ]
                 ]));
+                break;
         }
-
-        return $related->getId();
     }
 
     /**
@@ -2466,8 +2465,6 @@ class Database
                         throw new Exception('Invalid value for relationship');
                     }
 
-                    // TODO: Validate exists?
-
                     break;
                 case Database::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_CHILD) {
@@ -2518,6 +2515,9 @@ class Database
                     if (!\is_string($value)) {
                         throw new Exception('Invalid value for relationship');
                     }
+
+                    $this->deleteCachedDocument($relatedCollection->getId(), $value);
+
                     break;
                 case Database::RELATION_MANY_TO_MANY:
                     if (!\is_array($value)) {

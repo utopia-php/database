@@ -3790,7 +3790,6 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, \count($people));
-
         $this->assertEquals(
             'Library 2',
             $people[0]
@@ -3817,6 +3816,7 @@ abstract class Base extends TestCase
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
+        // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
                 'person',
@@ -3838,7 +3838,7 @@ abstract class Base extends TestCase
             'area' => 'Area 3',
         ]));
 
-        // Update existing document with new related document
+        // Relate existing document to new document
         static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
@@ -3864,7 +3864,7 @@ abstract class Base extends TestCase
         $library = $person->getAttribute('newLibrary');
         $this->assertEquals('library3', $library['$id']);
 
-        // Try to delete document while still related to another with on delete: restrict
+        // Can not delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('person', 'person1');
         } catch (Exception $e) {
@@ -3881,14 +3881,14 @@ abstract class Base extends TestCase
         // Delete parent, no effect on children for one-way
         static::getDatabase()->deleteDocument('person', 'person1');
 
-        // Delete child, set relationship to null for one-way
+        // Delete child, set parent relating attribute to null for one-way
         static::getDatabase()->deleteDocument('library', 'library2');
 
         // Check relation was set to null
         $person2 = static::getDatabase()->getDocument('person', 'person2');
         $this->assertEquals(null, $person2->getAttribute('library', ''));
 
-        // Relate again
+        // Relate to another document
         static::getDatabase()->updateDocument(
             'person',
             $person2->getId(),
@@ -3912,14 +3912,13 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('library', 'library3');
         $this->assertEquals(true, $library->isEmpty());
 
-
         // Delete relationship
         static::getDatabase()->deleteRelationship(
             'person',
             'newLibrary'
         );
 
-        // Try to get document again
+        // Check parent doesn't have relationship anymore
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('newLibrary', '');
         $this->assertEquals(null, $library);
@@ -4006,6 +4005,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
+                Permission::delete(Role::any()),
             ],
             'name' => 'France',
             'city' => 'city2',
@@ -4027,7 +4027,6 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, \count($countries));
-
         $this->assertEquals(
             'Paris',
             $countries[0]
@@ -4054,7 +4053,7 @@ abstract class Base extends TestCase
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
 
-        // Update document with existing document relation
+        // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
                 'country',
@@ -4065,7 +4064,7 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
-        // Successful update via removal
+        // Set relationship to null
         static::getDatabase()->updateDocument(
             'city',
             $city1->getId(),
@@ -4084,7 +4083,7 @@ abstract class Base extends TestCase
             'code' => 'CPH',
         ]));
 
-        // Update document with existing document relation
+        // Update document with relation to new document
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
@@ -4141,7 +4140,7 @@ abstract class Base extends TestCase
         $city = $country->getAttribute('newCity');
         $this->assertEquals('city1', $city['$id']);
 
-        // Try to delete document while still related to another with on delete: restrict
+        // Can not delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
         } catch (Exception $e) {
@@ -4155,14 +4154,14 @@ abstract class Base extends TestCase
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
-        // Delete parent, set child relationship to null
+        // Delete parent, will set child relationship to null for two-way
         static::getDatabase()->deleteDocument('country', 'country1');
 
         // Check relation was set to null
         $city2 = static::getDatabase()->getDocument('city', 'city3');
         $this->assertEquals(null, $city2->getAttribute('country', ''));
 
-        // Delete child, set relationship to null
+        // Delete child, set parent relationship to null for two-way
         static::getDatabase()->deleteDocument('city', 'city2');
 
         // Check relation was set to null
@@ -4193,6 +4192,32 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('city', 'city1');
         $this->assertEquals(true, $library->isEmpty());
 
+        // Delete child, will delete parent for two-way
+        static::getDatabase()->deleteDocument('city', 'city3');
+
+        // Check parent and child were deleted
+        $library = static::getDatabase()->getDocument('city', 'city3');
+        $this->assertEquals(true, $library->isEmpty());
+
+        $library = static::getDatabase()->getDocument('country', 'country2');
+        $this->assertEquals(true, $library->isEmpty());
+
+        // Create new document to check after deleting relationship
+        static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Munich',
+            'code' => 'MUC',
+            'newCountry' => [
+                '$id' => 'country4',
+                'name' => 'Germany'
+            ]
+        ]));
+
         // Delete relationship
         static::getDatabase()->deleteRelationship(
             'country',
@@ -4200,13 +4225,13 @@ abstract class Base extends TestCase
         );
 
         // Try to get document again
-        $country = static::getDatabase()->getDocument('country', 'country2');
-        $city = $country->getAttribute('newCity', '');
+        $country = static::getDatabase()->getDocument('country', 'country4');
+        $city = $country->getAttribute('newCity');
         $this->assertEquals(null, $city);
 
         // Try to get inverse document again
-        $city = static::getDatabase()->getDocument('city', 'city3');
-        $country = $city->getAttribute('newCountry', '');
+        $city = static::getDatabase()->getDocument('city', 'city4');
+        $country = $city->getAttribute('newCountry');
         $this->assertEquals(null, $country);
     }
 
@@ -4253,7 +4278,8 @@ abstract class Base extends TestCase
                 [
                     '$id' => 'album1',
                     '$permissions' => [
-                        Permission::read(Role::any())
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any())
                     ],
                     'name' => 'Album 1',
                     'price' => 9.99,
@@ -4327,11 +4353,26 @@ abstract class Base extends TestCase
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
 
-        // Update document with new related document
+        // Update document with new related documents, will remove existing relations
         static::getDatabase()->updateDocument(
             'artist',
             $artist1->getId(),
             $artist1->setAttribute('albums', ['album2'])
+        );
+
+        // Query related document again
+        $artists = static::getDatabase()->find('artist', [
+            Query::equal('albums.name', ['Album 2'])
+        ]);
+
+        $this->assertEquals(1, \count($artists));
+        $this->assertEquals(1, \count($artists[0]['albums']));
+
+        // Update document with new related documents, will remove existing relations
+        static::getDatabase()->updateDocument(
+            'artist',
+            $artist1->getId(),
+            $artist1->setAttribute('albums', ['album1', 'album2'])
         );
 
         // Query related document again
@@ -4554,6 +4595,21 @@ abstract class Base extends TestCase
             'customer',
             $customer1->getId(),
             $customer1->setAttribute('accounts', ['account2'])
+        );
+
+        // Query related document again
+        $customers = static::getDatabase()->find('customer', [
+            Query::equal('accounts.name', ['Account 2'])
+        ]);
+
+        $this->assertEquals(1, \count($customers));
+        $this->assertEquals(1, \count($customers[0]['accounts']));
+
+        // Update document with new related document
+        static::getDatabase()->updateDocument(
+            'customer',
+            $customer1->getId(),
+            $customer1->setAttribute('accounts', ['account1', 'account2'])
         );
 
         // Query related document again
@@ -4957,7 +5013,7 @@ abstract class Base extends TestCase
         ]));
 
         // Create document with relationship with related ID
-        $store2 = static::getDatabase()->createDocument('store', new Document([
+        static::getDatabase()->createDocument('store', new Document([
             '$id' => 'store2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -5035,18 +5091,18 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($products));
 
-        $store1 = static::getDatabase()->getDocument('store', 'store1');
+        $store2 = static::getDatabase()->getDocument('store', 'store2');
 
         // Update inverse document
         static::getDatabase()->updateDocument(
             'store',
-            $store1->getId(),
-            $store1->setAttribute('products', ['product1'])
+            $store2->getId(),
+            $store2->setAttribute('products', ['product1'])
         );
 
         // Query related document again
         $stores = static::getDatabase()->find('store', [
-            Query::equal('products.name', ['Product 2'])
+            Query::equal('products.name', ['Product 1'])
         ]);
 
         $this->assertEquals(1, \count($stores));
@@ -5059,6 +5115,31 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($products));
 
+
+
+
+        // Update inverse document
+        static::getDatabase()->updateDocument(
+            'store',
+            $store2->getId(),
+            $store2->setAttribute('products', ['product1', 'product2'])
+        );
+
+        // Query related document again
+        $stores = static::getDatabase()->find('store', [
+            Query::equal('products.name', ['Product 1'])
+        ]);
+
+        $this->assertEquals(1, \count($stores));
+        $this->assertEquals(2, \count($stores[0]['products']));
+
+        // Query inverse document again
+        $products = static::getDatabase()->find('product', [
+            Query::equal('store.name', ['Store 2'])
+        ]);
+
+        $this->assertEquals(2, \count($products));
+
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
             'product',
@@ -5068,14 +5149,14 @@ abstract class Base extends TestCase
         );
 
         // Get document with new relationship key
-        $store = static::getDatabase()->getDocument('store', 'store1');
+        $store = static::getDatabase()->getDocument('store', 'store2');
         $products = $store->getAttribute('newProducts');
         $this->assertEquals('product1', $products[0]['$id']);
 
         // Get inverse document with new relationship key
         $product = static::getDatabase()->getDocument('product', 'product1');
         $store = $product->getAttribute('newStore');
-        $this->assertEquals('store1', $store['$id']);
+        $this->assertEquals('store2', $store['$id']);
 
         // Try to delete document while still related to another with on delete: restrict
         try {

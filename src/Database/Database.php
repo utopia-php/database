@@ -2421,7 +2421,30 @@ class Database
                         if (!\is_array($value)) {
                             throw new Exception('Invalid value for relationship');
                         }
-                        foreach ($value as $relation) {
+
+                        $oldIds = \array_map(function ($document) {
+                            return $document->getId();
+                        }, $old->getAttribute($key, []));
+
+                        $oldDocuments = $old->getAttribute($key, []);
+
+                        $removedIds = \array_diff($oldIds, $value);
+
+                        $removedDocuments = \array_filter($oldDocuments, function ($document) use ($removedIds) {
+                            return \in_array($document->getId(), $removedIds);
+                        });
+
+                        foreach ($removedDocuments as $relation) {
+                            $this->skipRelationships(fn () => $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $relation->getId(),
+                                $relation->setAttribute($twoWayKey, null)
+                            ));
+                        }
+
+                        $addedIds = \array_diff($value, $oldIds);
+
+                        foreach ($addedIds as $relation) {
                             if (!\is_string($relation)) {
                                 throw new Exception('Invalid value for relationship');
                             }
@@ -2451,7 +2474,30 @@ class Database
                         if (!\is_array($value)) {
                             throw new Exception('Invalid value for relationship');
                         }
-                        foreach ($value as $relation) {
+
+                        $oldIds = \array_map(function ($document) {
+                            return $document->getId();
+                        }, $old->getAttribute($key, []));
+
+                        $oldDocuments = $old->getAttribute($key, []);
+
+                        $removedIds = \array_diff($oldIds, $value);
+
+                        $removedDocuments = \array_filter($oldDocuments, function ($document) use ($removedIds) {
+                            return \in_array($document->getId(), $removedIds);
+                        });
+
+                        foreach ($removedDocuments as $relation) {
+                            $this->skipRelationships(fn () => $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $relation->getId(),
+                                $relation->setAttribute($twoWayKey, null)
+                            ));
+                        }
+
+                        $addedIds = \array_diff($value, $oldIds);
+
+                        foreach ($addedIds as $relation) {
                             if (!\is_string($relation)) {
                                 throw new Exception('Invalid value for relationship');
                             }

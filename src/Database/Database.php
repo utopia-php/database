@@ -2287,6 +2287,8 @@ class Database
                 $this->deleteCachedDocument($relatedCollection, $relationId);
                 break;
             case Database::RELATION_MANY_TO_MANY:
+                $this->deleteCachedDocument($relatedCollection, $relationId);
+
                 $junction = $collection . '_' . $relatedCollection;
 
                 $this->createDocument($junction, new Document([

@@ -3778,11 +3778,11 @@ abstract class Base extends TestCase
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('library');
         $this->assertEquals('library1', $library['$id']);
+        $this->assertArrayNotHasKey('person', $library);
 
         // Get related document
         $library = static::getDatabase()->getDocument('library', 'library1');
-        $person = $library->getAttribute('person', '');
-        $this->assertEquals(null, $person);
+        $this->assertArrayNotHasKey('person', $library);
 
         // Query related document
         $people = static::getDatabase()->find('person', [
@@ -4015,11 +4015,13 @@ abstract class Base extends TestCase
         $city1 = static::getDatabase()->getDocument('city', 'city1');
         $country = $city1->getAttribute('country');
         $this->assertEquals('country1', $country['$id']);
+        $this->assertArrayNotHasKey('city', $country);
 
         // Get inverse document with relationship
         $country = static::getDatabase()->getDocument('country', 'country1');
         $city1 = $country->getAttribute('city');
         $this->assertEquals('city1', $city1['$id']);
+        $this->assertArrayNotHasKey('country', $city1);
 
         // Query related document
         $countries = static::getDatabase()->find('country', [
@@ -4313,11 +4315,11 @@ abstract class Base extends TestCase
         $artist = static::getDatabase()->getDocument('artist', 'artist1');
         $albums = $artist->getAttribute('albums', []);
         $this->assertEquals('album1', $albums[0]['$id']);
+        $this->assertArrayNotHasKey('artist', $albums[0]);
 
         // Get related document
         $album = static::getDatabase()->getDocument('album', 'album1');
-        $artist = $album->getAttribute('artist', '');
-        $this->assertEquals(null, $artist);
+        $this->assertArrayNotHasKey('albums', $album);
 
         // Query related document
         $artists = static::getDatabase()->find('artist', [
@@ -4551,11 +4553,13 @@ abstract class Base extends TestCase
         $customer = static::getDatabase()->getDocument('customer', 'customer1');
         $accounts = $customer->getAttribute('accounts', []);
         $this->assertEquals('account1', $accounts[0]['$id']);
+        $this->assertArrayNotHasKey('customer', $accounts[0]);
 
         // Get related document
         $account = static::getDatabase()->getDocument('account', 'account1');
         $customer = $account->getAttribute('customer');
         $this->assertEquals('customer1', $customer['$id']);
+        $this->assertArrayNotHasKey('accounts', $customer);
 
         // Query related document
         $customers = static::getDatabase()->find('customer', [
@@ -4812,11 +4816,11 @@ abstract class Base extends TestCase
         $review = static::getDatabase()->getDocument('review', 'review1');
         $movie = $review->getAttribute('movie', []);
         $this->assertEquals('movie1', $movie['$id']);
+        $this->assertArrayNotHasKey('reviews', $movie);
 
         // Get related document
         $movie = static::getDatabase()->getDocument('movie', 'movie1');
-        $reviews = $movie->getAttribute('reviews');
-        $this->assertEquals(null, $reviews);
+        $this->assertArrayNotHasKey('reviews', $movie);
 
         // Query related document
         $reviews = static::getDatabase()->find('review', [
@@ -5038,11 +5042,13 @@ abstract class Base extends TestCase
         $product = static::getDatabase()->getDocument('product', 'product1');
         $store = $product->getAttribute('store', []);
         $this->assertEquals('store1', $store['$id']);
+        $this->assertArrayNotHasKey('products', $store);
 
         // Get related document
         $store = static::getDatabase()->getDocument('store', 'store1');
         $products = $store->getAttribute('products');
         $this->assertEquals('product1', $products[0]['$id']);
+        $this->assertArrayNotHasKey('store', $products[0]);
 
         // Query related document
         $products = static::getDatabase()->find('product', [
@@ -5267,7 +5273,7 @@ abstract class Base extends TestCase
         ]));
 
         // Create document with relationship with related ID
-        $song2 = static::getDatabase()->createDocument('song', new Document([
+        static::getDatabase()->createDocument('song', new Document([
             '$id' => 'song2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -5293,11 +5299,11 @@ abstract class Base extends TestCase
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');
         $songs = $playlist->getAttribute('songs', []);
         $this->assertEquals('song1', $songs[0]['$id']);
+        $this->assertArrayNotHasKey('playlist', $songs[0]);
 
         // Get related document
         $library = static::getDatabase()->getDocument('song', 'song1');
-        $songs = $library->getAttribute('playlist');
-        $this->assertEquals(null, $songs);
+        $this->assertArrayNotHasKey('songs', $library);
 
         // Query related document
         $playlists = static::getDatabase()->find('playlist', [
@@ -5514,11 +5520,13 @@ abstract class Base extends TestCase
         $student = static::getDatabase()->getDocument('students', 'student1');
         $classes = $student->getAttribute('classes', []);
         $this->assertEquals('class1', $classes[0]['$id']);
+        $this->assertArrayNotHasKey('students', $classes[0]);
 
         // Get related document
         $class = static::getDatabase()->getDocument('classes', 'class1');
         $student = $class->getAttribute('students');
         $this->assertEquals('student1', $student[0]['$id']);
+        $this->assertArrayNotHasKey('classes', $student[0]);
 
         // Query related document
         $students = static::getDatabase()->find('students', [

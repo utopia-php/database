@@ -3711,13 +3711,8 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('person');
         static::getDatabase()->createCollection('library');
 
-        static::getDatabase()->createAttribute(
-            collection: 'library',
-            id: 'name',
-            type: 'string',
-            size: 255,
-            required: true,
-        );
+        static::getDatabase()->createAttribute('library', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('library', 'area', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
             collection: 'person',
@@ -3755,6 +3750,7 @@ abstract class Base extends TestCase
                     Permission::read(Role::any()),
                 ],
                 'name' => 'Library 1',
+                'area' => 'Area 1',
             ],
         ]));
 
@@ -3766,8 +3762,9 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Library 2',
+            'area' => 'Area 2',
         ]));
-        $person2 = static::getDatabase()->createDocument('person', new Document([
+        static::getDatabase()->createDocument('person', new Document([
             '$id' => 'person2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -3805,6 +3802,21 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($people));
 
+        // Select related document attributes
+        $person = static::getDatabase()->findOne('person', [
+            Query::select(['*', 'library.name'])
+        ]);
+
+        $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
+        $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
+
+        $person = static::getDatabase()->getDocument('person', 'person1', [
+            Query::select(['*', 'library.name'])
+        ]);
+
+        $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
+        $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
+
         try {
             static::getDatabase()->updateDocument(
                 'person',
@@ -3823,6 +3835,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Library 3',
+            'area' => 'Area 3',
         ]));
 
         // Update existing document with new related document
@@ -3917,21 +3930,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('country');
         static::getDatabase()->createCollection('city');
 
-        static::getDatabase()->createAttribute(
-            collection: 'city',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true,
-        );
-
-        static::getDatabase()->createAttribute(
-            collection: 'country',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true,
-        );
+        static::getDatabase()->createAttribute('country', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('city', 'code', Database::VAR_STRING, 3, true);
+        static::getDatabase()->createAttribute('city', 'name', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
             collection: 'country',
@@ -3984,7 +3985,8 @@ abstract class Base extends TestCase
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ],
-                'name' => 'London'
+                'name' => 'London',
+                'code' => 'LON',
             ],
         ]));
 
@@ -3996,7 +3998,8 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Paris'
+            'name' => 'Paris',
+            'code' => 'PAR',
         ]));
         static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country2',
@@ -4036,6 +4039,21 @@ abstract class Base extends TestCase
 
         $this->assertEquals(2, \count($countries));
 
+        // Select related document attributes
+        $country = static::getDatabase()->findOne('country', [
+            Query::select(['*', 'city.name'])
+        ]);
+
+        $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
+        $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
+
+        $country = static::getDatabase()->getDocument('country', 'country1', [
+            Query::select(['*', 'city.name'])
+        ]);
+
+        $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
+        $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
+
         // Update document with existing document relation
         try {
             static::getDatabase()->updateDocument(
@@ -4062,7 +4080,8 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Copenhagen'
+            'name' => 'Copenhagen',
+            'code' => 'CPH',
         ]));
 
         // Update document with existing document relation
@@ -4196,13 +4215,8 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('artist');
         static::getDatabase()->createCollection('album');
 
-        static::getDatabase()->createAttribute(
-            collection: 'album',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true,
-        );
+        static::getDatabase()->createAttribute('album', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('album', 'price', Database::VAR_FLOAT, 0, true);
 
         static::getDatabase()->createRelationship(
             collection: 'artist',
@@ -4241,7 +4255,8 @@ abstract class Base extends TestCase
                     '$permissions' => [
                         Permission::read(Role::any())
                     ],
-                    'name' => 'Album 1'
+                    'name' => 'Album 1',
+                    'price' => 9.99,
                 ],
             ],
         ]));
@@ -4254,7 +4269,8 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Album 2'
+            'name' => 'Album 2',
+            'price' => 19.99,
         ]));
         static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist2',
@@ -4295,6 +4311,21 @@ abstract class Base extends TestCase
         $artists = static::getDatabase()->find('artist');
 
         $this->assertEquals(2, \count($artists));
+
+        // Select related document attributes
+        $artist = static::getDatabase()->findOne('artist', [
+            Query::select(['*', 'albums.name'])
+        ]);
+
+        $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
+
+        $artist = static::getDatabase()->getDocument('artist', 'artist1', [
+            Query::select(['*', 'albums.name'])
+        ]);
+
+        $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -4385,21 +4416,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('customer');
         static::getDatabase()->createCollection('account');
 
-        static::getDatabase()->createAttribute(
-            collection: 'account',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true,
-        );
-
-        static::getDatabase()->createAttribute(
-            collection: 'customer',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true,
-        );
+        static::getDatabase()->createAttribute('customer', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('account', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('account', 'number', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
             collection: 'customer',
@@ -4457,6 +4476,7 @@ abstract class Base extends TestCase
                         Permission::delete(Role::any()),
                     ],
                     'name' => 'Account 1',
+                    'number' => '123456789',
                 ],
             ],
         ]));
@@ -4469,7 +4489,8 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Account 2'
+            'name' => 'Account 2',
+            'number' => '987654321',
         ]));
 
         static::getDatabase()->createDocument('customer', new Document([
@@ -4512,6 +4533,21 @@ abstract class Base extends TestCase
         $customers = static::getDatabase()->find('customer');
 
         $this->assertEquals(2, \count($customers));
+
+        // Select related document attributes
+        $customer = static::getDatabase()->findOne('customer', [
+            Query::select(['*', 'accounts.name'])
+        ]);
+
+        $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
+
+        $customer = static::getDatabase()->getDocument('customer', 'customer1', [
+            Query::select(['*', 'accounts.name'])
+        ]);
+
+        $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -4635,13 +4671,8 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('review');
         static::getDatabase()->createCollection('movie');
 
-        static::getDatabase()->createAttribute(
-            collection: 'movie',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true
-        );
+        static::getDatabase()->createAttribute('movie', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('movie', 'length', Database::VAR_INTEGER, 0, true, formatOptions: ['min' => 0, 'max' => 999]);
 
         static::getDatabase()->createRelationship(
             collection: 'review',
@@ -4696,6 +4727,7 @@ abstract class Base extends TestCase
                     Permission::delete(Role::any()),
                 ],
                 'name' => 'Movie 1',
+                'length' => 120,
             ],
         ]));
 
@@ -4708,6 +4740,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Movie 2',
+            'length' => 90,
         ]));
         static::getDatabase()->createDocument('review', new Document([
             '$id' => 'review2',
@@ -4746,6 +4779,21 @@ abstract class Base extends TestCase
         $reviews = static::getDatabase()->find('review');
 
         $this->assertEquals(2, \count($reviews));
+
+        // Select related document attributes
+        $review = static::getDatabase()->findOne('review', [
+            Query::select(['*', 'movie.name'])
+        ]);
+
+        $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
+        $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
+
+        $review = static::getDatabase()->getDocument('review', 'review1', [
+            Query::select(['*', 'movie.name'])
+        ]);
+
+        $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
+        $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -4838,13 +4886,8 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('product');
         static::getDatabase()->createCollection('store');
 
-        static::getDatabase()->createAttribute(
-            collection: 'store',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true
-        );
+        static::getDatabase()->createAttribute('store', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('store', 'opensAt', Database::VAR_STRING, 5, true);
 
         static::getDatabase()->createAttribute(
             collection: 'product',
@@ -4909,6 +4952,7 @@ abstract class Base extends TestCase
                     Permission::delete(Role::any()),
                 ],
                 'name' => 'Store 1',
+                'opensAt' => '09:00',
             ],
         ]));
 
@@ -4921,6 +4965,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Store 2',
+            'opensAt' => '09:30',
         ]));
         static::getDatabase()->createDocument('product', new Document([
             '$id' => 'product2',
@@ -4960,6 +5005,21 @@ abstract class Base extends TestCase
         $products = static::getDatabase()->find('product');
 
         $this->assertEquals(2, \count($products));
+
+        // Select related document attributes
+        $product = static::getDatabase()->findOne('product', [
+            Query::select(['*', 'store.name'])
+        ]);
+
+        $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
+        $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
+
+        $product = static::getDatabase()->getDocument('product', 'product1', [
+            Query::select(['*', 'store.name'])
+        ]);
+
+        $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
+        $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -5077,13 +5137,8 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('playlist');
         static::getDatabase()->createCollection('song');
 
-        static::getDatabase()->createAttribute(
-            collection: 'song',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true
-        );
+        static::getDatabase()->createAttribute('song', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('song', 'length', Database::VAR_INTEGER, 0, true);
 
         static::getDatabase()->createRelationship(
             collection: 'playlist',
@@ -5125,6 +5180,7 @@ abstract class Base extends TestCase
                         Permission::delete(Role::any()),
                     ],
                     'name' => 'Song 1',
+                    'length' => 180,
                 ],
             ],
         ]));
@@ -5138,6 +5194,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Song 2',
+            'length' => 140,
         ]));
         static::getDatabase()->createDocument('playlist', new Document([
             '$id' => 'playlist2',
@@ -5178,6 +5235,21 @@ abstract class Base extends TestCase
         $playlists = static::getDatabase()->find('playlist');
 
         $this->assertEquals(2, \count($playlists));
+
+        // Select related document attributes
+        $playlist = static::getDatabase()->findOne('playlist', [
+            Query::select(['*', 'songs.name'])
+        ]);
+
+        $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
+
+        $playlist = static::getDatabase()->getDocument('playlist', 'playlist1', [
+            Query::select(['*', 'songs.name'])
+        ]);
+
+        $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -5268,21 +5340,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('students');
         static::getDatabase()->createCollection('classes');
 
-        static::getDatabase()->createAttribute(
-            collection: 'students',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true
-        );
-
-        static::getDatabase()->createAttribute(
-            collection: 'classes',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true
-        );
+        static::getDatabase()->createAttribute('students', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('classes', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('classes', 'number', Database::VAR_INTEGER, 0, true);
 
         static::getDatabase()->createRelationship(
             collection: 'students',
@@ -5339,12 +5399,13 @@ abstract class Base extends TestCase
                         Permission::delete(Role::any()),
                     ],
                     'name' => 'Class 1',
+                    'number' => 1,
                 ],
             ],
         ]));
 
         // Create document with relationship with related ID
-        $class2 = static::getDatabase()->createDocument('classes', new Document([
+        static::getDatabase()->createDocument('classes', new Document([
             '$id' => 'class2',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -5353,6 +5414,7 @@ abstract class Base extends TestCase
 
             ],
             'name' => 'Class 2',
+            'number' => 2,
         ]));
         static::getDatabase()->createDocument('students', new Document([
             '$id' => 'student2',
@@ -5394,6 +5456,21 @@ abstract class Base extends TestCase
         $students = static::getDatabase()->find('students');
 
         $this->assertEquals(2, \count($students));
+
+        // Select related document attributes
+        $student = static::getDatabase()->findOne('students', [
+            Query::select(['*', 'classes.name'])
+        ]);
+
+        $this->assertEquals('Class 1', $student->getAttribute('classes')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('number', $student->getAttribute('classes')[0]);
+
+        $student = static::getDatabase()->getDocument('students', 'student1', [
+            Query::select(['*', 'classes.name'])
+        ]);
+
+        $this->assertEquals('Class 1', $student->getAttribute('classes')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('number', $student->getAttribute('classes')[0]);
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -5516,7 +5593,7 @@ abstract class Base extends TestCase
 
     public function testSelectRelationshipAttributes(): void
     {
-        $coll = static::getDatabase()->createCollection('make');
+        static::getDatabase()->createCollection('make');
         static::getDatabase()->createCollection('model');
 
         static::getDatabase()->createAttribute('make', 'name', Database::VAR_STRING, 255, true);
@@ -5556,6 +5633,7 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Select some parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
             Query::select(['name', 'models.name']),
         ]);
@@ -5564,37 +5642,53 @@ abstract class Base extends TestCase
         $this->assertEquals(2, \count($make['models']));
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
         $this->assertEquals('Focus', $make['models'][1]['name']);
-        $this->assertEquals(null, $make['models'][0]['year']);
-        $this->assertEquals(null, $make['models'][1]['year']);
-//
-//        $make = static::getDatabase()->findOne('make', [
-//            Query::select(['models.year']),
-//        ]);
-//
-//        $this->assertEquals(null, $make['name']);
-//        $this->assertEquals(2, \count($make['models']));
-//        $this->assertEquals(null, $make['models'][0]['name']);
-//        $this->assertEquals(null, $make['models'][1]['name']);
-//        $this->assertEquals(2010, $make['models'][0]['year']);
-//        $this->assertEquals(2011, $make['models'][1]['year']);
-//
-//        $make = static::getDatabase()->findOne('make', [
-//            Query::select(['models.*']),
-//        ]);
-//
-//        $this->assertEquals(null, $make['name']);
-//        $this->assertEquals(2, \count($make['models']));
-//        $this->assertEquals('Fiesta', $make['models'][0]['name']);
-//        $this->assertEquals('Focus', $make['models'][1]['name']);
-//        $this->assertEquals(2010, $make['models'][0]['year']);
-//        $this->assertEquals(2011, $make['models'][1]['year']);
-//
-//        $make = static::getDatabase()->findOne('make', [
-//            Query::select(['name']),
-//        ]);
-//
-//        $this->assertEquals('Ford', $make['name']);
-//        $this->assertEquals(null, $make['models']);
+        $this->assertArrayNotHasKey('year', $make['models'][0]);
+        $this->assertArrayNotHasKey('year', $make['models'][1]);
+
+        // Select all parent attributes, some child attributes
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['*', 'models.year']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals(2, \count($make['models']));
+        $this->assertArrayNotHasKey('name', $make['models'][0]);
+        $this->assertArrayNotHasKey('name', $make['models'][1]);
+        $this->assertEquals(2010, $make['models'][0]['year']);
+        $this->assertEquals(2011, $make['models'][1]['year']);
+
+        // Select all parent attributes, all child attributes
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['*', 'models.*']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals(2, \count($make['models']));
+        $this->assertEquals('Fiesta', $make['models'][0]['name']);
+        $this->assertEquals('Focus', $make['models'][1]['name']);
+        $this->assertEquals(2010, $make['models'][0]['year']);
+        $this->assertEquals(2011, $make['models'][1]['year']);
+
+        // Select all parent attributes, all child attributes
+        // Must select parent if selecting children
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['models.*']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals(2, \count($make['models']));
+        $this->assertEquals('Fiesta', $make['models'][0]['name']);
+        $this->assertEquals('Focus', $make['models'][1]['name']);
+        $this->assertEquals(2010, $make['models'][0]['year']);
+        $this->assertEquals(2011, $make['models'][1]['year']);
+
+        // Select all parent attributes, no child attributes
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertArrayNotHasKey('models', $make);
     }
 
     public function testEvents(): void

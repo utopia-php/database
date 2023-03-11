@@ -396,7 +396,7 @@ class Mongo extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        if (!empty($selections)) {
+        if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -611,7 +611,7 @@ class Mongo extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        if (!empty($selections)) {
+        if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 

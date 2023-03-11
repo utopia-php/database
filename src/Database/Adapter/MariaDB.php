@@ -1144,7 +1144,7 @@ class MariaDB extends SQL
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
-        if (empty($selections)) {
+        if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {
                 return "`{$prefix}`.*";
             }

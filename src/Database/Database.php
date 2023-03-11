@@ -1835,7 +1835,27 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $selections = $this->validateSelections($collection, $queries);
+        $selects = Query::groupByType($queries)['selections'];
+        $selections = $this->validateSelections($collection, $selects);
+        $nestedSelections = [];
+
+        foreach ($queries as $index => $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    foreach ($query->getValues() as $value) {
+                        if (\str_contains($value, '.')) {
+                            $nestedSelections[] = Query::select([
+                                \implode('.', \array_slice(\explode('.', $value), 1))
+                            ]);
+                            unset($queries[$index]);
+                            break;
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -1872,8 +1892,8 @@ class Database
             return new Document();
         }
 
-        if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->getDocumentRelationships($collection, $document, $selections));
+        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+            $this->silent(fn () => $this->getDocumentRelationships($collection, $document, $nestedSelections));
         }
 
         $document = $this->casting($collection, $document);
@@ -1889,10 +1909,11 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
+     * @param array<Query> $queries
      * @return Document
      * @throws Throwable
      */
-    private function getDocumentRelationships(Document $collection, Document $document): Document
+    private function getDocumentRelationships(Document $collection, Document $document, array $queries): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1923,7 +1944,7 @@ class Database
 
                     $fetchDepth++;
 
-                    $related = $this->getDocument($relatedCollection->getId(), $value);
+                    $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                     $fetchDepth = 0;
 
@@ -1934,7 +1955,7 @@ class Database
                         if (\is_null($value)) {
                             break;
                         }
-                        $related = $this->getDocument($relatedCollection->getId(), $value);
+                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
                         $document->setAttribute($key, $related);
                         break;
                     }
@@ -1953,6 +1974,7 @@ class Database
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
+                        ...$queries
                     ]);
 
                     foreach ($relatedDocuments as $related) {
@@ -1969,7 +1991,7 @@ class Database
                             $document->removeAttribute($key);
                         }
                         if ($twoWay && !\is_null($value)) {
-                            $related = $this->getDocument($relatedCollection->getId(), $value);
+                            $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
                             $document->setAttribute($key, $related);
                         }
                         break;
@@ -1985,6 +2007,7 @@ class Database
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
+                        ...$queries
                     ]);
 
                     foreach ($relatedDocuments as $related) {
@@ -2019,7 +2042,8 @@ class Database
                     foreach ($junctions as $junction) {
                         $related[] = $this->getDocument(
                             $relatedCollection->getId(),
-                            $junction->getAttribute($key)
+                            $junction->getAttribute($key),
+                            $queries
                         );
                     }
 
@@ -2895,7 +2919,7 @@ class Database
      */
     public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
-        if (!is_null($timeout) && $timeout <= 0) {
+        if (!\is_null($timeout) && $timeout <= 0) {
             throw new Exception('Timeout must be greater than 0');
         }
 
@@ -2903,7 +2927,7 @@ class Database
 
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
-        $selections = $grouped['selections'];
+        $selects = $grouped['selections'];
         $limit = $grouped['limit'];
         $offset = $grouped['offset'];
         $orderAttributes = $grouped['orderAttributes'];
@@ -2918,18 +2942,22 @@ class Database
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         $queries = \array_merge(
-            $selections,
+            $selects,
             self::convertQueries($collection, $filters)
         );
 
-        $selections = $this->validateSelections($collection, $selections);
+        $selections = $this->validateSelections($collection, $selects);
+        $nestedSelections = [];
+        $nestedQueries = [];
 
-        $nested = [];
         foreach ($queries as $index => $query) {
             switch ($query->getMethod()) {
                 case Query::TYPE_SELECT:
                     foreach ($query->getValues() as $value) {
                         if (\str_contains($value, '.')) {
+                            $nestedSelections[] = Query::select([
+                                \implode('.', \array_slice(\explode('.', $value), 1))
+                            ]);
                             unset($queries[$index]);
                             break;
                         }
@@ -2937,7 +2965,7 @@ class Database
                     break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {
-                        $nested[] = $query;
+                        $nestedQueries[] = $query;
                         unset($queries[$index]);
                     }
                     break;
@@ -2962,9 +2990,10 @@ class Database
             return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
         }) : [];
 
+
         foreach ($results as $index => &$node) {
-            if ($this->resolveRelationships) {
-                $node = $this->getDocumentRelationships($collection, $node);
+            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+                $node = $this->getDocumentRelationships($collection, $node, $nestedSelections);
             }
 
             $node = $this->casting($collection, $node);
@@ -2972,7 +3001,7 @@ class Database
             $node->setAttribute('$collection', $collection->getId());
 
             // Post apply nested queries
-            foreach ($nested as $query) {
+            foreach ($nestedQueries as $query) {
                 $path = \explode('.', $query->getAttribute());
 
                 if (\count($path) == 1) {
@@ -3241,12 +3270,9 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
-        $attributes = [];
-        foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
-                $attributes[] = $attribute;
-            }
-        }
+        $attributes = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            return $attribute['type'] !== self::VAR_RELATIONSHIP;
+        });
 
         $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
@@ -3266,55 +3292,6 @@ class Database
             if (empty($selections) || \in_array($key, $selections)) {
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
-        }
-
-        $filteredArray = [];
-        foreach ($selections as $path) {
-            $keys = \explode('.', $path);
-            $currentArray = $document->getArrayCopy();
-            $tempArray = &$filteredArray;
-            $wildcardIndex = \array_search('*', $keys, true);
-
-            if ($wildcardIndex !== false) {
-                $wildcardKeys = \array_slice($keys, $wildcardIndex + 1);
-                $keys = \array_slice($keys, 0, $wildcardIndex);
-            } else {
-                $wildcardKeys = [];
-            }
-
-            foreach ($keys as $key) {
-                if (!\array_key_exists($key, $currentArray)) {
-                    continue 2;
-                }
-                $currentArray = $currentArray[$key];
-                if (!isset($tempArray[$key])) {
-                    $tempArray[$key] = [];
-                }
-                $tempArray = &$tempArray[$key];
-            }
-
-            if (empty($wildcardKeys)) {
-                $tempArray = $currentArray;
-                break;
-            }
-
-            foreach ($currentArray as $subArray) {
-                $tempSubArray = &$tempArray;
-                foreach ($wildcardKeys as $wildcardKey) {
-                    if (!\array_key_exists($wildcardKey, $subArray)) {
-                        continue 2;
-                    }
-                    if (!isset($tempSubArray[$wildcardKey])) {
-                        $tempSubArray[$wildcardKey] = [];
-                    }
-                    $tempSubArray = &$tempSubArray[$wildcardKey];
-                }
-                $tempSubArray = $subArray;
-            }
-        }
-
-        if (!empty($selections)) {
-            $document = new Document($filteredArray);
         }
 
         return $document;
@@ -3451,6 +3428,7 @@ class Database
 
         $selections = [];
         $relationshipSelections = [];
+
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 foreach ($query->getValues() as $value) {
@@ -3463,38 +3441,19 @@ class Database
             }
         }
 
-        $attributes = [];
-        $relationships = [];
+        $keys = [];
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            if ($attribute['type'] === self::VAR_RELATIONSHIP) {
-                $relationships[] = $attribute['key'];
-                continue;
+            if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
+                $keys[] = $attribute['key'];
             }
-            $attributes[] = $attribute['key'];
         }
 
-        $invalid = \array_diff($selections, $attributes);
-        if (!empty($invalid)) {
-            throw new \Exception('Cannot select attributes: ' . \implode(', ', $invalid));
+        $invalid = \array_diff($selections, $keys);
+        if (!empty($invalid) && !\in_array('*', $invalid)) {
+            throw new \Exception('Can not select attributes: ' . \implode(', ', $invalid));
         }
 
-        foreach ($relationshipSelections as $relationshipSelection) {
-            $path = \explode('.', $relationshipSelection);
-
-            $matched = false;
-            foreach ($relationships as $relationship) {
-                if ($relationship === $path[0]) {
-                    $matched = true;
-                    break;
-                }
-            }
-
-            if (!$matched) {
-                throw new \Exception('Cannot select relationship attribute: ' . $path[0]);
-            }
-
-            $selections[] = $relationshipSelection;
-        }
+        $selections = \array_merge($selections, $relationshipSelections);
 
         $selections[] = '$id';
         $selections[] = '$internalId';

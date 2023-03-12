@@ -51,6 +51,7 @@ class Database
     public const RELATION_SIDE_PARENT = 'parent';
     public const RELATION_SIDE_CHILD = 'child';
 
+    public const RELATION_MAX_DEPTH = 2;
 
     // Orders
     public const ORDER_ASC = 'ASC';
@@ -1899,7 +1900,22 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
 
-        $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
+        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
+
+        $hasTwoWayRelationship = false;
+        foreach ($relationships as $relationship) {
+            if ($relationship['options']['twoWay']) {
+                $hasTwoWayRelationship = true;
+                break;
+            }
+        }
+
+        // Don't save to cache if there is a two-way relationship
+        if (!$hasTwoWayRelationship) {
+            $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -1922,6 +1938,7 @@ class Database
         });
 
         static $fetchDepth = 0;
+        static $fetchedRelationships = [];
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -1937,53 +1954,31 @@ class Database
                     if (\is_null($value)) {
                         break;
                     }
-                    if ($twoWay && $fetchDepth === 2) {
-                        $fetchDepth = 0;
+
+                    $fetchedCurrent = false;
+                    foreach ($fetchedRelationships as $fetchedRelationship) {
+                        if ($fetchedRelationship['key'] === $twoWayKey
+                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
+                        ) {
+                            $fetchedCurrent = true;
+                            break;
+                        }
+                    }
+
+                    if ($fetchedCurrent) {
+                        $document->removeAttribute($key);
+                    }
+
+                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent)) {
                         break;
                     }
 
                     $fetchDepth++;
+                    $fetchedRelationships[] = $relationship;
 
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
-                    $fetchDepth = 0;
-
                     $document->setAttribute($key, $related);
-                    break;
-                case Database::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if (\is_null($value)) {
-                            break;
-                        }
-                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-                        $document->setAttribute($key, $related);
-                        break;
-                    }
-                    if (!$twoWay) {
-                        $document->removeAttribute($key);
-                        break;
-                    }
-
-                    if ($fetchDepth === 2) {
-                        $fetchDepth = 0;
-                        break;
-                    }
-
-                    $fetchDepth++;
-
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ]);
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $fetchDepth = 0;
-
-                    $document->setAttribute($key, $relatedDocuments);
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_CHILD) {
@@ -1991,18 +1986,28 @@ class Database
                             $document->removeAttribute($key);
                         }
                         if ($twoWay && !\is_null($value)) {
+                            $fetchedRelationships[] = $relationship;
                             $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
                             $document->setAttribute($key, $related);
                         }
                         break;
                     }
 
-                    if ($twoWay && $fetchDepth === 2) {
-                        $fetchDepth = 0;
+                    $fetchedCurrent = false;
+                    foreach ($fetchedRelationships as $fetchedRelationship) {
+                        if ($fetchedRelationship['key'] === $twoWayKey
+                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
+                        ) {
+                            $fetchedCurrent = true;
+                        }
+                    }
+
+                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent)) {
                         break;
                     }
 
                     $fetchDepth++;
+                    $fetchedRelationships[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2014,7 +2019,49 @@ class Database
                         $related->removeAttribute($twoWayKey);
                     }
 
-                    $fetchDepth = 0;
+                    $document->setAttribute($key, $relatedDocuments);
+                    break;
+                case Database::RELATION_MANY_TO_ONE:
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if (\is_null($value)) {
+                            break;
+                        }
+                        $fetchedRelationships[] = $relationship;
+                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                        $document->setAttribute($key, $related);
+                        break;
+                    }
+
+                    if (!$twoWay) {
+                        $document->removeAttribute($key);
+                        break;
+                    }
+
+                    $fetchedCurrent = false;
+                    foreach ($fetchedRelationships as $fetchedRelationship) {
+                        if ($fetchedRelationship['key'] === $twoWayKey
+                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
+                        ) {
+                            $fetchedCurrent = true;
+                        }
+                    }
+
+                    if ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent) {
+                        break;
+                    }
+
+                    $fetchDepth++;
+                    $fetchedRelationships[] = $relationship;
+
+                    $relatedDocuments = $this->find($relatedCollection->getId(), [
+                        Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX),
+                        ...$queries
+                    ]);
+
+                    foreach ($relatedDocuments as $related) {
+                        $related->removeAttribute($twoWayKey);
+                    }
 
                     $document->setAttribute($key, $relatedDocuments);
                     break;
@@ -2023,12 +2070,21 @@ class Database
                         break;
                     }
 
-                    if ($twoWay && $fetchDepth === 2) {
-                        $fetchDepth = 0;
+                    $fetchedCurrent = false;
+                    foreach ($fetchedRelationships as $fetchedRelationship) {
+                        if ($fetchedRelationship['key'] === $twoWayKey
+                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
+                        ) {
+                            $fetchedCurrent = true;
+                        }
+                    }
+
+                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent)) {
                         break;
                     }
 
                     $fetchDepth++;
+                    $fetchedRelationships[] = $relationship;
 
                     $junction = $side === Database::RELATION_SIDE_PARENT
                         ? $collection->getId() . '_' . $relatedCollection->getId()
@@ -2047,11 +2103,12 @@ class Database
                         );
                     }
 
-                    $fetchDepth = 0;
-
                     $document->setAttribute($key, $related);
                     break;
             }
+
+            $fetchDepth = 0;
+            $fetchedRelationships = [];
         }
 
         return $document;

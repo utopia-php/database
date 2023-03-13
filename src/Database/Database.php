@@ -1576,11 +1576,11 @@ class Database
             }
         }
 
-        $collection->setAttribute('attributes', $attributes);
-
         if (\is_null($relationship)) {
             throw new Exception('Attribute not found');
         }
+
+        $collection->setAttribute('attributes', $attributes);
 
         $relatedCollection = $relationship['options']['relatedCollection'];
         $type = $relationship['options']['relationType'];
@@ -2090,9 +2090,9 @@ class Database
                         ? $collection->getId() . '_' . $relatedCollection->getId()
                         : $relatedCollection->getId() . '_' . $collection->getId();
 
-                    $junctions = $this->find($junction, [
+                    $junctions = $this->skipRelationships(fn() => $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
-                    ]);
+                    ]));
 
                     $related = [];
                     foreach ($junctions as $junction) {
@@ -2180,6 +2180,7 @@ class Database
             $relationType = $relationship['options']['relationType'];
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
+            $side = $relationship['options']['side'];
 
             switch (\gettype($value)) {
                 case 'array':
@@ -2198,7 +2199,8 @@ class Database
                                     $related,
                                     $relationType,
                                     $twoWay,
-                                    $twoWayKey
+                                    $twoWayKey,
+                                    $side
                                 );
                                 break;
                             case 'string':
@@ -2210,7 +2212,8 @@ class Database
                                     $related,
                                     $relationType,
                                     $twoWay,
-                                    $twoWayKey
+                                    $twoWayKey,
+                                    $side
                                 );
                                 break;
                             default:
@@ -2231,7 +2234,8 @@ class Database
                         $value,
                         $relationType,
                         $twoWay,
-                        $twoWayKey
+                        $twoWayKey,
+                        $side
                     );
                     $document->setAttribute($key, $relatedId);
                     break;
@@ -2245,7 +2249,8 @@ class Database
                         $value,
                         $relationType,
                         $twoWay,
-                        $twoWayKey
+                        $twoWayKey,
+                        $side
                     );
                     break;
                 case 'NULL':
@@ -2265,7 +2270,8 @@ class Database
         Document $relation,
         string $relationType,
         bool $twoWay,
-        string $twoWayKey
+        string $twoWayKey,
+        string $side
     ): string {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
@@ -2274,7 +2280,14 @@ class Database
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                $relation->setAttribute($twoWayKey, $document->getId());
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $relation->setAttribute($twoWayKey, $document->getId());
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $relation->setAttribute($twoWayKey, $document->getId());
+                }
                 break;
         }
 
@@ -2292,7 +2305,9 @@ class Database
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
-            $junction = $collection . '_' . $relatedCollection;
+            $junction = $side === Database::RELATION_SIDE_PARENT
+                ? $collection . '_' . $relatedCollection
+                : $relatedCollection . '_' . $collection;
 
             $this->createDocument($junction, new Document([
                 $key => $related->getId(),
@@ -2316,7 +2331,8 @@ class Database
         string $relationId,
         string $relationType,
         bool $twoWay,
-        string $twoWayKey
+        string $twoWayKey,
+        string $side
     ): void {
         // Get the related document, will be empty on permissions failure
         $related = $this->getDocument($relatedCollection, $relationId);
@@ -2335,18 +2351,23 @@ class Database
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                $related->setAttribute($twoWayKey, $documentId);
-                $this->skipRelationships(fn () =>
-                    $this->updateDocument($relatedCollection, $relationId, $related)
-                );
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $related->setAttribute($twoWayKey, $documentId);
+                    $this->skipRelationships(fn() => $this->updateDocument($relatedCollection, $relationId, $related));
+                }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                $this->deleteCachedDocument($relatedCollection, $relationId);
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $related->setAttribute($twoWayKey, $documentId);
+                    $this->skipRelationships(fn() => $this->updateDocument($relatedCollection, $relationId, $related));
+                }
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $this->deleteCachedDocument($relatedCollection, $relationId);
 
-                $junction = $collection . '_' . $relatedCollection;
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $collection . '_' . $relatedCollection
+                    : $relatedCollection . '_' . $collection;
 
                 $this->createDocument($junction, new Document([
                     $key => $related->getId(),

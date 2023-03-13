@@ -3774,14 +3774,22 @@ abstract class Base extends TestCase
             'library' => 'library2',
         ]));
 
-        // Get document with relationship
+        // Get documents with relationship
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('library');
         $this->assertEquals('library1', $library['$id']);
         $this->assertArrayNotHasKey('person', $library);
 
-        // Get related document
+        $person = static::getDatabase()->getDocument('person', 'person2');
+        $library = $person->getAttribute('library');
+        $this->assertEquals('library2', $library['$id']);
+        $this->assertArrayNotHasKey('person', $library);
+
+        // Get related documents
         $library = static::getDatabase()->getDocument('library', 'library1');
+        $this->assertArrayNotHasKey('person', $library);
+
+        $library = static::getDatabase()->getDocument('library', 'library2');
         $this->assertArrayNotHasKey('person', $library);
 
         // Query related document
@@ -3969,7 +3977,7 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        $country1 = static::getDatabase()->createDocument('country', new Document([
+        static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -3988,7 +3996,6 @@ abstract class Base extends TestCase
                 'code' => 'LON',
             ],
         ]));
-
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('city', new Document([
             '$id' => 'city2',
@@ -4011,17 +4018,88 @@ abstract class Base extends TestCase
             'city' => 'city2',
         ]));
 
+        // Create from child side
+        static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Christchurch',
+            'code' => 'CHC',
+            'country' => [
+                '$id' => 'country3',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'New Zealand',
+            ],
+        ]));
+        static::getDatabase()->createDocument('country', new Document([
+            '$id' => 'country4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Australia',
+        ]));
+        static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Sydney',
+            'code' => 'SYD',
+            'country' => 'country4',
+        ]));
+
         // Get document with relationship
-        $city1 = static::getDatabase()->getDocument('city', 'city1');
-        $country = $city1->getAttribute('country');
+        $city = static::getDatabase()->getDocument('city', 'city1');
+        $country = $city->getAttribute('country');
         $this->assertEquals('country1', $country['$id']);
+        $this->assertArrayNotHasKey('city', $country);
+
+        $city = static::getDatabase()->getDocument('city', 'city2');
+        $country = $city->getAttribute('country');
+        $this->assertEquals('country2', $country['$id']);
+        $this->assertArrayNotHasKey('city', $country);
+
+        $city = static::getDatabase()->getDocument('city', 'city3');
+        $country = $city->getAttribute('country');
+        $this->assertEquals('country3', $country['$id']);
+        $this->assertArrayNotHasKey('city', $country);
+
+        $city = static::getDatabase()->getDocument('city', 'city4');
+        $country = $city->getAttribute('country');
+        $this->assertEquals('country4', $country['$id']);
         $this->assertArrayNotHasKey('city', $country);
 
         // Get inverse document with relationship
         $country = static::getDatabase()->getDocument('country', 'country1');
-        $city1 = $country->getAttribute('city');
-        $this->assertEquals('city1', $city1['$id']);
-        $this->assertArrayNotHasKey('country', $city1);
+        $city = $country->getAttribute('city');
+        $this->assertEquals('city1', $city['$id']);
+        $this->assertArrayNotHasKey('country', $city);
+
+        $country = static::getDatabase()->getDocument('country', 'country2');
+        $city = $country->getAttribute('city');
+        $this->assertEquals('city2', $city['$id']);
+        $this->assertArrayNotHasKey('country', $city);
+
+        $country = static::getDatabase()->getDocument('country', 'country3');
+        $city = $country->getAttribute('city');
+        $this->assertEquals('city3', $city['$id']);
+        $this->assertArrayNotHasKey('country', $city);
+
+        $country = static::getDatabase()->getDocument('country', 'country4');
+        $city = $country->getAttribute('city');
+        $this->assertEquals('city4', $city['$id']);
+        $this->assertArrayNotHasKey('country', $city);
 
         // Query related document
         $countries = static::getDatabase()->find('country', [
@@ -4038,7 +4116,7 @@ abstract class Base extends TestCase
 
         $countries = static::getDatabase()->find('country');
 
-        $this->assertEquals(2, \count($countries));
+        $this->assertEquals(4, \count($countries));
 
         // Select related document attributes
         $country = static::getDatabase()->findOne('country', [
@@ -4055,6 +4133,8 @@ abstract class Base extends TestCase
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
 
+        $country1 = static::getDatabase()->getDocument('country', 'country1');
+
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
@@ -4066,6 +4146,8 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+
         // Set relationship to null
         static::getDatabase()->updateDocument(
             'city',
@@ -4074,8 +4156,8 @@ abstract class Base extends TestCase
         );
 
         // Create a new city with no relation
-        $city3 = static::getDatabase()->createDocument('city', new Document([
-            '$id' => 'city3',
+        static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city5',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4089,7 +4171,7 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
-            $country1->setAttribute('city', 'city3')
+            $country1->setAttribute('city', 'city5')
         );
 
         // Query new relationship
@@ -4101,7 +4183,7 @@ abstract class Base extends TestCase
 
         // Create a new city with no relation
         static::getDatabase()->createDocument('country', new Document([
-            '$id' => 'country3',
+            '$id' => 'country5',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4114,7 +4196,7 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'city',
             $city1->getId(),
-            $city1->setAttribute('country', 'country3')
+            $city1->setAttribute('country', 'country5')
         );
 
         // Query inverse related document again
@@ -4135,10 +4217,10 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $city = static::getDatabase()->getDocument('city', 'city1');
         $country = $city->getAttribute('newCountry');
-        $this->assertEquals('country3', $country['$id']);
+        $this->assertEquals('country5', $country['$id']);
 
         // Get inverse document with new relationship key
-        $country = static::getDatabase()->getDocument('country', 'country3');
+        $country = static::getDatabase()->getDocument('country', 'country5');
         $city = $country->getAttribute('newCity');
         $this->assertEquals('city1', $city['$id']);
 
@@ -4160,8 +4242,8 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteDocument('country', 'country1');
 
         // Check relation was set to null
-        $city2 = static::getDatabase()->getDocument('city', 'city3');
-        $this->assertEquals(null, $city2->getAttribute('country', ''));
+        $city5 = static::getDatabase()->getDocument('city', 'city5');
+        $this->assertEquals(null, $city5->getAttribute('country', ''));
 
         // Delete child, set parent relationship to null for two-way
         static::getDatabase()->deleteDocument('city', 'city2');
@@ -4173,8 +4255,8 @@ abstract class Base extends TestCase
         // Relate again
         static::getDatabase()->updateDocument(
             'city',
-            $city3->getId(),
-            $city3->setAttribute('newCountry', 'country2')
+            $city5->getId(),
+            $city5->setAttribute('newCountry', 'country2')
         );
 
         // Change on delete to cascade
@@ -4185,20 +4267,20 @@ abstract class Base extends TestCase
         );
 
         // Delete parent, will delete child
-        static::getDatabase()->deleteDocument('country', 'country3');
+        static::getDatabase()->deleteDocument('country', 'country5');
 
         // Check parent and child were deleted
-        $library = static::getDatabase()->getDocument('country', 'country3');
+        $library = static::getDatabase()->getDocument('country', 'country5');
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('city', 'city1');
         $this->assertEquals(true, $library->isEmpty());
 
         // Delete child, will delete parent for two-way
-        static::getDatabase()->deleteDocument('city', 'city3');
+        static::getDatabase()->deleteDocument('city', 'city5');
 
         // Check parent and child were deleted
-        $library = static::getDatabase()->getDocument('city', 'city3');
+        $library = static::getDatabase()->getDocument('city', 'city5');
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('country', 'country2');
@@ -4206,7 +4288,7 @@ abstract class Base extends TestCase
 
         // Create new document to check after deleting relationship
         static::getDatabase()->createDocument('city', new Document([
-            '$id' => 'city4',
+            '$id' => 'city6',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4215,7 +4297,7 @@ abstract class Base extends TestCase
             'name' => 'Munich',
             'code' => 'MUC',
             'newCountry' => [
-                '$id' => 'country4',
+                '$id' => 'country5',
                 'name' => 'Germany'
             ]
         ]));
@@ -4232,7 +4314,7 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $city);
 
         // Try to get inverse document again
-        $city = static::getDatabase()->getDocument('city', 'city4');
+        $city = static::getDatabase()->getDocument('city', 'city6');
         $country = $city->getAttribute('newCountry');
         $this->assertEquals(null, $country);
     }
@@ -4317,8 +4399,16 @@ abstract class Base extends TestCase
         $this->assertEquals('album1', $albums[0]['$id']);
         $this->assertArrayNotHasKey('artist', $albums[0]);
 
+        $artist = static::getDatabase()->getDocument('artist', 'artist2');
+        $albums = $artist->getAttribute('albums', []);
+        $this->assertEquals('album2', $albums[0]['$id']);
+        $this->assertArrayNotHasKey('artist', $albums[0]);
+
         // Get related document
         $album = static::getDatabase()->getDocument('album', 'album1');
+        $this->assertArrayNotHasKey('albums', $album);
+
+        $album = static::getDatabase()->getDocument('album', 'album2');
         $this->assertArrayNotHasKey('albums', $album);
 
         // Query related document
@@ -4523,7 +4613,6 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-
         // Create document with relationship with related ID
         $account2 = static::getDatabase()->createDocument('account', new Document([
             '$id' => 'account2',
@@ -4535,7 +4624,6 @@ abstract class Base extends TestCase
             'name' => 'Account 2',
             'number' => '987654321',
         ]));
-
         static::getDatabase()->createDocument('customer', new Document([
             '$id' => 'customer2',
             '$permissions' => [
@@ -4549,16 +4637,87 @@ abstract class Base extends TestCase
             ]
         ]));
 
-        // Get document with relationship
+        // Create from child side
+        static::getDatabase()->createDocument('account', new Document([
+            '$id' => 'account3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Account 3',
+            'number' => '123456789',
+            'customer' => [
+                '$id' => 'customer3',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Customer 3'
+            ]
+        ]));
+        static::getDatabase()->createDocument('customer', new Document([
+            '$id' => 'customer4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Customer 4',
+        ]));
+        static::getDatabase()->createDocument('account', new Document([
+            '$id' => 'account4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Account 4',
+            'number' => '123456789',
+            'customer' => 'customer4'
+        ]));
+
+        // Get documents with relationship
         $customer = static::getDatabase()->getDocument('customer', 'customer1');
         $accounts = $customer->getAttribute('accounts', []);
         $this->assertEquals('account1', $accounts[0]['$id']);
         $this->assertArrayNotHasKey('customer', $accounts[0]);
 
-        // Get related document
+        $customer = static::getDatabase()->getDocument('customer', 'customer2');
+        $accounts = $customer->getAttribute('accounts', []);
+        $this->assertEquals('account2', $accounts[0]['$id']);
+        $this->assertArrayNotHasKey('customer', $accounts[0]);
+
+        $customer = static::getDatabase()->getDocument('customer', 'customer3');
+        $accounts = $customer->getAttribute('accounts', []);
+        $this->assertEquals('account3', $accounts[0]['$id']);
+        $this->assertArrayNotHasKey('customer', $accounts[0]);
+
+        $customer = static::getDatabase()->getDocument('customer', 'customer4');
+        $accounts = $customer->getAttribute('accounts', []);
+        $this->assertEquals('account4', $accounts[0]['$id']);
+        $this->assertArrayNotHasKey('customer', $accounts[0]);
+
+        // Get related documents
         $account = static::getDatabase()->getDocument('account', 'account1');
         $customer = $account->getAttribute('customer');
         $this->assertEquals('customer1', $customer['$id']);
+        $this->assertArrayNotHasKey('accounts', $customer);
+
+        $account = static::getDatabase()->getDocument('account', 'account2');
+        $customer = $account->getAttribute('customer');
+        $this->assertEquals('customer2', $customer['$id']);
+        $this->assertArrayNotHasKey('accounts', $customer);
+
+        $account = static::getDatabase()->getDocument('account', 'account3');
+        $customer = $account->getAttribute('customer');
+        $this->assertEquals('customer3', $customer['$id']);
+        $this->assertArrayNotHasKey('accounts', $customer);
+
+        $account = static::getDatabase()->getDocument('account', 'account4');
+        $customer = $account->getAttribute('customer');
+        $this->assertEquals('customer4', $customer['$id']);
         $this->assertArrayNotHasKey('accounts', $customer);
 
         // Query related document
@@ -4577,7 +4736,7 @@ abstract class Base extends TestCase
 
         $customers = static::getDatabase()->find('customer');
 
-        $this->assertEquals(2, \count($customers));
+        $this->assertEquals(4, \count($customers));
 
         // Select related document attributes
         $customer = static::getDatabase()->findOne('customer', [
@@ -4818,8 +4977,16 @@ abstract class Base extends TestCase
         $this->assertEquals('movie1', $movie['$id']);
         $this->assertArrayNotHasKey('reviews', $movie);
 
+        $review = static::getDatabase()->getDocument('review', 'review2');
+        $movie = $review->getAttribute('movie', []);
+        $this->assertEquals('movie2', $movie['$id']);
+        $this->assertArrayNotHasKey('reviews', $movie);
+
         // Get related document
         $movie = static::getDatabase()->getDocument('movie', 'movie1');
+        $this->assertArrayNotHasKey('reviews', $movie);
+
+        $movie = static::getDatabase()->getDocument('movie', 'movie2');
         $this->assertArrayNotHasKey('reviews', $movie);
 
         // Query related document
@@ -5038,16 +5205,92 @@ abstract class Base extends TestCase
             'store' => 'store2',
         ]));
 
+        // Create from child side
+        static::getDatabase()->createDocument('store', new Document([
+            '$id' => 'store3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store 3',
+            'opensAt' => '11:30',
+            'products' => [
+                [
+                    '$id' => 'product3',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'name' => 'Product 3',
+                ],
+            ],
+        ]));
+
+        static::getDatabase()->createDocument('product', new Document([
+            '$id' => 'product4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Product 4',
+        ]));
+        static::getDatabase()->createDocument('store', new Document([
+            '$id' => 'store4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store 4',
+            'opensAt' => '11:30',
+            'products' => [
+                'product4',
+            ],
+        ]));
+
         // Get document with relationship
         $product = static::getDatabase()->getDocument('product', 'product1');
         $store = $product->getAttribute('store', []);
         $this->assertEquals('store1', $store['$id']);
         $this->assertArrayNotHasKey('products', $store);
 
+        $product = static::getDatabase()->getDocument('product', 'product2');
+        $store = $product->getAttribute('store', []);
+        $this->assertEquals('store2', $store['$id']);
+        $this->assertArrayNotHasKey('products', $store);
+
+        $product = static::getDatabase()->getDocument('product', 'product3');
+        $store = $product->getAttribute('store', []);
+        $this->assertEquals('store3', $store['$id']);
+        $this->assertArrayNotHasKey('products', $store);
+
+        $product = static::getDatabase()->getDocument('product', 'product4');
+        $store = $product->getAttribute('store', []);
+        $this->assertEquals('store4', $store['$id']);
+        $this->assertArrayNotHasKey('products', $store);
+
         // Get related document
         $store = static::getDatabase()->getDocument('store', 'store1');
         $products = $store->getAttribute('products');
         $this->assertEquals('product1', $products[0]['$id']);
+        $this->assertArrayNotHasKey('store', $products[0]);
+
+        $store = static::getDatabase()->getDocument('store', 'store2');
+        $products = $store->getAttribute('products');
+        $this->assertEquals('product2', $products[0]['$id']);
+        $this->assertArrayNotHasKey('store', $products[0]);
+
+        $store = static::getDatabase()->getDocument('store', 'store3');
+        $products = $store->getAttribute('products');
+        $this->assertEquals('product3', $products[0]['$id']);
+        $this->assertArrayNotHasKey('store', $products[0]);
+
+        $store = static::getDatabase()->getDocument('store', 'store4');
+        $products = $store->getAttribute('products');
+        $this->assertEquals('product4', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
 
         // Query related document
@@ -5066,7 +5309,7 @@ abstract class Base extends TestCase
 
         $products = static::getDatabase()->find('product');
 
-        $this->assertEquals(2, \count($products));
+        $this->assertEquals(4, \count($products));
 
         // Select related document attributes
         $product = static::getDatabase()->findOne('product', [
@@ -5301,8 +5544,16 @@ abstract class Base extends TestCase
         $this->assertEquals('song1', $songs[0]['$id']);
         $this->assertArrayNotHasKey('playlist', $songs[0]);
 
+        $playlist = static::getDatabase()->getDocument('playlist', 'playlist2');
+        $songs = $playlist->getAttribute('songs', []);
+        $this->assertEquals('song2', $songs[0]['$id']);
+        $this->assertArrayNotHasKey('playlist', $songs[0]);
+
         // Get related document
         $library = static::getDatabase()->getDocument('song', 'song1');
+        $this->assertArrayNotHasKey('songs', $library);
+
+        $library = static::getDatabase()->getDocument('song', 'song2');
         $this->assertArrayNotHasKey('songs', $library);
 
         // Query related document
@@ -5516,16 +5767,92 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Create from child side
+        static::getDatabase()->createDocument('classes', new Document([
+            '$id' => 'class3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Class 3',
+            'number' => 3,
+            'students' => [
+                [
+                    '$id' => 'student3',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'name' => 'Student 3',
+                ]
+            ],
+        ]));
+        static::getDatabase()->createDocument('students', new Document([
+            '$id' => 'student4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Student 4'
+        ]));
+        static::getDatabase()->createDocument('classes', new Document([
+            '$id' => 'class4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+
+            ],
+            'name' => 'Class 4',
+            'number' => 4,
+            'students' => [
+                'student4'
+            ],
+        ]));
+
         // Get document with relationship
         $student = static::getDatabase()->getDocument('students', 'student1');
         $classes = $student->getAttribute('classes', []);
         $this->assertEquals('class1', $classes[0]['$id']);
         $this->assertArrayNotHasKey('students', $classes[0]);
 
+        $student = static::getDatabase()->getDocument('students', 'student2');
+        $classes = $student->getAttribute('classes', []);
+        $this->assertEquals('class2', $classes[0]['$id']);
+        $this->assertArrayNotHasKey('students', $classes[0]);
+
+        $student = static::getDatabase()->getDocument('students', 'student3');
+        $classes = $student->getAttribute('classes', []);
+        $this->assertEquals('class3', $classes[0]['$id']);
+        $this->assertArrayNotHasKey('students', $classes[0]);
+
+        $student = static::getDatabase()->getDocument('students', 'student4');
+        $classes = $student->getAttribute('classes', []);
+        $this->assertEquals('class4', $classes[0]['$id']);
+        $this->assertArrayNotHasKey('students', $classes[0]);
+
         // Get related document
         $class = static::getDatabase()->getDocument('classes', 'class1');
         $student = $class->getAttribute('students');
         $this->assertEquals('student1', $student[0]['$id']);
+        $this->assertArrayNotHasKey('classes', $student[0]);
+
+        $class = static::getDatabase()->getDocument('classes', 'class2');
+        $student = $class->getAttribute('students');
+        $this->assertEquals('student2', $student[0]['$id']);
+        $this->assertArrayNotHasKey('classes', $student[0]);
+
+        $class = static::getDatabase()->getDocument('classes', 'class3');
+        $student = $class->getAttribute('students');
+        $this->assertEquals('student3', $student[0]['$id']);
+        $this->assertArrayNotHasKey('classes', $student[0]);
+
+        $class = static::getDatabase()->getDocument('classes', 'class4');
+        $student = $class->getAttribute('students');
+        $this->assertEquals('student4', $student[0]['$id']);
         $this->assertArrayNotHasKey('classes', $student[0]);
 
         // Query related document
@@ -5544,7 +5871,7 @@ abstract class Base extends TestCase
 
         $students = static::getDatabase()->find('students');
 
-        $this->assertEquals(2, \count($students));
+        $this->assertEquals(4, \count($students));
 
         // Select related document attributes
         $student = static::getDatabase()->findOne('students', [

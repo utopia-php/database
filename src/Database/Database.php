@@ -2297,11 +2297,11 @@ class Database
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it
             $related = $this->createDocument($relatedCollection, $relation);
-        } elseif ($relation->getArrayCopy() != $related->getArrayCopy()) {
+        } elseif ($related->getAttributes() != $relation->getAttributes()) {
             // If the related document exists and the data is not the same, update it
-            $related = $this->skipRelationships(fn () =>
-                $this->updateDocument($relatedCollection, $relation->getId(), $relation)
-            );
+            $relation = new Document(\array_merge($related->getArrayCopy(), $relation->getArrayCopy()));
+
+            $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {

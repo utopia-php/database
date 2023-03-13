@@ -2335,7 +2335,7 @@ class Database
         string $side
     ): void {
         // Get the related document, will be empty on permissions failure
-        $related = $this->getDocument($relatedCollection, $relationId);
+        $related = $this->skipRelationships(fn() => $this->getDocument($relatedCollection, $relationId));
 
         if ($related->isEmpty()) {
             return;

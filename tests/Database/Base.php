@@ -6107,6 +6107,309 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('models', $make);
     }
 
+    public function testNestedRelationships(): void
+    {
+        /**
+         * One to one -> one to many
+         */
+        static::getDatabase()->createCollection('teachers');
+        static::getDatabase()->createCollection('classrooms');
+        static::getDatabase()->createCollection('children');
+
+        static::getDatabase()->createAttribute('children', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('teachers', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('classrooms', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'teachers',
+            relatedCollection: 'classrooms',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'classroom',
+            twoWayKey: 'teacher'
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'classrooms',
+            relatedCollection: 'children',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            twoWayKey: 'classroom'
+        );
+
+        static::getDatabase()->createDocument('teachers', new Document([
+            '$id' => 'teacher1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Teacher 1',
+            'classroom' => [
+                '$id' => 'classroom1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Classroom 1',
+                'children' => [
+                    [
+                        '$id' => 'child1',
+                        '$permissions' => [
+                            Permission::read(Role::any()),
+                        ],
+                        'name' => 'Child 1',
+                    ],
+                    [
+                        '$id' => 'child2',
+                        '$permissions' => [
+                            Permission::read(Role::any()),
+                        ],
+                        'name' => 'Child 2',
+                    ],
+                ],
+            ],
+        ]));
+
+        $teacher1 = static::getDatabase()->getDocument('teachers', 'teacher1');
+        $this->assertEquals('classroom1', $teacher1['classroom']['$id']);
+        $this->assertArrayNotHasKey('teacher', $teacher1['classroom']);
+        $this->assertEquals(2, \count($teacher1['classroom']['children']));
+        $this->assertEquals('Child 1', $teacher1['classroom']['children'][0]['name']);
+        $this->assertEquals('Child 2', $teacher1['classroom']['children'][1]['name']);
+
+        static::getDatabase()->createDocument('children', new Document([
+            '$id' => 'child3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Child 3',
+            'classroom' => [
+                '$id' => 'classroom2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Classroom 2',
+                'teacher' => [
+                    '$id' => 'teacher2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Teacher 2',
+                ],
+            ],
+        ]));
+
+        $child3 = static::getDatabase()->getDocument('children', 'child3');
+        $this->assertEquals('classroom2', $child3['classroom']['$id']);
+        $this->assertArrayNotHasKey('children', $child3['classroom']);
+        $this->assertEquals('teacher2', $child3['classroom']['teacher']['$id']);
+        $this->assertArrayNotHasKey('classroom', $child3['classroom']['teacher']);
+
+        /**
+         * Many to one -> one to one
+         */
+        static::getDatabase()->createCollection('cities');
+        static::getDatabase()->createCollection('countries');
+        static::getDatabase()->createCollection('flags');
+
+        static::getDatabase()->createAttribute('cities', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('countries', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('flags', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'cities',
+            relatedCollection: 'countries',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'country'
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'countries',
+            relatedCollection: 'flags',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'flag',
+            twoWayKey: 'country'
+        );
+
+        static::getDatabase()->createDocument('cities', new Document([
+            '$id' => 'city1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'City 1',
+            'country' => [
+                '$id' => 'country1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Country 1',
+                'flag' => [
+                    '$id' => 'flag1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Flag 1',
+                ],
+            ],
+        ]));
+
+        $city1 = static::getDatabase()->getDocument('cities', 'city1');
+        $this->assertEquals('country1', $city1['country']['$id']);
+        $this->assertArrayNotHasKey('cities', $city1['country']);
+        $this->assertEquals('flag1', $city1['country']['flag']['$id']);
+        $this->assertArrayNotHasKey('country', $city1['country']['flag']);
+
+        static::getDatabase()->createDocument('flags', new Document([
+            '$id' => 'flag2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Flag 2',
+            'country' => [
+                '$id' => 'country2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Country 2',
+                'cities' => [
+                    [
+                        '$id' => 'city2',
+                        '$permissions' => [
+                            Permission::read(Role::any()),
+                        ],
+                        'name' => 'City 2',
+                    ],
+                    [
+                        '$id' => 'city3',
+                        '$permissions' => [
+                            Permission::read(Role::any()),
+                        ],
+                        'name' => 'City 3',
+                    ],
+                ],
+            ],
+        ]));
+
+        $flag2 = static::getDatabase()->getDocument('flags', 'flag2');
+        $this->assertEquals('country2', $flag2['country']['$id']);
+        $this->assertArrayNotHasKey('flag', $flag2['country']);
+        $this->assertEquals(2, \count($flag2['country']['cities']));
+        $this->assertEquals('city2', $flag2['country']['cities'][0]['$id']);
+        $this->assertEquals('city3', $flag2['country']['cities'][1]['$id']);
+
+        /**
+         * One to many -> many to many
+         */
+        static::getDatabase()->createCollection('authors');
+        static::getDatabase()->createCollection('books');
+        static::getDatabase()->createCollection('libraries');
+
+        static::getDatabase()->createAttribute('authors', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('books', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('libraries', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'authors',
+            relatedCollection: 'books',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            twoWayKey: 'author'
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'books',
+            relatedCollection: 'libraries',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true
+        );
+
+        static::getDatabase()->createDocument('authors', new Document([
+            '$id' => 'author1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Author 1',
+            'books' => [
+                [
+                    '$id' => 'book1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Book 1',
+                    'libraries' => [
+                        [
+                            '$id' => 'library1',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                                Permission::update(Role::any()),
+                            ],
+                            'name' => 'Library 1',
+                        ],
+                        [
+                            '$id' => 'library2',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                            ],
+                            'name' => 'Library 2',
+                        ],
+                        [
+                            '$id' => 'library3',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                            ],
+                            'name' => 'Library 3',
+                        ],
+                        [
+                            '$id' => 'library4',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                            ],
+                            'name' => 'Library 4',
+                        ],
+                    ],
+                ],
+                [
+                    '$id' => 'book2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Book 2',
+                    'libraries' => [
+                        'library1',
+                        'library2',
+                    ]
+                ],
+            ],
+        ]));
+
+        $author1 = static::getDatabase()->getDocument('authors', 'author1');
+        $this->assertEquals(2, \count($author1['books']));
+        $this->assertEquals(4, \count($author1['books'][0]['libraries']));
+        $this->assertEquals(2, \count($author1['books'][1]['libraries']));
+        $this->assertArrayNotHasKey('author', $author1['books'][0]);
+        $this->assertArrayNotHasKey('author', $author1['books'][1]);
+        $this->assertArrayNotHasKey('books', $author1['books'][0]['libraries'][0]);
+        $this->assertArrayNotHasKey('books', $author1['books'][0]['libraries'][1]);
+
+        static::getDatabase()->createDocument('libraries', new Document([
+            '$id' => 'library5',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Library 5',
+            'books' => [
+                'book1',
+                'book2',
+            ],
+        ]));
+
+        $library5 = static::getDatabase()->getDocument('libraries', 'library5');
+        $this->assertEquals(2, \count($library5['books']));
+        $this->assertEquals('author1', $library5['books'][0]['author']['$id']);
+        $this->assertEquals('author1', $library5['books'][1]['author']['$id']);
+        $this->assertArrayNotHasKey('books', $library5['books'][0]['author']);
+        $this->assertArrayNotHasKey('books', $library5['books'][1]['author']);
+        $this->assertArrayNotHasKey('libraries', $library5['books'][0]);
+        $this->assertArrayNotHasKey('libraries', $library5['books'][1]);
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

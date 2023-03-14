@@ -51,7 +51,7 @@ class Database
     public const RELATION_SIDE_PARENT = 'parent';
     public const RELATION_SIDE_CHILD = 'child';
 
-    public const RELATION_MAX_DEPTH = 2;
+    public const RELATION_MAX_DEPTH = 3;
 
     // Orders
     public const ORDER_ASC = 'ASC';
@@ -1939,6 +1939,7 @@ class Database
 
         static $fetchDepth = 0;
         static $fetchedRelationships = [];
+        static $retainFetches = false;
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -1949,34 +1950,43 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
+            $skipFetch = false;
+            foreach ($fetchedRelationships as $fetchedRelationship) {
+                $symmetric = $twoWay
+                    && $fetchedRelationship['key'] === $twoWayKey
+                    && $fetchedRelationship['options']['relatedCollection'] === $collection->getId();
+
+                $transitive = $twoWay
+                    && ($fetchedRelationship['options']['twoWayKey'] === $twoWayKey || $fetchedRelationship['key'] === $key)
+                    && $fetchedRelationship['collection'] === $collection->getId();
+
+                if ($symmetric || $transitive) {
+                    $skipFetch = true;
+                }
+            }
+
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
                     if (\is_null($value)) {
                         break;
                     }
 
-                    $fetchedCurrent = false;
-                    foreach ($fetchedRelationships as $fetchedRelationship) {
-                        if ($fetchedRelationship['key'] === $twoWayKey
-                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
-                        ) {
-                            $fetchedCurrent = true;
-                            break;
-                        }
-                    }
-
-                    if ($fetchedCurrent) {
+                    if ($skipFetch) {
                         $document->removeAttribute($key);
                     }
 
-                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent)) {
+                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
                         break;
                     }
 
                     $fetchDepth++;
                     $fetchedRelationships[] = $relationship;
 
+                    $retainFetches = true;
+
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+
+                    $retainFetches = false;
 
                     $document->setAttribute($key, $related);
                     break;
@@ -1986,34 +1996,32 @@ class Database
                             $document->removeAttribute($key);
                         }
                         if ($twoWay && !\is_null($value)) {
+                            $fetchDepth++;
                             $fetchedRelationships[] = $relationship;
+                            $retainFetches = true;
                             $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                            $retainFetches = false;
                             $document->setAttribute($key, $related);
                         }
                         break;
                     }
 
-                    $fetchedCurrent = false;
-                    foreach ($fetchedRelationships as $fetchedRelationship) {
-                        if ($fetchedRelationship['key'] === $twoWayKey
-                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
-                        ) {
-                            $fetchedCurrent = true;
-                        }
-                    }
-
-                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent)) {
+                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
                         break;
                     }
 
                     $fetchDepth++;
                     $fetchedRelationships[] = $relationship;
 
+                    $retainFetches = true;
+
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
                         ...$queries
                     ]);
+
+                    $retainFetches = false;
 
                     foreach ($relatedDocuments as $related) {
                         $related->removeAttribute($twoWayKey);
@@ -2026,8 +2034,11 @@ class Database
                         if (\is_null($value)) {
                             break;
                         }
+                        $fetchDepth++;
                         $fetchedRelationships[] = $relationship;
+                        $retainFetches = true;
                         $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                        $retainFetches = false;
                         $document->setAttribute($key, $related);
                         break;
                     }
@@ -2037,27 +2048,21 @@ class Database
                         break;
                     }
 
-                    $fetchedCurrent = false;
-                    foreach ($fetchedRelationships as $fetchedRelationship) {
-                        if ($fetchedRelationship['key'] === $twoWayKey
-                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
-                        ) {
-                            $fetchedCurrent = true;
-                        }
-                    }
-
-                    if ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent) {
+                    if ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                         break;
                     }
 
                     $fetchDepth++;
                     $fetchedRelationships[] = $relationship;
+                    $retainFetches = true;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
                         ...$queries
                     ]);
+
+                    $retainFetches = false;
 
                     foreach ($relatedDocuments as $related) {
                         $related->removeAttribute($twoWayKey);
@@ -2070,16 +2075,7 @@ class Database
                         break;
                     }
 
-                    $fetchedCurrent = false;
-                    foreach ($fetchedRelationships as $fetchedRelationship) {
-                        if ($fetchedRelationship['key'] === $twoWayKey
-                            && $fetchedRelationship['options']['relatedCollection'] === $collection->getId()
-                        ) {
-                            $fetchedCurrent = true;
-                        }
-                    }
-
-                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $fetchedCurrent)) {
+                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
                         break;
                     }
 
@@ -2094,6 +2090,8 @@ class Database
                         Query::equal($twoWayKey, [$document->getId()]),
                     ]));
 
+                    $retainFetches = true;
+
                     $related = [];
                     foreach ($junctions as $junction) {
                         $related[] = $this->getDocument(
@@ -2103,12 +2101,16 @@ class Database
                         );
                     }
 
+                    $retainFetches = false;
+
                     $document->setAttribute($key, $related);
                     break;
             }
 
-            $fetchDepth = 0;
-            $fetchedRelationships = [];
+            if (!$retainFetches) {
+                $fetchDepth = 0;
+                $fetchedRelationships = [];
+            }
         }
 
         return $document;

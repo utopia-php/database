@@ -2121,7 +2121,7 @@ class Database
                         ? $collection->getId() . '_' . $relatedCollection->getId()
                         : $relatedCollection->getId() . '_' . $collection->getId();
 
-                    $junctions = $this->skipRelationships(fn() => $this->find($junction, [
+                    $junctions = $this->skipRelationships(fn () => $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
                     ]));
 
@@ -2366,7 +2366,7 @@ class Database
         string $side
     ): void {
         // Get the related document, will be empty on permissions failure
-        $related = $this->skipRelationships(fn() => $this->getDocument($relatedCollection, $relationId));
+        $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection, $relationId));
 
         if ($related->isEmpty()) {
             return;
@@ -2376,7 +2376,8 @@ class Database
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->skipRelationships(fn () =>
+                    $this->skipRelationships(
+                        fn () =>
                         $this->updateDocument($relatedCollection, $relationId, $related)
                     );
                 }
@@ -2384,13 +2385,13 @@ class Database
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->skipRelationships(fn() => $this->updateDocument($relatedCollection, $relationId, $related));
+                    $this->skipRelationships(fn () => $this->updateDocument($relatedCollection, $relationId, $related));
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->skipRelationships(fn() => $this->updateDocument($relatedCollection, $relationId, $related));
+                    $this->skipRelationships(fn () => $this->updateDocument($relatedCollection, $relationId, $related));
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -2861,7 +2862,7 @@ class Database
         }
     }
 
-    private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side)
+    private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
         if (!\is_null($value)) {
             throw new Exception('Can not delete document because it has at least one related document.');
@@ -3024,7 +3025,7 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key, $twoWayKey) {
+                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key) {
                         $this->deleteDocument(
                             $relatedCollection->getId(),
                             $document->getAttribute($key)

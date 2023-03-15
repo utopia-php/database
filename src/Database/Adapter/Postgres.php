@@ -1078,8 +1078,8 @@ class Postgres extends SQL
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
 
-            case Database::VAR_DOCUMENT:
-                return 'VARCHAR';
+            case Database::VAR_RELATIONSHIP:
+                return 'VARCHAR(255)';
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';

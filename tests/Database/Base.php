@@ -3814,6 +3814,10 @@ abstract class Base extends TestCase
             Query::select(['*', 'library.name'])
         ]);
 
+        if (!$person instanceof Document) {
+            throw new Exception('Person not found');
+        }
+
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
@@ -4122,6 +4126,10 @@ abstract class Base extends TestCase
         $country = static::getDatabase()->findOne('country', [
             Query::select(['*', 'city.name'])
         ]);
+
+        if (!$country instanceof Document) {
+            throw new Exception('Country not found');
+        }
 
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
@@ -4435,6 +4443,10 @@ abstract class Base extends TestCase
             Query::select(['*', 'albums.name'])
         ]);
 
+        if (!$artist instanceof Document) {
+            throw new Exception('Artist not found');
+        }
+
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
 
@@ -4743,6 +4755,10 @@ abstract class Base extends TestCase
             Query::select(['*', 'accounts.name'])
         ]);
 
+        if (!$customer instanceof Document) {
+            throw new Exception('Customer not found');
+        }
+
         $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
 
@@ -5011,6 +5027,10 @@ abstract class Base extends TestCase
         $review = static::getDatabase()->findOne('review', [
             Query::select(['*', 'movie.name'])
         ]);
+
+        if (!$review instanceof Document) {
+            throw new Exception('Review not found');
+        }
 
         $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
         $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
@@ -5316,6 +5336,10 @@ abstract class Base extends TestCase
             Query::select(['*', 'store.name'])
         ]);
 
+        if (!$product instanceof Document) {
+            throw new Exception('Product not found');
+        }
+
         $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
         $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
 
@@ -5578,6 +5602,10 @@ abstract class Base extends TestCase
         $playlist = static::getDatabase()->findOne('playlist', [
             Query::select(['*', 'songs.name'])
         ]);
+
+        if (!$playlist instanceof Document) {
+            throw new Exception('Playlist not found');
+        }
 
         $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
@@ -5878,6 +5906,10 @@ abstract class Base extends TestCase
             Query::select(['*', 'classes.name'])
         ]);
 
+        if (!$student instanceof Document) {
+            throw new Exception('Student not found');
+        }
+
         $this->assertEquals('Class 1', $student->getAttribute('classes')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('number', $student->getAttribute('classes')[0]);
 
@@ -6054,6 +6086,10 @@ abstract class Base extends TestCase
             Query::select(['name', 'models.name']),
         ]);
 
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
         $this->assertEquals('Ford', $make['name']);
         $this->assertEquals(2, \count($make['models']));
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
@@ -6066,6 +6102,10 @@ abstract class Base extends TestCase
             Query::select(['*', 'models.year']),
         ]);
 
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
         $this->assertEquals('Ford', $make['name']);
         $this->assertEquals(2, \count($make['models']));
         $this->assertArrayNotHasKey('name', $make['models'][0]);
@@ -6077,6 +6117,10 @@ abstract class Base extends TestCase
         $make = static::getDatabase()->findOne('make', [
             Query::select(['*', 'models.*']),
         ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
 
         $this->assertEquals('Ford', $make['name']);
         $this->assertEquals(2, \count($make['models']));
@@ -6091,6 +6135,10 @@ abstract class Base extends TestCase
             Query::select(['models.*']),
         ]);
 
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
         $this->assertEquals('Ford', $make['name']);
         $this->assertEquals(2, \count($make['models']));
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
@@ -6103,11 +6151,15 @@ abstract class Base extends TestCase
             Query::select(['name']),
         ]);
 
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
         $this->assertEquals('Ford', $make['name']);
         $this->assertArrayNotHasKey('models', $make);
     }
 
-    public function testNestedOneToOne_OneToOneRelationship()
+    public function testNestedOneToOne_OneToOneRelationship(): void
     {
         static::getDatabase()->createCollection('pattern');
         static::getDatabase()->createCollection('shirt');
@@ -6189,10 +6241,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('team', $team['shirt']);
         $this->assertEquals('plain', $team['shirt']['pattern']['$id']);
         $this->assertArrayNotHasKey('shirt', $team['shirt']['pattern']);
-
     }
 
-    public function testNestedOneToOne_OneToManyRelationship()
+    public function testNestedOneToOne_OneToManyRelationship(): void
     {
         static::getDatabase()->createCollection('teachers');
         static::getDatabase()->createCollection('classrooms');
@@ -6283,10 +6334,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('children', $child3['classroom']);
         $this->assertEquals('teacher2', $child3['classroom']['teacher']['$id']);
         $this->assertArrayNotHasKey('classroom', $child3['classroom']['teacher']);
-
     }
 
-    public function testNestedOneToOne_ManyToOneRelationship()
+    public function testNestedOneToOne_ManyToOneRelationship(): void
     {
         static::getDatabase()->createCollection('users');
         static::getDatabase()->createCollection('profiles');
@@ -6368,10 +6418,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('avatars', $avatar2['profiles'][0]);
         $this->assertEquals('user2', $avatar2['profiles'][0]['user']['$id']);
         $this->assertArrayNotHasKey('profiles', $avatar2['profiles'][0]['user']);
-
     }
 
-    public function testNestedOneToOne_ManyToManyRelationship()
+    public function testNestedOneToOne_ManyToManyRelationship(): void
     {
         static::getDatabase()->createCollection('addresses');
         static::getDatabase()->createCollection('houses');
@@ -6458,10 +6507,9 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-
     }
 
-    public function testNestedOneToMany_OneToOneRelationship()
+    public function testNestedOneToMany_OneToOneRelationship(): void
     {
         static::getDatabase()->createCollection('countries');
         static::getDatabase()->createCollection('cities');
@@ -6560,10 +6608,9 @@ abstract class Base extends TestCase
         $this->assertEquals('mayor3', $country2['cities'][0]['mayor']['$id']);
         $this->assertArrayNotHasKey('country', $country2['cities'][0]);
         $this->assertArrayNotHasKey('city', $country2['cities'][0]['mayor']);
-
     }
 
-    public function testNestedOneToMany_OneToManyRelationship()
+    public function testNestedOneToMany_OneToManyRelationship(): void
     {
         static::getDatabase()->createCollection('dormitorys');
         static::getDatabase()->createCollection('occupants');
@@ -6685,10 +6732,9 @@ abstract class Base extends TestCase
         $this->assertEquals('dormitory2', $pet5['occupant']['dormitory']['$id']);
         $this->assertArrayNotHasKey('pets', $pet5['occupant']);
         $this->assertArrayNotHasKey('occupant', $pet5['occupant']['dormitory']);
-
     }
 
-    public function testNestedOneToMany_ManyToOneRelationship()
+    public function testNestedOneToMany_ManyToOneRelationship(): void
     {
         static::getDatabase()->createCollection('home');
         static::getDatabase()->createCollection('renters');
@@ -6771,17 +6817,16 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('floor', $floor2['renters'][0]);
         $this->assertEquals('home2', $floor2['renters'][0]['home']['$id']);
         $this->assertArrayNotHasKey('renter', $floor2['renters'][0]['home']);
-
     }
 
-    public function testNestedOneToMany_ManyToManyRelationship()
+    public function testNestedOneToMany_ManyToManyRelationship(): void
     {
         static::getDatabase()->createCollection('owners');
         static::getDatabase()->createCollection('cats');
         static::getDatabase()->createCollection('toys');
 
         static::getDatabase()->createAttribute('owners', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute ('cats', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('cats', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('toys', 'name', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
@@ -6859,10 +6904,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('toys', $toy2['cats'][0]);
         $this->assertEquals('owner2', $toy2['cats'][0]['owner']['$id']);
         $this->assertArrayNotHasKey('cats', $toy2['cats'][0]['owner']);
-
     }
 
-    public function testNestedManyToOne_OneToOneRelationship()
+    public function testNestedManyToOne_OneToOneRelationship(): void
     {
         static::getDatabase()->createCollection('towns');
         static::getDatabase()->createCollection('homelands');
@@ -6955,7 +6999,7 @@ abstract class Base extends TestCase
         $this->assertEquals('town3', $capital2['homeland']['towns'][1]['$id']);
     }
 
-    public function testNestedManyToOne_OneToManyRelationship()
+    public function testNestedManyToOne_OneToManyRelationship(): void
     {
         static::getDatabase()->createCollection('players');
         static::getDatabase()->createCollection('teams');
@@ -7056,10 +7100,9 @@ abstract class Base extends TestCase
         $this->assertEquals(2, \count($supporter3['team']['players']));
         $this->assertEquals('player2', $supporter3['team']['players'][0]['$id']);
         $this->assertEquals('player3', $supporter3['team']['players'][1]['$id']);
-
     }
 
-    public function testNestedManyToOne_ManyToOne()
+    public function testNestedManyToOne_ManyToOne(): void
     {
         static::getDatabase()->createCollection('cows');
         static::getDatabase()->createCollection('farms');
@@ -7151,10 +7194,9 @@ abstract class Base extends TestCase
         $this->assertEquals(2, \count($farmer2['farms'][0]['cows']));
         $this->assertEquals('cow2', $farmer2['farms'][0]['cows'][0]['$id']);
         $this->assertEquals('cow3', $farmer2['farms'][0]['cows'][1]['$id']);
-
     }
 
-    public function testNestedManyToOne_ManyToManyRelationship()
+    public function testNestedManyToOne_ManyToManyRelationship(): void
     {
         static::getDatabase()->createCollection('books');
         static::getDatabase()->createCollection('entrants');
@@ -7215,10 +7257,9 @@ abstract class Base extends TestCase
         $this->assertEquals(2, \count($book1['entrant']['rooms']));
         $this->assertEquals('class1', $book1['entrant']['rooms'][0]['$id']);
         $this->assertEquals('class2', $book1['entrant']['rooms'][1]['$id']);
-
     }
 
-    public function testNestedManyToMany_OneToOneRelationship()
+    public function testNestedManyToMany_OneToOneRelationship(): void
     {
         static::getDatabase()->createCollection('stones');
         static::getDatabase()->createCollection('hearths');
@@ -7321,7 +7362,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('hearths', $plot3['hearth']['stones'][0]);
     }
 
-    public function testNestedManyToMany_OneToManyRelationship()
+    public function testNestedManyToMany_OneToManyRelationship(): void
     {
         static::getDatabase()->createCollection('groups');
         static::getDatabase()->createCollection('tounaments');
@@ -7346,61 +7387,61 @@ abstract class Base extends TestCase
             twoWayKey: 'tounament'
         );
 
-static::getDatabase()->createDocument('groups', new Document([
-            '$id' => 'group1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-            ],
-            'name' => 'Group 1',
-            'tounaments' => [
-                [
-                    '$id' => 'tounament1',
+        static::getDatabase()->createDocument('groups', new Document([
+                    '$id' => 'group1',
                     '$permissions' => [
                         Permission::read(Role::any()),
                     ],
-                    'name' => 'Tounament 1',
-                    'prizes' => [
+                    'name' => 'Group 1',
+                    'tounaments' => [
                         [
-                            '$id' => 'prize1',
+                            '$id' => 'tounament1',
                             '$permissions' => [
                                 Permission::read(Role::any()),
                             ],
-                            'name' => 'Prize 1',
+                            'name' => 'Tounament 1',
+                            'prizes' => [
+                                [
+                                    '$id' => 'prize1',
+                                    '$permissions' => [
+                                        Permission::read(Role::any()),
+                                    ],
+                                    'name' => 'Prize 1',
+                                ],
+                                [
+                                    '$id' => 'prize2',
+                                    '$permissions' => [
+                                        Permission::read(Role::any()),
+                                    ],
+                                    'name' => 'Prize 2',
+                                ],
+                            ],
                         ],
                         [
-                            '$id' => 'prize2',
+                            '$id' => 'tounament2',
                             '$permissions' => [
                                 Permission::read(Role::any()),
                             ],
-                            'name' => 'Prize 2',
+                            'name' => 'Tounament 2',
+                            'prizes' => [
+                                [
+                                    '$id' => 'prize3',
+                                    '$permissions' => [
+                                        Permission::read(Role::any()),
+                                    ],
+                                    'name' => 'Prize 3',
+                                ],
+                                [
+                                    '$id' => 'prize4',
+                                    '$permissions' => [
+                                        Permission::read(Role::any()),
+                                    ],
+                                    'name' => 'Prize 4',
+                                ],
+                            ],
                         ],
                     ],
-                ],
-                [
-                    '$id' => 'tounament2',
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                    ],
-                    'name' => 'Tounament 2',
-                    'prizes' => [
-                        [
-                            '$id' => 'prize3',
-                            '$permissions' => [
-                                Permission::read(Role::any()),
-                            ],
-                            'name' => 'Prize 3',
-                        ],
-                        [
-                            '$id' => 'prize4',
-                            '$permissions' => [
-                                Permission::read(Role::any()),
-                            ],
-                            'name' => 'Prize 4',
-                        ],
-                    ],
-                ],
-            ],
-        ]));
+                ]));
 
         $group1 = static::getDatabase()->getDocument('groups', 'group1');
         $this->assertEquals(2, \count($group1['tounaments']));
@@ -7413,7 +7454,7 @@ static::getDatabase()->createDocument('groups', new Document([
         $this->assertArrayNotHasKey('tounament', $group1['tounaments'][0]['prizes'][0]);
     }
 
-    public function testNestedManyToMany_ManyToOneRelationship()
+    public function testNestedManyToMany_ManyToOneRelationship(): void
     {
         static::getDatabase()->createCollection('platforms');
         static::getDatabase()->createCollection('games');
@@ -7517,10 +7558,9 @@ static::getDatabase()->createDocument('groups', new Document([
         $this->assertArrayNotHasKey('publisher', $publisher3['games'][0]);
         $this->assertEquals('platform2', $publisher3['games'][0]['platforms'][0]['$id']);
         $this->assertArrayNotHasKey('games', $publisher3['games'][0]['platforms'][0]);
-
     }
 
-    public function testNestedManyToMany_ManyToManyRelationship()
+    public function testNestedManyToMany_ManyToManyRelationship(): void
     {
         static::getDatabase()->createCollection('sauces');
         static::getDatabase()->createCollection('pizzas');
@@ -7614,7 +7654,6 @@ static::getDatabase()->createDocument('groups', new Document([
         $this->assertEquals('topping3', $sauce1['pizzas'][1]['toppings'][0]['$id']);
         $this->assertEquals('topping4', $sauce1['pizzas'][1]['toppings'][1]['$id']);
         $this->assertArrayNotHasKey('pizzas', $sauce1['pizzas'][1]['toppings'][0]);
-
     }
 
     public function testEvents(): void

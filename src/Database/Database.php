@@ -1827,7 +1827,7 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new Exception('Missing collection: ' . $collection);
+            throw new Exception('Collection not found');
         }
 
         if (empty($id)) {
@@ -1949,8 +1949,6 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
-            //\var_dump("Processing {$relationType} relationship: {$collection->getId()}:{$document->getId()}.$key");
-
             $relationship->setAttribute('collection', $collection->getId());
             $relationship->setAttribute('document', $document->getId());
 
@@ -1972,7 +1970,7 @@ class Database
                     && $existingCollection === $relatedCollection->getId()
                     && $existingSide !== $side;
 
-                // If this relationship is transitive across multiple collections, skip it
+                // If this relationship is not directly related but relates across multiple collections, skip it
                 $transitive = (($existingKey === $twoWayKey
                         && $existingCollection === $relatedCollection->getId()
                         && $existingSide !== $side)
@@ -1987,8 +1985,6 @@ class Database
                         && $existingTwoWayKey === $twoWayKey
                         && $existingRelatedCollection === $relatedCollection->getId()
                         && $existingSide !== $side));
-
-                //\var_dump("frKey: {$fetchedKey}, key: $key, frTwoWayKey: {$existingTwoWayKey}, twoWayKey: $twoWayKey, frRelatedCollection: {$existingRelatedCollection}, frCollection: {$existingCollection}, collection: {$collection->getId()}");
 
                 if ($reflexive || $symmetric || $transitive) {
                     $skipFetch = true;

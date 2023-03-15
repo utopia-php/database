@@ -7656,6 +7656,232 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('pizzas', $sauce1['pizzas'][1]['toppings'][0]);
     }
 
+    public function testCreateRelationshipMissingCollection(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Collection not found');
+
+        static::getDatabase()->createRelationship(
+            collection: 'missing',
+            relatedCollection: 'missing',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+    }
+
+    public function testCreateRelationshipMissingRelatedCollection(): void
+    {
+        static::getDatabase()->createCollection('test');
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Related collection not found');
+
+        static::getDatabase()->createRelationship(
+            collection: 'test',
+            relatedCollection: 'missing',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+    }
+
+    public function testCreateDuplicateRelationship(): void
+    {
+        static::getDatabase()->createCollection('test1');
+        static::getDatabase()->createCollection('test2');
+
+        static::getDatabase()->createRelationship(
+            collection: 'test1',
+            relatedCollection: 'test2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Attribute already exists');
+
+        static::getDatabase()->createRelationship(
+            collection: 'test1',
+            relatedCollection: 'test2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+    }
+
+    public function testCreateInvalidRelationship(): void
+    {
+        static::getDatabase()->createCollection('test3');
+        static::getDatabase()->createCollection('test4');
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Invalid relationship type');
+
+        static::getDatabase()->createRelationship(
+            collection: 'test3',
+            relatedCollection: 'test4',
+            type: 'invalid',
+            twoWay: true,
+        );
+    }
+
+    public function testDeleteMissingRelationship(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Attribute not found');
+
+        static::getDatabase()->deleteRelationship('test', 'test2');
+    }
+
+    public function testCreateInvalidIntValueRelationship(): void
+    {
+        static::getDatabase()->createCollection('invalid1');
+        static::getDatabase()->createCollection('invalid2');
+
+        static::getDatabase()->createRelationship(
+            collection: 'invalid1',
+            relatedCollection: 'invalid2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+
+        static::getDatabase()->createDocument('invalid1', new Document([
+            '$id' => ID::unique(),
+            'invalid2' => 10,
+        ]));
+    }
+
+    /**
+     * @depends testCreateInvalidIntValueRelationship
+     */
+    public function testCreateInvalidObjectValueRelationship(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+
+        static::getDatabase()->createDocument('invalid1', new Document([
+            '$id' => ID::unique(),
+            'invalid2' => new \stdClass(),
+        ]));
+    }
+
+    /**
+     * @depends testCreateInvalidIntValueRelationship
+     */
+    public function testCreateInvalidArrayIntValueRelationship(): void
+    {
+        static::getDatabase()->createRelationship(
+            collection: 'invalid1',
+            relatedCollection: 'invalid2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'invalid3',
+            twoWayKey: 'invalid4',
+        );
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+
+        static::getDatabase()->createDocument('invalid1', new Document([
+            '$id' => ID::unique(),
+            'invalid3' => [10],
+        ]));
+    }
+
+    public function testCreateEmptyValueRelationship(): void
+    {
+        static::getDatabase()->createCollection('null1');
+        static::getDatabase()->createCollection('null2');
+
+        static::getDatabase()->createRelationship(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'null3',
+            twoWayKey: 'null4',
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'null4',
+            twoWayKey: 'null5',
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'null6',
+            twoWayKey: 'null7',
+        );
+
+        $document = static::getDatabase()->createDocument('null1', new Document([
+            '$id' => ID::unique(),
+            'null2' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null2'));
+
+        $document = static::getDatabase()->createDocument('null2', new Document([
+            '$id' => ID::unique(),
+            'null1' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null1'));
+
+        $document = static::getDatabase()->createDocument('null1', new Document([
+            '$id' => ID::unique(),
+            'null3' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null3'));
+
+        $document = static::getDatabase()->createDocument('null2', new Document([
+            '$id' => ID::unique(),
+            'null4' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null4'));
+
+        $document = static::getDatabase()->createDocument('null1', new Document([
+            '$id' => ID::unique(),
+            'null4' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null4'));
+
+        $document = static::getDatabase()->createDocument('null2', new Document([
+            '$id' => ID::unique(),
+            'null5' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null5'));
+
+        $document = static::getDatabase()->createDocument('null1', new Document([
+            '$id' => ID::unique(),
+            'null6' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null6'));
+
+        $document = static::getDatabase()->createDocument('null2', new Document([
+            '$id' => ID::unique(),
+            'null7' => null,
+        ]));
+
+        $this->assertNull($document->getAttribute('null7'));
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

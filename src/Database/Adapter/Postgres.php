@@ -1242,4 +1242,19 @@ class Postgres extends SQL
 
         throw $e;
     }
+
+    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '', string $onUpdate = 'restrict', string $onDelete = 'restrict'): bool
+    {
+        return false;
+    }
+
+    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    {
+        return false;
+    }
+
+    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey): bool
+    {
+        return false;
+    }
 }

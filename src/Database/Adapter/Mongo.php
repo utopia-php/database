@@ -326,7 +326,7 @@ class Mongo extends Adapter
         return true;
     }
 
-    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '', string $onUpdate = 'restrict', string $onDelete = 'restrict'): bool
+    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '', string $onDelete = Database::RELATION_MUTATE_RESTRICT): bool
     {
         return true;
     }

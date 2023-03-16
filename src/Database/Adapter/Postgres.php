@@ -273,7 +273,6 @@ class Postgres extends SQL
      * @param string $relatedCollection
      * @param bool $twoWay
      * @param string $twoWayKey
-     * @param string $onUpdate
      * @param string $onDelete
      * @return bool
      * @throws Exception
@@ -285,8 +284,7 @@ class Postgres extends SQL
         bool $twoWay = false,
         string $id = '',
         string $twoWayKey = '',
-        string $onUpdate = 'restrict',
-        string $onDelete = 'restrict'
+        string $onDelete = Database::RELATION_MUTATE_RESTRICT
     ): bool {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);

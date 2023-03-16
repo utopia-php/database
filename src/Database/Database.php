@@ -1314,7 +1314,6 @@ class Database
      * @param bool $twoWay
      * @param string $id
      * @param string $twoWayKey
-     * @param string $onUpdate
      * @param string $onDelete
      * @return bool
      * @throws AuthorizationException
@@ -1330,8 +1329,7 @@ class Database
         bool $twoWay = false,
         string $id = '',
         string $twoWayKey = '',
-        string $onUpdate = 'restrict',
-        string $onDelete = 'restrict'
+        string $onDelete = Database::RELATION_MUTATE_RESTRICT
     ): bool {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -1386,7 +1384,6 @@ class Database
                 'relationType' => $type,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $twoWayKey,
-                'onUpdate' => $onUpdate,
                 'onDelete' => $onDelete,
                 'side' => Database::RELATION_SIDE_PARENT,
             ],
@@ -1403,8 +1400,7 @@ class Database
                 'relationType' => $type,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $id,
-                'onUpdate' => 'restrict',
-                'onDelete' => 'restrict',
+                'onDelete' => $onDelete,
                 'side' => Database::RELATION_SIDE_CHILD,
             ],
         ]), Document::SET_TYPE_APPEND);
@@ -1508,7 +1504,6 @@ class Database
         string  $key,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
-        ?string $onUpdate = null,
         ?string $onDelete = null
     ): bool {
         $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete) {
@@ -1522,7 +1517,6 @@ class Database
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
             $newTwoWayKey ??= $attribute['options']['twoWayKey'];
-            $onUpdate ??= $attribute['options']['onUpdate'];
             $onDelete ??= $attribute['options']['onDelete'];
 
             $attribute->setAttribute('$id', $newKey);
@@ -1532,7 +1526,6 @@ class Database
                 'relationType' => $type,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $newTwoWayKey,
-                'onUpdate' => $onUpdate,
                 'onDelete' => $onDelete,
                 'side' => $side,
             ]);
@@ -1540,7 +1533,6 @@ class Database
             $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $onUpdate, $onDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $newKey;
-                $options['onUpdate'] = $onUpdate;
                 $options['onDelete'] = $onDelete;
 
                 $twoWayAttribute->setAttribute('$id', $newTwoWayKey);

@@ -892,6 +892,43 @@ class Database
      *
      * @param string $collection
      * @param string $id
+     * @param callable $updateCallback method that receives document, and returns it with changes applied
+     *
+     * @return Document
+     * @throws Exception
+     */
+    private function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
+    {
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($collection->getId() === self::METADATA) {
+            throw new Exception('Can not update metadata attributes');
+        }
+
+        $indexes = $collection->getAttribute('indexes', []);
+        $i = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
+
+        if ($i === false) {
+            throw new Exception('Index not found');
+        }
+
+        // Execute update from callback
+        $updateCallback($indexes[$i], $collection, $i);
+
+        // Save
+        $collection->setAttribute('indexes', $indexes, Document::SET_TYPE_ASSIGN);
+
+        $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$i]);
+
+        return $indexes[$i];
+    }
+
+    /**
+     * Update attribute metadata. Utility method for update attribute methods.
+     *
+     * @param string $collection
+     * @param string $id
      * @param callable $updateCallback method that recieves document, and returns it with changes applied
      *
      * @return Document
@@ -905,23 +942,23 @@ class Database
         }
 
         $attributes = $collection->getAttribute('attributes', []);
+        $i = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
-        $attributeIndex = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
-
-        if ($attributeIndex === false) {
+        if ($i === false) {
             throw new Exception('Attribute not found');
         }
 
         // Execute update from callback
-        call_user_func($updateCallback, $attributes[$attributeIndex], $collection, $attributeIndex);
+        $updateCallback($attributes[$i], $collection, $i);
 
         // Save
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
         $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$attributeIndex]);
-        return $attributes[$attributeIndex];
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$i]);
+
+        return $attributes[$i];
     }
 
     /**
@@ -1269,18 +1306,22 @@ class Database
     }
 
     /**
+     * Create a relationship attribute
+     *
      * @param string $collection
      * @param string $relatedCollection
-     * @param string $id
      * @param string $type
      * @param bool $twoWay
+     * @param string $id
      * @param string $twoWayKey
      * @param string $onUpdate
      * @param string $onDelete
      * @return bool
+     * @throws AuthorizationException
      * @throws DuplicateException
      * @throws LimitException
-     * @throws Exception
+     * @throws StructureException
+     * @throws Throwable
      */
     public function createRelationship(
         string $collection,
@@ -1441,7 +1482,7 @@ class Database
                     // Indexes created on junction collection creation
                     break;
                 default:
-                    throw new Exception('Invalid relation type');
+                    throw new Exception('Invalid relationship type.');
             }
         });
 
@@ -1451,6 +1492,8 @@ class Database
     }
 
     /**
+     * Update relationship attribute.
+     *
      * @param string $collection
      * @param string $key
      * @param string|null $newKey
@@ -1527,42 +1570,44 @@ class Database
             $this->deleteCachedCollection($collection);
             $this->deleteCachedCollection($relatedCollection);
 
-            $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $key, $newKey, $twoWayKey, $newTwoWayKey) {
-                $indexKey = 'index_' . $key;
-                $newIndexKey = 'index_' . $newKey;
-                $twoWayIndexKey = 'index_' . $twoWayKey;
-                $newTwoWayIndexKey = 'index_' . $newTwoWayKey;
+            $rename = function ($collection, $key, $newKey) {
+                $this->updateIndexMeta($collection, 'index_' . $key, fn($index) =>
+                    $index->setAttribute('attributes', [$newKey])
+                );
+                $this->renameIndex($collection, 'index_' . $key, 'index_' . $newKey);
+            };
 
+            $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $key, $newKey, $twoWayKey, $newTwoWayKey, $rename) {
                 switch ($type) {
                     case self::RELATION_ONE_TO_ONE:
                         if ($key !== $newKey) {
-                            $this->renameIndex($collection, $indexKey, $newIndexKey);
+                            $rename($collection, $key, $newKey);
                         }
                         if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                            $this->renameIndex($relatedCollection, $twoWayIndexKey, $newTwoWayIndexKey);
+                            $rename($relatedCollection, $twoWayKey, $newTwoWayKey);
                         }
                         break;
                     case self::RELATION_ONE_TO_MANY:
                         if ($twoWayKey !== $newTwoWayKey) {
-                            $this->renameIndex($relatedCollection, $twoWayIndexKey, $newTwoWayIndexKey);
+                            $rename($relatedCollection, $twoWayKey, $newTwoWayKey);
                         }
                         break;
                     case self::RELATION_MANY_TO_ONE:
                         if ($key !== $newKey) {
-                            $this->renameIndex($collection, $indexKey, $newIndexKey);
+                            $rename($collection, $key, $newKey);
                         }
                         break;
                     case self::RELATION_MANY_TO_MANY:
                         $junction = $collection . '_' . $relatedCollection;
                         if ($key !== $newKey) {
-                            $this->renameIndex($junction, $indexKey, $newIndexKey);
+                            $rename($junction, $key, $newKey);
                         }
                         if ($twoWayKey !== $newTwoWayKey) {
-                            $this->renameIndex($junction, $twoWayIndexKey, $newTwoWayIndexKey);
+                            $rename($junction, $twoWayKey, $newTwoWayKey);
                         }
                         break;
                     default:
-                        throw new Exception('Invalid relation type');
+                        throw new Exception('Invalid relationship type.');
                 }
             });
         });
@@ -1570,6 +1615,17 @@ class Database
         return true;
     }
 
+    /**
+     * Delete relationship attribute.
+     *
+     * @param string $collection
+     * @param string $id
+     *
+     * @return bool
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Throwable
+     */
     public function deleteRelationship(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () =>$this->getCollection($collection));
@@ -1628,7 +1684,7 @@ class Database
                 case self::RELATION_MANY_TO_MANY:
                     break;
                 default:
-                    throw new Exception('Invalid relation type');
+                    throw new Exception('Invalid relationship type.');
             }
         });
 
@@ -1657,6 +1713,10 @@ class Database
      * @param string $new
      *
      * @return bool
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws StructureException
+     * @throws Throwable
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {

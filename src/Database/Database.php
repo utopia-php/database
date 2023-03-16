@@ -1571,7 +1571,10 @@ class Database
             $this->deleteCachedCollection($relatedCollection);
 
             $rename = function ($collection, $key, $newKey) {
-                $this->updateIndexMeta($collection, 'index_' . $key, fn($index) =>
+                $this->updateIndexMeta(
+                    $collection,
+                    'index_' . $key,
+                    fn ($index) =>
                     $index->setAttribute('attributes', [$newKey])
                 );
                 $this->renameIndex($collection, 'index_' . $key, 'index_' . $newKey);

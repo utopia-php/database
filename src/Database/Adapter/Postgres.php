@@ -94,12 +94,12 @@ class Postgres extends SQL
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
-                PRIMARY KEY (\"_id\"),
-                UNIQUE (\"_uid\")
+                PRIMARY KEY (\"_id\")
             );
         ");
 
         $stmtIndex = $this->getPDO()->prepare("
+            CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(\"_uid\"));
             CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
         ");

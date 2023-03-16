@@ -500,8 +500,7 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP INDEX `{$id}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;")
             ->execute();
     }
 

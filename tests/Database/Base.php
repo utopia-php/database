@@ -3898,7 +3898,7 @@ abstract class Base extends TestCase
 
         // Check relation was set to null
         $person2 = static::getDatabase()->getDocument('person', 'person2');
-        $this->assertEquals(null, $person2->getAttribute('library', ''));
+        $this->assertEquals(null, $person2->getAttribute('newLibrary', ''));
 
         // Relate to another document
         static::getDatabase()->updateDocument(

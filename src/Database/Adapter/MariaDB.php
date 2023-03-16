@@ -355,14 +355,14 @@ class MariaDB extends SQL
                     $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if (!\is_null($newKey)) {
-                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
-                }
-                break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($twoWay && !\is_null($newTwoWayKey)) {
                     $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -429,7 +429,6 @@ class MariaDB extends SQL
      * @param string $new
      * @return bool
      * @throws Exception
-     * @throws PDOException
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {

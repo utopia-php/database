@@ -217,17 +217,18 @@ class SQLite extends MariaDB
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexs = json_decode($collectionDocument['indexes'], true);
+        $indexes = json_decode($collectionDocument['indexes'], true);
         $index = null;
 
-        foreach ($indexs as $node) {
+        foreach ($indexes as $node) {
             if ($node['key'] === $old) {
                 $index = $node;
                 break;
             }
         }
 
-        if ($index && $this->deleteIndex($collection, $old)
+        if ($index
+            && $this->deleteIndex($collection, $old)
             && $this->createIndex(
                 $collection,
                 $new,

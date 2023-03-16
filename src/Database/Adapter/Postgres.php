@@ -86,40 +86,52 @@ class Postgres extends SQL
         /**
          * @var array<string> $attributes
          */
-        $stmt = $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+        $stmt = $this->getPDO()->prepare("
+            CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
-                PRIMARY KEY (\"_id\")
-                )");
-        //,
-        //INDEX (\"_createdAt\"),
-        //INDEX (\"_updatedAt\")
-        $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(_uid));");
+                PRIMARY KEY (\"_id\"),
+                UNIQUE (\"_uid\")
+            );
+        ");
+
+        $stmtIndex = $this->getPDO()->prepare("
+            CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
+            CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+        ");
+
         try {
             $stmt->execute();
             $stmtIndex->execute();
 
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-                        \"_id\" SERIAL NOT NULL,
-                        \"_type\" VARCHAR(12) NOT NULL,
-                        \"_permission\" VARCHAR(255) NOT NULL,
-                        \"_document\" VARCHAR(255) NOT NULL,
-                        PRIMARY KEY (\"_id\")
-                    )")
-                ->execute();
+            $this->getPDO()->prepare("
+                CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
+                    \"_id\" SERIAL NOT NULL,
+                    \"_type\" VARCHAR(12) NOT NULL,
+                    \"_permission\" VARCHAR(255) NOT NULL,
+                    \"_document\" VARCHAR(255) NOT NULL,
+                    PRIMARY KEY (\"_id\")
+                );
+            ")->execute();
 
-            foreach ($indexes as &$index) {
+            foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
+                $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes');
+                $indexOrders = $index->getAttribute('orders', []);
 
-                $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
+                $this->createIndex(
+                    $id,
+                    $indexId,
+                    $indexType,
+                    $indexAttributes,
+                    [],
+                    $indexOrders
+                );
             }
         } catch (Exception $e) {
             $this->getPDO()->rollBack();
@@ -131,7 +143,6 @@ class Postgres extends SQL
         }
 
         // Update $this->getIndexCount when adding another default index
-        // return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
 
         return true;
     }
@@ -455,7 +466,7 @@ class Postgres extends SQL
             }
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attribute = "lower(\"{$attribute}\"::text) {$order}";
+                $attribute = "LOWER(\"{$attribute}\"::text) {$order}";
             } else {
                 $attribute = "\"{$attribute}\" {$order}";
             }
@@ -473,6 +484,7 @@ class Postgres extends SQL
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteIndex(string $collection, string $id): bool
     {

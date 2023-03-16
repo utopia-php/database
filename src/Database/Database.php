@@ -1392,20 +1392,19 @@ class Database
                 ]),
             ], [
                 new Document([
-                    '$id' => $id,
-                    'key' => $id,
+                    '$id' => 'index_' . $id,
+                    'key' => 'index_' . $id,
                     'type' => self::INDEX_KEY,
                     'attributes' => [$id],
                 ]),
                 new Document([
-                    '$id' => $twoWayKey,
-                    'key' => $twoWayKey,
+                    '$id' => 'index_' . $twoWayKey,
+                    'key' => 'index_' . $twoWayKey,
                     'type' => self::INDEX_KEY,
                     'attributes' => [$twoWayKey],
                 ]),
             ]);
         }
-
 
         $relationship = $this->adapter->createRelationship(
             $collection->getId(),
@@ -1422,18 +1421,21 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
 
+            $indexKey = 'index_' . $id;
+            $twoWayIndexKey = 'index_' . $twoWayKey;
+
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
-                    $this->createIndex($collection->getId(), $id, self::INDEX_UNIQUE, [$id]);
+                    $this->createIndex($collection->getId(), $indexKey, self::INDEX_UNIQUE, [$id]);
                     if ($twoWay) {
-                        $this->createIndex($relatedCollection->getId(), $twoWayKey, self::INDEX_UNIQUE, [$twoWayKey]);
+                        $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_UNIQUE, [$twoWayKey]);
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
-                    $this->createIndex($relatedCollection->getId(), $twoWayKey, self::INDEX_KEY, [$twoWayKey]);
+                    $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_KEY, [$twoWayKey]);
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    $this->createIndex($collection->getId(), $id, self::INDEX_KEY, [$id]);
+                    $this->createIndex($collection->getId(), $indexKey, self::INDEX_KEY, [$id]);
                     break;
                 case self::RELATION_MANY_TO_MANY:
                     // Indexes created on junction collection creation
@@ -1526,32 +1528,37 @@ class Database
             $this->deleteCachedCollection($relatedCollection);
 
             $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $key, $newKey, $twoWayKey, $newTwoWayKey) {
+                $indexKey = 'index_' . $key;
+                $newIndexKey = 'index_' . $newKey;
+                $twoWayIndexKey = 'index_' . $twoWayKey;
+                $newTwoWayIndexKey = 'index_' . $newTwoWayKey;
+
                 switch ($type) {
                     case self::RELATION_ONE_TO_ONE:
                         if ($key !== $newKey) {
-                            $this->renameIndex($collection, $key, $newKey);
+                            $this->renameIndex($collection, $indexKey, $newIndexKey);
                         }
                         if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                            $this->renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                            $this->renameIndex($relatedCollection, $twoWayIndexKey, $newTwoWayIndexKey);
                         }
                         break;
                     case self::RELATION_ONE_TO_MANY:
                         if ($twoWayKey !== $newTwoWayKey) {
-                            $this->renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                            $this->renameIndex($relatedCollection, $twoWayIndexKey, $newTwoWayIndexKey);
                         }
                         break;
                     case self::RELATION_MANY_TO_ONE:
                         if ($key !== $newKey) {
-                            $this->renameIndex($collection, $key, $newKey);
+                            $this->renameIndex($collection, $indexKey, $newIndexKey);
                         }
                         break;
                     case self::RELATION_MANY_TO_MANY:
                         $junction = $collection . '_' . $relatedCollection;
                         if ($key !== $newKey) {
-                            $this->renameIndex($junction, $key, $newKey);
+                            $this->renameIndex($junction, $indexKey, $newIndexKey);
                         }
                         if ($twoWayKey !== $newTwoWayKey) {
-                            $this->renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                            $this->renameIndex($junction, $twoWayIndexKey, $newTwoWayIndexKey);
                         }
                         break;
                     default:
@@ -1602,18 +1609,21 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
 
+            $indexKey = 'index_' . $id;
+            $twoWayIndexKey = 'index_' . $twoWayKey;
+
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
-                    $this->deleteIndex($collection->getId(), $id);
+                    $this->deleteIndex($collection->getId(), $indexKey);
                     if ($twoWay) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayKey);
+                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
-                    $this->deleteIndex($relatedCollection->getId(), $twoWayKey);
+                    $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    $this->deleteIndex($collection->getId(), $id);
+                    $this->deleteIndex($collection->getId(), $indexKey);
                     break;
                 case self::RELATION_MANY_TO_MANY:
                     break;
@@ -2281,6 +2291,8 @@ class Database
                     );
                     break;
                 case 'NULL':
+                    // TODO: This might need to depend on the relation type, to be either set to null or removed?
+                    $document->removeAttribute($key);
                     // No related document
                     break;
                 default:

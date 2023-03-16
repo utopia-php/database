@@ -803,7 +803,6 @@ class MariaDB extends SQL
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
-            GROUP BY _uid
             {$order}
             LIMIT :offset, :limit;
         ";

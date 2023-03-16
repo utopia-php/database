@@ -798,7 +798,7 @@ class Postgres extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT DISTINCT _uid, {$this->getAttributeProjection($selections, 'table_main')}
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
             {$order}

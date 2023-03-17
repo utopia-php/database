@@ -2355,6 +2355,11 @@ class Database
         }
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws Throwable
+     * @throws StructureException
+     */
     private function relateDocuments(
         string $collection,
         string $relatedCollection,
@@ -2388,7 +2393,12 @@ class Database
         $related = $this->getDocument($relatedCollection, $relation->getId());
 
         if ($related->isEmpty()) {
-            // If the related document doesn't exist, create it
+            // If the related document doesn't exist, create it, inheriting permissions if none are set
+
+            if (! isset($relation->getArrayCopy()['$permissions'])) {
+                $relation->setAttribute('$permissions', $document->getPermissions());
+            }
+
             $related = $this->createDocument($relatedCollection, $relation);
         } elseif ($related->getAttributes() != $relation->getAttributes()) {
             // If the related document exists and the data is not the same, update it

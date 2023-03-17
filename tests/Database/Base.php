@@ -7656,6 +7656,71 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('pizzas', $sauce1['pizzas'][1]['toppings'][0]);
     }
 
+    public function testCreateRelationshipInheritPermissions(): void
+    {
+        static::getDatabase()->createCollection('base');
+        static::getDatabase()->createCollection('inherit');
+        static::getDatabase()->createCollection('inherit2');
+
+        static::getDatabase()->createAttribute('base', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('inherit', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('inherit2', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'base',
+            relatedCollection: 'inherit',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'inherit',
+            relatedCollection: 'inherit2',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+        );
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::read(Role::user('user1')),
+            Permission::update(Role::user('user1')),
+            Permission::delete(Role::user('user2')),
+        ];
+
+        static::getDatabase()->createDocument('base', new Document([
+            '$id' => 'base1',
+            '$permissions' => $permissions,
+            'name' => 'Test 1',
+            'inherit' => [
+                [
+                    '$id' => 'inherit1',
+                    'name' => 'Inherit 1',
+                    'inherit2' => [
+                        [
+                            '$id' => 'inherit2_1',
+                            'name' => 'Inherit 2 1',
+                        ],
+                        [
+                            '$id' => 'inherit2_2',
+                            'name' => 'Inherit 2 2',
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+
+        $base1 = static::getDatabase()->getDocument('base', 'base1');
+        $this->assertEquals($permissions, $base1->getPermissions());
+        $this->assertEquals($permissions, $base1['inherit'][0]->getPermissions());
+        $this->assertEquals($permissions, $base1['inherit'][0]['inherit2'][0]->getPermissions());
+        $this->assertEquals($permissions, $base1['inherit'][0]['inherit2'][1]->getPermissions());
+
+        $inherit1 = static::getDatabase()->getDocument('inherit', 'inherit1');
+        $this->assertEquals($permissions, $inherit1->getPermissions());
+        $this->assertEquals($permissions, $inherit1['base']->getPermissions());
+        $this->assertEquals($permissions, $inherit1['inherit2'][0]->getPermissions());
+        $this->assertEquals($permissions, $inherit1['inherit2'][1]->getPermissions());
+    }
+
     public function testCreateRelationshipMissingCollection(): void
     {
         $this->expectException(Exception::class);

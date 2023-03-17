@@ -23,6 +23,7 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
+use function Swoole\Coroutine\Http\get;
 
 abstract class Base extends TestCase
 {
@@ -7656,25 +7657,26 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('pizzas', $sauce1['pizzas'][1]['toppings'][0]);
     }
 
-    public function testCreateRelationshipInheritPermissions(): void
+    public function testInheritRelationshipPermissions(): void
     {
-        static::getDatabase()->createCollection('base');
-        static::getDatabase()->createCollection('inherit');
-        static::getDatabase()->createCollection('inherit2');
+        static::getDatabase()->createCollection('lawns');
+        static::getDatabase()->createCollection('trees');
+        static::getDatabase()->createCollection('birds');
 
-        static::getDatabase()->createAttribute('base', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('inherit', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('inherit2', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('lawns', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('trees', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('birds', 'name', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
-            collection: 'base',
-            relatedCollection: 'inherit',
+            collection: 'lawns',
+            relatedCollection: 'trees',
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
+            twoWayKey: 'lawn',
         );
         static::getDatabase()->createRelationship(
-            collection: 'inherit',
-            relatedCollection: 'inherit2',
+            collection: 'trees',
+            relatedCollection: 'birds',
             type: Database::RELATION_MANY_TO_MANY,
             twoWay: true,
         );
@@ -7686,39 +7688,192 @@ abstract class Base extends TestCase
             Permission::delete(Role::user('user2')),
         ];
 
-        static::getDatabase()->createDocument('base', new Document([
-            '$id' => 'base1',
+        static::getDatabase()->createDocument('lawns', new Document([
+            '$id' => 'lawn1',
             '$permissions' => $permissions,
-            'name' => 'Test 1',
-            'inherit' => [
+            'name' => 'Lawn 1',
+            'trees' => [
                 [
-                    '$id' => 'inherit1',
-                    'name' => 'Inherit 1',
-                    'inherit2' => [
+                    '$id' => 'tree1',
+                    'name' => 'Tree 1',
+                    'birds' => [
                         [
-                            '$id' => 'inherit2_1',
-                            'name' => 'Inherit 2 1',
+                            '$id' => 'bird1',
+                            'name' => 'Bird 1',
                         ],
                         [
-                            '$id' => 'inherit2_2',
-                            'name' => 'Inherit 2 2',
+                            '$id' => 'bird2',
+                            'name' => 'Bird 2',
                         ],
                     ],
                 ],
             ],
         ]));
 
-        $base1 = static::getDatabase()->getDocument('base', 'base1');
-        $this->assertEquals($permissions, $base1->getPermissions());
-        $this->assertEquals($permissions, $base1['inherit'][0]->getPermissions());
-        $this->assertEquals($permissions, $base1['inherit'][0]['inherit2'][0]->getPermissions());
-        $this->assertEquals($permissions, $base1['inherit'][0]['inherit2'][1]->getPermissions());
+        $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
+        $this->assertEquals($permissions, $lawn1->getPermissions());
+        $this->assertEquals($permissions, $lawn1['trees'][0]->getPermissions());
+        $this->assertEquals($permissions, $lawn1['trees'][0]['birds'][0]->getPermissions());
+        $this->assertEquals($permissions, $lawn1['trees'][0]['birds'][1]->getPermissions());
 
-        $inherit1 = static::getDatabase()->getDocument('inherit', 'inherit1');
-        $this->assertEquals($permissions, $inherit1->getPermissions());
-        $this->assertEquals($permissions, $inherit1['base']->getPermissions());
-        $this->assertEquals($permissions, $inherit1['inherit2'][0]->getPermissions());
-        $this->assertEquals($permissions, $inherit1['inherit2'][1]->getPermissions());
+        $tree1 = static::getDatabase()->getDocument('trees', 'tree1');
+        $this->assertEquals($permissions, $tree1->getPermissions());
+        $this->assertEquals($permissions, $tree1['lawn']->getPermissions());
+        $this->assertEquals($permissions, $tree1['birds'][0]->getPermissions());
+        $this->assertEquals($permissions, $tree1['birds'][1]->getPermissions());
+    }
+
+    /**
+     * @depends testInheritRelationshipPermissions
+     */
+    public function testEnforceRelationshipPermissions(): void
+    {
+        $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
+        $this->assertEquals('Lawn 1', $lawn1['name']);
+
+        // Try update root document
+        try {
+            static::getDatabase()->updateDocument(
+                'lawns',
+                $lawn1->getId(),
+                $lawn1->setAttribute('name', 'Lawn 1 Updated')
+            );
+            $this->fail('Failed to throw exception when updating document with missing permissions');
+        } catch (Exception $e) {
+            $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
+        }
+
+        // Try delete root document
+        try {
+            static::getDatabase()->deleteDocument(
+                'lawns',
+                $lawn1->getId(),
+            );
+            $this->fail('Failed to throw exception when deleting document with missing permissions');
+        } catch (Exception $e) {
+            $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
+        }
+
+        $tree1 = static::getDatabase()->getDocument('trees', 'tree1');
+
+        // Try update nested document
+        try {
+            static::getDatabase()->updateDocument(
+                'trees',
+                $tree1->getId(),
+                $tree1->setAttribute('name', 'Tree 1 Updated')
+            );
+            $this->fail('Failed to throw exception when updating document with missing permissions');
+        } catch (Exception $e) {
+            $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
+        }
+
+        // Try delete nested document
+        try {
+            static::getDatabase()->deleteDocument(
+                'trees',
+                $tree1->getId(),
+            );
+            $this->fail('Failed to throw exception when deleting document with missing permissions');
+        } catch (Exception $e) {
+            $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
+        }
+
+        $bird1 = static::getDatabase()->getDocument('birds', 'bird1');
+
+        // Try update multi-level nested document
+        try {
+            static::getDatabase()->updateDocument(
+                'birds',
+                $bird1->getId(),
+                $bird1->setAttribute('name', 'Bird 1 Updated')
+            );
+            $this->fail('Failed to throw exception when updating document with missing permissions');
+        } catch (Exception $e) {
+            $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
+        }
+
+        // Try delete multi-level nested document
+        try {
+            static::getDatabase()->deleteDocument(
+                'birds',
+                $bird1->getId(),
+            );
+            $this->fail('Failed to throw exception when deleting document with missing permissions');
+        } catch (Exception $e) {
+            $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
+        }
+
+        Authorization::setRole(Role::user('user1')->toString());
+
+        $bird1 = static::getDatabase()->getDocument('birds', 'bird1');
+
+        \var_dump($bird1);
+
+        // Try update multi-level nested document
+        $bird1 = static::getDatabase()->updateDocument(
+            'birds',
+            $bird1->getId(),
+            $bird1->setAttribute('name', 'Bird 1 Updated')
+        );
+
+        $this->assertEquals('Bird 1 Updated', $bird1['name']);
+
+        // Try delete multi-level nested document
+        $deleted = static::getDatabase()->deleteDocument(
+            'birds',
+            $bird1->getId(),
+        );
+
+        $this->assertEquals(true, $deleted);
+        $tree1 = static::getDatabase()->getDocument('trees', 'tree1');
+        $this->assertEquals(1, count($tree1['birds']));
+
+        // Try update nested document
+        $tree1 = static::getDatabase()->updateDocument(
+            'trees',
+            $tree1->getId(),
+            $tree1->setAttribute('name', 'Tree 1 Updated')
+        );
+
+        $this->assertEquals('Tree 1 Updated', $tree1['name']);
+
+        // Try delete nested document
+        $deleted = static::getDatabase()->deleteDocument(
+            'trees',
+            $tree1->getId(),
+        );
+
+        $this->assertEquals(true, $deleted);
+        $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
+        $this->assertEquals(0, count($lawn1['trees']));
+
+        // Create document with no permissions
+        static::getDatabase()->createDocument('lawns', new Document([
+            '$id' => 'lawn2',
+            'name' => 'Lawn 2',
+            'trees' => [
+                [
+                    '$id' => 'tree2',
+                    'name' => 'Tree 2',
+                    'birds' => [
+                        [
+                            '$id' => 'bird3',
+                            'name' => 'Bird 3',
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+
+        $lawn2 = static::getDatabase()->getDocument('lawns', 'lawn2');
+        $this->assertEquals(true, $lawn2->isEmpty());
+
+        $tree2 = static::getDatabase()->getDocument('trees', 'tree2');
+        $this->assertEquals(true, $tree2->isEmpty());
+
+        $bird3 = static::getDatabase()->getDocument('birds', 'bird3');
+        $this->assertEquals(true, $bird3->isEmpty());
     }
 
     public function testCreateRelationshipMissingCollection(): void

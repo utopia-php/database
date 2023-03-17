@@ -1450,7 +1450,6 @@ class Database
             $twoWay,
             $id,
             $twoWayKey,
-            $onUpdate,
             $onDelete,
         );
 
@@ -1506,7 +1505,7 @@ class Database
         ?string $newTwoWayKey = null,
         ?string $onDelete = null
     ): bool {
-        $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onUpdate, $onDelete) {
+        $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onDelete) {
             $altering = !\is_null($newKey) || !\is_null($newTwoWayKey);
 
             $relatedCollection = $attribute['options']['relatedCollection'];
@@ -1530,7 +1529,7 @@ class Database
                 'side' => $side,
             ]);
 
-            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $onUpdate, $onDelete) {
+            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $onDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $newKey;
                 $options['onDelete'] = $onDelete;

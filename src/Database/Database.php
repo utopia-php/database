@@ -2415,7 +2415,6 @@ class Database
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
-
             if (! isset($relation->getArrayCopy()['$permissions'])) {
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
@@ -2587,37 +2586,79 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
+        static $updateDepth = 1;
+
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
+            $oldValue = $old->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = $relationship['options']['relationType'];
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
+            if ($oldValue == $value) {
+                $document->removeAttribute($key);
+                continue;
+            }
+
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
                     if (!$twoWay) {
+                        if ($value instanceof Document) {
+                            $relationId = $this->relateDocuments(
+                                $collection->getId(),
+                                $relatedCollection->getId(),
+                                $key,
+                                $document,
+                                $value,
+                                $relationType,
+                                $twoWay,
+                                $twoWayKey,
+                                $side,
+                                $updateDepth
+                            );
+                            $document->setAttribute($key, $relationId);
+                        }
                         break;
                     }
 
-                    $newValue = \is_null($value) ? null : $document->getId();
-
-                    if (\is_null($value)) {
-                        $value = $old
-                            ->getAttribute($key)
-                            ->getId();
+                    switch (\gettype($value)) {
+                        case 'string':
+                            $relatedId = $value;
+                            $newValue = $document->getId();
+                            break;
+                        case 'NULL':
+                            $relatedId = $oldValue->getId();
+                            $newValue = null;
+                            break;
+                        case 'object':
+                            if ($value instanceof Document) {
+                                \var_dump('is document');
+                                $relatedId = $value->getId();
+                                $newValue = $document->getId();
+                                $value->setAttribute($twoWayKey, $document->getId());
+                                break;
+                            }
+                        default:
+                            throw new Exception('Invalid type for relationship. Must be either a document, document ID or null.');
                     }
 
-                    if (!\is_string($value)) {
-                        throw new Exception('Invalid type for relationship. Must be either an existing document ID or null.');
-                    }
-
-                    $related = $this->getDocument($relatedCollection->getId(), $value);
+                    $related = $this->getDocument($relatedCollection->getId(), $relatedId);
 
                     if ($related->isEmpty()) {
-                        break;
+                        if ($value instanceof Document) {
+                            $newDocument = $this->createDocument($relatedCollection->getId(), $value);
+                            $document->setAttribute($key, $newDocument->getId());
+
+                            \var_dump($document);
+                        } else {
+                            \var_dump('breaking');
+                            break;
+                        }
+                    } else if (! \is_null($value)) {
+                        $document->setAttribute($key, $related->getId());
                     }
 
                     $this->skipRelationships(fn () => $this->updateDocument(

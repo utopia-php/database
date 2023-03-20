@@ -3712,6 +3712,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('person');
         static::getDatabase()->createCollection('library');
 
+        static::getDatabase()->createAttribute('person', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('library', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('library', 'area', Database::VAR_STRING, 255, true);
 
@@ -3745,10 +3746,12 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
+            'name' => 'Person 1',
             'library' => [
                 '$id' => 'library1',
                 '$permissions' => [
                     Permission::read(Role::any()),
+                    Permission::update(Role::any()),
                 ],
                 'name' => 'Library 1',
                 'area' => 'Area 1',
@@ -3772,12 +3775,13 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
+            'name' => 'Person 2',
             'library' => 'library2',
         ]));
 
         // Get documents with relationship
-        $person = static::getDatabase()->getDocument('person', 'person1');
-        $library = $person->getAttribute('library');
+        $person1 = static::getDatabase()->getDocument('person', 'person1');
+        $library = $person1->getAttribute('library');
         $this->assertEquals('library1', $library['$id']);
         $this->assertArrayNotHasKey('person', $library);
 
@@ -3829,6 +3833,25 @@ abstract class Base extends TestCase
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
+        // Update root document attribute without altering relationship
+        static::getDatabase()->updateDocument(
+            'person',
+            $person1->getId(),
+            $person1->setAttribute('name', 'Person 1 Updated')
+        );
+
+        $person1 = static::getDatabase()->getDocument('person', 'person1');
+
+        // Update nested document attribute
+        static::getDatabase()->updateDocument(
+            'person',
+            $person1->getId(),
+            $person1->setAttribute('library', $person1
+                ->getAttribute('library')
+                ->setAttribute('name', 'Library 1 Updated')
+            )
+        );
+
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
@@ -3841,7 +3864,7 @@ abstract class Base extends TestCase
         }
 
         // Create new document
-        static::getDatabase()->createDocument('library', new Document([
+        $library3 = static::getDatabase()->createDocument('library', new Document([
             '$id' => 'library3',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -3856,6 +3879,13 @@ abstract class Base extends TestCase
             'person',
             $person1->getId(),
             $person1->setAttribute('library', 'library3')
+        );
+
+        // Relate existing document to new document as nested data
+        static::getDatabase()->updateDocument(
+            'person',
+            $person1->getId(),
+            $person1->setAttribute('library', $library3)
         );
 
         // Query new related document
@@ -4144,6 +4174,25 @@ abstract class Base extends TestCase
 
         $country1 = static::getDatabase()->getDocument('country', 'country1');
 
+        // Update root document attribute without altering relationship
+        static::getDatabase()->updateDocument(
+            'country',
+            $country1->getId(),
+            $country1->setAttribute('name', 'Country 1 Updated')
+        );
+
+        $country1 = static::getDatabase()->getDocument('country', 'country1');
+
+        // Update nested document attribute
+        static::getDatabase()->updateDocument(
+            'country',
+            $country1->getId(),
+            $country1->setAttribute('city', $country1
+                ->getAttribute('city')
+                ->setAttribute('name', 'City 1 Updated')
+            )
+        );
+
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
@@ -4165,7 +4214,7 @@ abstract class Base extends TestCase
         );
 
         // Create a new city with no relation
-        static::getDatabase()->createDocument('city', new Document([
+        $city5 = static::getDatabase()->createDocument('city', new Document([
             '$id' => 'city5',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -4183,6 +4232,13 @@ abstract class Base extends TestCase
             $country1->setAttribute('city', 'city5')
         );
 
+        // Relate existing document to new document as nested data
+        static::getDatabase()->updateDocument(
+            'country',
+            $country1->getId(),
+            $country1->setAttribute('city', $city5)
+        );
+
         // Query new relationship
         $countries = static::getDatabase()->find('country', [
             Query::equal('city.name', ['Copenhagen'])
@@ -4190,7 +4246,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, \count($countries));
 
-        // Create a new city with no relation
+        // Create a new country with no relation
         static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country5',
             '$permissions' => [
@@ -7673,12 +7729,14 @@ abstract class Base extends TestCase
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
             twoWayKey: 'lawn',
+            onDelete: Database::RELATION_MUTATE_CASCADE,
         );
         static::getDatabase()->createRelationship(
             collection: 'trees',
             relatedCollection: 'birds',
             type: Database::RELATION_MANY_TO_MANY,
             twoWay: true,
+            onDelete: Database::RELATION_MUTATE_SET_NULL,
         );
 
         $permissions = [
@@ -7816,6 +7874,8 @@ abstract class Base extends TestCase
         );
 
         $this->assertEquals('Bird 1 Updated', $bird1['name']);
+
+        Authorization::setRole(Role::user('user2')->toString());
 
         // Try delete multi-level nested document
         $deleted = static::getDatabase()->deleteDocument(

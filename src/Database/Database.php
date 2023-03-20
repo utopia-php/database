@@ -2001,7 +2001,7 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        static $fetchDepth = 0;
+        static $fetchDepth = 1;
         static $fetchedRelationships = [];
 
         foreach ($relationships as $relationship) {
@@ -2264,7 +2264,9 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        foreach ($relationships as $relationship) {
+        static $createDepth = 1;
+
+        foreach ($relationships as $index => $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
@@ -2272,6 +2274,16 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            if ($createDepth > Database::RELATION_MAX_DEPTH) {
+                $document->removeAttribute($key);
+
+                if ($index === \count($relationships) - 1) {
+                    return;
+                }
+
+                continue;
+            }
 
             switch (\gettype($value)) {
                 case 'array':
@@ -2291,7 +2303,8 @@ class Database
                                     $relationType,
                                     $twoWay,
                                     $twoWayKey,
-                                    $side
+                                    $side,
+                                    $createDepth
                                 );
                                 break;
                             case 'string':
@@ -2304,7 +2317,8 @@ class Database
                                     $relationType,
                                     $twoWay,
                                     $twoWayKey,
-                                    $side
+                                    $side,
+                                    $createDepth
                                 );
                                 break;
                             default:
@@ -2326,7 +2340,8 @@ class Database
                         $relationType,
                         $twoWay,
                         $twoWayKey,
-                        $side
+                        $side,
+                        $createDepth
                     );
                     $document->setAttribute($key, $relatedId);
                     break;
@@ -2341,7 +2356,8 @@ class Database
                         $relationType,
                         $twoWay,
                         $twoWayKey,
-                        $side
+                        $side,
+                        $createDepth
                     );
                     break;
                 case 'NULL':
@@ -2369,7 +2385,8 @@ class Database
         string $relationType,
         bool $twoWay,
         string $twoWayKey,
-        string $side
+        string $side,
+        int &$depth
     ): string {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
@@ -2399,12 +2416,16 @@ class Database
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
 
+            $depth++;
             $related = $this->createDocument($relatedCollection, $relation);
+            $depth--;
         } elseif ($related->getAttributes() != $relation->getAttributes()) {
             // If the related document exists and the data is not the same, update it
             $relation = new Document(\array_merge($related->getArrayCopy(), $relation->getArrayCopy()));
 
+            $depth ++;
             $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
+            $depth --;
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
@@ -2435,7 +2456,8 @@ class Database
         string $relationType,
         bool $twoWay,
         string $twoWayKey,
-        string $side
+        string $side,
+        int &$depth
     ): void {
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection, $relationId));
@@ -2448,10 +2470,7 @@ class Database
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
                     $related->setAttribute($twoWayKey, $documentId);
-                    $this->skipRelationships(
-                        fn () =>
-                        $this->updateDocument($relatedCollection, $relationId, $related)
-                    );
+                    $this->skipRelationships(fn () => $this->updateDocument($relatedCollection, $relationId, $related));
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -2548,8 +2567,12 @@ class Database
 
     /**
      * @param Document $collection
+     * @param Document $old
      * @param Document $document
+     *
      * @return void
+     * @throws AuthorizationException
+     * @throws StructureException
      * @throws Throwable
      */
     private function updateDocumentRelationships(Document $collection, Document $old, Document $document): void

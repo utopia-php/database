@@ -1993,7 +1993,7 @@ class Database
      * @return Document
      * @throws Throwable
      */
-    private function getDocumentRelationships(Document $collection, Document $document, array $queries): Document
+    private function getDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2242,6 +2242,10 @@ class Database
         }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
+
+        if ($this->resolveRelationships) {
+            $this->silent(fn () => $this->getDocumentRelationships($collection, $document));
+        }
 
         $document = $this->decode($collection, $document);
 

@@ -806,6 +806,7 @@ class MariaDB extends SQL
             {$order}
             LIMIT :offset, :limit;
         ";
+
         if ($timeout) {
             $sql = $this->setTimeout($sql, $timeout);
         }

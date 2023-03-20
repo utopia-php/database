@@ -95,12 +95,12 @@ class Postgres extends SQL
                 \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\")
-                )");
-        //,
-        //INDEX (\"_createdAt\"),
-        //INDEX (\"_updatedAt\")
-        $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(_uid));");
+                );
+                CREATE INDEX \"index_{$namespace}_{$id}_createdAt\" ON {$this->getSQLTable($id)} USING btree (\"_createdAt\");
+                CREATE INDEX \"index_{$namespace}_{$id}_updatedAt\" ON {$this->getSQLTable($id)} USING btree (\"_updatedAt\");
+                ");
+
+        $stmtIndex = $this->getPDO()->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(_uid));");
         try {
             $stmt->execute();
             $stmtIndex->execute();
@@ -112,7 +112,10 @@ class Postgres extends SQL
                         \"_permission\" VARCHAR(255) NOT NULL,
                         \"_document\" VARCHAR(255) NOT NULL,
                         PRIMARY KEY (\"_id\")
-                    )")
+                    );
+                    CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_ukey\" ON {$this->getSQLTable($id. '_perms')} USING btree (\"_document\",\"_type\",\"_permission\");
+                    CREATE INDEX \"index_{$namespace}_{$id}_permission\" ON {$this->getSQLTable($id. '_perms')} USING btree (\"_permission\",\"_type\",\"_document\");
+                    ")
                 ->execute();
 
             foreach ($indexes as &$index) {

@@ -127,7 +127,7 @@ class MariaDB extends SQL
                         `_document` VARCHAR(255) NOT NULL,
                         PRIMARY KEY (`_id`),
                         UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`)
+                        INDEX `_permission` (`_permission`,`_type`,`_document`)
                     )")
                 ->execute();
         } catch (\Exception $th) {
@@ -806,7 +806,7 @@ class MariaDB extends SQL
             {$order}
             LIMIT :offset, :limit;
         ";
-
+var_dump($sql);
         if ($timeout) {
             $sql = $this->setTimeout($sql, $timeout);
         }

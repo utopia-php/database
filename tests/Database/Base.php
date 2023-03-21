@@ -3852,6 +3852,34 @@ abstract class Base extends TestCase
             )
         );
 
+        // Create new document with no relationship
+        $person3 = static::getDatabase()->createDocument('person', new Document([
+            '$id' => 'person3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 3',
+        ]));
+
+        // Update to relate to created document
+        static::getDatabase()->updateDocument(
+            'person',
+            $person3->getId(),
+            $person3->setAttribute('library', new Document([
+                '$id' => 'library3',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Library 3',
+                'area' => 'Area 3',
+            ]))
+        );
+
+        $person3 = static::getDatabase()->getDocument('person', 'person3');
+        $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
+
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
@@ -3864,33 +3892,33 @@ abstract class Base extends TestCase
         }
 
         // Create new document
-        $library3 = static::getDatabase()->createDocument('library', new Document([
-            '$id' => 'library3',
+        $library4 = static::getDatabase()->createDocument('library', new Document([
+            '$id' => 'library4',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'name' => 'Library 3',
-            'area' => 'Area 3',
+            'name' => 'Library 4',
+            'area' => 'Area 4',
         ]));
 
         // Relate existing document to new document
         static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
-            $person1->setAttribute('library', 'library3')
+            $person1->setAttribute('library', 'library4')
         );
 
         // Relate existing document to new document as nested data
         static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
-            $person1->setAttribute('library', $library3)
+            $person1->setAttribute('library', $library4)
         );
 
         // Query new related document
         $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['Library 3'])
+            Query::equal('library.name', ['Library 4'])
         ]);
 
         $this->assertEquals(1, \count($people));
@@ -3905,7 +3933,7 @@ abstract class Base extends TestCase
         // Get document with again
         $person = static::getDatabase()->getDocument('person', 'person1');
         $library = $person->getAttribute('newLibrary');
-        $this->assertEquals('library3', $library['$id']);
+        $this->assertEquals('library4', $library['$id']);
 
         // Can not delete document while still related to another with on delete set to restrict
         try {
@@ -3935,7 +3963,7 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'person',
             $person2->getId(),
-            $person2->setAttribute('newLibrary', 'library3')
+            $person2->setAttribute('newLibrary', 'library4')
         );
 
         // Change on delete to cascade
@@ -3952,7 +3980,7 @@ abstract class Base extends TestCase
         $person = static::getDatabase()->getDocument('person', 'person2');
         $this->assertEquals(true, $person->isEmpty());
 
-        $library = static::getDatabase()->getDocument('library', 'library3');
+        $library = static::getDatabase()->getDocument('library', 'library4');
         $this->assertEquals(true, $library->isEmpty());
 
         // Delete relationship
@@ -3967,6 +3995,13 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $library);
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws LimitException
+     * @throws DuplicateException
+     * @throws StructureException
+     * @throws \Throwable
+     */
     public function testOneToOneTwoWayRelationship(): void
     {
         static::getDatabase()->createCollection('country');
@@ -4031,6 +4066,7 @@ abstract class Base extends TestCase
                 'code' => 'LON',
             ],
         ]));
+
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('city', new Document([
             '$id' => 'city2',
@@ -4193,6 +4229,36 @@ abstract class Base extends TestCase
             )
         );
 
+        // Create new document with no relationship
+        $country5 = static::getDatabase()->createDocument('country', new Document([
+            '$id' => 'country5',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Country 5',
+        ]));
+
+        // Update to relate to created document
+        $country5 = static::getDatabase()->updateDocument(
+            'country',
+            $country5->getId(),
+            $country5->setAttribute('city', new Document([
+                '$id' => 'city5',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'City 5',
+                'code' => 'C5',
+            ]))
+        );
+
+        $this->assertEquals('city5', $country5->getAttribute('city')['$id']);
+        $country5 = static::getDatabase()->getDocument('country', 'country5');
+        $this->assertEquals('city5', $country5->getAttribute('city')['$id']);
+
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
@@ -4214,8 +4280,8 @@ abstract class Base extends TestCase
         );
 
         // Create a new city with no relation
-        $city5 = static::getDatabase()->createDocument('city', new Document([
-            '$id' => 'city5',
+        $city6 = static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city6',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4229,14 +4295,14 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
-            $country1->setAttribute('city', 'city5')
+            $country1->setAttribute('city', 'city6')
         );
 
         // Relate existing document to new document as nested data
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
-            $country1->setAttribute('city', $city5)
+            $country1->setAttribute('city', $city6)
         );
 
         // Query new relationship
@@ -4248,7 +4314,7 @@ abstract class Base extends TestCase
 
         // Create a new country with no relation
         static::getDatabase()->createDocument('country', new Document([
-            '$id' => 'country5',
+            '$id' => 'country6',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4261,7 +4327,7 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'city',
             $city1->getId(),
-            $city1->setAttribute('country', 'country5')
+            $city1->setAttribute('country', 'country6')
         );
 
         // Query inverse related document again
@@ -4282,10 +4348,10 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $city = static::getDatabase()->getDocument('city', 'city1');
         $country = $city->getAttribute('newCountry');
-        $this->assertEquals('country5', $country['$id']);
+        $this->assertEquals('country6', $country['$id']);
 
         // Get inverse document with new relationship key
-        $country = static::getDatabase()->getDocument('country', 'country5');
+        $country = static::getDatabase()->getDocument('country', 'country6');
         $city = $country->getAttribute('newCity');
         $this->assertEquals('city1', $city['$id']);
 
@@ -4307,8 +4373,8 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteDocument('country', 'country1');
 
         // Check relation was set to null
-        $city5 = static::getDatabase()->getDocument('city', 'city5');
-        $this->assertEquals(null, $city5->getAttribute('country', ''));
+        $city6 = static::getDatabase()->getDocument('city', 'city6');
+        $this->assertEquals(null, $city6->getAttribute('country', ''));
 
         // Delete child, set parent relationship to null for two-way
         static::getDatabase()->deleteDocument('city', 'city2');
@@ -4320,8 +4386,8 @@ abstract class Base extends TestCase
         // Relate again
         static::getDatabase()->updateDocument(
             'city',
-            $city5->getId(),
-            $city5->setAttribute('newCountry', 'country2')
+            $city6->getId(),
+            $city6->setAttribute('newCountry', 'country2')
         );
 
         // Change on delete to cascade
@@ -4332,20 +4398,20 @@ abstract class Base extends TestCase
         );
 
         // Delete parent, will delete child
-        static::getDatabase()->deleteDocument('country', 'country5');
+        static::getDatabase()->deleteDocument('country', 'country6');
 
         // Check parent and child were deleted
-        $library = static::getDatabase()->getDocument('country', 'country5');
+        $library = static::getDatabase()->getDocument('country', 'country6');
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('city', 'city1');
         $this->assertEquals(true, $library->isEmpty());
 
         // Delete child, will delete parent for two-way
-        static::getDatabase()->deleteDocument('city', 'city5');
+        static::getDatabase()->deleteDocument('city', 'city6');
 
         // Check parent and child were deleted
-        $library = static::getDatabase()->getDocument('city', 'city5');
+        $library = static::getDatabase()->getDocument('city', 'city6');
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('country', 'country2');
@@ -4362,7 +4428,7 @@ abstract class Base extends TestCase
             'name' => 'Munich',
             'code' => 'MUC',
             'newCountry' => [
-                '$id' => 'country5',
+                '$id' => 'country6',
                 'name' => 'Germany'
             ]
         ]));

@@ -2559,6 +2559,10 @@ class Database
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
 
+        if ($this->resolveRelationships) {
+            $this->silent(fn () => $this->getDocumentRelationships($collection, $document));
+        }
+
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
@@ -2626,46 +2630,70 @@ class Database
 
                     switch (\gettype($value)) {
                         case 'string':
-                            $relatedId = $value;
-                            $newValue = $document->getId();
-                            break;
-                        case 'NULL':
-                            $relatedId = $oldValue->getId();
-                            $newValue = null;
+                            $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
+
+                            if (
+                                $oldValue?->getId() !== $value
+                                && $this->findOne($relatedCollection->getId(), [
+                                    Query::equal($twoWayKey, [$document->getId()]),
+                                ]) !== false
+                            ) {
+                                // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
+                                throw new DuplicateException('Document already has a related document');
+                            }
+
+                            $this->skipRelationships(fn() => $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $related->getId(),
+                                $related->setAttribute($twoWayKey, $document->getId())
+                            ));
                             break;
                         case 'object':
                             if ($value instanceof Document) {
-                                \var_dump('is document');
-                                $relatedId = $value->getId();
-                                $newValue = $document->getId();
-                                $value->setAttribute($twoWayKey, $document->getId());
+                                $related = $this->skipRelationships(fn() => $this->getDocument($relatedCollection->getId(), $value->getId()));
+
+                                if (
+                                    $oldValue?->getId() !== $value->getId()
+                                    && $this->findOne($relatedCollection->getId(), [
+                                        Query::equal($twoWayKey, [$document->getId()]),
+                                    ]) !== false
+                                ) {
+                                    // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
+                                    throw new DuplicateException('Document already has a related document');
+                                }
+
+                                $updateDepth++;
+                                if ($related->isEmpty()) {
+                                    $related = $this->createDocument(
+                                        $relatedCollection->getId(),
+                                        $value->setAttribute($twoWayKey, $document->getId())
+                                    );
+                                } else {
+                                    $related = $this->updateDocument(
+                                        $relatedCollection->getId(),
+                                        $related->getId(),
+                                        $value->setAttribute($twoWayKey, $document->getId())
+                                    );
+                                }
+                                $updateDepth--;
+
+                                $document->setAttribute($key, $related->getId());
                                 break;
                             }
+                        case 'NULL':
+                            if (!\is_null($oldValue?->getId())) {
+                                $oldRelated = $this->getDocument($relatedCollection->getId(), $oldValue->getId());
+
+                                $this->skipRelationships(fn() => $this->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $oldRelated->getId(),
+                                    $oldRelated->setAttribute($twoWayKey, null)
+                                ));
+                            }
+                            break;
                         default:
                             throw new Exception('Invalid type for relationship. Must be either a document, document ID or null.');
                     }
-
-                    $related = $this->getDocument($relatedCollection->getId(), $relatedId);
-
-                    if ($related->isEmpty()) {
-                        if ($value instanceof Document) {
-                            $newDocument = $this->createDocument($relatedCollection->getId(), $value);
-                            $document->setAttribute($key, $newDocument->getId());
-
-                            \var_dump($document);
-                        } else {
-                            \var_dump('breaking');
-                            break;
-                        }
-                    } else if (! \is_null($value)) {
-                        $document->setAttribute($key, $related->getId());
-                    }
-
-                    $this->skipRelationships(fn () => $this->updateDocument(
-                        $relatedCollection->getId(),
-                        $related->getId(),
-                        $related->setAttribute($twoWayKey, $newValue)
-                    ));
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_PARENT) {

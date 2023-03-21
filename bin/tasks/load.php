@@ -246,6 +246,7 @@ function addArticle($database, Generator $faker): void
         // Three random users out of 10,000 get mutate access
 
         '$permissions' => [
+            Permission::read(Role::any()),
             Permission::read(Role::user($faker->randomNumber(4))),
             Permission::read(Role::user($faker->randomNumber(4))),
             Permission::read(Role::user($faker->randomNumber(4))),

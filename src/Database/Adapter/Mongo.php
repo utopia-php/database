@@ -1401,6 +1401,11 @@ class Mongo extends Adapter
         return true;
     }
 
+    public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *

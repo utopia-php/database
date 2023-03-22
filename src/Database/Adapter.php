@@ -483,6 +483,13 @@ abstract class Adapter
     abstract public function getSupportForTimeouts(): bool;
 
     /**
+     * Are relationships supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForRelationships(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

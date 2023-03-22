@@ -23,7 +23,6 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
-use function Swoole\Coroutine\Http\get;
 
 abstract class Base extends TestCase
 {
@@ -3709,6 +3708,11 @@ abstract class Base extends TestCase
     // Relationships
     public function testOneToOneOneWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('person');
         static::getDatabase()->createCollection('library');
 
@@ -3873,7 +3877,9 @@ abstract class Base extends TestCase
         $person1 = static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
-            $person1->setAttribute('library', $person1
+            $person1->setAttribute(
+                'library',
+                $person1
                 ->getAttribute('library')
                 ->setAttribute('name', 'Library 1 Updated')
             )
@@ -4036,6 +4042,11 @@ abstract class Base extends TestCase
      */
     public function testOneToOneTwoWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('country');
         static::getDatabase()->createCollection('city');
 
@@ -4270,7 +4281,9 @@ abstract class Base extends TestCase
         $country1 = static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
-            $country1->setAttribute('city', $country1
+            $country1->setAttribute(
+                'city',
+                $country1
                 ->getAttribute('city')
                 ->setAttribute('name', 'City 1 Updated')
             )
@@ -4284,7 +4297,9 @@ abstract class Base extends TestCase
         $city2 = static::getDatabase()->updateDocument(
             'city',
             $city2->getId(),
-            $city2->setAttribute('country', $city2
+            $city2->setAttribute(
+                'country',
+                $city2
                 ->getAttribute('country')
                 ->setAttribute('name', 'Country 2 Updated')
             )
@@ -4547,6 +4562,11 @@ abstract class Base extends TestCase
 
     public function testOneToManyOneWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('artist');
         static::getDatabase()->createCollection('album');
 
@@ -4835,6 +4855,11 @@ abstract class Base extends TestCase
 
     public function testOneToManyTwoWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('customer');
         static::getDatabase()->createCollection('account');
 
@@ -5088,7 +5113,9 @@ abstract class Base extends TestCase
         $account2 = static::getDatabase()->updateDocument(
             'account',
             $account2->getId(),
-            $account2->setAttribute('customer', $account2
+            $account2->setAttribute(
+                'customer',
+                $account2
                 ->getAttribute('customer')
                 ->setAttribute('name', 'Customer 2 Updated')
             )
@@ -5294,6 +5321,11 @@ abstract class Base extends TestCase
 
     public function testManyToOneOneWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('review');
         static::getDatabase()->createCollection('movie');
 
@@ -5580,6 +5612,11 @@ abstract class Base extends TestCase
 
     public function testManyToOneTwoWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('product');
         static::getDatabase()->createCollection('store');
 
@@ -6050,6 +6087,11 @@ abstract class Base extends TestCase
 
     public function testManyToManyOneWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('playlist');
         static::getDatabase()->createCollection('song');
 
@@ -6326,6 +6368,11 @@ abstract class Base extends TestCase
 
     public function testManyToManyTwoWayRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('students');
         static::getDatabase()->createCollection('classes');
 
@@ -6780,6 +6827,11 @@ abstract class Base extends TestCase
 
     public function testSelectRelationshipAttributes(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('make');
         static::getDatabase()->createCollection('model');
 
@@ -6900,6 +6952,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToOne_OneToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('pattern');
         static::getDatabase()->createCollection('shirt');
         static::getDatabase()->createCollection('team');
@@ -6984,6 +7041,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToOne_OneToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('teachers');
         static::getDatabase()->createCollection('classrooms');
         static::getDatabase()->createCollection('children');
@@ -7077,6 +7139,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToOne_ManyToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('users');
         static::getDatabase()->createCollection('profiles');
         static::getDatabase()->createCollection('avatars');
@@ -7161,6 +7228,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToOne_ManyToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('addresses');
         static::getDatabase()->createCollection('houses');
         static::getDatabase()->createCollection('buildings');
@@ -7250,6 +7322,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToMany_OneToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('countries');
         static::getDatabase()->createCollection('cities');
         static::getDatabase()->createCollection('mayors');
@@ -7351,6 +7428,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToMany_OneToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('dormitorys');
         static::getDatabase()->createCollection('occupants');
         static::getDatabase()->createCollection('pets');
@@ -7475,6 +7557,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToMany_ManyToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('home');
         static::getDatabase()->createCollection('renters');
         static::getDatabase()->createCollection('floors');
@@ -7560,6 +7647,11 @@ abstract class Base extends TestCase
 
     public function testNestedOneToMany_ManyToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('owners');
         static::getDatabase()->createCollection('cats');
         static::getDatabase()->createCollection('toys');
@@ -7647,6 +7739,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToOne_OneToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('towns');
         static::getDatabase()->createCollection('homelands');
         static::getDatabase()->createCollection('capitals');
@@ -7740,6 +7837,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToOne_OneToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('players');
         static::getDatabase()->createCollection('teams');
         static::getDatabase()->createCollection('supporters');
@@ -7843,6 +7945,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToOne_ManyToOne(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('cows');
         static::getDatabase()->createCollection('farms');
         static::getDatabase()->createCollection('farmer');
@@ -7937,6 +8044,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToOne_ManyToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('books');
         static::getDatabase()->createCollection('entrants');
         static::getDatabase()->createCollection('rooms');
@@ -8000,6 +8112,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToMany_OneToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('stones');
         static::getDatabase()->createCollection('hearths');
         static::getDatabase()->createCollection('plots');
@@ -8103,6 +8220,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToMany_OneToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('groups');
         static::getDatabase()->createCollection('tounaments');
         static::getDatabase()->createCollection('prizes');
@@ -8195,6 +8317,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToMany_ManyToOneRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('platforms');
         static::getDatabase()->createCollection('games');
         static::getDatabase()->createCollection('publishers');
@@ -8301,6 +8428,11 @@ abstract class Base extends TestCase
 
     public function testNestedManyToMany_ManyToManyRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('sauces');
         static::getDatabase()->createCollection('pizzas');
         static::getDatabase()->createCollection('toppings');
@@ -8397,6 +8529,11 @@ abstract class Base extends TestCase
 
     public function testInheritRelationshipPermissions(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('lawns');
         static::getDatabase()->createCollection('trees');
         static::getDatabase()->createCollection('birds');
@@ -8468,6 +8605,11 @@ abstract class Base extends TestCase
      */
     public function testEnforceRelationshipPermissions(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 
@@ -8618,6 +8760,11 @@ abstract class Base extends TestCase
 
     public function testExceedMaxDepth(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('level1');
         static::getDatabase()->createCollection('level2');
         static::getDatabase()->createCollection('level3');
@@ -8681,7 +8828,10 @@ abstract class Base extends TestCase
 
 
         // Exceed update depth
-        $level1 = static::getDatabase()->updateDocument('level1', 'level1', $level1
+        $level1 = static::getDatabase()->updateDocument(
+            'level1',
+            'level1',
+            $level1
             ->setAttribute('level2', [new Document([
                 '$id' => 'level2new',
                 'level3' => [
@@ -8705,6 +8855,11 @@ abstract class Base extends TestCase
 
     public function testCreateRelationshipMissingCollection(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Collection not found');
 
@@ -8718,6 +8873,11 @@ abstract class Base extends TestCase
 
     public function testCreateRelationshipMissingRelatedCollection(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('test');
 
         $this->expectException(Exception::class);
@@ -8733,6 +8893,11 @@ abstract class Base extends TestCase
 
     public function testCreateDuplicateRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('test1');
         static::getDatabase()->createCollection('test2');
 
@@ -8756,6 +8921,11 @@ abstract class Base extends TestCase
 
     public function testCreateInvalidRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('test3');
         static::getDatabase()->createCollection('test4');
 
@@ -8772,6 +8942,11 @@ abstract class Base extends TestCase
 
     public function testDeleteMissingRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Attribute not found');
 
@@ -8780,6 +8955,11 @@ abstract class Base extends TestCase
 
     public function testCreateInvalidIntValueRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('invalid1');
         static::getDatabase()->createCollection('invalid2');
 
@@ -8804,6 +8984,11 @@ abstract class Base extends TestCase
      */
     public function testCreateInvalidObjectValueRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
@@ -8818,6 +9003,11 @@ abstract class Base extends TestCase
      */
     public function testCreateInvalidArrayIntValueRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createRelationship(
             collection: 'invalid1',
             relatedCollection: 'invalid2',
@@ -8838,6 +9028,11 @@ abstract class Base extends TestCase
 
     public function testCreateEmptyValueRelationship(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('null1');
         static::getDatabase()->createCollection('null2');
 

@@ -600,6 +600,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
     /**
      * Get SQL Index Type
      *

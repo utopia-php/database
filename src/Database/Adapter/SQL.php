@@ -671,6 +671,11 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForRelationships(): bool
+    {
+        return true;
+    }
+
     /**
      * @param mixed $stmt
      * @param Query $query

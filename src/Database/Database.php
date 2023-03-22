@@ -3082,6 +3082,9 @@ class Database
         return $deleted;
     }
 
+    /**
+     * @throws Exception
+     */
     private function deleteDocumentRelationships(Document $collection, Document $document): void
     {
         $attributes = $collection->getAttribute('attributes', []);
@@ -3114,24 +3117,26 @@ class Database
         }
     }
 
+    /**
+     * @throws Exception
+     */
     private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
-        if (!\is_null($value)) {
+        if (!empty($value)) {
             throw new Exception('Can not delete document because it has at least one related document.');
         }
 
         /**
-         * When many-to-one and not two-way, deleting the child (one) should be restricted
+         * When many-to-one, deleting the child (one) should be restricted
          * if there is at least one parent (many) that relates to the child
         */
         if (
-            !$twoWay
-            && $relationType === Database::RELATION_MANY_TO_ONE
+            $relationType === Database::RELATION_MANY_TO_ONE
             && $side === Database::RELATION_SIDE_CHILD
         ) {
-            $related = $this->findOne($relatedCollection->getId(), [
+            $related = Authorization::skip(fn () => $this->findOne($relatedCollection->getId(), [
                 Query::equal($twoWayKey, [$document->getId()])
-            ]);
+            ]));
 
             if ($related) {
                 throw new Exception('Can not delete document because it has at least one related document.');

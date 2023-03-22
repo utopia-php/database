@@ -2721,7 +2721,10 @@ class Database
                         $removedDocuments = \array_diff($oldIds, $newIds);
 
                         foreach ($removedDocuments as $relation) {
-                            $relation = $this->getDocument($relatedCollection->getId(), $relation);
+                            $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                $relatedCollection->getId(),
+                                $relation
+                            ));
 
                             $this->skipRelationships(fn () => $this->updateDocument(
                                 $relatedCollection->getId(),

@@ -2729,17 +2729,7 @@ class Database
                             ));
                         }
 
-                        $addedDocuments = \array_filter($value, function ($document) use ($oldIds) {
-                            if (\is_string($document)) {
-                                return !\in_array($document, $oldIds);
-                            } else if ($document instanceof Document) {
-                                return !\in_array($document->getId(), $oldIds);
-                            } else {
-                                throw new Exception('Invalid value for relationship');
-                            }
-                        });
-
-                        foreach ($addedDocuments as $relation) {
+                        foreach ($value as $relation) {
                             if (\is_string($relation)) {
                                 $related = $this->getDocument($relatedCollection->getId(), $relation);
                                 $related->setAttribute($twoWayKey, $document->getId());

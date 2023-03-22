@@ -8617,10 +8617,12 @@ abstract class Base extends TestCase
             twoWay: true,
         );
 
-        static::getDatabase()->createDocument('level1', new Document([
+        // Exceed create depth
+        $level1 = static::getDatabase()->createDocument('level1', new Document([
             '$id' => 'level1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'level2' => [
                 [
@@ -8638,13 +8640,41 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-
-        $level1 = static::getDatabase()->getDocument('level1', 'level1');
-        $this->assertEquals('level1', $level1->getId());
         $this->assertEquals(1, count($level1['level2']));
         $this->assertEquals('level2', $level1['level2'][0]->getId());
         $this->assertEquals(1, count($level1['level2'][0]['level3']));
         $this->assertEquals('level3', $level1['level2'][0]['level3'][0]->getId());
+        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument('level1', 'level1');
+        $this->assertEquals(1, count($level1['level2']));
+        $this->assertEquals('level2', $level1['level2'][0]->getId());
+        $this->assertEquals(1, count($level1['level2'][0]['level3']));
+        $this->assertEquals('level3', $level1['level2'][0]['level3'][0]->getId());
+        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+
+
+        // Exceed update depth
+        $level1 = static::getDatabase()->updateDocument('level1', 'level1', $level1
+            ->setAttribute('level2', [new Document([
+                '$id' => 'level2new',
+                'level3' => [
+                    [
+                        '$id' => 'level3new',
+                        'level4' => [
+                            [
+                                '$id' => 'level4new',
+                            ],
+                        ],
+                    ],
+                ],
+            ])])
+        );
+        $this->assertEquals(1, count($level1['level2']));
+        $this->assertEquals('level2new', $level1['level2'][0]->getId());
+        $this->assertEquals(1, count($level1['level2'][0]['level3']));
+        $this->assertEquals('level3new', $level1['level2'][0]['level3'][0]->getId());
         $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
     }
 

@@ -2586,7 +2586,7 @@ class Database
 
         static $updateDepth = 1;
 
-        foreach ($relationships as $relationship) {
+        foreach ($relationships as $index => $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
             $oldValue = $old->getAttribute($key);
@@ -2598,6 +2598,16 @@ class Database
 
             if ($oldValue == $value) {
                 $document->removeAttribute($key);
+                continue;
+            }
+
+            if ($updateDepth > Database::RELATION_MAX_DEPTH) {
+                $document->removeAttribute($key);
+
+                if ($index === \count($relationships) - 1) {
+                    return;
+                }
+
                 continue;
             }
 

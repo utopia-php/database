@@ -2696,7 +2696,15 @@ class Database
                     }
                     break;
                 case Database::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
+                case Database::RELATION_MANY_TO_ONE:
+                    if (
+                        ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
+                        || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
+                    ) {
+                        if (\is_null($value)) {
+                            break;
+                        }
+
                         if (!\is_array($value)) {
                             throw new Exception('Invalid value for relationship');
                         }
@@ -2773,75 +2781,16 @@ class Database
                                 $relatedCollection->getId(),
                                 $value
                             );
-                        } else {
+                        } else if ($related->getAttributes() != $value->getAttributes()) {
+                            $this->updateDocument(
+                                $relatedCollection->getId(),
+                                $related->getId(),
+                                $value
+                            );
                             $this->deleteCachedDocument($relatedCollection->getId(), $related->getId());
                         }
 
-                        $document->setAttribute($key, $related->getId());
-                    } else {
-                        throw new Exception('Invalid value for relationship');
-                    }
-
-                    break;
-                case Database::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!\is_array($value)) {
-                            throw new Exception('Invalid value for relationship');
-                        }
-
-                        $oldIds = \array_map(function ($document) {
-                            return $document->getId();
-                        }, $old->getAttribute($key, []));
-
-                        $oldDocuments = $old->getAttribute($key, []);
-
-                        $removedIds = \array_diff($oldIds, $value);
-
-                        $removedDocuments = \array_filter($oldDocuments, function ($document) use ($removedIds) {
-                            return \in_array($document->getId(), $removedIds);
-                        });
-
-                        foreach ($removedDocuments as $relation) {
-                            $this->skipRelationships(fn () => $this->updateDocument(
-                                $relatedCollection->getId(),
-                                $relation->getId(),
-                                $relation->setAttribute($twoWayKey, null)
-                            ));
-                        }
-
-                        $addedIds = \array_diff($value, $oldIds);
-
-                        foreach ($addedIds as $relation) {
-                            if (!\is_string($relation)) {
-                                throw new Exception('Invalid value for relationship');
-                            }
-
-                            $related = $this->getDocument($relatedCollection->getId(), $relation);
-
-                            $this->skipRelationships(fn () => $this->updateDocument(
-                                $relatedCollection->getId(),
-                                $related->getId(),
-                                $related->setAttribute($twoWayKey, $document->getId())
-                            ));
-                        }
-
-                        $document->removeAttribute($key);
-                        break;
-                    }
-
-                    if (\is_string($value)) {
-                        $this->deleteCachedDocument($relatedCollection->getId(), $value);
-                    } else if ($value instanceof Document) {
-                        $related = $this->getDocument($relatedCollection->getId(), $value->getId());
-
-                        if ($related->isEmpty()) {
-                            $this->createDocument(
-                                $relatedCollection->getId(),
-                                $value
-                            );
-                        }
-
-                        $document->setAttribute($key, $related->getId());
+                        $document->setAttribute($key, $value->getId());
                     } else {
                         throw new Exception('Invalid value for relationship');
                     }

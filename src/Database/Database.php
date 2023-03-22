@@ -1506,7 +1506,8 @@ class Database
         ?string $onDelete = null
     ): bool {
         $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
-            $altering = !\is_null($newKey) || !\is_null($newTwoWayKey);
+            $altering = (!\is_null($newKey) && $newKey !== $key)
+                || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
             $relatedCollection = $attribute['options']['relatedCollection'];
             $type = $attribute['options']['relationType'];

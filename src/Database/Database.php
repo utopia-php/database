@@ -2177,9 +2177,7 @@ class Database
                     $fetchDepth++;
                     $fetchedRelationships[] = $relationship;
 
-                    $junction = $side === Database::RELATION_SIDE_PARENT
-                        ? $collection->getId() . '_' . $relatedCollection->getId()
-                        : $relatedCollection->getId() . '_' . $collection->getId();
+                    $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                     $junctions = $this->skipRelationships(fn () => $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2432,9 +2430,7 @@ class Database
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
-            $junction = $side === Database::RELATION_SIDE_PARENT
-                ? $collection . '_' . $relatedCollection
-                : $relatedCollection . '_' . $collection;
+            $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
             $this->createDocument($junction, new Document([
                 $key => $related->getId(),
@@ -2491,9 +2487,7 @@ class Database
             case Database::RELATION_MANY_TO_MANY:
                 $this->deleteCachedDocument($relatedCollection, $relationId);
 
-                $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $collection . '_' . $relatedCollection
-                    : $relatedCollection . '_' . $collection;
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->createDocument($junction, new Document([
                     $key => $related->getId(),
@@ -2709,11 +2703,7 @@ class Database
                             throw new Exception('Invalid value for relationship');
                         }
 
-                        $oldDocuments = $old->getAttribute($key, []);
-
-                        $oldIds = \array_map(function ($document) {
-                            return $document->getId();
-                        }, $oldDocuments);
+                        $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
 
                         $newIds = \array_map(function ($item) {
                             if (\is_string($item)) {
@@ -2797,41 +2787,97 @@ class Database
 
                     break;
                 case Database::RELATION_MANY_TO_MANY:
+                    if (\is_null($value)) {
+                        break;
+                    }
                     if (!\is_array($value)) {
                         throw new Exception('Invalid value for relationship');
                     }
-                    foreach ($value as $relation) {
-                        if (!\is_string($relation)) {
+
+                    $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
+
+                    $newIds = \array_map(function ($item) {
+                        if (\is_string($item)) {
+                            return $item;
+                        } else if ($item instanceof Document) {
+                            return $item->getId();
+                        } else {
                             throw new Exception('Invalid value for relationship');
                         }
+                    }, $value);
 
-                        $junction = $side === Database::RELATION_SIDE_PARENT
-                            ? $collection->getId() . '_' . $relatedCollection->getId()
-                            : $relatedCollection->getId() . '_' . $collection->getId();
+                    $removedDocuments = \array_diff($oldIds, $newIds);
+
+                    foreach ($removedDocuments as $relation) {
+                        $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                         $queryKey = $side === Database::RELATION_SIDE_PARENT ? $twoWayKey : $key;
                         $queryValue = $side === Database::RELATION_SIDE_PARENT ? $document->getId() : $relation;
-
-                        $attrKey = $side === Database::RELATION_SIDE_PARENT ? $key : $twoWayKey;
-                        $attrValue = $side === Database::RELATION_SIDE_PARENT ? $relation : $document->getId();
 
                         $junctions = $this->find($junction, [
                             Query::equal($queryKey, [$queryValue]),
                         ]);
 
                         foreach ($junctions as $junction) {
-                            $this->skipRelationships(fn () => $this->updateDocument(
-                                $junction->getCollection(),
-                                $junction->getId(),
-                                $junction->setAttribute($attrKey, $attrValue)
-                            ));
+                            $this->deleteDocument($junction->getCollection(), $junction->getId());
                         }
+                    }
+
+                    foreach ($value as $relation) {
+                        if (\is_string($relation)) {
+                            if (\in_array($relation, $oldIds)) {
+                                continue;
+                            }
+                        } else if ($relation instanceof Document) {
+                            $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
+
+                            if ($related->isEmpty()) {
+                                $related = $this->createDocument(
+                                    $relatedCollection->getId(),
+                                    $relation
+                                );
+                            } else if ($related->getAttributes() != $relation->getAttributes()) {
+                                $related = $this->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $related->getId(),
+                                    $relation
+                                );
+                            }
+
+                            if (\in_array($relation->getId(), $oldIds)) {
+                                continue;
+                            }
+
+                            $relation = $related->getId();
+                        } else if (!\is_string($relation)) {
+                            throw new Exception('Invalid value for relationship');
+                        }
+
+                        $this->skipRelationships(fn () => $this->createDocument(
+                            $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side),
+                            new Document([
+                                '$permissions' => [
+                                    Permission::read(Role::any()),
+                                    Permission::update(Role::any()),
+                                    Permission::delete(Role::any()),
+                                ],
+                                $key => $relation,
+                                $twoWayKey => $document->getId(),
+                            ])
+                        ));
                     }
 
                     $document->removeAttribute($key);
                     break;
             }
         }
+    }
+
+    private function getJunctionCollection(string $collection, string $relatedCollection, string $side): string
+    {
+        return $side === Database::RELATION_SIDE_PARENT
+            ? $collection . '_' . $relatedCollection
+            : $relatedCollection . '_' . $collection;
     }
 
     /**
@@ -3122,9 +3168,7 @@ class Database
 
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $collection->getId() . '_' . $relatedCollection->getId()
-                    : $relatedCollection->getId() . '_' . $collection->getId();
+                $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                 $junctions = $this->find($junction, [
                     Query::equal($twoWayKey, [$document->getId()]),
@@ -3181,9 +3225,7 @@ class Database
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $collection->getId() . '_' . $relatedCollection->getId()
-                    : $relatedCollection->getId() . '_' . $collection->getId();
+                $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                 $junctions = $this->find($junction, [
                     Query::equal($twoWayKey, [$document->getId()]),

@@ -1640,6 +1640,7 @@ class Database
             if ($attribute['$id'] === $id) {
                 $relationship = $attribute;
                 unset($attributes[$name]);
+                break;
             }
         }
 
@@ -1660,6 +1661,7 @@ class Database
         foreach ($relatedAttributes as $name => $attribute) {
             if ($attribute['$id'] === $twoWayKey) {
                 unset($relatedAttributes[$name]);
+                break;
             }
         }
 

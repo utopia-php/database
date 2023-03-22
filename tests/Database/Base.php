@@ -8822,56 +8822,57 @@ abstract class Base extends TestCase
             'null2' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null2'));
+        $this->assertEquals(null, $document->getAttribute('null2'));
 
         $document = static::getDatabase()->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null1' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null1'));
+        $this->assertEquals(null, $document->getAttribute('null1'));
 
         $document = static::getDatabase()->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null3' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null3'));
+        // One to many will be empty array instead of null
+        $this->assertEquals([], $document->getAttribute('null3'));
 
         $document = static::getDatabase()->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null4' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null4'));
+        $this->assertEquals(null, $document->getAttribute('null4'));
 
         $document = static::getDatabase()->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null4' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null4'));
+        $this->assertEquals(null, $document->getAttribute('null4'));
 
         $document = static::getDatabase()->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null5' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null5'));
+        $this->assertEquals([], $document->getAttribute('null5'));
 
         $document = static::getDatabase()->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null6' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null6'));
+        $this->assertEquals([], $document->getAttribute('null6'));
 
         $document = static::getDatabase()->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null7' => null,
         ]));
 
-        $this->assertNull($document->getAttribute('null7'));
+        $this->assertEquals([], $document->getAttribute('null7'));
     }
 
     public function testEvents(): void

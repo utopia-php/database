@@ -3758,6 +3758,31 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Update through create
+        $library10 = static::getDatabase()->createDocument('library', new Document([
+            '$id' => 'library10',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Library 10',
+            'area' => 'Area 10',
+        ]));
+        $person10 = static::getDatabase()->createDocument('person', new Document([
+            '$id' => 'person10',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 10',
+            'library' => [
+                '$id' => 'library10',
+                'name' => 'Library 10 Updated',
+                'area' => 'Area 10 Updated',
+            ],
+        ]));
+
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('library', new Document([
             '$id' => 'library2',
@@ -3812,7 +3837,7 @@ abstract class Base extends TestCase
 
         $people = static::getDatabase()->find('person');
 
-        $this->assertEquals(2, \count($people));
+        $this->assertEquals(3, \count($people));
 
         // Select related document attributes
         $person = static::getDatabase()->findOne('person', [

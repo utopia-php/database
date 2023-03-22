@@ -2257,6 +2257,7 @@ class Database
      * @param Document $document
      * @return void
      * @throws Exception
+     * @throws Throwable
      */
     private function createDocumentRelationships(Document $collection, Document $document): void
     {
@@ -2420,12 +2421,14 @@ class Database
             $depth++;
             $related = $this->createDocument($relatedCollection, $relation);
             $depth--;
-        } elseif ($related->getAttributes() != $relation->getAttributes()) {
+        } else if ($related->getAttributes() != $relation->getAttributes()) {
             // If the related document exists and the data is not the same, update it
-            $relation = new Document(\array_merge($related->getArrayCopy(), $relation->getArrayCopy()));
+            foreach ($relation->getAttributes() as $attribute => $value) {
+                $related->setAttribute($attribute, $value);
+            }
 
             $depth ++;
-            $related = $this->updateDocument($relatedCollection, $relation->getId(), $relation);
+            $related = $this->updateDocument($relatedCollection, $related->getId(), $related);
             $depth --;
         }
 

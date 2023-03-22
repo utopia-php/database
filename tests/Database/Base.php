@@ -3976,6 +3976,24 @@ abstract class Base extends TestCase
         $library = $person->getAttribute('newLibrary');
         $this->assertEquals('library4', $library['$id']);
 
+        // Create person with no relationship
+        $person4 = static::getDatabase()->createDocument('person', new Document([
+            '$id' => 'person4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 4',
+        ]));
+
+        // Can delete parent document with no relation with on delete set to restrict
+        $deleted = static::getDatabase()->deleteDocument('person', 'person4');
+        $this->assertEquals(true, $deleted);
+
+        $person4 = static::getDatabase()->getDocument('person', 'person4');
+        $this->assertEquals(true, $person4->isEmpty());
+
         // Can not delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('person', 'person1');
@@ -4468,6 +4486,25 @@ abstract class Base extends TestCase
         $city = $country->getAttribute('newCity');
         $this->assertEquals('city1', $city['$id']);
 
+        // Create a new country with no relation
+        static::getDatabase()->createDocument('country', new Document([
+            '$id' => 'country8',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Denmark'
+        ]));
+
+        // Can delete parent document with no relation with on delete set to restrict
+        $deleted = static::getDatabase()->deleteDocument('country', 'country8');
+        $this->assertEquals(1, $deleted);
+
+        $country8 = static::getDatabase()->getDocument('country', 'country8');
+        $this->assertEquals(true, $country8->isEmpty());
+
+
         // Can not delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
@@ -4799,9 +4836,28 @@ abstract class Base extends TestCase
         $albums = $artist->getAttribute('newAlbums');
         $this->assertEquals('album1', $albums[0]['$id']);
 
+        // Create new document with no relationship
+        static::getDatabase()->createDocument('artist', new Document([
+            '$id' => 'artist4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Artist 4',
+        ]));
+
+        // Can delete document with no relationship when on delete is set to restrict
+        $deleted = static::getDatabase()->deleteDocument('artist', 'artist4');
+        $this->assertEquals(true, $deleted);
+
+        $artist4 = static::getDatabase()->getDocument('artist', 'artist4');
+        $this->assertEquals(true, $artist4->isEmpty());
+
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('artist', 'artist1');
+            $this->fail('Exception should be thrown');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -5260,9 +5316,28 @@ abstract class Base extends TestCase
         $customer = $account->getAttribute('newCustomer');
         $this->assertEquals('customer1', $customer['$id']);
 
+        // Create new document with no relationship
+        static::getDatabase()->createDocument('customer', new Document([
+            '$id' => 'customer7',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Customer 7',
+        ]));
+
+        // Can delete document with no relationship when on delete is set to restrict
+        $deleted = static::getDatabase()->deleteDocument('customer', 'customer7');
+        $this->assertEquals(true, $deleted);
+
+        $customer7 = static::getDatabase()->getDocument('customer', 'customer7');
+        $this->assertEquals(true, $customer7->isEmpty());
+
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('customer', 'customer1');
+            $this->fail('Exception should be thrown');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -5562,9 +5637,29 @@ abstract class Base extends TestCase
             $review1->setAttribute('newMovie', 'movie1')
         );
 
+        // Create new document with no relationship
+        static::getDatabase()->createDocument('movie', new Document([
+            '$id' => 'movie3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Movie 3',
+            'length' => 90,
+        ]));
+
+        // Can delete document with no relationship when on delete is set to restrict
+        $deleted = static::getDatabase()->deleteDocument('movie', 'movie3');
+        $this->assertEquals(true, $deleted);
+
+        $movie3 = static::getDatabase()->getDocument('movie', 'movie3');
+        $this->assertEquals(true, $movie3->isEmpty());
+
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('movie', 'movie1');
+            $this->fail('Exception should be thrown');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -6033,9 +6128,37 @@ abstract class Base extends TestCase
         $store = $product->getAttribute('newStore');
         $this->assertEquals('store2', $store['$id']);
 
+        // Reset relationships
+        $store1 = static::getDatabase()->getDocument('store', 'store1');
+        static::getDatabase()->updateDocument(
+            'store',
+            $store1->getId(),
+            $store1->setAttribute('newProducts', ['product1'])
+        );
+
+        // Create new document with no relationship
+        static::getDatabase()->createDocument('store', new Document([
+            '$id' => 'store7',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store 7',
+            'opensAt' => '09:00',
+        ]));
+
+        // Can delete document with no relationship when on delete is set to restrict
+        $deleted = static::getDatabase()->deleteDocument('store', 'store7');
+        $this->assertEquals(true, $deleted);
+
+        $store7 = static::getDatabase()->getDocument('store', 'store7');
+        $this->assertEquals(true, $store7->isEmpty());
+
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('store', 'store1');
+            $this->fail('Exception should be thrown');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -6310,9 +6433,28 @@ abstract class Base extends TestCase
         $songs = $playlist->getAttribute('newSongs');
         $this->assertEquals('song2', $songs[0]['$id']);
 
+        // Create new document with no relationship
+        static::getDatabase()->createDocument('playlist', new Document([
+            '$id' => 'playlist3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Playlist 3',
+        ]));
+
+        // Can delete document with no relationship when on delete is set to restrict
+        $deleted = static::getDatabase()->deleteDocument('playlist', 'playlist3');
+        $this->assertEquals(true, $deleted);
+
+        $playlist3 = static::getDatabase()->getDocument('playlist', 'playlist3');
+        $this->assertEquals(true, $playlist3->isEmpty());
+
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('playlist', 'playlist1');
+            $this->fail('Exception should be thrown');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -6764,9 +6906,28 @@ abstract class Base extends TestCase
         $students = $class->getAttribute('newStudents');
         $this->assertEquals('student1', $students[0]['$id']);
 
+        // Create new document with no relationship
+        static::getDatabase()->createDocument('students', new Document([
+            '$id' => 'student7',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Student 7',
+        ]));
+
+        // Can delete document with no relationship when on delete is set to restrict
+        $deleted = static::getDatabase()->deleteDocument('students', 'student7');
+        $this->assertEquals(true, $deleted);
+
+        $student6 = static::getDatabase()->getDocument('students', 'student7');
+        $this->assertEquals(true, $student6->isEmpty());
+
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('students', 'student1');
+            $this->fail('Exception should be thrown');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }

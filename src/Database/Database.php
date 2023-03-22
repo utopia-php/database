@@ -2645,7 +2645,7 @@ class Database
                                 $oldValue?->getId() !== $value
                                 && $this->findOne($relatedCollection->getId(), [
                                     Query::equal($twoWayKey, [$document->getId()]),
-                                ]) !== false
+                                ])
                             ) {
                                 // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                 throw new DuplicateException('Document already has a related document');
@@ -2665,7 +2665,7 @@ class Database
                                     $oldValue?->getId() !== $value->getId()
                                     && $this->findOne($relatedCollection->getId(), [
                                         Query::equal($twoWayKey, [$document->getId()]),
-                                    ]) !== false
+                                    ])
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                     throw new DuplicateException('Document already has a related document');

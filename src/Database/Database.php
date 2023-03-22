@@ -896,6 +896,7 @@ class Database
      *
      * @return Document
      * @throws Exception
+     * @throws Throwable
      */
     private function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
     {
@@ -905,23 +906,23 @@ class Database
         }
 
         $indexes = $collection->getAttribute('indexes', []);
-        $i = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
+        $index = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
 
-        if ($i === false) {
+        if ($index === false) {
             throw new Exception('Index not found');
         }
 
         // Execute update from callback
-        $updateCallback($indexes[$i], $collection, $i);
+        $updateCallback($indexes[$index], $collection, $index);
 
         // Save
         $collection->setAttribute('indexes', $indexes, Document::SET_TYPE_ASSIGN);
 
         $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$i]);
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$index]);
 
-        return $indexes[$i];
+        return $indexes[$index];
     }
 
     /**
@@ -929,10 +930,11 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param callable $updateCallback method that recieves document, and returns it with changes applied
+     * @param callable $updateCallback method that receives document, and returns it with changes applied
      *
      * @return Document
      * @throws Exception
+     * @throws Throwable
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
@@ -942,23 +944,23 @@ class Database
         }
 
         $attributes = $collection->getAttribute('attributes', []);
-        $i = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
-        if ($i === false) {
+        if ($index === false) {
             throw new Exception('Attribute not found');
         }
 
         // Execute update from callback
-        $updateCallback($attributes[$i], $collection, $i);
+        $updateCallback($attributes[$index], $collection, $index);
 
         // Save
         $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
 
         $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$i]);
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$index]);
 
-        return $attributes[$i];
+        return $attributes[$index];
     }
 
     /**

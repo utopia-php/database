@@ -3781,11 +3781,14 @@ abstract class Base extends TestCase
             ],
             'name' => 'Person 10',
             'library' => [
-                '$id' => 'library10',
+                '$id' => $library10->getId(),
                 'name' => 'Library 10 Updated',
                 'area' => 'Area 10 Updated',
             ],
         ]));
+        $this->assertEquals('Library 10 Updated', $person10->getAttribute('library')->getAttribute('name'));
+        $library10 = static::getDatabase()->getDocument('library', $library10->getId());
+        $this->assertEquals('Library 10 Updated', $library10->getAttribute('name'));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('library', new Document([

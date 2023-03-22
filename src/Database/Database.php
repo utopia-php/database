@@ -1917,20 +1917,18 @@ class Database
         $nestedSelections = [];
 
         foreach ($queries as $index => $query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
-                        if (\str_contains($value, '.')) {
-                            $nestedSelections[] = Query::select([
-                                \implode('.', \array_slice(\explode('.', $value), 1))
-                            ]);
-                            unset($queries[$index]);
-                            break;
-                        }
+            if ($query->getMethod() == Query::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    if (\str_contains($value, '.')) {
+                        // Shift the top level off the dot-path to pass the selection down the chain
+                        // 'foo.bar.baz' becomes 'bar.baz'
+                        $nestedSelections[] = Query::select([
+                            \implode('.', \array_slice(\explode('.', $value), 1))
+                        ]);
+                        unset($queries[$index]);
+                        break;
                     }
-                    break;
-                default:
-                    break;
+                }
             }
         }
 

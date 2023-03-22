@@ -1314,8 +1314,8 @@ class Database
      * @param string $relatedCollection
      * @param string $type
      * @param bool $twoWay
-     * @param string $id
-     * @param string $twoWayKey
+     * @param string|null $id
+     * @param string|null $twoWayKey
      * @param string $onDelete
      * @return bool
      * @throws AuthorizationException
@@ -1329,8 +1329,8 @@ class Database
         string $relatedCollection,
         string $type,
         bool $twoWay = false,
-        string $id = '',
-        string $twoWayKey = '',
+        ?string $id = null,
+        ?string $twoWayKey = null,
         string $onDelete = Database::RELATION_MUTATE_RESTRICT
     ): bool {
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -1345,13 +1345,9 @@ class Database
             throw new Exception('Related collection not found');
         }
 
-        if (empty($id)) {
-            $id = $relatedCollection->getId();
-        }
+        $id ??= $relatedCollection->getId();
 
-        if (empty($twoWayKey)) {
-            $twoWayKey = $collection->getId();
-        }
+        $twoWayKey ??= $collection->getId();
 
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
@@ -1495,9 +1491,10 @@ class Database
      * @param string $key
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
+     * @param bool|null $twoWay
      * @param string|null $onDelete
      * @return bool
-     * @throws Exception
+     * @throws Throwable
      */
     public function updateRelationship(
         string  $collection,

@@ -4228,6 +4228,19 @@ abstract class Base extends TestCase
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('Country 1 Updated', $country1->getAttribute('name'));
 
+        $city2 = static::getDatabase()->getDocument('city', 'city2');
+
+        // Update inverse root document attribute without altering relationship
+        $city2 = static::getDatabase()->updateDocument(
+            'city',
+            $city2->getId(),
+            $city2->setAttribute('name', 'City 2 Updated')
+        );
+
+        $this->assertEquals('City 2 Updated', $city2->getAttribute('name'));
+        $city2 = static::getDatabase()->getDocument('city', 'city2');
+        $this->assertEquals('City 2 Updated', $city2->getAttribute('name'));
+
         // Update nested document attribute
         $country1 = static::getDatabase()->updateDocument(
             'country',
@@ -4241,6 +4254,20 @@ abstract class Base extends TestCase
         $this->assertEquals('City 1 Updated', $country1->getAttribute('city')->getAttribute('name'));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('City 1 Updated', $country1->getAttribute('city')->getAttribute('name'));
+
+        // Update inverse nested document attribute
+        $city2 = static::getDatabase()->updateDocument(
+            'city',
+            $city2->getId(),
+            $city2->setAttribute('country', $city2
+                ->getAttribute('country')
+                ->setAttribute('name', 'Country 2 Updated')
+            )
+        );
+
+        $this->assertEquals('Country 2 Updated', $city2->getAttribute('country')->getAttribute('name'));
+        $city2 = static::getDatabase()->getDocument('city', 'city2');
+        $this->assertEquals('Country 2 Updated', $city2->getAttribute('country')->getAttribute('name'));
 
         // Create new document with no relationship
         $country5 = static::getDatabase()->createDocument('country', new Document([
@@ -4272,6 +4299,36 @@ abstract class Base extends TestCase
         $country5 = static::getDatabase()->getDocument('country', 'country5');
         $this->assertEquals('city5', $country5->getAttribute('city')['$id']);
 
+        // Create new document with no relationship
+        $city6 = static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city6',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'City6',
+            'code' => 'C6',
+        ]));
+
+        // Update to relate to created document
+        $city6 = static::getDatabase()->updateDocument(
+            'city',
+            $city6->getId(),
+            $city6->setAttribute('country', new Document([
+                '$id' => 'country6',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Country 6',
+            ]))
+        );
+
+        $this->assertEquals('country6', $city6->getAttribute('country')['$id']);
+        $city6 = static::getDatabase()->getDocument('city', 'city6');
+        $this->assertEquals('country6', $city6->getAttribute('country')['$id']);
+
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
             static::getDatabase()->updateDocument(
@@ -4293,8 +4350,8 @@ abstract class Base extends TestCase
         );
 
         // Create a new city with no relation
-        $city6 = static::getDatabase()->createDocument('city', new Document([
-            '$id' => 'city6',
+        $city7 = static::getDatabase()->createDocument('city', new Document([
+            '$id' => 'city7',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4308,14 +4365,14 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
-            $country1->setAttribute('city', 'city6')
+            $country1->setAttribute('city', 'city7')
         );
 
         // Relate existing document to new document as nested data
         static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
-            $country1->setAttribute('city', $city6)
+            $country1->setAttribute('city', $city7)
         );
 
         // Query new relationship
@@ -4327,7 +4384,7 @@ abstract class Base extends TestCase
 
         // Create a new country with no relation
         static::getDatabase()->createDocument('country', new Document([
-            '$id' => 'country6',
+            '$id' => 'country7',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4340,7 +4397,7 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument(
             'city',
             $city1->getId(),
-            $city1->setAttribute('country', 'country6')
+            $city1->setAttribute('country', 'country7')
         );
 
         // Query inverse related document again
@@ -4361,10 +4418,10 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $city = static::getDatabase()->getDocument('city', 'city1');
         $country = $city->getAttribute('newCountry');
-        $this->assertEquals('country6', $country['$id']);
+        $this->assertEquals('country7', $country['$id']);
 
         // Get inverse document with new relationship key
-        $country = static::getDatabase()->getDocument('country', 'country6');
+        $country = static::getDatabase()->getDocument('country', 'country7');
         $city = $country->getAttribute('newCity');
         $this->assertEquals('city1', $city['$id']);
 
@@ -4386,8 +4443,8 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteDocument('country', 'country1');
 
         // Check relation was set to null
-        $city6 = static::getDatabase()->getDocument('city', 'city6');
-        $this->assertEquals(null, $city6->getAttribute('country', ''));
+        $city7 = static::getDatabase()->getDocument('city', 'city7');
+        $this->assertEquals(null, $city7->getAttribute('country', ''));
 
         // Delete child, set parent relationship to null for two-way
         static::getDatabase()->deleteDocument('city', 'city2');
@@ -4399,8 +4456,8 @@ abstract class Base extends TestCase
         // Relate again
         static::getDatabase()->updateDocument(
             'city',
-            $city6->getId(),
-            $city6->setAttribute('newCountry', 'country2')
+            $city7->getId(),
+            $city7->setAttribute('newCountry', 'country2')
         );
 
         // Change on delete to cascade
@@ -4411,20 +4468,20 @@ abstract class Base extends TestCase
         );
 
         // Delete parent, will delete child
-        static::getDatabase()->deleteDocument('country', 'country6');
+        static::getDatabase()->deleteDocument('country', 'country7');
 
         // Check parent and child were deleted
-        $library = static::getDatabase()->getDocument('country', 'country6');
+        $library = static::getDatabase()->getDocument('country', 'country7');
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('city', 'city1');
         $this->assertEquals(true, $library->isEmpty());
 
         // Delete child, will delete parent for two-way
-        static::getDatabase()->deleteDocument('city', 'city6');
+        static::getDatabase()->deleteDocument('city', 'city7');
 
         // Check parent and child were deleted
-        $library = static::getDatabase()->getDocument('city', 'city6');
+        $library = static::getDatabase()->getDocument('city', 'city7');
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('country', 'country2');
@@ -4432,7 +4489,7 @@ abstract class Base extends TestCase
 
         // Create new document to check after deleting relationship
         static::getDatabase()->createDocument('city', new Document([
-            '$id' => 'city6',
+            '$id' => 'city7',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -4441,7 +4498,7 @@ abstract class Base extends TestCase
             'name' => 'Munich',
             'code' => 'MUC',
             'newCountry' => [
-                '$id' => 'country6',
+                '$id' => 'country7',
                 'name' => 'Germany'
             ]
         ]));
@@ -4458,7 +4515,7 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $city);
 
         // Try to get inverse document again
-        $city = static::getDatabase()->getDocument('city', 'city6');
+        $city = static::getDatabase()->getDocument('city', 'city7');
         $country = $city->getAttribute('newCountry');
         $this->assertEquals(null, $country);
     }
@@ -4975,6 +5032,19 @@ abstract class Base extends TestCase
         $customer1 = static::getDatabase()->getDocument('customer', 'customer1');
         $this->assertEquals('Customer 1 Updated', $customer1->getAttribute('name'));
 
+        $account2 = static::getDatabase()->getDocument('account', 'account2');
+
+        // Update inverse root document attribute without altering relationship
+        $account2 = static::getDatabase()->updateDocument(
+            'account',
+            $account2->getId(),
+            $account2->setAttribute('name', 'Account 2 Updated')
+        );
+
+        $this->assertEquals('Account 2 Updated', $account2->getAttribute('name'));
+        $account2 = static::getDatabase()->getDocument('account', 'account2');
+        $this->assertEquals('Account 2 Updated', $account2->getAttribute('name'));
+
         // Update nested document attribute
         $accounts = $customer1->getAttribute('accounts', []);
         $accounts[0]->setAttribute('name', 'Account 1 Updated');
@@ -4988,6 +5058,20 @@ abstract class Base extends TestCase
         $this->assertEquals('Account 1 Updated', $customer1->getAttribute('accounts')[0]->getAttribute('name'));
         $customer1 = static::getDatabase()->getDocument('customer', 'customer1');
         $this->assertEquals('Account 1 Updated', $customer1->getAttribute('accounts')[0]->getAttribute('name'));
+
+        // Update inverse nested document attribute
+        $account2 = static::getDatabase()->updateDocument(
+            'account',
+            $account2->getId(),
+            $account2->setAttribute('customer', $account2
+                ->getAttribute('customer')
+                ->setAttribute('name', 'Customer 2 Updated')
+            )
+        );
+
+        $this->assertEquals('Customer 2 Updated', $account2->getAttribute('customer')->getAttribute('name'));
+        $account2 = static::getDatabase()->getDocument('account', 'account2');
+        $this->assertEquals('Customer 2 Updated', $account2->getAttribute('customer')->getAttribute('name'));
 
         // Create new document with no relationship
         $customer5 = static::getDatabase()->createDocument('customer', new Document([
@@ -5020,6 +5104,37 @@ abstract class Base extends TestCase
         $customer5 = static::getDatabase()->getDocument('customer', 'customer5');
         $this->assertEquals('Account 5', $customer5->getAttribute('accounts')[0]->getAttribute('name'));
 
+        // Create new child document with no relationship
+        $account6 = static::getDatabase()->createDocument('account', new Document([
+            '$id' => 'account6',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Account 6',
+            'number' => '123456789',
+        ]));
+
+        // Update inverse to relate to created document
+        $account6 = static::getDatabase()->updateDocument(
+            'account',
+            $account6->getId(),
+            $account6->setAttribute('customer', new Document([
+                '$id' => 'customer6',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Customer 6',
+            ]))
+        );
+
+        $this->assertEquals('Customer 6', $account6->getAttribute('customer')->getAttribute('name'));
+        $account6 = static::getDatabase()->getDocument('account', 'account6');
+        $this->assertEquals('Customer 6', $account6->getAttribute('customer')->getAttribute('name'));
+
         // Update document with new related document, will remove existing relations
         static::getDatabase()->updateDocument(
             'customer',
@@ -5029,7 +5144,7 @@ abstract class Base extends TestCase
 
         // Query related document again
         $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2'])
+            Query::equal('accounts.name', ['Account 2 Updated'])
         ]);
 
         $this->assertEquals(1, \count($customers));
@@ -5044,7 +5159,7 @@ abstract class Base extends TestCase
 
         // Query related document again
         $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2'])
+            Query::equal('accounts.name', ['Account 2 Updated'])
         ]);
 
         $this->assertEquals(1, \count($customers));
@@ -5059,7 +5174,7 @@ abstract class Base extends TestCase
 
         // Query related document again
         $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2'])
+            Query::equal('accounts.name', ['Account 2 Updated'])
         ]);
 
         $this->assertEquals(1, \count($customers));
@@ -5067,7 +5182,7 @@ abstract class Base extends TestCase
 
         // Query inverse document again
         $customers = static::getDatabase()->find('account', [
-            Query::equal('customer.name', ['Customer 2'])
+            Query::equal('customer.name', ['Customer 2 Updated'])
         ]);
 
         $this->assertEquals(1, \count($customers));
@@ -5670,7 +5785,18 @@ abstract class Base extends TestCase
         $this->assertEquals('Product 1 Updated', $product1->getAttribute('name'));
         $product1 = static::getDatabase()->getDocument('product', 'product1');
         $this->assertEquals('Product 1 Updated', $product1->getAttribute('name'));
-        $this->assertEquals('store1', $product1->getAttribute('store')->getId());
+
+        // Update inverse document attribute without altering relationship
+        $store1 = static::getDatabase()->getDocument('store', 'store1');
+        $store1 = static::getDatabase()->updateDocument(
+            'store',
+            $store1->getId(),
+            $store1->setAttribute('name', 'Store 1 Updated')
+        );
+
+        $this->assertEquals('Store 1 Updated', $store1->getAttribute('name'));
+        $store1 = static::getDatabase()->getDocument('store', 'store1');
+        $this->assertEquals('Store 1 Updated', $store1->getAttribute('name'));
 
         // Update nested document attribute
         $store = $product1->getAttribute('store');
@@ -5685,6 +5811,20 @@ abstract class Base extends TestCase
         $this->assertEquals('Store 1 Updated', $product1->getAttribute('store')->getAttribute('name'));
         $product1 = static::getDatabase()->getDocument('product', 'product1');
         $this->assertEquals('Store 1 Updated', $product1->getAttribute('store')->getAttribute('name'));
+
+        // Update inverse nested document attribute
+        $product = $store1->getAttribute('products')[0];
+        $product->setAttribute('name', 'Product 1 Updated');
+
+        $store1 = static::getDatabase()->updateDocument(
+            'store',
+            $store1->getId(),
+            $store1->setAttribute('products', [$product])
+        );
+
+        $this->assertEquals('Product 1 Updated', $store1->getAttribute('products')[0]->getAttribute('name'));
+        $store1 = static::getDatabase()->getDocument('store', 'store1');
+        $this->assertEquals('Product 1 Updated', $store1->getAttribute('products')[0]->getAttribute('name'));
 
         // Create new document with no relationship
         $product5 = static::getDatabase()->createDocument('product', new Document([
@@ -5716,6 +5856,37 @@ abstract class Base extends TestCase
         $this->assertEquals('Store 5', $product5->getAttribute('store')->getAttribute('name'));
         $product5 = static::getDatabase()->getDocument('product', 'product5');
         $this->assertEquals('Store 5', $product5->getAttribute('store')->getAttribute('name'));
+
+        // Create new child document with no relationship
+        $store6 = static::getDatabase()->createDocument('store', new Document([
+            '$id' => 'store6',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store 6',
+            'opensAt' => '09:00',
+        ]));
+
+        // Update inverse to related to newly created document
+        $store6 = static::getDatabase()->updateDocument(
+            'store',
+            $store6->getId(),
+            $store6->setAttribute('products', [new Document([
+                '$id' => 'product6',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Product 6',
+            ])])
+        );
+
+        $this->assertEquals('Product 6', $store6->getAttribute('products')[0]->getAttribute('name'));
+        $store6 = static::getDatabase()->getDocument('store', 'store6');
+        $this->assertEquals('Product 6', $store6->getAttribute('products')[0]->getAttribute('name'));
 
         // Update document with new related document
         static::getDatabase()->updateDocument(
@@ -6358,6 +6529,18 @@ abstract class Base extends TestCase
         $student1 = static::getDatabase()->getDocument('students', 'student1');
         $this->assertEquals('Student 1 Updated', $student1->getAttribute('name'));
 
+        // Update inverse root document attribute without altering relationship
+        $class2 = static::getDatabase()->getDocument('classes', 'class2');
+        $class2 = static::getDatabase()->updateDocument(
+            'classes',
+            $class2->getId(),
+            $class2->setAttribute('name', 'Class 2 Updated')
+        );
+
+        $this->assertEquals('Class 2 Updated', $class2->getAttribute('name'));
+        $class2 = static::getDatabase()->getDocument('classes', 'class2');
+        $this->assertEquals('Class 2 Updated', $class2->getAttribute('name'));
+
         // Update nested document attribute
         $classes = $student1->getAttribute('classes', []);
         $classes[0]->setAttribute('name', 'Class 1 Updated');
@@ -6371,6 +6554,20 @@ abstract class Base extends TestCase
         $this->assertEquals('Class 1 Updated', $student1->getAttribute('classes')[0]->getAttribute('name'));
         $student1 = static::getDatabase()->getDocument('students', 'student1');
         $this->assertEquals('Class 1 Updated', $student1->getAttribute('classes')[0]->getAttribute('name'));
+
+        // Update inverse nested document attribute
+        $students = $class2->getAttribute('students', []);
+        $students[0]->setAttribute('name', 'Student 2 Updated');
+
+        $class2 = static::getDatabase()->updateDocument(
+            'classes',
+            $class2->getId(),
+            $class2->setAttribute('students', $students)
+        );
+
+        $this->assertEquals('Student 2 Updated', $class2->getAttribute('students')[0]->getAttribute('name'));
+        $class2 = static::getDatabase()->getDocument('classes', 'class2');
+        $this->assertEquals('Student 2 Updated', $class2->getAttribute('students')[0]->getAttribute('name'));
 
         // Create new document with no relationship
         $student5 = static::getDatabase()->createDocument('students', new Document([
@@ -6403,6 +6600,37 @@ abstract class Base extends TestCase
         $student5 = static::getDatabase()->getDocument('students', 'student5');
         $this->assertEquals('Class 5', $student5->getAttribute('classes')[0]->getAttribute('name'));
 
+        // Create child document with no relationship
+        $class6 = static::getDatabase()->createDocument('classes', new Document([
+            '$id' => 'class6',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Class 6',
+            'number' => 6,
+        ]));
+
+        // Update to relate to created document
+        $class6 = static::getDatabase()->updateDocument(
+            'classes',
+            $class6->getId(),
+            $class6->setAttribute('students', [new Document([
+                '$id' => 'student6',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Student 6',
+            ])])
+        );
+
+        $this->assertEquals('Student 6', $class6->getAttribute('students')[0]->getAttribute('name'));
+        $class6 = static::getDatabase()->getDocument('classes', 'class6');
+        $this->assertEquals('Student 6', $class6->getAttribute('students')[0]->getAttribute('name'));
+
         // Update document with new related document
         static::getDatabase()->updateDocument(
             'students',
@@ -6412,7 +6640,7 @@ abstract class Base extends TestCase
 
         // Query related document again
         $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2'])
+            Query::equal('classes.name', ['Class 2 Updated'])
         ]);
 
         $this->assertEquals(2, \count($students));
@@ -6429,7 +6657,7 @@ abstract class Base extends TestCase
 
         // Query related document again
         $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2'])
+            Query::equal('classes.name', ['Class 2 Updated'])
         ]);
 
         $this->assertEquals(2, \count($students));
@@ -6438,7 +6666,7 @@ abstract class Base extends TestCase
 
         // Query inverse document again
         $customers = static::getDatabase()->find('classes', [
-            Query::equal('students.name', ['Student 2'])
+            Query::equal('students.name', ['Student 2 Updated'])
         ]);
 
         $this->assertEquals(1, \count($customers));

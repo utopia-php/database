@@ -159,14 +159,13 @@ class Authorization extends Validator
     public static function skip(callable $callback): mixed
     {
         $initialStatus = self::$status;
-
         self::disable();
 
-        $result = $callback();
-
-        self::$status = $initialStatus;
-
-        return $result;
+        try {
+            return $callback();
+        } finally {
+            self::$status = $initialStatus;
+        }
     }
 
     /**

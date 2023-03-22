@@ -2413,7 +2413,7 @@ class Database
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
-            if (! isset($relation->getArrayCopy()['$permissions'])) {
+            if (! isset($relation['$permissions'])) {
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
 
@@ -2658,6 +2658,9 @@ class Database
 
                                 $updateDepth++;
                                 if ($related->isEmpty()) {
+                                    if (! isset($value['$permissions'])) {
+                                        $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                    }
                                     $related = $this->createDocument(
                                         $relatedCollection->getId(),
                                         $value->setAttribute($twoWayKey, $document->getId())
@@ -2741,6 +2744,9 @@ class Database
                                 $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                                 if ($related->isEmpty()) {
+                                    if (! isset($value['$permissions'])) {
+                                        $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                    }
                                     $this->createDocument(
                                         $relatedCollection->getId(),
                                         $relation->setAttribute($twoWayKey, $document->getId())
@@ -2767,6 +2773,9 @@ class Database
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
 
                         if ($related->isEmpty()) {
+                            if (! isset($value['$permissions'])) {
+                                $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                            }
                             $this->createDocument(
                                 $relatedCollection->getId(),
                                 $value
@@ -2832,6 +2841,9 @@ class Database
                             $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                             if ($related->isEmpty()) {
+                                if (! isset($value['$permissions'])) {
+                                    $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                }
                                 $related = $this->createDocument(
                                     $relatedCollection->getId(),
                                     $relation

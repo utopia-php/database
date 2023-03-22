@@ -1502,19 +1502,20 @@ class Database
         string  $key,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
+        ?bool $twoWay = null,
         ?string $onDelete = null
     ): bool {
-        $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $onDelete) {
+        $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
             $altering = !\is_null($newKey) || !\is_null($newTwoWayKey);
 
             $relatedCollection = $attribute['options']['relatedCollection'];
             $type = $attribute['options']['relationType'];
-            $twoWay = $attribute['options']['twoWay'];
             $side = $attribute['options']['side'];
 
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
             $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+            $twoWay ??= $attribute['options']['twoWay'];
             $onDelete ??= $attribute['options']['onDelete'];
 
             $attribute->setAttribute('$id', $newKey);
@@ -1528,9 +1529,10 @@ class Database
                 'side' => $side,
             ]);
 
-            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $onDelete) {
+            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $newKey;
+                $options['twoWay'] = $twoWay;
                 $options['onDelete'] = $onDelete;
 
                 $twoWayAttribute->setAttribute('$id', $newTwoWayKey);

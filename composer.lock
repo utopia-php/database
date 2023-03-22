@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "688e5f025fca97528e504acda4118bf9",
+    "content-hash": "5882b38e527e7b5468b1da64e9f6dae7",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -380,16 +380,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "0.1.0",
+            "version": "0.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "f4b6ec74c5323ca16c500dd19109518d2eeb1f8f"
+                "reference": "b6dfb31b93c07c59b8bbd62a3b52e3b97a407c09"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/f4b6ec74c5323ca16c500dd19109518d2eeb1f8f",
-                "reference": "f4b6ec74c5323ca16c500dd19109518d2eeb1f8f",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/b6dfb31b93c07c59b8bbd62a3b52e3b97a407c09",
+                "reference": "b6dfb31b93c07c59b8bbd62a3b52e3b97a407c09",
                 "shasum": ""
             },
             "require": {
@@ -434,9 +434,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/0.1.0"
+                "source": "https://github.com/utopia-php/mongo/tree/0.2.0"
             },
-            "time": "2023-01-12T14:02:08+00:00"
+            "time": "2023-03-22T10:44:29+00:00"
         }
     ],
     "packages-dev": [

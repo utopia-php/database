@@ -3834,16 +3834,18 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         // Update root document attribute without altering relationship
-        static::getDatabase()->updateDocument(
+        $person1 = static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
             $person1->setAttribute('name', 'Person 1 Updated')
         );
 
+        $this->assertEquals('Person 1 Updated', $person1->getAttribute('name'));
         $person1 = static::getDatabase()->getDocument('person', 'person1');
+        $this->assertEquals('Person 1 Updated', $person1->getAttribute('name'));
 
         // Update nested document attribute
-        static::getDatabase()->updateDocument(
+        $person1 = static::getDatabase()->updateDocument(
             'person',
             $person1->getId(),
             $person1->setAttribute('library', $person1
@@ -3851,6 +3853,8 @@ abstract class Base extends TestCase
                 ->setAttribute('name', 'Library 1 Updated')
             )
         );
+
+        $this->assertEquals('Library 1 Updated', $person1->getAttribute('library')->getAttribute('name'));
 
         // Create new document with no relationship
         $person3 = static::getDatabase()->createDocument('person', new Document([
@@ -3864,7 +3868,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update to relate to created document
-        static::getDatabase()->updateDocument(
+        $person3 = static::getDatabase()->updateDocument(
             'person',
             $person3->getId(),
             $person3->setAttribute('library', new Document([
@@ -3877,6 +3881,7 @@ abstract class Base extends TestCase
             ]))
         );
 
+        $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
         $person3 = static::getDatabase()->getDocument('person', 'person3');
         $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
 
@@ -4211,16 +4216,18 @@ abstract class Base extends TestCase
         $country1 = static::getDatabase()->getDocument('country', 'country1');
 
         // Update root document attribute without altering relationship
-        static::getDatabase()->updateDocument(
+        $country1 = static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
             $country1->setAttribute('name', 'Country 1 Updated')
         );
 
+        $this->assertEquals('Country 1 Updated', $country1->getAttribute('name'));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
+        $this->assertEquals('Country 1 Updated', $country1->getAttribute('name'));
 
         // Update nested document attribute
-        static::getDatabase()->updateDocument(
+        $country1 = static::getDatabase()->updateDocument(
             'country',
             $country1->getId(),
             $country1->setAttribute('city', $country1
@@ -4228,6 +4235,8 @@ abstract class Base extends TestCase
                 ->setAttribute('name', 'City 1 Updated')
             )
         );
+
+        $this->assertEquals('City 1 Updated', $country1->getAttribute('city')->getAttribute('name'));
 
         // Create new document with no relationship
         $country5 = static::getDatabase()->createDocument('country', new Document([
@@ -4455,6 +4464,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('artist');
         static::getDatabase()->createCollection('album');
 
+        static::getDatabase()->createAttribute('artist', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('album', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('album', 'price', Database::VAR_FLOAT, 0, true);
 
@@ -4489,6 +4499,7 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
+            'name' => 'Artist 1',
             'albums' => [
                 [
                     '$id' => 'album1',
@@ -4519,6 +4530,7 @@ abstract class Base extends TestCase
                 Permission::read(Role::any()),
                 Permission::delete(Role::any()),
             ],
+            'name' => 'Artist 2',
             'albums' => [
                 'album2'
             ]
@@ -4567,7 +4579,7 @@ abstract class Base extends TestCase
         ]);
 
         if (!$artist instanceof Document) {
-            throw new Exception('Artist not found');
+            $this->fail('Artist not found');
         }
 
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
@@ -4579,6 +4591,58 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
+
+        // Update root document attribute without altering relationship
+        $artist1 = static::getDatabase()->updateDocument(
+            'artist',
+            $artist1->getId(),
+            $artist1->setAttribute('name', 'Artist 1 Updated')
+        );
+
+        $this->assertEquals('Artist 1 Updated', $artist1->getAttribute('name'));
+        $artist1 = static::getDatabase()->getDocument('artist', 'artist1');
+        $this->assertEquals('Artist 1 Updated', $artist1->getAttribute('name'));
+
+        // Update nested document attribute
+        $albums = $artist1->getAttribute('albums', []);
+        $albums[0]->setAttribute('name', 'Album 1 Updated');
+
+        static::getDatabase()->updateDocument(
+            'artist',
+            $artist1->getId(),
+            $artist1->setAttribute('albums', $albums)
+        );
+
+        // Create new document with no relationship
+        $artist3 = static::getDatabase()->createDocument('artist', new Document([
+            '$id' => 'artist3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Artist 3',
+        ]));
+
+        // Update to relate to created document
+        $artist3 = static::getDatabase()->updateDocument(
+            'artist',
+            $artist3->getId(),
+            $artist3->setAttribute('albums', [new Document([
+                '$id' => 'album3',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Album 3',
+                'price' => 29.99,
+            ])])
+        );
+
+        $this->assertEquals('Album 3', $artist3->getAttribute('albums')[0]->getAttribute('name'));
+        $artist3 = static::getDatabase()->getDocument('artist', 'artist3');
+        $this->assertEquals('Album 3', $artist3->getAttribute('albums')[0]->getAttribute('name'));
 
         // Update document with new related documents, will remove existing relations
         static::getDatabase()->updateDocument(
@@ -4892,7 +4956,59 @@ abstract class Base extends TestCase
         $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
 
-        // Update document with new related document
+        // Update root document attribute without altering relationship
+        $customer1 = static::getDatabase()->updateDocument(
+            'customer',
+            $customer1->getId(),
+            $customer1->setAttribute('name', 'Customer 1 Updated')
+        );
+
+        $this->assertEquals('Customer 1 Updated', $customer1->getAttribute('name'));
+        $customer1 = static::getDatabase()->getDocument('customer', 'customer1');
+        $this->assertEquals('Customer 1 Updated', $customer1->getAttribute('name'));
+
+        // Update nested document attribute
+        $accounts = $customer1->getAttribute('accounts', []);
+        $accounts[0]->setAttribute('name', 'Account 1 Updated');
+
+        static::getDatabase()->updateDocument(
+            'customer',
+            $customer1->getId(),
+            $customer1->setAttribute('accounts', $accounts)
+        );
+
+        // Create new document with no relationship
+        $customer5 = static::getDatabase()->createDocument('customer', new Document([
+            '$id' => 'customer5',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Customer 5',
+        ]));
+
+        // Update to relate to created document
+        $customer5 = static::getDatabase()->updateDocument(
+            'customer',
+            $customer5->getId(),
+            $customer5->setAttribute('accounts', [new Document([
+                '$id' => 'account5',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Account 5',
+                'number' => '123456789',
+            ])])
+        );
+
+        $this->assertEquals('Account 5', $customer5->getAttribute('accounts')[0]->getAttribute('name'));
+        $customer5 = static::getDatabase()->getDocument('customer', 'customer5');
+        $this->assertEquals('Account 5', $customer5->getAttribute('accounts')[0]->getAttribute('name'));
+
+        // Update document with new related document, will remove existing relations
         static::getDatabase()->updateDocument(
             'customer',
             $customer1->getId(),

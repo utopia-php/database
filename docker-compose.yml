@@ -13,7 +13,6 @@ services:
       - ./bin:/usr/src/code/bin
       - ./src:/usr/src/code/src
       - ./tests:/usr/src/code/tests
-      - ./tmp:/usr/src/code/tmp
       - ./phpunit.xml:/usr/src/code/phpunit.xml
     ports:
       - "8708:8708"

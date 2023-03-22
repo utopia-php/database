@@ -1505,6 +1505,15 @@ class Database
         ?bool $twoWay = null,
         ?string $onDelete = null
     ): bool {
+        if (
+            \is_null($newKey)
+            && \is_null($newTwoWayKey)
+            && \is_null($twoWay)
+            && \is_null($onDelete)
+        ) {
+            return true;
+        }
+
         $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
             $altering = (!\is_null($newKey) && $newKey !== $key)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);

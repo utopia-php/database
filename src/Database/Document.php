@@ -7,18 +7,21 @@ use Exception;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
+/**
+ * @extends ArrayObject<string, mixed>
+ */
 class Document extends ArrayObject
 {
-    const SET_TYPE_ASSIGN = 'assign';
-    const SET_TYPE_PREPEND = 'prepend';
-    const SET_TYPE_APPEND = 'append';
+    public const SET_TYPE_ASSIGN = 'assign';
+    public const SET_TYPE_PREPEND = 'prepend';
+    public const SET_TYPE_APPEND = 'append';
 
     /**
      * Construct.
      *
      * Construct a new fields object
      *
-     * @param array $input
+     * @param array<string, mixed> $input
      * @throws Exception
      * @see ArrayObject::__construct
      *
@@ -72,7 +75,7 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return array
+     * @return array<string>
      */
     public function getPermissions(): array
     {
@@ -80,28 +83,40 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return array
+     * @return array<string>
      */
     public function getRead(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_READ);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getCreate(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_CREATE);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getUpdate(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_UPDATE);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getDelete(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_DELETE);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getWrite(): array
     {
         return \array_unique(\array_intersect(
@@ -111,6 +126,9 @@ class Document extends ArrayObject
         ));
     }
 
+    /**
+     * @return array<string>
+     */
     public function getPermissionsByType(string $type): array
     {
         $typePermissions = [];
@@ -144,7 +162,7 @@ class Document extends ArrayObject
     /**
      * Get Document Attributes
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getAttributes(): array
     {
@@ -178,7 +196,7 @@ class Document extends ArrayObject
      *
      * @return mixed
      */
-    public function getAttribute(string $name, $default = null)
+    public function getAttribute(string $name, mixed $default = null): mixed
     {
         if (isset($this[$name])) {
             return $this[$name];
@@ -244,7 +262,7 @@ class Document extends ArrayObject
      *
      * @return mixed
      */
-    public function find(string $key, $find, string $subject = '')
+    public function find(string $key, $find, string $subject = ''): mixed
     {
         $subject = $this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
@@ -348,7 +366,7 @@ class Document extends ArrayObject
      *
      * @return bool
      */
-    public function isSet($key): bool
+    public function isSet(string $key): bool
     {
         return isset($this[$key]);
     }
@@ -358,10 +376,10 @@ class Document extends ArrayObject
      *
      * Outputs entity as a PHP array
      *
-     * @param array $allow
-     * @param array $disallow
+     * @param array<string> $allow
+     * @param array<string> $disallow
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getArrayCopy(array $allow = [], array $disallow = []): array
     {

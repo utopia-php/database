@@ -5,12 +5,11 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use PDOStatement;
-use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -18,7 +17,7 @@ class Postgres extends SQL
 {
     /**
      * Differences between MariaDB and Postgres
-     * 
+     *
      * 1. Need to use CASCADE to DROP schema
      * 2. Quotes are different ` vs "
      * 3. DATETIME is TIMESTAMP
@@ -29,7 +28,7 @@ class Postgres extends SQL
      * Create Database
      *
      * @param string $name
-     * 
+     *
      * @return bool
      */
     public function create(string $name): bool
@@ -59,10 +58,10 @@ class Postgres extends SQL
 
     /**
      * Create Collection
-     * 
+     *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
@@ -84,6 +83,9 @@ class Postgres extends SQL
             $attribute = "\"{$attrId}\" {$attrType}, ";
         }
 
+        /**
+         * @var array<string> $attributes
+         */
         $stmt = $this->getPDO()
             ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
@@ -136,7 +138,7 @@ class Postgres extends SQL
 
     /**
      * Delete Collection
-     * 
+     *
      * @param string $id
      * @return bool
      */
@@ -151,13 +153,13 @@ class Postgres extends SQL
 
     /**
      * Create Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
      * @param int $size
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
@@ -178,11 +180,11 @@ class Postgres extends SQL
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param bool $array
-     * 
+     *
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id, bool $array = false): bool
@@ -255,14 +257,14 @@ class Postgres extends SQL
 
     /**
      * Create Index
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     * 
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
+     *
      * @return bool
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
@@ -301,10 +303,10 @@ class Postgres extends SQL
 
     /**
      * Delete Index
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteIndex(string $collection, string $id): bool
@@ -422,11 +424,9 @@ class Postgres extends SQL
                 case 23505:
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                    break;
 
                 default:
                     throw $e;
-                    break;
             }
         }
 
@@ -593,25 +593,23 @@ class Postgres extends SQL
             $attributeIndex++;
         }
 
-        if (!empty($attributes)) {
-            try {
-                $stmt->execute();
-                if (isset($stmtRemovePermissions)) {
-                    $stmtRemovePermissions->execute();
-                }
-                if (isset($stmtAddPermissions)) {
-                    $stmtAddPermissions->execute();
-                }
-            } catch (PDOException $e) {
-                $this->getPDO()->rollBack();
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23505:
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+        try {
+            $stmt->execute();
+            if (isset($stmtRemovePermissions)) {
+                $stmtRemovePermissions->execute();
+            }
+            if (isset($stmtAddPermissions)) {
+                $stmtAddPermissions->execute();
+            }
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+            switch ($e->getCode()) {
+                case 1062:
+                case 23505:
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                    default:
-                        throw $e;
-                }
+                default:
+                    throw $e;
             }
         }
 
@@ -694,19 +692,21 @@ class Postgres extends SQL
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param int|null $timeout
      *
-     * @return array 
-     * @throws Exception 
-     * @throws PDOException 
+     * @return array<Document>
+     * @throws Exception
+     * @throws PDOException
+     * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -748,7 +748,7 @@ class Postgres extends SQL
                             table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
-            } else if ($cursorDirection === Database::CURSOR_BEFORE) {
+            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
@@ -758,8 +758,10 @@ class Postgres extends SQL
         // Allow after pagination without any order
         if (empty($orderAttributes) && !empty($cursor)) {
             $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+            ) : (
+                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
             );
             $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
@@ -797,12 +799,16 @@ class Postgres extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT DISTINCT _uid, {$this->getAttributeProjection($selections, 'table_main')}
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
         ";
+
+        if ($timeout) {
+            $sql = $this->setTimeout($sql, $timeout);
+        }
 
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
@@ -832,7 +838,11 @@ class Postgres extends SQL
             $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         }
 
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+        }
 
         $results = $stmt->fetchAll();
 
@@ -865,7 +875,7 @@ class Postgres extends SQL
      * Count data set size using chosen queries
      *
      * @param string $collection
-     * @param array $queries
+     * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int
@@ -906,7 +916,6 @@ class Postgres extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -919,7 +928,7 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
+     * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int|float
@@ -959,7 +968,6 @@ class Postgres extends SQL
 
         $stmt->execute();
 
-        /** @var array $result */
         $result = $stmt->fetch();
 
         return $result['sum'] ?? 0;
@@ -998,10 +1006,10 @@ class Postgres extends SQL
         }
 
         return \implode(', ', $selections);
-
     }
 
-    /*
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1020,7 +1028,7 @@ class Postgres extends SQL
         $attribute = "\"{$query->getAttribute()}\"" ;
         $placeholder = $this->getSQLPlaceholder($query);
 
-        switch ($query->getMethod()){
+        switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
                 $value = trim(str_replace(['@', '+', '-', '*', '.'], '|', $query->getValues()[0]));
                 $value = $this->getSQLValue($query->getMethod(), $value);
@@ -1036,7 +1044,7 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1045,10 +1053,10 @@ class Postgres extends SQL
 
     /**
      * Get SQL Type
-     * 
+     *
      * @param string $type
      * @param int $size in chars
-     * 
+     *
      * @return string
      */
     protected function getSQLType(string $type, int $size, bool $signed = true): string
@@ -1061,7 +1069,6 @@ class Postgres extends SQL
                 }
 
                 return "VARCHAR({$size})";
-                break;
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554
 
@@ -1070,27 +1077,21 @@ class Postgres extends SQL
                 }
 
                 return 'INTEGER';
-                break;
 
             case Database::VAR_FLOAT:
                 return 'DOUBLE PRECISION';
-                break;
 
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
-                break;
 
             case Database::VAR_DOCUMENT:
                 return 'VARCHAR';
-                break;
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
-                break;
 
             default:
                 throw new Exception('Unknown Type: ' . $type);
-                break;
         }
     }
 
@@ -1100,7 +1101,7 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
+     * @param array<string> $attributes
      *
      * @return string
      * @throws Exception
@@ -1119,7 +1120,7 @@ class Postgres extends SQL
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -1133,8 +1134,8 @@ class Postgres extends SQL
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -1162,10 +1163,10 @@ class Postgres extends SQL
 
     /**
      * Encode array
-     * 
+     *
      * @param string $value
-     * 
-     * @return array
+     *
+     * @return array<string>
      */
     protected function encodeArray(string $value): array
     {
@@ -1179,15 +1180,16 @@ class Postgres extends SQL
 
     /**
      * Decode array
-     * 
-     * @param array $value
-     * 
+     *
+     * @param array<string> $value
+     *
      * @return string
      */
     protected function decodeArray(array $value): string
     {
-        if (empty($value))
+        if (empty($value)) {
             return '{}';
+        }
 
         foreach ($value as &$item) {
             $item = '"' . str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
@@ -1205,5 +1207,45 @@ class Postgres extends SQL
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param string $sql
+     * @param int $milliseconds
+     * @return string
+     */
+    protected function setTimeout(string $sql, int $milliseconds): string
+    {
+        return "SET statement_timeout = {$milliseconds};{$sql};SET statement_timeout = 0;";
+    }
+
+    /**
+     * @param PDOException $e
+     * @throws Timeout
+     */
+    protected function processException(PDOException $e): void
+    {
+        // Regular PDO
+        if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new Timeout($e->getMessage());
+        }
+
+        // PDOProxy switches errorInfo PDOProxy.php line 64
+        if ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
     }
 }

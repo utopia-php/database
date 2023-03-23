@@ -4,7 +4,6 @@
 require_once '/usr/src/code/vendor/autoload.php';
 
 use Utopia\CLI\CLI;
-use Utopia\CLI\Console;
 
 $cli = new CLI();
 

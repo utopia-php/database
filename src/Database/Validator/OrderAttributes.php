@@ -12,31 +12,31 @@ class OrderAttributes extends Validator
     /**
      * @var string
      */
-    protected $message = 'Invalid order attribute';
+    protected string $message = 'Invalid order attribute';
 
     /**
-     * @var array
+     * @var array<array<string, mixed>>
      */
-    protected $schema = [];
+    protected array $schema = [];
 
     /**
-     * @var array
+     * @var array<array<string, mixed>>
      */
-    protected $indexes = [];
+    protected array $indexes = [];
 
     /**
      * @var bool
      */
-    protected $strict;
+    protected bool $strict;
 
     /**
      * Expression constructor
      *
-     * @param Document[] $attributes
-     * @param Document[] $indexes
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @param bool $strict
      */
-    public function __construct($attributes, $indexes, $strict = true)
+    public function __construct(array $attributes, array $indexes, bool $strict = true)
     {
         $this->schema[] = [
             'key' => '$id',
@@ -102,13 +102,13 @@ class OrderAttributes extends Validator
      *
      * Returns true if query typed according to schema.
      *
-     * @param string[] $attributes
+     * @param mixed $value
      *
      * @return bool
      */
-    public function isValid($attributes): bool
+    public function isValid($value): bool
     {
-        foreach ($attributes as $attribute) {
+        foreach ($value as $attribute) {
             // Search for attribute in schema
             $attributeInSchema = \in_array($attribute, \array_column($this->schema, 'key'));
 
@@ -124,19 +124,19 @@ class OrderAttributes extends Validator
         if ($this->strict) {
             // look for strict match among indexes
             foreach ($this->indexes as $index) {
-                if ($this->arrayMatch($index['attributes'],  $attributes)) {
+                if ($this->arrayMatch($index['attributes'], $value)) {
                     $found = $index;
                 }
             }
 
             if (!$found) {
-                $this->message = 'Index not found: ' . implode(",", $attributes);
+                $this->message = 'Index not found: ' . implode(",", $value);
                 return false;
             }
 
             // search method requires fulltext index
-            if (in_array(Query::TYPE_SEARCH, $attributes) && $found['type'] !== Database::INDEX_FULLTEXT) {
-                $this->message = 'Search method requires fulltext index: ' . implode(",", $attributes);
+            if (in_array(Query::TYPE_SEARCH, $value) && $found['type'] !== Database::INDEX_FULLTEXT) {
+                $this->message = 'Search method requires fulltext index: ' . implode(",", $value);
                 return false;
             }
         }
@@ -170,12 +170,12 @@ class OrderAttributes extends Validator
     /**
      * Check if indexed array $indexes matches $queries
      *
-     * @param array $indexes
-     * @param array $queries
+     * @param array<string> $indexes
+     * @param array<string> $queries
      *
      * @return bool
      */
-    protected function arrayMatch($indexes, $queries): bool
+    protected function arrayMatch(array $indexes, array $queries): bool
     {
         // Check the count of indexes first for performance
         if (count($indexes) !== count($queries)) {

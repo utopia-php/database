@@ -8,32 +8,32 @@ use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Authorization as ExceptionAuthorization;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\DatetimeValidator;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
-use Utopia\Validator;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
-
 
 abstract class Base extends TestCase
 {
     /**
      * @return Database
      */
-    abstract static protected function getDatabase(): Database;
+    abstract protected static function getDatabase(): Database;
 
     /**
      * @return string
      */
-    abstract static protected function getAdapterName(): string;
+    abstract protected static function getAdapterName(): string;
 
     public function setUp(): void
     {
@@ -47,12 +47,12 @@ abstract class Base extends TestCase
 
     protected string $testDatabase = 'utopiaTests';
 
-    public function testPing()
+    public function testPing(): void
     {
         $this->assertEquals(true, static::getDatabase()->ping());
     }
 
-    public function testCreateExistsDelete()
+    public function testCreateExistsDelete(): void
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
         if (!$schemaSupport) {
@@ -71,7 +71,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
-    public function testCreatedAtUpdatedAt()
+    public function testCreatedAtUpdatedAt(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
 
@@ -87,13 +87,12 @@ abstract class Base extends TestCase
 
         $this->assertNotEmpty($document->getInternalId());
         $this->assertNotNull($document->getInternalId());
-
     }
 
     /**
      * @depends testCreateExistsDelete
      */
-    public function testCreateListExistsDeleteCollection()
+    public function testCreateListExistsDeleteCollection(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
 
@@ -116,7 +115,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
 
-    public function testCreateDeleteAttribute()
+    public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');
 
@@ -200,8 +199,10 @@ abstract class Base extends TestCase
     /**
      * Using phpunit dataProviders to check that all these combinations of types/defaults throw exceptions
      * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
+     *
+     * @return array<array<bool|float|int|string>>
      */
-    public function invalidDefaultValues()
+    public function invalidDefaultValues(): array
     {
         return [
             [Database::VAR_STRING, 1],
@@ -222,9 +223,8 @@ abstract class Base extends TestCase
     /**
      * @depends      testCreateDeleteAttribute
      * @dataProvider invalidDefaultValues
-     * @expectedException Exception
      */
-    public function testInvalidDefaultValues($type, $default)
+    public function testInvalidDefaultValues(string $type, mixed $default): void
     {
         $this->expectException(\Exception::class);
         $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_default', $type, 256, true, $default));
@@ -233,7 +233,7 @@ abstract class Base extends TestCase
     /**
      * @depends testInvalidDefaultValues
      */
-    public function testAttributeCaseInsensitivity()
+    public function testAttributeCaseInsensitivity(): void
     {
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
         $this->expectException(DuplicateException::class);
@@ -243,7 +243,7 @@ abstract class Base extends TestCase
     /**
      * @depends testAttributeCaseInsensitivity
      */
-    public function testIndexCaseInsensitivity()
+    public function testIndexCaseInsensitivity(): void
     {
         $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
         $this->expectException(DuplicateException::class);
@@ -255,7 +255,7 @@ abstract class Base extends TestCase
      *
      * @depends testIndexCaseInsensitivity
      */
-    public function testCleanupAttributeTests()
+    public function testCleanupAttributeTests(): void
     {
         static::getDatabase()->deleteCollection('attributes');
         $this->assertEquals(1, 1);
@@ -265,13 +265,13 @@ abstract class Base extends TestCase
      * @depends testCreateDeleteAttribute
      * @expectedException Exception
      */
-    public function testUnknownFormat()
+    public function testUnknownFormat(): void
     {
         $this->expectException(\Exception::class);
         $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
     }
 
-    public function testCreateDeleteIndex()
+    public function testCreateDeleteIndex(): void
     {
         static::getDatabase()->createCollection('indexes');
 
@@ -306,7 +306,7 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('indexes');
     }
 
-    public function testCreateCollectionWithSchema()
+    public function testCreateCollectionWithSchema(): void
     {
         $attributes = [
             new Document([
@@ -421,7 +421,7 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('with-dash');
     }
 
-    public function testCreateCollectionValidator()
+    public function testCreateCollectionValidator(): void
     {
         $collections = [
             "validatorTest",
@@ -548,7 +548,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testCreateDocument()
+    public function testCreateDocument(): Document
     {
         static::getDatabase()->createCollection('documents');
 
@@ -605,7 +605,7 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testRespectNulls()
+    public function testRespectNulls(): Document
     {
         static::getDatabase()->createCollection('documents_nulls');
 
@@ -641,7 +641,7 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testCreateDocumentDefaults()
+    public function testCreateDocumentDefaults(): void
     {
         static::getDatabase()->createCollection('defaults');
 
@@ -687,13 +687,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @throws ExceptionAuthorization
-     * @throws LimitException
-     * @throws DuplicateException
-     * @throws StructureException
-     * @throws Exception
+     * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|\Throwable
      */
-    public function testIncreaseDecrease()
+    public function testIncreaseDecrease(): Document
     {
         $collection = 'increase_decrease';
         static::getDatabase()->createCollection($collection);
@@ -739,7 +735,7 @@ abstract class Base extends TestCase
     /**
      * @depends testIncreaseDecrease
      */
-    public function testIncreaseLimitMax(Document $document)
+    public function testIncreaseLimitMax(Document $document): void
     {
         $this->expectException(Exception::class);
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 10.5, 102.4));
@@ -748,7 +744,7 @@ abstract class Base extends TestCase
     /**
      * @depends testIncreaseDecrease
      */
-    public function testDecreaseLimitMin(Document $document)
+    public function testDecreaseLimitMin(Document $document): void
     {
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 10, 99));
@@ -757,7 +753,7 @@ abstract class Base extends TestCase
     /**
      * @depends testIncreaseDecrease
      */
-    public function testIncreaseTextAttribute(Document $document)
+    public function testIncreaseTextAttribute(Document $document): void
     {
         $this->expectException(Exception::class);
         $this->assertEquals(false, static::getDatabase()->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
@@ -766,7 +762,7 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testGetDocument(Document $document)
+    public function testGetDocument(Document $document): Document
     {
         $document = static::getDatabase()->getDocument('documents', $document->getId());
 
@@ -812,7 +808,7 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testFulltextIndexWithInteger()
+    public function testFulltextIndexWithInteger(): void
     {
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
@@ -823,10 +819,10 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testListDocumentSearch(Document $document)
+    public function testListDocumentSearch(Document $document): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
-        if(!$fulltextSupport) {
+        if (!$fulltextSupport) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -856,14 +852,12 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
-
-        return $document;
     }
 
     /**
      * @depends testGetDocument
      */
-    public function testUpdateDocument(Document $document)
+    public function testUpdateDocument(Document $document): Document
     {
         $document
             ->setAttribute('string', 'text📝 updated')
@@ -922,9 +916,40 @@ abstract class Base extends TestCase
     }
 
     /**
+     * @depends testUpdateDocument
+     */
+    public function testUpdateDocumentConflict(Document $document): void
+    {
+        $document->setAttribute('integer', 7);
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+        $this->assertEquals(7, $result->getAttribute('integer'));
+
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $document->setAttribute('integer', 8);
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testDeleteDocumentConflict(Document $document): void
+    {
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+            return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
+        });
+    }
+
+    /**
      * @depends testGetDocument
      */
-    public function testUpdateDocumentDuplicatePermissions(Document $document)
+    public function testUpdateDocumentDuplicatePermissions(Document $document): Document
     {
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
@@ -934,7 +959,7 @@ abstract class Base extends TestCase
             ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
             ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND);
 
-        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new, true);
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
         $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
@@ -947,7 +972,7 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateDocument
      */
-    public function testDeleteDocument(Document $document)
+    public function testDeleteDocument(Document $document): void
     {
         $result = $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
         $document = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
@@ -958,7 +983,8 @@ abstract class Base extends TestCase
 
 
 
-    public function testFind(){
+    public function testFind(): void
+    {
         static::getDatabase()->createCollection('movies');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
@@ -1113,10 +1139,9 @@ abstract class Base extends TestCase
             'with-dash' => 'Works3',
             'nullable' => 'Not null'
         ]));
-
     }
 
-    public function testFindBasicChecks()
+    public function testFindBasicChecks(): void
     {
         $documents = static::getDatabase()->find('movies');
         $movieDocuments = $documents;
@@ -1179,10 +1204,10 @@ abstract class Base extends TestCase
             Query::orderAsc(''),
         ]);
         $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
-
     }
 
-    public function testFindCheckPermissions(){
+    public function testFindCheckPermissions(): void
+    {
         /**
          * Check Permissions
          */
@@ -1192,7 +1217,8 @@ abstract class Base extends TestCase
         $this->assertEquals(6, count($documents));
     }
 
-    public function testFindCheckInteger(){
+    public function testFindCheckInteger(): void
+    {
         /**
          * Query with dash attribute
          */
@@ -1220,7 +1246,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
     }
 
-    public function testFindBoolean(){
+    public function testFindBoolean(): void
+    {
         /**
          * Boolean condition
          */
@@ -1231,7 +1258,8 @@ abstract class Base extends TestCase
         $this->assertEquals(4, count($documents));
     }
 
-    public function testFindStringQueryEqual(){
+    public function testFindStringQueryEqual(): void
+    {
         /**
          * String condition
          */
@@ -1242,7 +1270,7 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
     }
 
-    public function testFindNotEqual()
+    public function testFindNotEqual(): void
     {
         /**
          * Not Equal query
@@ -1256,11 +1284,11 @@ abstract class Base extends TestCase
         foreach ($documents as $document) {
             $this->assertTrue($document['director'] !== 'TBD');
         }
-
     }
 
 
-    public function testFindBetween(){
+    public function testFindBetween(): void
+    {
         $documents = static::getDatabase()->find('movies', [
             Query::between('price', 25.94, 25.99),
         ]);
@@ -1280,10 +1308,10 @@ abstract class Base extends TestCase
             Query::between('$updatedAt', '1975-12-06T07:08:49.733+02:00', '2050-02-05T10:15:21.825+00:00'),
         ]);
         $this->assertEquals(6, count($documents));
-
     }
 
-    public function testFindFloat(){
+    public function testFindFloat(): void
+    {
         /**
          * Float condition
          */
@@ -1295,7 +1323,8 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
-    public function testFindContains(){
+    public function testFindContains(): void
+    {
         /**
          * Array contains condition
          */
@@ -1319,7 +1348,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, true); // Test must do an assertion
     }
 
-    public function testFindFulltext(){
+    public function testFindFulltext(): void
+    {
         /**
          * Fulltext search
          */
@@ -1350,10 +1380,10 @@ abstract class Base extends TestCase
         }
 
         $this->assertEquals(true, true); // Test must do an assertion
-
     }
 
-    public function testFindMultipleConditions(){
+    public function testFindMultipleConditions(): void
+    {
         /**
          * Multiple conditions
          */
@@ -1376,7 +1406,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Captain Marvel', $documents[1]['name']);
     }
 
-    public function testFindByID(){
+    public function testFindByID(): void
+    {
         /**
          * $id condition
          */
@@ -1388,7 +1419,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Frozen', $documents[0]['name']);
     }
 
-    public function testFindOrderBy(){
+    public function testFindOrderBy(): void
+    {
         /**
          * ORDER BY
          */
@@ -1408,7 +1440,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[5]['name']);
     }
 
-    public function testFindOrderByNatural(){
+    public function testFindOrderByNatural(): void
+    {
         /**
          * ORDER BY natural
          */
@@ -1431,7 +1464,8 @@ abstract class Base extends TestCase
         $this->assertEquals($base[5]['name'], $documents[5]['name']);
     }
 
-    public function testFindOrderByMultipleAttributes(){
+    public function testFindOrderByMultipleAttributes(): void
+    {
         /**
          * ORDER BY - Multiple attributes
          */
@@ -1451,7 +1485,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress', $documents[5]['name']);
     }
 
-    public function testFindOrderByCursorAfter(){
+    public function testFindOrderByCursorAfter(): void
+    {
         /**
          * ORDER BY - After
          */
@@ -1495,7 +1530,8 @@ abstract class Base extends TestCase
     }
 
 
-    public function testFindOrderByCursorBefore(){
+    public function testFindOrderByCursorBefore(): void
+    {
         /**
          * ORDER BY - Before
          */
@@ -1547,7 +1583,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByAfterNaturalOrder(){
+    public function testFindOrderByAfterNaturalOrder(): void
+    {
         /**
          * ORDER BY - After by natural order
          */
@@ -1594,7 +1631,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByBeforeNaturalOrder(){
+    public function testFindOrderByBeforeNaturalOrder(): void
+    {
         /**
          * ORDER BY - Before by natural order
          */
@@ -1652,7 +1690,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderBySingleAttributeAfter(){
+    public function testFindOrderBySingleAttributeAfter(): void
+    {
         /**
          * ORDER BY - Single Attribute After
          */
@@ -1701,7 +1740,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderBySingleAttributeBefore(){
+    public function testFindOrderBySingleAttributeBefore(): void
+    {
         /**
          * ORDER BY - Single Attribute Before
          */
@@ -1759,7 +1799,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByMultipleAttributeAfter(){
+    public function testFindOrderByMultipleAttributeAfter(): void
+    {
         /**
          * ORDER BY - Multiple Attribute After
          */
@@ -1812,7 +1853,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByMultipleAttributeBefore(){
+    public function testFindOrderByMultipleAttributeBefore(): void
+    {
         /**
          * ORDER BY - Multiple Attribute Before
          */
@@ -1877,7 +1919,8 @@ abstract class Base extends TestCase
         $this->assertEmpty(count($documents));
     }
 
-    public function testFindOrderByAndCursor(){
+    public function testFindOrderByAndCursor(): void
+    {
         /**
          * ORDER BY + CURSOR
          */
@@ -1896,7 +1939,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindOrderByIdAndCursor(){
+    public function testFindOrderByIdAndCursor(): void
+    {
         /**
          * ORDER BY ID + CURSOR
          */
@@ -1915,7 +1959,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindOrderByCreateDateAndCursor(){
+    public function testFindOrderByCreateDateAndCursor(): void
+    {
         /**
          * ORDER BY CREATE DATE + CURSOR
          */
@@ -1935,7 +1980,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindOrderByUpdateDateAndCursor(){
+    public function testFindOrderByUpdateDateAndCursor(): void
+    {
         /**
          * ORDER BY UPDATE DATE + CURSOR
          */
@@ -1954,7 +2000,8 @@ abstract class Base extends TestCase
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
-    public function testFindLimit(){
+    public function testFindLimit(): void
+    {
         /**
          * Limit
          */
@@ -1971,7 +2018,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Frozen II', $documents[3]['name']);
     }
 
-    public function testFindLimitAndOffset(){
+    public function testFindLimitAndOffset(): void
+    {
         /**
          * Limit + Offset
          */
@@ -1988,7 +2036,8 @@ abstract class Base extends TestCase
         $this->assertEquals('Work in Progress 2', $documents[3]['name']);
     }
 
-    public function testFindOrQueries(){
+    public function testFindOrQueries(): void
+    {
         /**
          * Test that OR queries are handled correctly
          */
@@ -1999,7 +2048,8 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
-    public function testFindOrderByAfterException(){
+    public function testFindOrderByAfterException(): void
+    {
         /**
          * ORDER BY - After Exception
          * Must be last assertion in test
@@ -2016,10 +2066,37 @@ abstract class Base extends TestCase
         ]);
     }
 
+    public function testTimeout(): void
+    {
+        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            static::getDatabase()->createCollection('timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for ($i = 0 ; $i <= 5 ; $i++) {
+                static::getDatabase()->createDocument('timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+
+            static::getDatabase()->find('timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ], 1);
+        }
+
+        $this->expectNotToPerformAssertions();
+    }
+
     /**
      * @depends testUpdateDocument
      */
-    public function testFindEdgeCases(Document $document)
+    public function testFindEdgeCases(Document $document): void
     {
         $collection = 'edgeCases';
 
@@ -2069,7 +2146,7 @@ abstract class Base extends TestCase
         $this->assertEquals($values[0], $documents[0]->getAttribute('value'));
 
         /**
-         * Check `equals` query 
+         * Check `equals` query
          */
         foreach ($values as $value) {
             $documents = static::getDatabase()->find($collection, [
@@ -2085,13 +2162,15 @@ abstract class Base extends TestCase
     /**
      * @depends testFind
      */
-    public function testFindOne()
+    public function testFindOne(): void
     {
         $document = static::getDatabase()->findOne('movies', [
             Query::offset(2),
             Query::orderAsc('name')
         ]);
-        $this->assertEquals('Frozen', $document['name']);
+
+        $this->assertTrue($document instanceof Document);
+        $this->assertEquals('Frozen', $document->getAttribute('name'));
 
         $document = static::getDatabase()->findOne('movies', [
             Query::offset(10)
@@ -2099,7 +2178,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $document);
     }
 
-    public function testFindNull()
+    public function testFindNull(): void
     {
         $documents = static::getDatabase()->find('movies', [
             Query::isNull('nullable'),
@@ -2108,7 +2187,7 @@ abstract class Base extends TestCase
         $this->assertEquals(5, count($documents));
     }
 
-    public function testFindNotNull()
+    public function testFindNotNull(): void
     {
         $documents = static::getDatabase()->find('movies', [
             Query::isNotNull('nullable'),
@@ -2117,7 +2196,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
-    public function testFindStartsWith()
+    public function testFindStartsWith(): void
     {
         $documents = static::getDatabase()->find('movies', [
             Query::startsWith('name', 'Work'),
@@ -2138,7 +2217,7 @@ abstract class Base extends TestCase
         $this->assertEquals(0, count($documents));
     }
 
-    public function testFindStartsWithWords()
+    public function testFindStartsWithWords(): void
     {
         $documents = static::getDatabase()->find('movies', [
             Query::startsWith('name', 'Work in Progress'),
@@ -2147,7 +2226,7 @@ abstract class Base extends TestCase
         $this->assertEquals(2, count($documents));
     }
 
-    public function testFindEndsWith()
+    public function testFindEndsWith(): void
     {
         $documents = static::getDatabase()->find('movies', [
             Query::endsWith('name', 'Marvel'),
@@ -2156,7 +2235,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
-    public function testFindSelect()
+    public function testFindSelect(): void
     {
         $documents = static::getDatabase()->find('movies', [
             Query::select(['name', 'year'])
@@ -2168,7 +2247,6 @@ abstract class Base extends TestCase
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
             $this->assertArrayHasKey('$permissions', $document);
-
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
             $this->assertArrayNotHasKey('director', $document);
@@ -2180,7 +2258,7 @@ abstract class Base extends TestCase
     /**
      * @depends testFind
      */
-    public function testCount()
+    public function testCount(): void
     {
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
@@ -2220,7 +2298,7 @@ abstract class Base extends TestCase
     /**
      * @depends testFind
      */
-    public function testSum()
+    public function testSum(): void
     {
         Authorization::setRole('user:x');
         $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
@@ -2247,7 +2325,7 @@ abstract class Base extends TestCase
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
-    public function testEncodeDecode()
+    public function testEncodeDecode(): void
     {
         $collection = new Document([
             '$collection' => ID::custom(Database::METADATA),
@@ -2422,7 +2500,7 @@ abstract class Base extends TestCase
             'registration' => '1975-06-12 14:12:55+01:00',
             'reset' => false,
             'name' => 'My Name',
-            'prefs' => new \stdClass,
+            'prefs' => new \stdClass(),
             'sessions' => [],
             'tokens' => [],
             'memberships' => [],
@@ -2494,7 +2572,7 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testReadPermissionsSuccess(Document $document)
+    public function testReadPermissionsSuccess(Document $document): Document
     {
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
@@ -2526,7 +2604,7 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testReadPermissionsFailure()
+    public function testReadPermissionsFailure(): Document
     {
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
@@ -2560,7 +2638,7 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testWritePermissionsSuccess(Document $document)
+    public function testWritePermissionsSuccess(Document $document): Document
     {
         Authorization::cleanRoles();
 
@@ -2589,9 +2667,9 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testWritePermissionsUpdateFailure(Document $document)
+    public function testWritePermissionsUpdateFailure(Document $document): Document
     {
-        $this->expectException(ExceptionAuthorization::class);
+        $this->expectException(AuthorizationException::class);
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
@@ -2632,7 +2710,7 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testExceptionAttributeLimit()
+    public function testExceptionAttributeLimit(): void
     {
         if ($this->getDatabase()->getLimitForAttributes() > 0) {
             // load the collection up to the limit
@@ -2662,7 +2740,7 @@ abstract class Base extends TestCase
     /**
      * @depends testExceptionAttributeLimit
      */
-    public function testCheckAttributeCountLimit()
+    public function testCheckAttributeCountLimit(): void
     {
         if ($this->getDatabase()->getLimitForAttributes() > 0) {
             $collection = static::getDatabase()->getCollection('attributeLimit');
@@ -2690,8 +2768,10 @@ abstract class Base extends TestCase
     /**
      * Using phpunit dataProviders to check that all these combinations of types/sizes throw exceptions
      * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
+     *
+     * @return array<array<int>>
      */
-    public function rowWidthExceedsMaximum()
+    public function rowWidthExceedsMaximum(): array
     {
         return [
             // These combinations of attributes gets exactly to the 64k limit
@@ -2712,7 +2792,7 @@ abstract class Base extends TestCase
     /**
      * @dataProvider rowWidthExceedsMaximum
      */
-    public function testExceptionWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
+    public function testExceptionWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
     {
         if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
             $attributes = [];
@@ -2788,7 +2868,7 @@ abstract class Base extends TestCase
      * @dataProvider rowWidthExceedsMaximum
      * @depends      testExceptionWidthLimit
      */
-    public function testCheckAttributeWidthLimit($key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount)
+    public function testCheckAttributeWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
     {
         if (static::getDatabase()->getAdapter()::getDocumentSizeLimit()> 0) {
             $collection = static::getDatabase()->getCollection("widthLimit{$key}");
@@ -2813,7 +2893,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, 1);
     }
 
-    public function testExceptionIndexLimit()
+    public function testExceptionIndexLimit(): void
     {
         static::getDatabase()->createCollection('indexLimit');
 
@@ -2836,7 +2916,7 @@ abstract class Base extends TestCase
     /**
      * @depends testGetDocument
      */
-    public function testExceptionDuplicate(Document $document)
+    public function testExceptionDuplicate(Document $document): void
     {
         $document->setAttribute('$id', 'duplicated');
         static::getDatabase()->createDocument($document->getCollection(), $document);
@@ -2848,7 +2928,7 @@ abstract class Base extends TestCase
     /**
      * @depends testGetDocument
      */
-    public function testExceptionCaseInsensitiveDuplicate(Document $document)
+    public function testExceptionCaseInsensitiveDuplicate(Document $document): Document
     {
         $document->setAttribute('$id', 'caseSensitive');
         static::getDatabase()->createDocument($document->getCollection(), $document);
@@ -2864,7 +2944,7 @@ abstract class Base extends TestCase
     /**
      * @depends testFind
      */
-    public function testUniqueIndexDuplicate()
+    public function testUniqueIndexDuplicate(): void
     {
         $this->expectException(DuplicateException::class);
 
@@ -2898,7 +2978,7 @@ abstract class Base extends TestCase
     /**
      * @depends testUniqueIndexDuplicate
      */
-    public function testUniqueIndexDuplicateUpdate()
+    public function testUniqueIndexDuplicateUpdate(): void
     {
         // create document then update to conflict with index
         $document = static::getDatabase()->createDocument('movies', new Document([
@@ -2930,17 +3010,17 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
     }
 
-    public function testGetAttributeLimit()
+    public function testGetAttributeLimit(): void
     {
         $this->assertIsInt($this->getDatabase()->getLimitForAttributes());
     }
 
-    public function testGetIndexLimit()
+    public function testGetIndexLimit(): void
     {
         $this->assertEquals(59, $this->getDatabase()->getLimitForIndexes());
     }
 
-    public function testGetId()
+    public function testGetId(): void
     {
         $this->assertEquals(20, strlen(ID::unique()));
         $this->assertEquals(13, strlen(ID::unique(0)));
@@ -2951,7 +3031,7 @@ abstract class Base extends TestCase
         $this->assertNotEquals(ID::unique(10), ID::unique(10));
     }
 
-    public function testRenameIndex()
+    public function testRenameIndex(): void
     {
         $database = static::getDatabase();
 
@@ -2977,7 +3057,7 @@ abstract class Base extends TestCase
      * @depends testRenameIndex
      * @expectedException Exception
      */
-    public function testRenameIndexMissing()
+    public function testRenameIndexMissing(): void
     {
         $database = static::getDatabase();
         $this->expectExceptionMessage('Index not found');
@@ -2988,14 +3068,14 @@ abstract class Base extends TestCase
      * @depends testRenameIndex
      * @expectedException Exception
      */
-    public function testRenameIndexExisting()
+    public function testRenameIndexExisting(): void
     {
         $database = static::getDatabase();
         $this->expectExceptionMessage('Index name already used');
         $index = $database->renameIndex('numbers', 'index3', 'index2');
     }
 
-    public function testRenameAttribute()
+    public function testRenameAttribute(): void
     {
         $database = static::getDatabase();
 
@@ -3030,7 +3110,8 @@ abstract class Base extends TestCase
         $this->assertCount(1, $colors->getAttribute('indexes'));
 
         // Document should be there if adapter migrated properly
-        $document = $database->findOne('colors', []);
+        $document = $database->findOne('colors');
+        $this->assertTrue($document instanceof Document);
         $this->assertEquals('black', $document->getAttribute('verbose'));
         $this->assertEquals('#000000', $document->getAttribute('hex'));
         $this->assertEquals(null, $document->getAttribute('name'));
@@ -3040,7 +3121,7 @@ abstract class Base extends TestCase
      * @depends testRenameAttribute
      * @expectedException Exception
      */
-    public function textRenameAttributeMissing()
+    public function textRenameAttributeMissing(): void
     {
         $database = static::getDatabase();
         $this->expectExceptionMessage('Attribute not found');
@@ -3051,14 +3132,14 @@ abstract class Base extends TestCase
      * @depends testRenameAttribute
      * @expectedException Exception
      */
-    public function testRenameAttributeExisting()
+    public function testRenameAttributeExisting(): void
     {
         $database = static::getDatabase();
         $this->expectExceptionMessage('Attribute name already used');
         $database->renameAttribute('colors', 'verbose', 'hex');
     }
 
-    public function testUpdateAttributeDefault()
+    public function testUpdateAttributeDefault(): void
     {
         $database = static::getDatabase();
 
@@ -3113,7 +3194,7 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateAttributeDefault
      */
-    public function testUpdateAttributeRequired()
+    public function testUpdateAttributeRequired(): void
     {
         $database = static::getDatabase();
 
@@ -3135,7 +3216,7 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateAttributeDefault
      */
-    public function testUpdateAttributeFilter()
+    public function testUpdateAttributeFilter(): void
     {
         $database = static::getDatabase();
 
@@ -3168,7 +3249,7 @@ abstract class Base extends TestCase
     /**
      * @depends testUpdateAttributeDefault
      */
-    public function testUpdateAttributeFormat()
+    public function testUpdateAttributeFormat(): void
     {
         $database = static::getDatabase();
 
@@ -3221,38 +3302,155 @@ abstract class Base extends TestCase
      * @depends testUpdateAttributeDefault
      * @depends testUpdateAttributeFormat
      */
-    public function testUpdateAttributeStructure()
+    public function testUpdateAttributeStructure(): void
     {
         // TODO: When this becomes relevant, add many more tests (from all types to all types, chaging size up&down, switchign between array/non-array...
 
+        Structure::addFormat('priceRangeNew', function ($attribute) {
+            $min = $attribute['formatOptions']['min'];
+            $max = $attribute['formatOptions']['max'];
+            return new Range($min, $max);
+        }, Database::VAR_INTEGER);
+
         $database = static::getDatabase();
 
+        // price attribute
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('priceRange', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', default: 100);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('priceRange', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('priceRangeNew', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', format: '');
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', formatOptions: ['min' => 1, 'max' => 999]);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals(['min'=>1, 'max'=>999], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', formatOptions: []);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', signed: false);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(false, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(100, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', required: true);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('integer', $attribute['type']);
+        $this->assertEquals(false, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(true, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
+
+        $database->updateAttribute('flowers', 'price', type: Database::VAR_STRING, size: Database::LENGTH_KEY, format: '');
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[4];
+        $this->assertEquals('string', $attribute['type']);
+        $this->assertEquals(false, $attribute['signed']);
+        $this->assertEquals(255, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals(true, $attribute['required']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $collection->getAttribute('attributes')[4]['formatOptions']);
+
+        // Date attribute
+        $attribute = $collection->getAttribute('attributes')[2];
+        $this->assertEquals('date', $attribute['key']);
+        $this->assertEquals('string', $attribute['type']);
+        $this->assertEquals(null, $attribute['default']);
+
+        $database->updateAttribute('flowers', 'date', type: Database::VAR_DATETIME, size: 0, filters: ['datetime']);
+        $collection = $database->getCollection('flowers');
+        $attribute = $collection->getAttribute('attributes')[2];
+        $this->assertEquals('datetime', $attribute['type']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(false, $attribute['required']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(false, $attribute['array']);
+        $this->assertEquals('', $attribute['format']);
+        $this->assertEquals([], $attribute['formatOptions']);
+
         $doc = $database->getDocument('flowers', 'LiliPriced');
-        $this->assertIsNumeric($doc->getAttribute('price'));
-        $this->assertEquals(500, $doc->getAttribute('price'));
-
-        $database->updateAttribute('flowers', 'price', Database::VAR_STRING, 255, false, false);
-        $database->updateAttribute('flowers', 'date', Database::VAR_DATETIME, 0, false, filters:['datetime']);
-
-        // Delete cache to force read from database with new schema
-        $database->deleteCachedDocument('flowers', 'LiliPriced');
-
-        $doc = $database->getDocument('flowers', 'LiliPriced');
-
         $this->assertIsString($doc->getAttribute('price'));
         $this->assertEquals('500', $doc->getAttribute('price'));
 
-        // String to Datetime
-        $database->deleteCachedDocument('flowers', 'flowerWithDate');
         $doc = $database->getDocument('flowers', 'flowerWithDate');
-        //TODO: Timestamps with trailing microsecond zeroes are truncated by postgres
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
     /**
      * @depends testCreatedAtUpdatedAt
      */
-    public function testCreatedAtUpdatedAtAssert()
+    public function testCreatedAtUpdatedAtAssert(): void
     {
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertEquals(true, !$document->isEmpty());
@@ -3266,7 +3464,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('created_at');
     }
 
-    public function testCreateDatetime()
+    public function testCreateDatetime(): void
     {
         static::getDatabase()->createCollection('datetime');
 
@@ -3293,7 +3491,7 @@ abstract class Base extends TestCase
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
         $dateValidator = new DatetimeValidator();
-        $this->assertEquals(NULL, $document->getAttribute('date2'));
+        $this->assertEquals(null, $document->getAttribute('date2'));
         $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
         $this->assertEquals(false, $dateValidator->isValid($document->getAttribute('date2')));
 
@@ -3315,7 +3513,7 @@ abstract class Base extends TestCase
         ]));
     }
 
-    public function testCreateDateTimeAttributeFailure()
+    public function testCreateDateTimeAttributeFailure(): void
     {
         static::getDatabase()->createCollection('datetime_fail');
 
@@ -3324,7 +3522,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
     }
 
-    public function testKeywords()
+    public function testKeywords(): void
     {
         $database = static::getDatabase();
         $keywords = $database->getKeywords();
@@ -3435,7 +3633,7 @@ abstract class Base extends TestCase
         // TODO: Index name tests
     }
 
-    public function testWritePermissions()
+    public function testWritePermissions(): void
     {
         $database = static::getDatabase();
 
@@ -3475,7 +3673,7 @@ abstract class Base extends TestCase
 
         try {
             $database->deleteDocument('animals', 'cat');
-        } catch (ExceptionAuthorization) {
+        } catch (AuthorizationException) {
             $didFail = true;
         }
 
@@ -3487,7 +3685,7 @@ abstract class Base extends TestCase
         try {
             $newDog = $dog->setAttribute('type', 'newDog');
             $database->updateDocument('animals', 'dog', $newDog);
-        } catch (ExceptionAuthorization) {
+        } catch (AuthorizationException) {
             $didFail = true;
         }
 
@@ -3506,7 +3704,7 @@ abstract class Base extends TestCase
         $this->assertEquals('newCat', $docs[0]['type']);
     }
 
-    public function testEvents()
+    public function testEvents(): void
     {
         Authorization::skip(function () {
             $database = static::getDatabase();

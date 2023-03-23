@@ -13,20 +13,20 @@ use Utopia\Database\Validator\Queries;
 class QueriesTest extends TestCase
 {
     /**
-     * @var array
+     * @var array<string, mixed>
      */
-    protected $collection = [];
+    protected array $collection = [];
 
     /**
-     * @var DatabaseQuery[] $queries
+     * @var array<string>
      */
-    protected $queries = [];
+    protected array $queries = [];
+
+    protected ?Query $queryValidator = null;
 
     /**
-     * @var Query
+     * @throws \Exception
      */
-    protected $queryValidator = null;
-
     public function setUp(): void
     {
         $this->collection = [
@@ -105,9 +105,9 @@ class QueriesTest extends TestCase
 
         array_push($this->queries, $query1, $query2);
 
-        // Constructor expects Document[] $indexes
+        // Constructor expects array<Document> $indexes
         // Object property declaration cannot initialize a Document object
-        // Add Document[] $indexes separately
+        // Add array<Document> $indexes separately
         $index1 = new Document([
             '$id' => ID::custom('testindex'),
             'type' => 'key',
@@ -160,7 +160,10 @@ class QueriesTest extends TestCase
     {
     }
 
-    public function testQueries()
+    /**
+     * @throws \Exception
+     */
+    public function testQueries(): void
     {
         // test for SUCCESS
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
@@ -197,10 +200,13 @@ class QueriesTest extends TestCase
         $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
     }
 
-    public function testLooseOrderQueries()
+    /**
+     * @throws \Exception
+     */
+    public function testLooseOrderQueries(): void
     {
         $validator = new Queries(
-            $this->queryValidator, 
+            $this->queryValidator,
             [
                 new Document([
                     '$id' => 'title',
@@ -243,8 +249,16 @@ class QueriesTest extends TestCase
                         'rating'
                     ],
                     'orders' => []
+                ]),
+                new Document([
+                    '$id' => 'key-price',
+                    'type' => 'key',
+                    'attributes' => [
+                        'price'
+                    ],
+                    'orders' => []
                 ])
-            ], 
+            ],
             true,
         );
 
@@ -292,7 +306,10 @@ class QueriesTest extends TestCase
         ]));
     }
 
-    public function testIsStrict()
+    /**
+     * @throws \Exception
+     */
+    public function testIsStrict(): void
     {
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
 
@@ -301,6 +318,5 @@ class QueriesTest extends TestCase
         $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes'], false);
 
         $this->assertEquals(false, $validator->isStrict());
-
     }
 }

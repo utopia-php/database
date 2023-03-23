@@ -3466,7 +3466,7 @@ class Database
                             $matched = \str_contains($value, $query->getValue());
                             break;
                         case Query::TYPE_IS_NULL:
-                            $matched = $value == null;
+                            $matched = $value === null;
                             break;
                         case Query::TYPE_IS_NOT_NULL:
                             $matched = $value != null;

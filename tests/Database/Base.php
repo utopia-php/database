@@ -4404,11 +4404,15 @@ abstract class Base extends TestCase
         $city1 = static::getDatabase()->getDocument('city', 'city1');
 
         // Set relationship to null
-        static::getDatabase()->updateDocument(
+        $city1 = static::getDatabase()->updateDocument(
             'city',
             $city1->getId(),
             $city1->setAttribute('country', null)
         );
+
+        $this->assertEquals(null, $city1->getAttribute('country'));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertEquals(null, $city1->getAttribute('country'));
 
         // Create a new city with no relation
         $city7 = static::getDatabase()->createDocument('city', new Document([

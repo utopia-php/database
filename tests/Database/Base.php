@@ -5426,14 +5426,14 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('review');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'movies') {
+            if ($attribute['key'] === 'movie') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('movies', $attribute['$id']);
-                $this->assertEquals('movies', $attribute['key']);
+                $this->assertEquals('movie', $attribute['$id']);
+                $this->assertEquals('movie', $attribute['key']);
                 $this->assertEquals('movie', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('review', $attribute['options']['twoWayKey']);
+                $this->assertEquals('reviews', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -5441,14 +5441,14 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('movie');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'review') {
+            if ($attribute['key'] === 'reviews') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('review', $attribute['$id']);
-                $this->assertEquals('review', $attribute['key']);
+                $this->assertEquals('reviews', $attribute['$id']);
+                $this->assertEquals('reviews', $attribute['key']);
                 $this->assertEquals('review', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('movies', $attribute['options']['twoWayKey']);
+                $this->assertEquals('movie', $attribute['options']['twoWayKey']);
             }
         }
 

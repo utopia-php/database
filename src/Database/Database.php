@@ -2008,7 +2008,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter($attributes, fn ($attribute) =>
-            return $attribute['type'] === Database::VAR_RELATIONSHIP
+            $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         static $fetchDepth = 1;
@@ -3365,6 +3365,8 @@ class Database
                 case Query::TYPE_SELECT:
                     foreach ($query->getValues() as $value) {
                         if (\str_contains($value, '.')) {
+                            // Shift the top level off the dot-path to pass the selection down the chain
+                            // 'foo.bar.baz' becomes 'bar.baz'
                             $nestedSelections[] = Query::select([
                                 \implode('.', \array_slice(\explode('.', $value), 1))
                             ]);
@@ -3480,10 +3482,10 @@ class Database
                             $matched = \str_contains($value, $query->getValue());
                             break;
                         case Query::TYPE_IS_NULL:
-                            $matched = $value == null;
+                            $matched = $value === null;
                             break;
                         case Query::TYPE_IS_NOT_NULL:
-                            $matched = $value != null;
+                            $matched = $value !== null;
                             break;
                         case Query::TYPE_BETWEEN:
                             $matched = $value >= $query->getValues()[0] && $value <= $query->getValues()[1];
@@ -3680,9 +3682,9 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
-        $attributes = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
-            return $attribute['type'] !== self::VAR_RELATIONSHIP;
-        });
+        $attributes = \array_filter($collection->getAttribute('attributes', []), fn ($attribute) =>
+            $attribute['type'] !== self::VAR_RELATIONSHIP
+        );
 
         $attributes = array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {

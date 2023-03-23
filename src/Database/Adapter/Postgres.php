@@ -693,8 +693,8 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $limit
-     * @param int $offset
+     * @param int|null $limit
+     * @param int|null $offset
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
@@ -706,7 +706,7 @@ class Postgres extends SQL
      * @throws PDOException
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -787,22 +787,23 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        $order = 'ORDER BY ' . implode(', ', $orders);
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
+        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
+        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
-            {$order}
-            LIMIT :limit OFFSET :offset;
+            {$sqlOrder}
+            {$sqlLimit};
         ";
 
         if ($timeout) {
@@ -830,8 +831,13 @@ class Postgres extends SQL
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        if (!\is_null($limit)) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        }
+        if (!\is_null($offset)) {
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
+
         try {
             $stmt->execute();
         } catch (PDOException $e) {
@@ -870,16 +876,16 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
+        $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -904,7 +910,7 @@ class Postgres extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($max !== 0) {
+        if (!\is_null($max)) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
@@ -923,16 +929,16 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int|float
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
+        $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
@@ -956,7 +962,7 @@ class Postgres extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($max !== 0) {
+        if (!\is_null($max)) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 

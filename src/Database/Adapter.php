@@ -323,8 +323,8 @@ abstract class Adapter
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $limit
-     * @param int $offset
+     * @param int|null $limit
+     * @param int|null $offset
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
@@ -333,7 +333,7 @@ abstract class Adapter
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
 
     /**
      * Sum an attribute
@@ -341,22 +341,22 @@ abstract class Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int;
+    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
 
     /**
      * Count Documents
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], int $max = 0): int;
+    abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
      * Get max STRING limit

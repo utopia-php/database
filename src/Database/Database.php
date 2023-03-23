@@ -250,7 +250,7 @@ class Database
     private int $relationshipUpdateDepth = 1;
 
     /**
-     * @var array<array<string, mixed>
+     * @var array<array<string, mixed>>
      */
     private array $relationshipFetchMap = [];
 
@@ -1973,7 +1973,9 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), fn ($attribute) =>
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) =>
             $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
@@ -2006,7 +2008,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, fn ($attribute) =>
+        $relationships = \array_filter(
+            $attributes,
+            fn ($attribute) =>
             $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
@@ -2276,7 +2280,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, fn ($attribute) =>
+        $relationships = \array_filter(
+            $attributes,
+            fn ($attribute) =>
             $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
@@ -3681,7 +3687,9 @@ class Database
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
-        $attributes = \array_filter($collection->getAttribute('attributes', []), fn ($attribute) =>
+        $attributes = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) =>
             $attribute['type'] !== self::VAR_RELATIONSHIP
         );
 

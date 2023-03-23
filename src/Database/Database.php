@@ -239,21 +239,20 @@ class Database
         '*' => [],
     ];
 
-    /**
-     * @var bool
-     */
     protected bool $silentEvents = false;
 
-    /**
-     * Timestamp for the current request
-     * @var ?\DateTime
-     */
     protected ?\DateTime $timestamp = null;
 
-    /**
-     * @var bool
-     */
     protected bool $resolveRelationships = true;
+
+    private int $relationshipFetchDepth = 1;
+    private int $relationshipCreateDepth = 1;
+    private int $relationshipUpdateDepth = 1;
+
+    /**
+     * @var array<array<string, mixed>
+     */
+    private array $relationshipFetchMap = [];
 
     /**
      * @param Adapter $adapter
@@ -2011,9 +2010,6 @@ class Database
             $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        static $fetchDepth = 1;
-        static $fetchedRelationships = [];
-
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
@@ -2027,7 +2023,7 @@ class Database
             $relationship->setAttribute('document', $document->getId());
 
             $skipFetch = false;
-            foreach ($fetchedRelationships as $fetchedRelationship) {
+            foreach ($this->relationshipFetchMap as $fetchedRelationship) {
                 $existingKey = $fetchedRelationship['key'];
                 $existingCollection = $fetchedRelationship['collection'];
                 $existingRelatedCollection = $fetchedRelationship['options']['relatedCollection'];
@@ -2044,7 +2040,14 @@ class Database
                     && $existingCollection === $relatedCollection->getId()
                     && $existingSide !== $side;
 
-                // If this relationship is not directly related but relates across multiple collections, skip it
+                // If this relationship is not directly related but relates across multiple collections, skip it.
+                //
+                // These conditions ensure that a relationship is considered transitive if it has the same
+                // two-way key and related collection, but is on the opposite side of the relationship (the first and second conditions).
+                //
+                // They also ensure that a relationship is considered transitive if it has the same key and related
+                // collection as an existing relationship, but a different two-way key (the third condition),
+                // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                 $transitive = (($existingKey === $twoWayKey
                         && $existingCollection === $relatedCollection->getId()
                         && $existingSide !== $side)
@@ -2075,17 +2078,17 @@ class Database
                         $document->removeAttribute($key);
                     }
 
-                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
                         break;
                     }
 
-                    $fetchDepth++;
-                    $fetchedRelationships[] = $relationship;
+                    $this->relationshipFetchDepth++;
+                    $this->relationshipFetchMap[] = $relationship;
 
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
-                    $fetchDepth--;
-                    \array_pop($fetchedRelationships);
+                    $this->relationshipFetchDepth--;
+                    \array_pop($this->relationshipFetchMap);
 
                     $document->setAttribute($key, $related);
                     break;
@@ -2095,25 +2098,25 @@ class Database
                             $document->removeAttribute($key);
                         }
                         if ($twoWay && !\is_null($value) && !$skipFetch) {
-                            $fetchDepth++;
-                            $fetchedRelationships[] = $relationship;
+                            $this->relationshipFetchDepth++;
+                            $this->relationshipFetchMap[] = $relationship;
 
                             $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
-                            $fetchDepth--;
-                            \array_pop($fetchedRelationships);
+                            $this->relationshipFetchDepth--;
+                            \array_pop($this->relationshipFetchMap);
 
                             $document->setAttribute($key, $related);
                         }
                         break;
                     }
 
-                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
                         break;
                     }
 
-                    $fetchDepth++;
-                    $fetchedRelationships[] = $relationship;
+                    $this->relationshipFetchDepth++;
+                    $this->relationshipFetchMap[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2121,8 +2124,8 @@ class Database
                         ...$queries
                     ]);
 
-                    $fetchDepth--;
-                    \array_pop($fetchedRelationships);
+                    $this->relationshipFetchDepth--;
+                    \array_pop($this->relationshipFetchMap);
 
                     foreach ($relatedDocuments as $related) {
                         $related->removeAttribute($twoWayKey);
@@ -2135,13 +2138,13 @@ class Database
                         if (\is_null($value) || $skipFetch) {
                             break;
                         }
-                        $fetchDepth++;
-                        $fetchedRelationships[] = $relationship;
+                        $this->relationshipFetchDepth++;
+                        $this->relationshipFetchMap[] = $relationship;
 
                         $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
-                        $fetchDepth--;
-                        \array_pop($fetchedRelationships);
+                        $this->relationshipFetchDepth--;
+                        \array_pop($this->relationshipFetchMap);
 
                         $document->setAttribute($key, $related);
                         break;
@@ -2152,12 +2155,12 @@ class Database
                         break;
                     }
 
-                    if ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
+                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                         break;
                     }
 
-                    $fetchDepth++;
-                    $fetchedRelationships[] = $relationship;
+                    $this->relationshipFetchDepth++;
+                    $this->relationshipFetchMap[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2165,8 +2168,8 @@ class Database
                         ...$queries
                     ]);
 
-                    $fetchDepth--;
-                    \array_pop($fetchedRelationships);
+                    $this->relationshipFetchDepth--;
+                    \array_pop($this->relationshipFetchMap);
 
 
                     foreach ($relatedDocuments as $related) {
@@ -2180,12 +2183,12 @@ class Database
                         break;
                     }
 
-                    if ($twoWay && ($fetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
                         break;
                     }
 
-                    $fetchDepth++;
-                    $fetchedRelationships[] = $relationship;
+                    $this->relationshipFetchDepth++;
+                    $this->relationshipFetchMap[] = $relationship;
 
                     $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
@@ -2202,8 +2205,8 @@ class Database
                         );
                     }
 
-                    $fetchDepth--;
-                    \array_pop($fetchedRelationships);
+                    $this->relationshipFetchDepth--;
+                    \array_pop($this->relationshipFetchMap);
 
                     $document->setAttribute($key, $related);
                     break;
@@ -2277,8 +2280,6 @@ class Database
             $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        static $createDepth = 1;
-
         foreach ($relationships as $index => $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
@@ -2288,7 +2289,7 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
-            if ($createDepth > Database::RELATION_MAX_DEPTH) {
+            if ($this->relationshipCreateDepth > Database::RELATION_MAX_DEPTH) {
                 $document->removeAttribute($key);
 
                 if ($index === \count($relationships) - 1) {
@@ -2317,7 +2318,7 @@ class Database
                                     $twoWay,
                                     $twoWayKey,
                                     $side,
-                                    $createDepth
+                                    $this->relationshipCreateDepth
                                 );
                                 break;
                             case 'string':
@@ -2331,7 +2332,7 @@ class Database
                                     $twoWay,
                                     $twoWayKey,
                                     $side,
-                                    $createDepth
+                                    $this->relationshipCreateDepth
                                 );
                                 break;
                             default:
@@ -2354,7 +2355,7 @@ class Database
                         $twoWay,
                         $twoWayKey,
                         $side,
-                        $createDepth
+                        $this->relationshipCreateDepth
                     );
                     $document->setAttribute($key, $relatedId);
                     break;
@@ -2370,7 +2371,7 @@ class Database
                         $twoWay,
                         $twoWayKey,
                         $side,
-                        $createDepth
+                        $this->relationshipCreateDepth
                     );
                     break;
                 case 'NULL':
@@ -2597,8 +2598,6 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        static $updateDepth = 1;
-
         foreach ($relationships as $index => $relationship) {
             /** @var string $key */
             $key = $relationship['key'];
@@ -2615,7 +2614,7 @@ class Database
                 continue;
             }
 
-            if ($updateDepth > Database::RELATION_MAX_DEPTH) {
+            if ($this->relationshipUpdateDepth > Database::RELATION_MAX_DEPTH) {
                 $document->removeAttribute($key);
 
                 if ($index === \count($relationships) - 1) {
@@ -2639,7 +2638,7 @@ class Database
                                 $twoWay,
                                 $twoWayKey,
                                 $side,
-                                $updateDepth
+                                $this->relationshipUpdateDepth
                             );
                             $document->setAttribute($key, $relationId);
                         }
@@ -2680,7 +2679,7 @@ class Database
                                     throw new DuplicateException('Document already has a related document');
                                 }
 
-                                $updateDepth++;
+                                $this->relationshipUpdateDepth++;
                                 if ($related->isEmpty()) {
                                     if (! isset($value['$permissions'])) {
                                         $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
@@ -2696,7 +2695,7 @@ class Database
                                         $value->setAttribute($twoWayKey, $document->getId())
                                     );
                                 }
-                                $updateDepth--;
+                                $this->relationshipUpdateDepth--;
 
                                 $document->setAttribute($key, $related->getId());
                                 break;

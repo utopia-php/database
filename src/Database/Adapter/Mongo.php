@@ -710,8 +710,8 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $limit
-     * @param int $offset
+     * @param int|null $limit
+     * @param int|null $offset
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
@@ -722,7 +722,7 @@ class Mongo extends Adapter
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -734,10 +734,13 @@ class Mongo extends Adapter
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        $options = [
-            'limit' => $limit,
-            'skip' => $offset
-        ];
+        $options = [];
+        if (!\is_null($limit)) {
+            $options['limit'] = $limit;
+        }
+        if (!\is_null($offset)) {
+            $options['skip'] = $offset;
+        }
 
         if ($timeout) {
             $options['maxTimeMS'] = $timeout;
@@ -971,12 +974,12 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1006,12 +1009,12 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);

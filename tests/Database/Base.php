@@ -4699,10 +4699,10 @@ abstract class Base extends TestCase
 
         // Get related document
         $album = static::getDatabase()->getDocument('album', 'album1');
-        $this->assertArrayNotHasKey('albums', $album);
+        $this->assertArrayNotHasKey('artist', $album);
 
         $album = static::getDatabase()->getDocument('album', 'album2');
-        $this->assertArrayNotHasKey('albums', $album);
+        $this->assertArrayNotHasKey('artist', $album);
 
         // Query related document
         $artists = static::getDatabase()->find('artist', [

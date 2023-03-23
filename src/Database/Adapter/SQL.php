@@ -12,14 +12,14 @@ use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-    protected PDO $pdo;
+    protected mixed $pdo;
 
     /**
      * Constructor.
      *
      * Set connection and settings
      *
-     * @param PDO $pdo
+     * @param mixed $pdo
      */
     public function __construct(mixed $pdo)
     {
@@ -827,9 +827,9 @@ abstract class SQL extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO
+     * @return mixed
      */
-    protected function getPDO(): PDO
+    protected function getPDO(): mixed
     {
         return $this->pdo;
     }

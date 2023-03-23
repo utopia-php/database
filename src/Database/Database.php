@@ -1974,9 +1974,9 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = \array_filter($collection->getAttribute('attributes', []), fn ($attribute) =>
+            $attribute['type'] === Database::VAR_RELATIONSHIP
+        );
 
         $hasTwoWayRelationship = false;
         foreach ($relationships as $relationship) {
@@ -2007,9 +2007,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = \array_filter($attributes, fn ($attribute) =>
+            return $attribute['type'] === Database::VAR_RELATIONSHIP
+        );
 
         static $fetchDepth = 1;
         static $fetchedRelationships = [];
@@ -2273,9 +2273,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = \array_filter($attributes, fn ($attribute) =>
+            $attribute['type'] === Database::VAR_RELATIONSHIP
+        );
 
         static $createDepth = 1;
 

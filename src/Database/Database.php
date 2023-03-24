@@ -1577,7 +1577,8 @@ class Database
                     fn ($index) =>
                     $index->setAttribute('attributes', [$newKey])
                 );
-                $this->silent(fn () =>
+                $this->silent(
+                    fn () =>
                     $this->renameIndex($collection, 'index_' . $key, 'index_' . $newKey)
                 );
             };
@@ -3427,6 +3428,13 @@ class Database
         return $results;
     }
 
+
+    /**
+     * @param array<Document> $results
+     * @param array<Query> $queries
+     * @param array<Document> $relationships
+     * @return array<Document>
+     */
     private function applyNestedQueries(array $results, array $queries, array $relationships): array
     {
         foreach ($results as $index => &$node) {

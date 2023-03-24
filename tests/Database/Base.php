@@ -5745,14 +5745,14 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('product');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'stores') {
+            if ($attribute['key'] === 'store') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('stores', $attribute['$id']);
-                $this->assertEquals('stores', $attribute['key']);
+                $this->assertEquals('store', $attribute['$id']);
+                $this->assertEquals('store', $attribute['key']);
                 $this->assertEquals('store', $attribute['options']['relatedCollection']);
                 $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('product', $attribute['options']['twoWayKey']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('products', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -5760,14 +5760,14 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('store');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'product') {
+            if ($attribute['key'] === 'products') {
                 $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('product', $attribute['$id']);
-                $this->assertEquals('product', $attribute['key']);
+                $this->assertEquals('products', $attribute['$id']);
+                $this->assertEquals('products', $attribute['key']);
                 $this->assertEquals('product', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('stores', $attribute['options']['twoWayKey']);
+                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(true, $attribute['options']['twoWay']);
+                $this->assertEquals('store', $attribute['options']['twoWayKey']);
             }
         }
 
@@ -6555,7 +6555,7 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('classes');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'customer') {
+            if ($attribute['key'] === 'classes') {
                 $this->assertEquals('relationship', $attribute['type']);
                 $this->assertEquals('classes', $attribute['$id']);
                 $this->assertEquals('classes', $attribute['key']);

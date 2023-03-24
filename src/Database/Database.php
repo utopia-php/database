@@ -1403,7 +1403,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->createCollection($collection->getId() . '_' . $relatedCollection->getId(), [
+            $this->silent(fn () => $this->createCollection($collection->getId() . '_' . $relatedCollection->getId(), [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -1437,7 +1437,7 @@ class Database
                     'type' => self::INDEX_KEY,
                     'attributes' => [$twoWayKey],
                 ]),
-            ]);
+            ]));
         }
 
         $relationship = $this->adapter->createRelationship(
@@ -1484,7 +1484,7 @@ class Database
     }
 
     /**
-     * Update relationship attribute.
+     * Update a relationship attribute
      *
      * @param string $collection
      * @param string $key
@@ -1570,56 +1570,56 @@ class Database
             $this->deleteCachedCollection($collection);
             $this->deleteCachedCollection($relatedCollection);
 
-            $rename = function ($collection, $key, $newKey) {
+            $renameIndex = function ($collection, $key, $newKey) {
                 $this->updateIndexMeta(
                     $collection,
                     'index_' . $key,
                     fn ($index) =>
                     $index->setAttribute('attributes', [$newKey])
                 );
-                $this->renameIndex($collection, 'index_' . $key, 'index_' . $newKey);
+                $this->silent(fn () =>
+                    $this->renameIndex($collection, 'index_' . $key, 'index_' . $newKey)
+                );
             };
 
-            $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $key, $newKey, $twoWayKey, $newTwoWayKey, $rename) {
-                switch ($type) {
-                    case self::RELATION_ONE_TO_ONE:
-                        if ($key !== $newKey) {
-                            $rename($collection, $key, $newKey);
-                        }
-                        if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                            $rename($relatedCollection, $twoWayKey, $newTwoWayKey);
-                        }
-                        break;
-                    case self::RELATION_ONE_TO_MANY:
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $rename($relatedCollection, $twoWayKey, $newTwoWayKey);
-                        }
-                        break;
-                    case self::RELATION_MANY_TO_ONE:
-                        if ($key !== $newKey) {
-                            $rename($collection, $key, $newKey);
-                        }
-                        break;
-                    case self::RELATION_MANY_TO_MANY:
-                        $junction = $collection . '_' . $relatedCollection;
-                        if ($key !== $newKey) {
-                            $rename($junction, $key, $newKey);
-                        }
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $rename($junction, $twoWayKey, $newTwoWayKey);
-                        }
-                        break;
-                    default:
-                        throw new Exception('Invalid relationship type.');
-                }
-            });
+            switch ($type) {
+                case self::RELATION_ONE_TO_ONE:
+                    if ($key !== $newKey) {
+                        $renameIndex($collection, $key, $newKey);
+                    }
+                    if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                    break;
+                case self::RELATION_ONE_TO_MANY:
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                    break;
+                case self::RELATION_MANY_TO_ONE:
+                    if ($key !== $newKey) {
+                        $renameIndex($collection, $key, $newKey);
+                    }
+                    break;
+                case self::RELATION_MANY_TO_MANY:
+                    $junction = $collection . '_' . $relatedCollection;
+                    if ($key !== $newKey) {
+                        $renameIndex($junction, $key, $newKey);
+                    }
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                    }
+                    break;
+                default:
+                    throw new Exception('Invalid relationship type.');
+            }
         });
 
         return true;
     }
 
     /**
-     * Delete relationship attribute.
+     * Delete a relationship attribute
      *
      * @param string $collection
      * @param string $id
@@ -2509,7 +2509,7 @@ class Database
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $this->createDocument($junction, new Document([
+                $this->skipRelationships(fn () => $this->createDocument($junction, new Document([
                     $key => $related->getId(),
                     $twoWayKey => $documentId,
                     '$permissions' => [
@@ -2517,7 +2517,7 @@ class Database
                         Permission::update(Role::any()),
                         Permission::delete(Role::any()),
                     ]
-                ]));
+                ])));
                 break;
         }
     }
@@ -2641,7 +2641,7 @@ class Database
                                 $document,
                                 $value,
                                 $relationType,
-                                $twoWay,
+                                false,
                                 $twoWayKey,
                                 $side,
                                 $this->relationshipUpdateDepth
@@ -2766,12 +2766,11 @@ class Database
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
                                 $related = $this->getDocument($relatedCollection->getId(), $relation);
-                                $related->setAttribute($twoWayKey, $document->getId());
 
                                 $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $related->getId(),
-                                    $related
+                                    $related->setAttribute($twoWayKey, $document->getId())
                                 ));
                             } elseif ($relation instanceof Document) {
                                 $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
@@ -2937,6 +2936,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws Exception
+     * @throws Throwable
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
@@ -3054,6 +3054,9 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws Exception
+     * @throws Throwable
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -3074,7 +3077,7 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->deleteDocumentRelationships($collection, $document);
+            $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
         }
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
@@ -3407,18 +3410,27 @@ class Database
             return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
         }) : [];
 
-
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-                $node = $this->getDocumentRelationships($collection, $node, $nestedSelections);
+                $node = $this->silent(fn () => $this->getDocumentRelationships($collection, $node, $nestedSelections));
             }
 
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
+        }
 
-            // Post apply nested queries
-            foreach ($nestedQueries as $query) {
+        $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
+
+        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
+
+        return $results;
+    }
+
+    private function applyNestedQueries(array $results, array $queries, array $relationships): array
+    {
+        foreach ($results as $index => &$node) {
+            foreach ($queries as $query) {
                 $path = \explode('.', $query->getAttribute());
 
                 if (\count($path) == 1) {
@@ -3512,11 +3524,7 @@ class Database
             }
         }
 
-        $results = \array_values($results);
-
-        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
-
-        return $results;
+        return \array_values($results);
     }
 
     /**

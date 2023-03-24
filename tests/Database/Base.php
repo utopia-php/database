@@ -6418,6 +6418,22 @@ abstract class Base extends TestCase
             ])])
         );
 
+        // Playlist relating to existing songs that belong to other playlists
+        static::getDatabase()->createDocument('playlist', new Document([
+            '$id' => 'playlist6',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Playlist 6',
+            'songs' => [
+                'song1',
+                'song2',
+                'song5'
+            ]
+        ]));
+
         $this->assertEquals('Song 5', $playlist5->getAttribute('songs')[0]->getAttribute('name'));
         $playlist5 = static::getDatabase()->getDocument('playlist', 'playlist5');
         $this->assertEquals('Song 5', $playlist5->getAttribute('songs')[0]->getAttribute('name'));
@@ -6434,7 +6450,7 @@ abstract class Base extends TestCase
             Query::equal('songs.name', ['Song 2'])
         ]);
 
-        $this->assertEquals(2, \count($playlists));
+        $this->assertEquals(3, \count($playlists));
         $this->assertEquals(1, \count($playlists[0]['songs']));
 
         // Rename relationship key

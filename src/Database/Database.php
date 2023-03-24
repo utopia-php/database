@@ -1990,7 +1990,7 @@ class Database
 
         // Don't save to cache if there is a two-way relationship
         if (!$hasTwoWayRelationship) {
-            $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
+            $this->cache->save($cacheKey, $document->getArrayCopy());
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);

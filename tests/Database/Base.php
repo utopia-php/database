@@ -5473,6 +5473,18 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Create document with relationship to existing document by ID
+        $review10 = static::getDatabase()->createDocument('review', new Document([
+            '$id' => 'review10',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Review 10',
+            'movie' => 'movie1'
+        ]));
+
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('movie', new Document([
             '$id' => 'movie2',
@@ -5529,7 +5541,7 @@ abstract class Base extends TestCase
 
         $reviews = static::getDatabase()->find('review');
 
-        $this->assertEquals(2, \count($reviews));
+        $this->assertEquals(3, \count($reviews));
 
         // Select related document attributes
         $review = static::getDatabase()->findOne('review', [

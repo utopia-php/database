@@ -2,9 +2,7 @@
 
 \Swoole\Runtime::enableCoroutine();
 
-go(function () {
+Co\run(function () {
     global $argc, $argv;
     require __DIR__. '/SwooleMariaDB.php';
 });
-
-

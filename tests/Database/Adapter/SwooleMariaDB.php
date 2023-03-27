@@ -34,6 +34,7 @@ class SwooleMariaDB extends Base
      */
     public static function getDatabase(): Database
     {
+
         if (!is_null(self::$database)) {
             return self::$database;
         }
@@ -73,7 +74,7 @@ class SwooleMariaDB extends Base
                 ->withCharset('utf8mb4')
                 ->withUsername('root')
                 ->withPassword('password'),
-            128
+            64
         );
 
         $pdo = $pool->get();
@@ -83,5 +84,6 @@ class SwooleMariaDB extends Base
         $database->setNamespace($name);
 
         return self::$database = $database;
+
     }
 }

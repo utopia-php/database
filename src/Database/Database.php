@@ -116,6 +116,14 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
+    public const HOOK_PRE_CREATE = 'pre_create';
+    public const HOOK_POST_CREATE = 'post_create';
+    public const HOOK_POST_READ = 'post_read';
+    public const HOOK_POST_LIST = 'post_list';
+    public const HOOK_PRE_UPDATE = 'pre_update';
+    public const HOOK_POST_UPDATE = 'post_update';
+    public const HOOK_POST_DELETE = 'post_delete';
+
     protected Adapter $adapter;
 
     protected Cache $cache;
@@ -233,11 +241,16 @@ class Database
     private array $instanceFilters = [];
 
     /**
-     * @var array<string, mixed>
+     * @var array<string, array<callable>>
      */
     protected array $listeners = [
         '*' => [],
     ];
+
+    /**
+     * @var array<string, array<callable>>
+     */
+    protected array $hooks = [];
 
     protected bool $silentEvents = false;
 
@@ -353,6 +366,28 @@ class Database
     }
 
     /**
+     * Add hook to hooks
+     *
+     * @param array<string> $hooks
+     * @param callable|null $callback
+     * @return self
+     */
+    public function hook(array $hooks, ?callable $callback): self
+    {
+        foreach ($hooks as $hook) {
+            if (\is_null($callback)) {
+                $this->hooks[$hook] = [];
+                continue;
+            }
+            if (!isset($this->hooks[$hook])) {
+                $this->hooks[$hook] = [];
+            }
+            $this->hooks[$hook][] = $callback;
+        }
+        return $this;
+    }
+
+    /**
      * Silent event generation for all the calls inside the callback
      *
      * @param callable $callback
@@ -401,12 +436,34 @@ class Database
             return;
         }
         foreach ($this->listeners[self::EVENT_ALL] as $callback) {
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
 
         foreach (($this->listeners[$event] ?? []) as $callback) {
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
+    }
+
+    /**
+     * Trigger callback for hooks
+     *
+     * @param string $hook
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     * @throws Exception
+     */
+    protected function process(string $hook, Document $collection, Document $document): Document
+    {
+        foreach (($this->hooks[$hook] ?? []) as $callback) {
+            $result = $callback($collection, $document);
+        }
+
+        if (isset($result) && !$result instanceof Document) {
+            throw new Exception('Hook must return a Document instance');
+        }
+
+        return $result ?? $document;
     }
 
     /**
@@ -652,6 +709,7 @@ class Database
      *
      * @return Document
      * @throws Exception
+     * @throws Throwable
      */
     public function getCollection(string $id): Document
     {
@@ -1950,6 +2008,8 @@ class Database
                 return new Document();
             }
 
+            $document = $this->process(self::HOOK_POST_READ, $collection, $document);
+
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
             return $document;
@@ -1992,6 +2052,8 @@ class Database
         if (!$hasTwoWayRelationship) {
             $this->cache->save($cacheKey, $document->getArrayCopy());
         }
+
+        $document = $this->process(self::HOOK_POST_READ, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -2253,6 +2315,8 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        $document = $this->process(self::HOOK_PRE_CREATE, $collection, $document);
+
         if ($this->resolveRelationships) {
             $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
         }
@@ -2264,6 +2328,8 @@ class Database
         }
 
         $document = $this->decode($collection, $document);
+
+        $document = $this->process(self::HOOK_POST_CREATE, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
@@ -2568,6 +2634,8 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        $document = $this->process(self::HOOK_PRE_UPDATE, $collection, $document);
+
         if ($this->resolveRelationships) {
             $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
         }
@@ -2581,6 +2649,8 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $document = $this->process(self::HOOK_POST_UPDATE, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -3085,6 +3155,8 @@ class Database
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
+        $document = $this->process(self::HOOK_POST_DELETE, $collection, $document);
+
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
         return $deleted;
@@ -3307,6 +3379,7 @@ class Database
      * @param string $collection
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteCachedCollection(string $collection): bool
     {
@@ -3320,6 +3393,7 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
@@ -3335,6 +3409,7 @@ class Database
      *
      * @return array<Document>
      * @throws Exception
+     * @throws Throwable
      */
     public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
@@ -3419,6 +3494,8 @@ class Database
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
+
+            $node = $this->process(self::HOOK_POST_LIST, $collection, $node);
         }
 
         $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);

@@ -1800,7 +1800,6 @@ class Database
      *
      * @return bool
      * @throws Exception
-     * @throws Exception
      */
     public function deleteCachedCollection(string $collection): bool
     {
@@ -1814,7 +1813,6 @@ class Database
      * @param string $id
      *
      * @return bool
-     * @throws Exception
      * @throws Exception
      */
     public function deleteCachedDocument(string $collection, string $id): bool

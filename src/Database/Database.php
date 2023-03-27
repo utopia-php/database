@@ -1784,8 +1784,6 @@ class Database
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
-        $document = $this->process(self::HOOK_PRE_DELETE, $collection, $document);
-
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
         $document = $this->process(self::HOOK_POST_DELETE, $collection, $document);

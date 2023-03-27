@@ -99,6 +99,14 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
+    public const HOOK_PRE_CREATE = 'pre_create';
+    public const HOOK_POST_CREATE = 'post_create';
+    public const HOOK_POST_READ = 'post_read';
+    public const HOOK_POST_LIST = 'post_list';
+    public const HOOK_PRE_UPDATE = 'pre_update';
+    public const HOOK_POST_UPDATE = 'post_update';
+    public const HOOK_POST_DELETE = 'post_delete';
+
     protected Adapter $adapter;
 
     protected Cache $cache;
@@ -216,11 +224,16 @@ class Database
     private array $instanceFilters = [];
 
     /**
-     * @var array<string, mixed>
+     * @var array<string, array<callable>>
      */
     protected array $listeners = [
         '*' => [],
     ];
+
+    /**
+     * @var array<string, array<callable>>
+     */
+    protected array $hooks = [];
 
     /**
      * @var bool
@@ -332,6 +345,28 @@ class Database
     }
 
     /**
+     * Add hook to hooks
+     *
+     * @param array<string> $hooks
+     * @param callable|null $callback
+     * @return self
+     */
+    public function hook(array $hooks, ?callable $callback): self
+    {
+        foreach ($hooks as $hook) {
+            if (\is_null($callback)) {
+                $this->hooks[$hook] = [];
+                continue;
+            }
+            if (!isset($this->hooks[$hook])) {
+                $this->hooks[$hook] = [];
+            }
+            $this->hooks[$hook][] = $callback;
+        }
+        return $this;
+    }
+
+    /**
      * Silent event generation for all the calls inside the callback
      *
      * @param callable $callback
@@ -359,12 +394,34 @@ class Database
             return;
         }
         foreach ($this->listeners[self::EVENT_ALL] as $callback) {
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
 
         foreach (($this->listeners[$event] ?? []) as $callback) {
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
+    }
+
+    /**
+     * Trigger callback for hooks
+     *
+     * @param string $hook
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     * @throws Exception
+     */
+    protected function process(string $hook, Document $collection, Document $document): Document
+    {
+        foreach (($this->hooks[$hook] ?? []) as $callback) {
+            $result = $callback($collection, $document);
+        }
+
+        if (isset($result) && !$result instanceof Document) {
+            throw new Exception('Hook must return a Document instance');
+        }
+
+        return $result ?? $document;
     }
 
     /**
@@ -610,6 +667,7 @@ class Database
      *
      * @return Document
      * @throws Exception
+     * @throws Throwable
      */
     public function getCollection(string $id): Document
     {
@@ -852,6 +910,7 @@ class Database
      *
      * @return Document
      * @throws Exception
+     * @throws Throwable
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
@@ -1437,6 +1496,8 @@ class Database
                 return new Document();
             }
 
+            $document = $this->process(self::HOOK_POST_READ, $collection, $document);
+
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
             return $document;
@@ -1458,6 +1519,8 @@ class Database
         $document = $this->decode($collection, $document, $selections);
 
         $this->cache->save($cacheKey, $document->getArrayCopy()); // save to cache after fetching from db
+
+        $document = $this->process(self::HOOK_POST_READ, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -1496,9 +1559,13 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        $document = $this->process(self::HOOK_PRE_CREATE, $collection, $document);
+
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         $document = $this->decode($collection, $document);
+
+        $document = $this->process(self::HOOK_POST_CREATE, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
@@ -1550,10 +1617,14 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
+        $document = $this->process(self::HOOK_PRE_UPDATE, $collection, $document);
+
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $document = $this->process(self::HOOK_POST_UPDATE, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -1572,6 +1643,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws Exception
+     * @throws Throwable
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
@@ -1689,6 +1761,8 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
+     * @throws Exception
+     * @throws Throwable
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -1710,7 +1784,11 @@ class Database
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
+        $document = $this->process(self::HOOK_PRE_DELETE, $collection, $document);
+
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
+
+        $document = $this->process(self::HOOK_POST_DELETE, $collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -1723,6 +1801,8 @@ class Database
      * @param string $collection
      *
      * @return bool
+     * @throws Exception
+     * @throws Exception
      */
     public function deleteCachedCollection(string $collection): bool
     {
@@ -1736,6 +1816,8 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws Exception
+     * @throws Exception
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
@@ -1751,6 +1833,7 @@ class Database
      *
      * @return array<Document>
      * @throws Exception
+     * @throws Throwable
      */
     public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
@@ -1799,6 +1882,8 @@ class Database
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());
+
+            $node = $this->process(self::HOOK_POST_LIST, $collection, $node);
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);

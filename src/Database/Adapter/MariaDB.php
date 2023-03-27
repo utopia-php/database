@@ -411,7 +411,9 @@ class MariaDB extends SQL
         try {
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+            $statement = $this->getPDO()->prepare("select last_insert_id() as id");
+            $statement->execute();
+            $document['$internalId'] = $statement->fetch()['id'];
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

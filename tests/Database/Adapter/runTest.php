@@ -28,7 +28,6 @@ Co\run(function () {
     );
 
     go(function () use ($pool) {
-        sleep(1);
         $pdo = $pool->get();
         require __DIR__. '/SwooleMariaDB.php';
         $pool->put($pdo);

@@ -2,8 +2,8 @@
 
 namespace Utopia\Tests\Adapter;
 
-use Faker\Factory;
 use PDO;
+use PHPUnit\Framework\TestCase;
 use Redis;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
@@ -17,8 +17,6 @@ class SwooleMariaDB extends Base
 {
     public static ?Database $database = null;
 
-    // TODO@kodumbeats hacky way to identify adapters for tests
-    // Remove once all methods are implemented
     /**
      * Return name of adapter
      *
@@ -77,13 +75,16 @@ class SwooleMariaDB extends Base
             64
         );
 
+
         $pdo = $pool->get();
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database->setDefaultDatabase($schema);
         $database->setNamespace($name);
 
-        return self::$database = $database;
+        self::$database = $database;
+
+        return $database;
 
     }
 }

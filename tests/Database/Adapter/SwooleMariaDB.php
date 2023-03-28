@@ -35,7 +35,6 @@ class SwooleMariaDB extends TestCase
     public static function getDatabase(): Database
     {
         global $pdo;
-        var_dump($pdo);
         $cache = new Cache(new NoCache());
         return new Database(new MariaDB($pdo), $cache);
     }

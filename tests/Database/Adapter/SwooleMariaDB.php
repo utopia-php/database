@@ -7,13 +7,15 @@ use PHPUnit\Framework\TestCase;
 use Redis;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
+use Utopia\App;
+use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Tests\Base;
 
-class SwooleMariaDB extends Base
+class SwooleMariaDB extends TestCase
 {
     public static ?Database $database = null;
 
@@ -32,59 +34,15 @@ class SwooleMariaDB extends Base
      */
     public static function getDatabase(): Database
     {
-
-        if (!is_null(self::$database)) {
-            return self::$database;
-        }
-
-        $dbHost = 'mariadb';
-        $dbPort = '3306';
-        $dbUser = 'root';
-        $dbPass = 'password';
-
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
-
-        $database = new Database(new MariaDB($pdo), $cache);
-        $schema = 'shmuel';
-
-        $database->setDefaultDatabase($schema);
-        $name = 'myapp_'.uniqid();
-        $database->setNamespace($name);
-
-        if ($database->exists($database->getDefaultDatabase())) {
-            $database->delete($database->getDefaultDatabase());
-        }
-        $database->create();
-
-        // reclaim resources
-        $database = null;
-        $pdo = null;
-        // create PDO pool for coroutines
-        $pool = new PDOPool(
-            (new PDOConfig())
-                ->withHost('mariadb')
-                ->withPort(3306)
-                ->withDbName($schema)
-                ->withCharset('utf8mb4')
-                ->withUsername('root')
-                ->withPassword('password'),
-            64
-        );
-
-
-        $pdo = $pool->get();
-
-        $database = new Database(new MariaDB($pdo), $cache);
-        $database->setDefaultDatabase($schema);
-        $database->setNamespace($name);
-
-        self::$database = $database;
-
-        return $database;
-
+        global $pdo;
+        var_dump($pdo);
+        $cache = new Cache(new NoCache());
+        return new Database(new MariaDB($pdo), $cache);
     }
+
+    public function testPing(): void
+    {
+        $this->assertEquals(true, static::getDatabase()->ping());
+    }
+
 }

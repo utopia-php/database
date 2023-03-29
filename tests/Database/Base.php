@@ -3756,6 +3756,7 @@ abstract class Base extends TestCase
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
                 ],
                 'name' => 'Library 1',
                 'area' => 'Area 1',
@@ -3928,6 +3929,7 @@ abstract class Base extends TestCase
                 $person1->getId(),
                 $person1->setAttribute('library', 'library2')
             );
+            $this->fail('Failed to throw duplicate exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
@@ -3997,6 +3999,15 @@ abstract class Base extends TestCase
         // Can not delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('person', 'person1');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+        }
+
+        // Can not delete document while still related to another with on delete set to restrict
+        try {
+            static::getDatabase()->deleteDocument('library', 'library4');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -4397,6 +4408,7 @@ abstract class Base extends TestCase
                 $country1->getId(),
                 $country1->setAttribute('city', 'city2')
             );
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
@@ -4512,6 +4524,7 @@ abstract class Base extends TestCase
         // Can not delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -4861,7 +4874,7 @@ abstract class Base extends TestCase
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('artist', 'artist1');
-            $this->fail('Exception should be thrown');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -5341,7 +5354,7 @@ abstract class Base extends TestCase
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('customer', 'customer1');
-            $this->fail('Exception should be thrown');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -5675,7 +5688,7 @@ abstract class Base extends TestCase
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('movie', 'movie1');
-            $this->fail('Exception should be thrown');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -6174,7 +6187,7 @@ abstract class Base extends TestCase
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('store', 'store1');
-            $this->fail('Exception should be thrown');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -6486,7 +6499,7 @@ abstract class Base extends TestCase
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('playlist', 'playlist1');
-            $this->fail('Exception should be thrown');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -6959,7 +6972,7 @@ abstract class Base extends TestCase
         // Try to delete document while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('students', 'student1');
-            $this->fail('Exception should be thrown');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
@@ -8816,7 +8829,7 @@ abstract class Base extends TestCase
                 $lawn1->getId(),
                 $lawn1->setAttribute('name', 'Lawn 1 Updated')
             );
-            $this->fail('Failed to throw exception when updating document with missing permissions');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
         }
@@ -8827,7 +8840,7 @@ abstract class Base extends TestCase
                 'lawns',
                 $lawn1->getId(),
             );
-            $this->fail('Failed to throw exception when deleting document with missing permissions');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
@@ -8841,7 +8854,7 @@ abstract class Base extends TestCase
                 $tree1->getId(),
                 $tree1->setAttribute('name', 'Tree 1 Updated')
             );
-            $this->fail('Failed to throw exception when updating document with missing permissions');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
         }
@@ -8852,7 +8865,7 @@ abstract class Base extends TestCase
                 'trees',
                 $tree1->getId(),
             );
-            $this->fail('Failed to throw exception when deleting document with missing permissions');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
@@ -8877,7 +8890,7 @@ abstract class Base extends TestCase
                 'birds',
                 $bird1->getId(),
             );
-            $this->fail('Failed to throw exception when deleting document with missing permissions');
+            $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }

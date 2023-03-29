@@ -3756,7 +3756,6 @@ abstract class Base extends TestCase
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
                 ],
                 'name' => 'Library 1',
                 'area' => 'Area 1',
@@ -3814,19 +3813,6 @@ abstract class Base extends TestCase
 
         // Get documents with relationship
         $person1 = static::getDatabase()->getDocument('person', 'person1');
-
-        var_dump($person1);
-
-        $deleted = static::getDatabase()->deleteDocument('library', 'library1');
-
-        //$deleted = static::getDatabase()->deleteCachedDocument('person', 'person1');
-
-        $person1 = static::getDatabase()->getDocument('person', 'person1');
-
-        var_dump($person1);
-        die;
-
-
         $library = $person1->getAttribute('library');
         $this->assertEquals('library1', $library['$id']);
         $this->assertArrayNotHasKey('person', $library);

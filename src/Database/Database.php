@@ -3130,18 +3130,36 @@ class Database
      */
     private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
+        if (
+            $relationType === Database::RELATION_ONE_TO_ONE
+            && $side === Database::RELATION_SIDE_CHILD
+            && !$twoWay
+        ) {
+            Authorization::skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
+                $related = $this->findOne($relatedCollection->getId(), [
+                    Query::equal($twoWayKey, [$document->getId()])
+                ]);
+
+                if (!$related instanceof Document) {
+                    return;
+                }
+
+                $this->skipRelationships(fn () => $this->updateDocument(
+                    $relatedCollection->getId(),
+                    $related->getId(),
+                    $related->setAttribute($twoWayKey, null)
+                ));
+            });
+        }
+
         if (!empty($value)) {
             throw new Exception('Can not delete document because it has at least one related document.');
         }
 
-        if ((
+        if (
             $relationType === Database::RELATION_MANY_TO_ONE
             && $side === Database::RELATION_SIDE_CHILD
-        ) || (
-            $relationType === Database::RELATION_ONE_TO_ONE
-            && $side === Database::RELATION_SIDE_CHILD
-            && !$twoWay
-        )) {
+        ) {
             $related = Authorization::skip(fn () => $this->findOne($relatedCollection->getId(), [
                 Query::equal($twoWayKey, [$document->getId()])
             ]));

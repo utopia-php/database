@@ -3979,7 +3979,7 @@ abstract class Base extends TestCase
         $this->assertEquals('library4', $library['$id']);
 
         // Create person with no relationship
-        $person4 = static::getDatabase()->createDocument('person', new Document([
+        static::getDatabase()->createDocument('person', new Document([
             '$id' => 'person4',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -4004,13 +4004,29 @@ abstract class Base extends TestCase
             $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
         }
 
-        // Can not delete document while still related to another with on delete set to restrict
-        try {
-            static::getDatabase()->deleteDocument('library', 'library4');
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
-        }
+        // Can delete child document while still related to another with on delete set to restrict
+        $person5 = static::getDatabase()->createDocument('person', new Document([
+            '$id' => 'person5',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 5',
+            'newLibrary' => [
+                '$id' => 'library5',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Library 5',
+                'area' => 'Area 5',
+            ],
+        ]));
+        $deleted = static::getDatabase()->deleteDocument('library', 'library5');
+        $this->assertEquals(true, $deleted);
+        $person5 = static::getDatabase()->getDocument('person', 'person5');
+        $this->assertEquals(null, $person5->getAttribute('newLibrary'));
 
         // Change on delete to set null
         static::getDatabase()->updateRelationship(

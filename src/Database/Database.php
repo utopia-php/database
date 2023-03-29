@@ -3134,14 +3134,14 @@ class Database
             throw new Exception('Can not delete document because it has at least one related document.');
         }
 
-        /**
-         * When many-to-one, deleting the child (one) should be restricted
-         * if there is at least one parent (many) that relates to the child
-        */
-        if (
+        if ((
             $relationType === Database::RELATION_MANY_TO_ONE
             && $side === Database::RELATION_SIDE_CHILD
-        ) {
+        ) || (
+            $relationType === Database::RELATION_ONE_TO_ONE
+            && $side === Database::RELATION_SIDE_CHILD
+            && !$twoWay
+        )) {
             $related = Authorization::skip(fn () => $this->findOne($relatedCollection->getId(), [
                 Query::equal($twoWayKey, [$document->getId()])
             ]));

@@ -333,7 +333,7 @@ class Mongo extends Adapter
 
     public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        $junction = $this->getNamespace() . '_' . $this->filter($collection . '_' . $relatedCollection);
+        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 
@@ -385,7 +385,7 @@ class Mongo extends Adapter
 
     public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey): bool
     {
-        $junction = $this->getNamespace() . '_' . $this->filter($collection . '_' . $relatedCollection);
+        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 

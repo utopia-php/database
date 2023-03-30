@@ -1403,7 +1403,7 @@ class Database
         ]), Document::SET_TYPE_APPEND);
 
         if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->silent(fn () => $this->createCollection($collection->getId() . '_' . $relatedCollection->getId(), [
+            $this->silent(fn () => $this->createCollection('_' . $collection->getId() . '_' . $relatedCollection->getId(), [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -1426,14 +1426,14 @@ class Database
                 ]),
             ], [
                 new Document([
-                    '$id' => 'index_' . $id,
+                    '$id' => '_index_' . $id,
                     'key' => 'index_' . $id,
                     'type' => self::INDEX_KEY,
                     'attributes' => [$id],
                 ]),
                 new Document([
-                    '$id' => 'index_' . $twoWayKey,
-                    'key' => 'index_' . $twoWayKey,
+                    '$id' => '_index_' . $twoWayKey,
+                    'key' => '_index_' . $twoWayKey,
                     'type' => self::INDEX_KEY,
                     'attributes' => [$twoWayKey],
                 ]),
@@ -1454,8 +1454,8 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
 
-            $indexKey = 'index_' . $id;
-            $twoWayIndexKey = 'index_' . $twoWayKey;
+            $indexKey = '_index_' . $id;
+            $twoWayIndexKey = '_index_' . $twoWayKey;
 
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
@@ -1549,7 +1549,7 @@ class Database
             });
 
             if ($type === self::RELATION_MANY_TO_MANY) {
-                $junction = $collection . '_' . $relatedCollection;
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->updateAttributeMeta($junction, $key, function ($junctionAttribute) use ($newKey) {
                     $junctionAttribute->setAttribute('$id', $newKey);
@@ -1573,13 +1573,13 @@ class Database
             $renameIndex = function ($collection, $key, $newKey) {
                 $this->updateIndexMeta(
                     $collection,
-                    'index_' . $key,
+                    '_index_' . $key,
                     fn ($index) =>
                     $index->setAttribute('attributes', [$newKey])
                 );
                 $this->silent(
                     fn () =>
-                    $this->renameIndex($collection, 'index_' . $key, 'index_' . $newKey)
+                    $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
                 );
             };
 
@@ -1603,7 +1603,8 @@ class Database
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
-                    $junction = $collection . '_' . $relatedCollection;
+                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+
                     if ($key !== $newKey) {
                         $renameIndex($junction, $key, $newKey);
                     }
@@ -1671,8 +1672,8 @@ class Database
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
 
-            $indexKey = 'index_' . $id;
-            $twoWayIndexKey = 'index_' . $twoWayKey;
+            $indexKey = '_index_' . $id;
+            $twoWayIndexKey = '_index_' . $twoWayKey;
 
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
@@ -2921,8 +2922,8 @@ class Database
     private function getJunctionCollection(string $collection, string $relatedCollection, string $side): string
     {
         return $side === Database::RELATION_SIDE_PARENT
-            ? $collection . '_' . $relatedCollection
-            : $relatedCollection . '_' . $collection;
+            ? '_' . $collection . '_' . $relatedCollection
+            : '_' . $relatedCollection . '_' . $collection;
     }
 
     /**

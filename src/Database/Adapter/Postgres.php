@@ -374,7 +374,7 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $junction = $this->getSQLTable($collection . '_' . $relatedCollection);
+                $junction = $this->getSQLTable('_' . $collection . '_' . $relatedCollection);
 
                 if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$junction} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
@@ -417,7 +417,7 @@ class Postgres extends SQL
                 $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $junction = $this->getSQLTable($collection . '_' . $relatedCollection);
+                $junction = $this->getSQLTable('_' . $collection . '_' . $relatedCollection);
                 $sql = "DROP TABLE {$junction};";
                 break;
             default:

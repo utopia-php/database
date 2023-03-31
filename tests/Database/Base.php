@@ -9386,6 +9386,131 @@ abstract class Base extends TestCase
         $this->assertEquals(0, \count($devices->getAttribute('indexes')));
     }
 
+    public function testDeleteTwoWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('drivers');
+        static::getDatabase()->createCollection('licenses');
+
+        static::getDatabase()->createRelationship(
+            collection: 'drivers',
+            relatedCollection: 'licenses',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'license',
+            twoWayKey: 'driver'
+        );
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+
+        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(1, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('indexes')));
+
+        static::getDatabase()->deleteRelationship('licenses', 'driver');
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+
+        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+
+        static::getDatabase()->createRelationship(
+            collection: 'drivers',
+            relatedCollection: 'licenses',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'licenses',
+            twoWayKey: 'driver'
+        );
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+
+        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('indexes')));
+
+        static::getDatabase()->deleteRelationship('licenses', 'driver');
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+
+        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+
+        static::getDatabase()->createRelationship(
+            collection: 'licenses',
+            relatedCollection: 'drivers',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'driver',
+            twoWayKey: 'licenses'
+        );
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+
+        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('indexes')));
+
+        static::getDatabase()->deleteRelationship('drivers', 'licenses');
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+
+        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+
+        static::getDatabase()->createRelationship(
+            collection: 'licenses',
+            relatedCollection: 'drivers',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'drivers',
+            twoWayKey: 'licenses'
+        );
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+        $junction = static::getDatabase()->getCollection('_licenses_drivers');
+
+        $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(1, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+        $this->assertEquals(2, \count($junction->getAttribute('attributes')));
+        $this->assertEquals(2, \count($junction->getAttribute('indexes')));
+
+        static::getDatabase()->deleteRelationship('drivers', 'licenses');
+
+        $drivers = static::getDatabase()->getCollection('drivers');
+        $licenses = static::getDatabase()->getCollection('licenses');
+        $junction = static::getDatabase()->getCollection('_licenses_drivers');
+
+        $this->assertEquals(0, \count($drivers->getAttribute('attributes')));
+        $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('attributes')));
+        $this->assertEquals(0, \count($licenses->getAttribute('indexes')));
+
+        $this->assertEquals(true, $junction->isEmpty());
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

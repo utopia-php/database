@@ -1228,6 +1228,7 @@ class Database
             if (isset($value['$id']) && $value['$id'] === $id) {
                 $attribute = $value;
                 unset($attributes[$key]);
+                break;
             }
         }
 
@@ -1235,7 +1236,7 @@ class Database
             throw new Exception('Attribute not found');
         }
 
-        $collection->setAttribute('attributes', $attributes);
+        $collection->setAttribute('attributes', \array_values($attributes));
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -1649,7 +1650,7 @@ class Database
             throw new Exception('Attribute not found');
         }
 
-        $collection->setAttribute('attributes', $attributes);
+        $collection->setAttribute('attributes', \array_values($attributes));
 
         $relatedCollection = $relationship['options']['relatedCollection'];
         $type = $relationship['options']['relationType'];
@@ -1666,7 +1667,7 @@ class Database
             }
         }
 
-        $relatedCollection->setAttribute('attributes', $relatedAttributes);
+        $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
@@ -1874,7 +1875,7 @@ class Database
             }
         }
 
-        $collection->setAttribute('indexes', $indexes);
+        $collection->setAttribute('indexes', \array_values($indexes));
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -1932,6 +1933,8 @@ class Database
                 }
             }
         }
+
+        $queries = \array_values($queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
 
@@ -3411,6 +3414,8 @@ class Database
                     break;
             }
         }
+
+        $queries = \array_values($queries);
 
         $results = $this->adapter->find(
             $collection->getId(),

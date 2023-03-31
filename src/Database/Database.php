@@ -696,9 +696,18 @@ class Database
      */
     public function deleteCollection(string $id): bool
     {
+        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+        $relationships = \array_filter($collection->getAttribute('attributes'), fn ($attribute) =>
+            $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
+        );
+
+        foreach ($relationships as $relationship) {
+            $this->deleteRelationship($collection->getId(), $relationship->getId());
+        }
+
         $this->adapter->deleteCollection($id);
 
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
         $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
 
         $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);

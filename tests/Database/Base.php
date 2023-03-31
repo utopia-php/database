@@ -9351,6 +9351,41 @@ abstract class Base extends TestCase
         $this->assertEquals([], $document->getAttribute('null7'));
     }
 
+    public function testDeleteCollectionDeletesRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('testers');
+        static::getDatabase()->createCollection('devices');
+
+        static::getDatabase()->createRelationship(
+            collection: 'testers',
+            relatedCollection: 'devices',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            twoWayKey: 'tester'
+        );
+
+        $testers = static::getDatabase()->getCollection('testers');
+        $devices = static::getDatabase()->getCollection('devices');
+
+        $this->assertEquals(1, \count($testers->getAttribute('attributes')));
+        $this->assertEquals(1, \count($devices->getAttribute('attributes')));
+        $this->assertEquals(1, \count($devices->getAttribute('indexes')));
+
+        static::getDatabase()->deleteCollection('testers');
+
+        $testers = static::getDatabase()->getCollection('testers');
+        $devices = static::getDatabase()->getCollection('devices');
+
+        $this->assertEquals(true, $testers->isEmpty());
+        $this->assertEquals(0, \count($devices->getAttribute('attributes')));
+        $this->assertEquals(0, \count($devices->getAttribute('indexes')));
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

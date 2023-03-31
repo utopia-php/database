@@ -1656,6 +1656,7 @@ class Database
         $type = $relationship['options']['relationType'];
         $twoWay = $relationship['options']['twoWay'];
         $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
@@ -1669,7 +1670,7 @@ class Database
 
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
             $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
 
@@ -1684,10 +1685,18 @@ class Database
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
-                    $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                    } elseif ($twoWay) {
+                        $this->deleteIndex($collection->getId(), $indexKey);
+                    }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    $this->deleteIndex($collection->getId(), $indexKey);
+                    if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                    } else {
+                        $this->deleteIndex($collection->getId(), $indexKey);
+                    }
                     break;
                 case self::RELATION_MANY_TO_MANY:
                     break;
@@ -1702,7 +1711,8 @@ class Database
             $type,
             $twoWay,
             $id,
-            $twoWayKey
+            $twoWayKey,
+            $side
         );
 
         $this->deleteCachedCollection($collection->getId());

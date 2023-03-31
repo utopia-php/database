@@ -7389,7 +7389,8 @@ abstract class Base extends TestCase
             collection: 'profiles',
             relatedCollection: 'avatars',
             type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true
+            twoWay: true,
+            id: 'avatar',
         );
 
         static::getDatabase()->createDocument('users', new Document([
@@ -7404,7 +7405,7 @@ abstract class Base extends TestCase
                     Permission::read(Role::any()),
                 ],
                 'name' => 'Profile 1',
-                'avatars' => [
+                'avatar' => [
                     '$id' => 'avatar1',
                     '$permissions' => [
                         Permission::read(Role::any()),
@@ -7417,8 +7418,8 @@ abstract class Base extends TestCase
         $user1 = static::getDatabase()->getDocument('users', 'user1');
         $this->assertEquals('profile1', $user1['profile']['$id']);
         $this->assertArrayNotHasKey('user', $user1['profile']);
-        $this->assertEquals('avatar1', $user1['profile']['avatars']['$id']);
-        $this->assertArrayNotHasKey('profile', $user1['profile']['avatars']);
+        $this->assertEquals('avatar1', $user1['profile']['avatar']['$id']);
+        $this->assertArrayNotHasKey('profile', $user1['profile']['avatar']);
 
         static::getDatabase()->createDocument('avatars', new Document([
             '$id' => 'avatar2',

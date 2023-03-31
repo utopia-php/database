@@ -277,9 +277,10 @@ abstract class Adapter
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @return bool
      */
-    abstract public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey): bool;
+    abstract public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool;
 
     /**
      * Rename Index

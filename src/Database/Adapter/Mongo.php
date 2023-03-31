@@ -383,7 +383,15 @@ class Mongo extends Adapter
         return true;
     }
 
-    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey): bool
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool
     {
         $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
@@ -397,12 +405,18 @@ class Mongo extends Adapter
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                if ($twoWay) {
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $this->getClient()->dropCollection($junction);

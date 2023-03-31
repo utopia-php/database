@@ -396,7 +396,15 @@ class Postgres extends SQL
             ->execute();
     }
 
-    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey): bool
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool
     {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
@@ -410,15 +418,30 @@ class Postgres extends SQL
                     $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                break;
             case Database::RELATION_ONE_TO_MANY:
-                $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                } else {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                } else {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $junction = $this->getSQLTable('_' . $collection . '_' . $relatedCollection);
-                $sql = "DROP TABLE {$junction};";
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection . '_' . $relatedCollection)
+                    : $this->getSQLTable('_' . $relatedCollection . '_' . $collection);
+
+                $perms = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection . '_' . $relatedCollection . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection . '_' . $collection . '_perms');
+
+                $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
             default:
                 throw new Exception('Invalid relationship type.');

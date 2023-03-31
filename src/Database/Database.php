@@ -1708,6 +1708,13 @@ class Database
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
+                    $junction = $this->getJunctionCollection(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $side
+                    );
+
+                    $this->deleteDocument(self::METADATA, $junction);
                     break;
                 default:
                     throw new Exception('Invalid relationship type.');

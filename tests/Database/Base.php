@@ -4713,7 +4713,7 @@ abstract class Base extends TestCase
             'albums' => [
                 'album2',
                 [
-                    '$id' => 'album3',
+                    '$id' => 'album33',
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::update(Role::any()),
@@ -4735,7 +4735,7 @@ abstract class Base extends TestCase
         $albums = $artist->getAttribute('albums', []);
         $this->assertEquals('album2', $albums[0]['$id']);
         $this->assertArrayNotHasKey('artist', $albums[0]);
-        $this->assertEquals('album3', $albums[1]['$id']);
+        $this->assertEquals('album33', $albums[1]['$id']);
         $this->assertCount(2, $albums);
 
         // Get related document

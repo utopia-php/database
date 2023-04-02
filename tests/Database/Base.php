@@ -4711,7 +4711,17 @@ abstract class Base extends TestCase
             ],
             'name' => 'Artist 2',
             'albums' => [
-                'album2'
+                'album2',
+                [
+                    '$id' => 'album3',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'name' => 'Album 3',
+                    'price' => 33.33,
+                ]
             ]
         ]));
 
@@ -4725,6 +4735,8 @@ abstract class Base extends TestCase
         $albums = $artist->getAttribute('albums', []);
         $this->assertEquals('album2', $albums[0]['$id']);
         $this->assertArrayNotHasKey('artist', $albums[0]);
+        $this->assertEquals('album3', $albums[1]['$id']);
+        $this->assertCount(2, $albums);
 
         // Get related document
         $album = static::getDatabase()->getDocument('album', 'album1');
@@ -4738,8 +4750,8 @@ abstract class Base extends TestCase
             Query::equal('albums.name', ['Album 2'])
         ]);
 
-        $this->assertEquals(1, \count($artists));
-        $this->assertEquals(1, \count($artists[0]['albums']));
+        $this->assertCount(1, $artists);
+        $this->assertCount(2, $artists[0]['albums']);
 
         $this->assertEquals(
             'Album 2',

@@ -2231,6 +2231,7 @@ class Database
 
                     $junctions = $this->skipRelationships(fn () => $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX)
                     ]));
 
                     $related = [];
@@ -2890,6 +2891,7 @@ class Database
 
                         $junctions = $this->find($junction, [
                             Query::equal($queryKey, [$queryValue]),
+                            Query::limit(PHP_INT_MAX)
                         ]);
 
                         foreach ($junctions as $junction) {
@@ -3254,7 +3256,8 @@ class Database
 
                 if (!$twoWay) {
                     $value = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()])
+                        Query::equal($twoWayKey, [$document->getId()]),
+                        Query::limit(PHP_INT_MAX)
                     ]);
                 }
 
@@ -3276,6 +3279,7 @@ class Database
 
                 $junctions = $this->find($junction, [
                     Query::equal($twoWayKey, [$document->getId()]),
+                    Query::limit(PHP_INT_MAX)
                 ]);
 
                 foreach ($junctions as $document) {
@@ -3317,7 +3321,8 @@ class Database
                 }
 
                 $value = $this->find($relatedCollection->getId(), [
-                    Query::equal($twoWayKey, [$document->getId()])
+                    Query::equal($twoWayKey, [$document->getId()]),
+                    Query::limit(PHP_INT_MAX)
                 ]);
 
                 foreach ($value as $relation) {
@@ -3333,6 +3338,7 @@ class Database
 
                 $junctions = $this->find($junction, [
                     Query::equal($twoWayKey, [$document->getId()]),
+                    Query::limit(PHP_INT_MAX)
                 ]);
 
                 foreach ($junctions as $document) {

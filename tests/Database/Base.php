@@ -4944,6 +4944,54 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('album', 'album2');
         $this->assertEquals(true, $library->isEmpty());
 
+        $albums = [];
+        for ($i = 1 ; $i <= 50 ; $i++){
+            $albums[] = [
+                '$id' => 'album_' . $i,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'album ' . $i . ' ' . 'Artist 100',
+                'price' => 100,
+            ];
+        }
+
+        $artist = static::getDatabase()->createDocument('artist', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Artist 100',
+            'newAlbums' => $albums
+        ]));
+
+        $artist = static::getDatabase()->getDocument('artist', $artist->getId());
+        $this->assertCount(50, $artist->getAttribute('newAlbums'));
+
+        $albums = static::getDatabase()->find('album', [
+            Query::equal('artist', [$artist->getId()]),
+            Query::limit(999)
+        ]);
+
+        $this->assertCount(50, $albums);
+
+        $count = static::getDatabase()->count('album', [
+            Query::equal('artist', [$artist->getId()]),
+        ]);
+
+        $this->assertEquals(50, $count);
+
+        static::getDatabase()->deleteDocument('artist', $artist->getId());
+
+        $albums = static::getDatabase()->find('album', [
+            Query::equal('artist', [$artist->getId()]),
+            Query::limit(999)
+        ]);
+
+        $this->assertCount(0, $albums);
+
         // Delete relationship
         static::getDatabase()->deleteRelationship(
             'artist',

@@ -246,7 +246,7 @@ class Document extends ArrayObject
      */
     public function removeAttribute(string $key): self
     {
-        if (isset($this[$key])) {
+        if (\array_key_exists($key, (array)$this)) {
             unset($this[$key]);
         }
 

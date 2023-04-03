@@ -698,7 +698,9 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
-        $relationships = \array_filter($collection->getAttribute('attributes'), fn ($attribute) =>
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes'),
+            fn ($attribute) =>
             $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
@@ -3165,7 +3167,7 @@ class Database
             && $side === Database::RELATION_SIDE_CHILD
             && !$twoWay
         ) {
-            Authorization::skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
+            Authorization::skip(function () use ($document, $relatedCollection, $twoWayKey) {
                 $related = $this->findOne($relatedCollection->getId(), [
                     Query::equal($twoWayKey, [$document->getId()])
                 ]);

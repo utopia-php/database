@@ -9522,8 +9522,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $junction->isEmpty());
     }
 
-
-
     public function testEvents(): void
     {
         Authorization::skip(function () {

@@ -404,8 +404,7 @@ class Postgres extends SQL
         string $key,
         string $twoWayKey,
         string $side
-    ): bool
-    {
+    ): bool {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);

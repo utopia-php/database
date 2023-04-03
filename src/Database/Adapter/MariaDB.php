@@ -394,12 +394,14 @@ class MariaDB extends SQL
         string $key,
         string $twoWayKey,
         string $side
-    ): bool
-    {
+    ): bool {
         $name = $this->filter($collection);
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
+
+
+        $sql = '';
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:

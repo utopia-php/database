@@ -391,8 +391,7 @@ class Mongo extends Adapter
         string $key,
         string $twoWayKey,
         string $side
-    ): bool
-    {
+    ): bool {
         $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);

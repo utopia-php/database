@@ -3446,16 +3446,16 @@ class Database
                                 return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
                             }) : [];
 
-                            foreach ($relationships as $relationship){
-                                if($relationship->getAttribute('key') === $key){
-                                    switch ($relationship->getAttribute('options')['relationType']){
+                            foreach ($relationships as $relationship) {
+                                if ($relationship->getAttribute('key') === $key) {
+                                    switch ($relationship->getAttribute('options')['relationType']) {
                                         case Database::RELATION_MANY_TO_MANY:
                                         case Database::RELATION_ONE_TO_MANY:
                                             unset($values[$valueIndex]);
                                             break;
 
-                                            case Database::RELATION_MANY_TO_ONE:
-                                            case Database::RELATION_ONE_TO_ONE:
+                                        case Database::RELATION_MANY_TO_ONE:
+                                        case Database::RELATION_ONE_TO_ONE:
                                             $values[$valueIndex] = $key;
                                             break;
                                     }

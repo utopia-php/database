@@ -1946,19 +1946,22 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
-        foreach ($queries as $index => $query) {
+        foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
-                foreach ($query->getValues() as $value) {
+                $arr = $query->getValues();
+                foreach ($arr as $k => $value) {
                     if (\str_contains($value, '.')) {
                         // Shift the top level off the dot-path to pass the selection down the chain
                         // 'foo.bar.baz' becomes 'bar.baz'
                         $nestedSelections[] = Query::select([
                             \implode('.', \array_slice(\explode('.', $value), 1))
                         ]);
-                        unset($queries[$index]);
-                        break;
+
+                        unset($arr[$k]);
                     }
                 }
+                $query->setValues(array_values($arr));
+                break;
             }
         }
 
@@ -3425,20 +3428,42 @@ class Database
         $nestedSelections = [];
         $nestedQueries = [];
 
-        foreach ($queries as $index => $query) {
+        foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
                 case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
+                    $values = $query->getValues();
+                    foreach ($values as $valueIndex => $value) {
                         if (\str_contains($value, '.')) {
                             // Shift the top level off the dot-path to pass the selection down the chain
                             // 'foo.bar.baz' becomes 'bar.baz'
                             $nestedSelections[] = Query::select([
                                 \implode('.', \array_slice(\explode('.', $value), 1))
                             ]);
-                            unset($queries[$index]);
-                            break;
+
+                            $key = \explode('.', $value)[0];
+
+                            $relationships = $this->resolveRelationships ? \array_filter($collection->getAttribute('attributes', []), function (Document $attribute) {
+                                return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
+                            }) : [];
+
+                            foreach ($relationships as $relationship){
+                                if($relationship->getAttribute('key') === $key){
+                                    switch ($relationship->getAttribute('options')['relationType']){
+                                        case Database::RELATION_MANY_TO_MANY:
+                                        case Database::RELATION_ONE_TO_MANY:
+                                            unset($values[$valueIndex]);
+                                            break;
+
+                                            case Database::RELATION_MANY_TO_ONE:
+                                            case Database::RELATION_ONE_TO_ONE:
+                                            $values[$valueIndex] = $key;
+                                            break;
+                                    }
+                                }
+                            }
                         }
                     }
+                    $query->setValues(array_values($values));
                     break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {
@@ -3450,7 +3475,6 @@ class Database
         }
 
         $queries = \array_values($queries);
-
         $results = $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -3470,8 +3494,14 @@ class Database
         }) : [];
 
         foreach ($results as $index => &$node) {
+
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+
+                var_dump($node);
+
                 $node = $this->silent(fn () => $this->getDocumentRelationships($collection, $node, $nestedSelections));
+
+
             }
 
             $node = $this->casting($collection, $node);
@@ -3782,7 +3812,7 @@ class Database
                 }
             }
 
-            if (empty($selections) || \in_array($key, $selections)) {
+            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
         }

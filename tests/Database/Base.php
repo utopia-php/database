@@ -5502,7 +5502,8 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('review', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('movie', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('movie', 'length', Database::VAR_INTEGER, 0, true, formatOptions: ['min' => 0, 'max' => 999]);
-
+        static::getDatabase()->createAttribute('movie', 'date', Database::VAR_DATETIME, 0, false, filters: ['datetime']);
+        static::getDatabase()->createAttribute('review', 'date', Database::VAR_DATETIME, 0, false, filters: ['datetime']);
         static::getDatabase()->createRelationship(
             collection: 'review',
             relatedCollection: 'movie',
@@ -5549,6 +5550,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Review 1',
+            'date' => '2023-04-03 10:35:27.390',
             'movie' => [
                 '$id' => 'movie1',
                 '$permissions' => [
@@ -5557,6 +5559,7 @@ abstract class Base extends TestCase
                     Permission::delete(Role::any()),
                 ],
                 'name' => 'Movie 1',
+                'date' => '2023-04-03 10:35:27.390',
                 'length' => 120,
             ],
         ]));
@@ -5570,7 +5573,8 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Review 10',
-            'movie' => 'movie1'
+            'movie' => 'movie1',
+            'date' => '2023-04-03 10:35:27.390',
         ]));
 
         // Create document with relationship with related ID
@@ -5583,6 +5587,7 @@ abstract class Base extends TestCase
             ],
             'name' => 'Movie 2',
             'length' => 90,
+            'date' => '2023-04-03 10:35:27.390',
         ]));
         static::getDatabase()->createDocument('review', new Document([
             '$id' => 'review2',
@@ -5593,6 +5598,7 @@ abstract class Base extends TestCase
             ],
             'name' => 'Review 2',
             'movie' => 'movie2',
+            'date' => '2023-04-03 10:35:27.390',
         ]));
 
         // Get document with relationship
@@ -5600,6 +5606,12 @@ abstract class Base extends TestCase
         $movie = $review->getAttribute('movie', []);
         $this->assertEquals('movie1', $movie['$id']);
         $this->assertArrayNotHasKey('reviews', $movie);
+
+        $response = static::getDatabase()->find('review', [
+            Query::select(['date', 'movie.date'])
+        ]);
+
+        // todo some assertions for the response @shmuel
 
         $review = static::getDatabase()->getDocument('review', 'review2');
         $movie = $review->getAttribute('movie', []);

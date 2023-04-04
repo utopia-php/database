@@ -3494,16 +3494,9 @@ class Database
         }) : [];
 
         foreach ($results as $index => &$node) {
-
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-
-                var_dump($node);
-
                 $node = $this->silent(fn () => $this->getDocumentRelationships($collection, $node, $nestedSelections));
-
-
             }
-
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
             $node->setAttribute('$collection', $collection->getId());

@@ -7756,16 +7756,16 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection('dormitorys');
+        static::getDatabase()->createCollection('dormitories');
         static::getDatabase()->createCollection('occupants');
         static::getDatabase()->createCollection('pets');
 
-        static::getDatabase()->createAttribute('dormitorys', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('dormitories', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('occupants', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('pets', 'name', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
-            collection: 'dormitorys',
+            collection: 'dormitories',
             relatedCollection: 'occupants',
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
@@ -7779,7 +7779,7 @@ abstract class Base extends TestCase
             twoWayKey: 'occupant'
         );
 
-        static::getDatabase()->createDocument('dormitorys', new Document([
+        static::getDatabase()->createDocument('dormitories', new Document([
             '$id' => 'dormitory1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -7835,7 +7835,7 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $dormitory1 = static::getDatabase()->getDocument('dormitorys', 'dormitory1');
+        $dormitory1 = static::getDatabase()->getDocument('dormitories', 'dormitory1');
         $this->assertEquals('occupant1', $dormitory1['occupants'][0]['$id']);
         $this->assertEquals('occupant2', $dormitory1['occupants'][1]['$id']);
         $this->assertEquals('pet1', $dormitory1['occupants'][0]['pets'][0]['$id']);

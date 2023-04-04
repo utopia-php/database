@@ -3842,8 +3842,13 @@ abstract class Base extends TestCase
             ->getAttribute('name')
         );
 
-        $people = static::getDatabase()->find('person');
+        $people = static::getDatabase()->find('person', [
+            Query::select(['name'])
+        ]);
 
+        $this->assertArrayNotHasKey('library', $people[0]);
+
+        $people = static::getDatabase()->find('person');
         $this->assertEquals(3, \count($people));
 
         // Select related document attributes
@@ -4723,6 +4728,12 @@ abstract class Base extends TestCase
                 ]
             ]
         ]));
+
+        $documents = static::getDatabase()->find('artist', [
+            Query::select(['name']),
+            Query::limit(1)
+        ]);
+        $this->assertArrayNotHasKey('albums', $documents[0]);
 
         // Get document with relationship
         $artist = static::getDatabase()->getDocument('artist', 'artist1');
@@ -5607,11 +5618,19 @@ abstract class Base extends TestCase
         $this->assertEquals('movie1', $movie['$id']);
         $this->assertArrayNotHasKey('reviews', $movie);
 
-        $response = static::getDatabase()->find('review', [
+        $documents = static::getDatabase()->find('review', [
             Query::select(['date', 'movie.date'])
         ]);
 
-        // todo some assertions for the response @shmuel
+        $this->assertCount(3, $documents);
+
+        $document = $documents[0];
+        $this->assertArrayHasKey('date', $document);
+        $this->assertArrayHasKey('movie', $document);
+        $this->assertArrayHasKey('date', $document->getAttribute('movie'));
+        $this->assertArrayNotHasKey('name', $document);
+        $this->assertEquals(29, strlen($document['date'])); // checks filter
+        $this->assertEquals(29, strlen($document['movie']['date']));
 
         $review = static::getDatabase()->getDocument('review', 'review2');
         $movie = $review->getAttribute('movie', []);
@@ -6410,6 +6429,13 @@ abstract class Base extends TestCase
                 'song2'
             ]
         ]));
+
+        $documents = static::getDatabase()->find('playlist', [
+            Query::select(['name']),
+            Query::limit(1)
+        ]);
+
+        $this->assertArrayNotHasKey('songs', $documents[0]);
 
         // Get document with relationship
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');

@@ -7712,6 +7712,32 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        $documents = static::getDatabase()->find('countries', [
+            Query::limit(1)
+        ]);
+        $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
+
+        $documents = static::getDatabase()->find('countries', [
+            Query::select(['name']),
+            Query::limit(1)
+        ]);
+        $this->assertArrayNotHasKey('cities', $documents[0]);
+
+        $documents = static::getDatabase()->find('countries', [
+            Query::select(['*']),
+            Query::limit(1)
+        ]);
+        // todo: double check please:
+        //$this->assertArrayHasKey('cities', $documents[0]); // todo: double check why no attributes are resolved
+
+        $documents = static::getDatabase()->find('countries', [
+            Query::select(['*','cities.*']),
+            Query::limit(1)
+        ]);
+        var_dump($documents[0]['cities'][0]);
+        // todo: double check why mayor is not resolved
+        //$this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
+
         $country1 = static::getDatabase()->getDocument('countries', 'country1');
         $this->assertEquals('city1', $country1['cities'][0]['$id']);
         $this->assertEquals('city2', $country1['cities'][1]['$id']);

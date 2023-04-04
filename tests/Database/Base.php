@@ -4945,7 +4945,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $library->isEmpty());
 
         $albums = [];
-        for ($i = 1 ; $i <= 50 ; $i++){
+        for ($i = 1 ; $i <= 50 ; $i++) {
             $albums[] = [
                 '$id' => 'album_' . $i,
                 '$permissions' => [

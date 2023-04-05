@@ -3948,6 +3948,7 @@ abstract class Base extends TestCase
                 '$id' => 'library3',
                 '$permissions' => [
                     Permission::read(Role::any()),
+                    Permission::update(Role::any()),
                 ],
                 'name' => 'Library 3',
                 'area' => 'Area 3',
@@ -3956,6 +3957,17 @@ abstract class Base extends TestCase
 
         $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
         $person3 = static::getDatabase()->getDocument('person', 'person3');
+        $this->assertEquals('Library 3', $person3['library']['name']);
+
+        $libraryDocument = static::getDatabase()->getDocument('library', 'library3');
+        $libraryDocument->setAttribute('name', 'Library 3 updated');
+        static::getDatabase()->updateDocument('library', 'library3', $libraryDocument);
+        $libraryDocument = static::getDatabase()->getDocument('library', 'library3');
+        $this->assertEquals('Library 3 updated', $libraryDocument['name']);
+
+        $person3 = static::getDatabase()->getDocument('person', 'person3');
+        // Todo: This is failing
+        $this->assertEquals($libraryDocument['name'], $person3['library']['name']);
         $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
 
         // One to one can't relate to multiple documents, unique index throws duplicate

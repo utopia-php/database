@@ -9644,10 +9644,10 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('ovens');
         static::getDatabase()->createCollection('cakes');
 
-        static::getDatabase()->createAttribute('ovens', 'maxTemp', Database::VAR_INTEGER, 0,true);
-        static::getDatabase()->createAttribute('ovens', 'owner', Database::VAR_STRING, 255,true);
-        static::getDatabase()->createAttribute('cakes', 'height', Database::VAR_INTEGER, 0,true);
-        static::getDatabase()->createAttribute('cakes', 'colour', Database::VAR_STRING, 255,true);
+        static::getDatabase()->createAttribute('ovens', 'maxTemp', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute('ovens', 'owner', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('cakes', 'height', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute('cakes', 'colour', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
             collection: 'ovens',

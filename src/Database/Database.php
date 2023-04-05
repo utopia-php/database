@@ -1471,8 +1471,7 @@ class Database
             $type,
             $twoWay,
             $id,
-            $twoWayKey,
-            $onDelete,
+            $twoWayKey
         );
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {

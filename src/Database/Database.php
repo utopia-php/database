@@ -1990,7 +1990,9 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), fn (Document $attribute) =>
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) =>
             $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
@@ -3470,7 +3472,9 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), fn (Document $attribute) =>
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) =>
             $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 

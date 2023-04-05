@@ -2819,8 +2819,10 @@ class Database
                             // no break
                         case 'NULL':
                             if (!\is_null($oldValue?->getId())) {
-                                $oldRelated = $this->getDocument($relatedCollection->getId(), $oldValue->getId());
-
+                                $oldRelated = $this->skipRelationships(
+                                    fn () =>
+                                    $this->getDocument($relatedCollection->getId(), $oldValue->getId())
+                                );
                                 $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $oldRelated->getId(),
@@ -2968,10 +2970,9 @@ class Database
                         $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                         $queryKey = $side === Database::RELATION_SIDE_PARENT ? $twoWayKey : $key;
-                        $queryValue = $side === Database::RELATION_SIDE_PARENT ? $document->getId() : $relation;
 
                         $junctions = $this->find($junction, [
-                            Query::equal($queryKey, [$queryValue]),
+                            Query::equal($queryKey, [$relation]),
                             Query::limit(PHP_INT_MAX)
                         ]);
 

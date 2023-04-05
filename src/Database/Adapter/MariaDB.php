@@ -439,6 +439,10 @@ class MariaDB extends SQL
                 throw new Exception('Invalid relationship type.');
         }
 
+        if (empty($sql)) {
+            return true;
+        }
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();

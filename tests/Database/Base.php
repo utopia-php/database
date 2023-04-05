@@ -7733,16 +7733,16 @@ abstract class Base extends TestCase
             Query::select(['*']),
             Query::limit(1)
         ]);
-        // todo: double check please:
-        //$this->assertArrayHasKey('cities', $documents[0]); // todo: double check why no attributes are resolved
+
+        var_dump($documents);
+        $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['*','cities.*']),
+            Query::select(['*', 'cities.*', 'cities.mayor.*']),
             Query::limit(1)
         ]);
-        var_dump($documents[0]['cities'][0]);
-        // todo: double check why mayor is not resolved
-        //$this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
+
+        $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
 
         $country1 = static::getDatabase()->getDocument('countries', 'country1');
         $this->assertEquals('city1', $country1['cities'][0]['$id']);

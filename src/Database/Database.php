@@ -2315,7 +2315,7 @@ class Database
                     foreach ($junctions as $junction) {
                         $related[] = $this->getDocument(
                             $relatedCollection->getId(),
-                            $junction->getAttribute($key),
+                            $junction->getAttribute($this->adapter->filter($key)),
                             $queries
                         );
                     }

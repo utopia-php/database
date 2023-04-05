@@ -326,13 +326,43 @@ class Mongo extends Adapter
         return true;
     }
 
-    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '', string $onDelete = Database::RELATION_MUTATE_RESTRICT): bool
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayKey
+     * @return bool
+     */
+    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
         return true;
     }
 
-    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool
-    {
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null
+    ): bool {
         $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
@@ -383,6 +413,18 @@ class Mongo extends Adapter
         return true;
     }
 
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,

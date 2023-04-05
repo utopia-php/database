@@ -248,10 +248,9 @@ abstract class Adapter
      * @param bool $twoWay
      * @param string $id
      * @param string $twoWayKey
-     * @param string $onDelete
      * @return bool
      */
-    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = '', string $onDelete = Database::RELATION_MUTATE_RESTRICT): bool;
+    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool;
 
     /**
      * Update Relationship

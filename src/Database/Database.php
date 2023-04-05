@@ -1249,6 +1249,10 @@ class Database
             throw new Exception('Attribute not found');
         }
 
+        if ($attribute['type'] === self::VAR_RELATIONSHIP) {
+            throw new Exception("Can't delete relationship attribute.");
+        }
+
         foreach ($indexes as $indexKey => $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
@@ -1990,7 +1994,9 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), fn (Document $attribute) =>
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) =>
             $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
@@ -3470,7 +3476,9 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), fn (Document $attribute) =>
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) =>
             $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 

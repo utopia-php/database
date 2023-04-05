@@ -3747,6 +3747,13 @@ abstract class Base extends TestCase
             }
         }
 
+        try {
+            static::getDatabase()->deleteAttribute('person', 'library');
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals("Can't delete relationship attribute.", $e->getMessage());
+        }
+
         // Create document with relationship with nested data
         $person1 = static::getDatabase()->createDocument('person', new Document([
             '$id' => 'person1',

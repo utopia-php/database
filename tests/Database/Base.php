@@ -3973,7 +3973,7 @@ abstract class Base extends TestCase
         // Rename relationship key
         static::getDatabase()->updateRelationship(
             collection: 'person',
-            key: 'library',
+            id: 'library',
             newKey: 'newLibrary'
         );
 
@@ -4035,7 +4035,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'person',
-            key: 'newLibrary',
+            id: 'newLibrary',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -4059,7 +4059,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'person',
-            key: 'newLibrary',
+            id: 'newLibrary',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -4552,7 +4552,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'country',
-            key: 'newCity',
+            id: 'newCity',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -4580,7 +4580,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'country',
-            key: 'newCity',
+            id: 'newCity',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -4920,7 +4920,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'artist',
-            key: 'newAlbums',
+            id: 'newAlbums',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -4941,7 +4941,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'artist',
-            key: 'newAlbums',
+            id: 'newAlbums',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -5448,7 +5448,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'customer',
-            key: 'newAccounts',
+            id: 'newAccounts',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -5469,7 +5469,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'customer',
-            key: 'newAccounts',
+            id: 'newAccounts',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -5802,7 +5802,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'review',
-            key: 'newMovie',
+            id: 'newMovie',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -5816,7 +5816,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'review',
-            key: 'newMovie',
+            id: 'newMovie',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -6301,7 +6301,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'product',
-            key: 'newStore',
+            id: 'newStore',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -6315,7 +6315,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'product',
-            key: 'newStore',
+            id: 'newStore',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -6620,7 +6620,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'playlist',
-            key: 'newSongs',
+            id: 'newSongs',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -6643,7 +6643,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'playlist',
-            key: 'newSongs',
+            id: 'newSongs',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 
@@ -7093,7 +7093,7 @@ abstract class Base extends TestCase
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'students',
-            key: 'newClasses',
+            id: 'newClasses',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
@@ -7116,7 +7116,7 @@ abstract class Base extends TestCase
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
             collection: 'students',
-            key: 'newClasses',
+            id: 'newClasses',
             onDelete: Database::RELATION_MUTATE_CASCADE
         );
 

@@ -1499,7 +1499,7 @@ class Database
      * Update a relationship attribute
      *
      * @param string $collection
-     * @param string $key
+     * @param string $id
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @param bool|null $twoWay
@@ -1509,7 +1509,7 @@ class Database
      */
     public function updateRelationship(
         string  $collection,
-        string  $key,
+        string  $id,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
         ?bool $twoWay = null,
@@ -1524,8 +1524,8 @@ class Database
             return true;
         }
 
-        $this->updateAttributeMeta($collection, $key, function ($attribute) use ($collection, $key, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
-            $altering = (!\is_null($newKey) && $newKey !== $key)
+        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
+            $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
             $relatedCollection = $attribute['options']['relatedCollection'];
@@ -1563,7 +1563,7 @@ class Database
             if ($type === self::RELATION_MANY_TO_MANY) {
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $this->updateAttributeMeta($junction, $key, function ($junctionAttribute) use ($newKey) {
+                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($newKey) {
                     $junctionAttribute->setAttribute('$id', $newKey);
                     $junctionAttribute->setAttribute('key', $newKey);
                 });
@@ -1576,7 +1576,7 @@ class Database
             }
 
             if ($altering) {
-                $this->adapter->updateRelationship($collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $newKey, $newTwoWayKey);
+                $this->adapter->updateRelationship($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $newKey, $newTwoWayKey);
             }
 
             $this->deleteCachedCollection($collection);
@@ -1597,8 +1597,8 @@ class Database
 
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
-                    if ($key !== $newKey) {
-                        $renameIndex($collection, $key, $newKey);
+                    if ($id !== $newKey) {
+                        $renameIndex($collection, $id, $newKey);
                     }
                     if ($twoWay && $twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
@@ -1610,15 +1610,15 @@ class Database
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($key !== $newKey) {
-                        $renameIndex($collection, $key, $newKey);
+                    if ($id !== $newKey) {
+                        $renameIndex($collection, $id, $newKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
                     $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    if ($key !== $newKey) {
-                        $renameIndex($junction, $key, $newKey);
+                    if ($id !== $newKey) {
+                        $renameIndex($junction, $id, $newKey);
                     }
                     if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($junction, $twoWayKey, $newTwoWayKey);

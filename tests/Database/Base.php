@@ -128,8 +128,8 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true));
 
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'string1', Database::INDEX_KEY, ['string1']));
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'string2', Database::INDEX_KEY, ['string1']));
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'string1_index', Database::INDEX_KEY, ['string1']));
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'string2_index', Database::INDEX_KEY, ['string2']));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(8, $collection->getAttribute('attributes'));

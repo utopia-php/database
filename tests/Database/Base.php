@@ -6590,7 +6590,7 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(3, \count($playlists));
-        $this->assertEquals(1, \count($playlists[0]['songs']));
+        $this->assertEquals(2, \count($playlists[0]['songs']));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -6602,7 +6602,8 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1');
         $songs = $playlist->getAttribute('newSongs');
-        $this->assertEquals('song2', $songs[0]['$id']);
+        $this->assertEquals('song1', $songs[0]['$id']);
+        $this->assertEquals('song2', $songs[1]['$id']);
 
         // Create new document with no relationship
         static::getDatabase()->createDocument('playlist', new Document([
@@ -6651,7 +6652,7 @@ abstract class Base extends TestCase
 
         // Check relation was set to null
         $playlist1 = static::getDatabase()->getDocument('playlist', 'playlist1');
-        $this->assertEquals([], $playlist1->getAttribute('newSongs'));
+        $this->assertEquals(1, \count($playlist1->getAttribute('newSongs')));
 
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(
@@ -7032,7 +7033,8 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(2, \count($students));
-        $this->assertEquals(1, \count($students[0]['classes']));
+        $this->assertEquals(2, \count($students[0]['classes']));
+        $this->assertEquals(1, \count($students[1]['classes']));
 
         $class1 = static::getDatabase()->getDocument('classes', 'class1');
 
@@ -7070,7 +7072,8 @@ abstract class Base extends TestCase
         // Get document with new relationship key
         $students = static::getDatabase()->getDocument('students', 'student1');
         $classes = $students->getAttribute('newClasses');
-        $this->assertEquals('class2', $classes[0]['$id']);
+        $this->assertEquals('class1', $classes[0]['$id']);
+        $this->assertEquals('class2', $classes[1]['$id']);
 
         // Get inverse document with new relationship key
         $class = static::getDatabase()->getDocument('classes', 'class1');
@@ -7124,7 +7127,7 @@ abstract class Base extends TestCase
 
         // Check relation was set to null
         $student1 = static::getDatabase()->getDocument('students', 'student1');
-        $this->assertEquals([], $student1->getAttribute('newClasses'));
+        $this->assertEquals(1, \count($student1->getAttribute('newClasses')));
 
         // Change on delete to cascade
         static::getDatabase()->updateRelationship(

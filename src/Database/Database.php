@@ -1990,14 +1990,18 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $relationships = \array_filter($collection->getAttribute('attributes', []), fn (Document $attribute) =>
+            $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
         $selects = Query::groupByType($queries)['selections'];
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
-                $arr = $query->getValues();
-                foreach ($arr as $k => $value) {
+                $values = $query->getValues();
+                foreach ($values as $valueIndex => $value) {
                     if (\str_contains($value, '.')) {
                         // Shift the top level off the dot-path to pass the selection down the chain
                         // 'foo.bar.baz' becomes 'bar.baz'
@@ -2005,11 +2009,26 @@ class Database
                             \implode('.', \array_slice(\explode('.', $value), 1))
                         ]);
 
-                        unset($arr[$k]);
+                        $key = \explode('.', $value)[0];
+
+                        foreach ($relationships as $relationship) {
+                            if ($relationship->getAttribute('key') === $key) {
+                                switch ($relationship->getAttribute('options')['relationType']) {
+                                    case Database::RELATION_MANY_TO_MANY:
+                                    case Database::RELATION_ONE_TO_MANY:
+                                        unset($values[$valueIndex]);
+                                        break;
+
+                                    case Database::RELATION_MANY_TO_ONE:
+                                    case Database::RELATION_ONE_TO_ONE:
+                                        $values[$valueIndex] = $key;
+                                        break;
+                                }
+                            }
+                        }
                     }
                 }
-                $query->setValues(array_values($arr));
-                break;
+                $query->setValues(\array_values($values));
             }
         }
 
@@ -3451,6 +3470,10 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $relationships = \array_filter($collection->getAttribute('attributes', []), fn (Document $attribute) =>
+            $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
         $selects = $grouped['selections'];
@@ -3490,10 +3513,6 @@ class Database
 
                             $key = \explode('.', $value)[0];
 
-                            $relationships = $this->resolveRelationships ? \array_filter($collection->getAttribute('attributes', []), function (Document $attribute) {
-                                return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
-                            }) : [];
-
                             foreach ($relationships as $relationship) {
                                 if ($relationship->getAttribute('key') === $key) {
                                     switch ($relationship->getAttribute('options')['relationType']) {
@@ -3511,7 +3530,7 @@ class Database
                             }
                         }
                     }
-                    $query->setValues(array_values($values));
+                    $query->setValues(\array_values($values));
                     break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {

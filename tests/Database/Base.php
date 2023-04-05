@@ -3883,6 +3883,25 @@ abstract class Base extends TestCase
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
+
+
+        $document = static::getDatabase()->getDocument('person', $person->getId(), [
+            Query::select(['name']),
+        ]);
+        $this->assertArrayNotHasKey('library', $document);
+        $this->assertEquals('Person 1', $document['name']);
+
+        $document = static::getDatabase()->getDocument('person', $person->getId(), [
+            Query::select(['*']),
+        ]);
+        $this->assertEquals('library1', $document['library']);
+
+        $document = static::getDatabase()->getDocument('person', $person->getId(), [
+            Query::select(['library.*']),
+        ]);
+        $this->assertEquals('Library 1', $document['library']['name']);
+        $this->assertArrayNotHasKey('name', $document);
+
         // Update root document attribute without altering relationship
         $person1 = static::getDatabase()->updateDocument(
             'person',

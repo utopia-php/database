@@ -338,7 +338,6 @@ class Query
             case self::TYPE_SEARCH:
             case self::TYPE_IS_NULL:
             case self::TYPE_IS_NOT_NULL:
-            case self::TYPE_BETWEEN:
             case self::TYPE_STARTS_WITH:
             case self::TYPE_ENDS_WITH:
                 $attribute = $parsedParams[0] ?? '';
@@ -347,6 +346,8 @@ class Query
                 }
                 return new self($method, $attribute, \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
 
+            case self::TYPE_BETWEEN:
+                return new self($method, $parsedParams[0], [$parsedParams[1], $parsedParams[2]]);
             case self::TYPE_SELECT:
                 return new self($method, values: $parsedParams[0]);
             case self::TYPE_ORDERASC:

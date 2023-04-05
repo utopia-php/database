@@ -2932,6 +2932,8 @@ class Database
                         }
 
                         $document->setAttribute($key, $value->getId());
+                    } elseif (\is_null($value)) {
+                        break;
                     } else {
                         throw new Exception('Invalid value for relationship');
                     }

@@ -2875,7 +2875,9 @@ class Database
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                $related = $this->getDocument($relatedCollection->getId(), $relation);
+                                $related = $this->skipRelationships(fn () =>
+                                    $this->getDocument($relatedCollection->getId(), $relation)
+                                );
 
                                 $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),

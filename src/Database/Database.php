@@ -1226,6 +1226,8 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws Exception
+     * @throws Throwable
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
@@ -1255,9 +1257,11 @@ class Database
             if (empty($indexAttributes)) {
                 unset($indexes[$indexKey]);
             } else {
-                $index->setAttribute('attributes', $indexAttributes);
+                $index->setAttribute('attributes', \array_values($indexAttributes));
             }
         }
+
+        $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
 
         $collection->setAttribute('attributes', \array_values($attributes));
         $collection->setAttribute('indexes', \array_values($indexes));
@@ -1266,7 +1270,6 @@ class Database
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
-        $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
 
@@ -1280,7 +1283,10 @@ class Database
      * @param string $old Current attribute ID
      * @param string $new
      * @return bool
+     * @throws AuthorizationException
      * @throws DuplicateException
+     * @throws StructureException
+     * @throws Throwable
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {

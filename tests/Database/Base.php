@@ -130,10 +130,11 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'string1_index', Database::INDEX_KEY, ['string1']));
         $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'string2_index', Database::INDEX_KEY, ['string2'], [255]));
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]));
 
         $collection = static::getDatabase()->getCollection('attributes');
         $this->assertCount(8, $collection->getAttribute('attributes'));
-        $this->assertCount(2, $collection->getAttribute('indexes'));
+        $this->assertCount(3, $collection->getAttribute('indexes'));
 
         // Array
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, null, true, true));

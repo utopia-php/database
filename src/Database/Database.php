@@ -1537,11 +1537,31 @@ class Database
             return true;
         }
 
-        $this->updateAttributeMeta($collection, $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
+        $collection = $this->getCollection($collection);
+        $attributes = $collection->getAttribute('attributes', []);
+
+        if (
+            !\is_null($newKey)
+            && \in_array($newKey, \array_map(fn ($attribute) => $attribute['key'], $attributes))
+        ) {
+            throw new DuplicateException('Attribute already exists');
+        }
+
+        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
             $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
-            $relatedCollection = $attribute['options']['relatedCollection'];
+            $relatedCollectionId = $attribute['options']['relatedCollection'];
+            $relatedCollection = $this->getCollection($relatedCollectionId);
+            $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+
+            if (
+                !\is_null($newTwoWayKey)
+                && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
+            ) {
+                throw new DuplicateException('Attribute already exists');
+            }
+
             $type = $attribute['options']['relationType'];
             $side = $attribute['options']['side'];
 
@@ -1554,7 +1574,7 @@ class Database
             $attribute->setAttribute('$id', $newKey);
             $attribute->setAttribute('key', $newKey);
             $attribute->setAttribute('options', [
-                'relatedCollection' => $relatedCollection,
+                'relatedCollection' => $relatedCollection->getId(),
                 'relationType' => $type,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $newTwoWayKey,
@@ -1562,7 +1582,8 @@ class Database
                 'side' => $side,
             ]);
 
-            $this->updateAttributeMeta($relatedCollection, $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
+
+            $this->updateAttributeMeta($relatedCollection->getId(), $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $newKey;
                 $options['twoWay'] = $twoWay;
@@ -1574,7 +1595,7 @@ class Database
             });
 
             if ($type === self::RELATION_MANY_TO_MANY) {
-                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                 $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($newKey) {
                     $junctionAttribute->setAttribute('$id', $newKey);
@@ -1589,13 +1610,22 @@ class Database
             }
 
             if ($altering) {
-                $this->adapter->updateRelationship($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $newKey, $newTwoWayKey);
+                $this->adapter->updateRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $twoWay,
+                    $id,
+                    $twoWayKey,
+                    $newKey,
+                    $newTwoWayKey
+                );
             }
 
-            $this->deleteCachedCollection($collection);
-            $this->deleteCachedCollection($relatedCollection);
+            $this->deleteCachedCollection($collection->getId());
+            $this->deleteCachedCollection($relatedCollection->getId());
 
-            $renameIndex = function ($collection, $key, $newKey) {
+            $renameIndex = function (string $collection, string $key, string $newKey) {
                 $this->updateIndexMeta(
                     $collection,
                     '_index_' . $key,
@@ -1611,24 +1641,24 @@ class Database
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
                     if ($id !== $newKey) {
-                        $renameIndex($collection, $id, $newKey);
+                        $renameIndex($collection->getId(), $id, $newKey);
                     }
                     if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
                     if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection, $twoWayKey, $newTwoWayKey);
+                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
                     if ($id !== $newKey) {
-                        $renameIndex($collection, $id, $newKey);
+                        $renameIndex($collection->getId(), $id, $newKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                    $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
                     if ($id !== $newKey) {
                         $renameIndex($junction, $id, $newKey);

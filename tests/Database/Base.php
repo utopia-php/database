@@ -9639,6 +9639,40 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $junction->isEmpty());
     }
 
+    public function testUpdateRelationshipToExistingKey(): void
+    {
+        static::getDatabase()->createCollection('ovens');
+        static::getDatabase()->createCollection('cakes');
+
+        static::getDatabase()->createAttribute('ovens', 'maxTemp', Database::VAR_INTEGER, 0,true);
+        static::getDatabase()->createAttribute('ovens', 'owner', Database::VAR_STRING, 255,true);
+        static::getDatabase()->createAttribute('cakes', 'height', Database::VAR_INTEGER, 0,true);
+        static::getDatabase()->createAttribute('cakes', 'colour', Database::VAR_STRING, 255,true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'ovens',
+            relatedCollection: 'cakes',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'cakes',
+            twoWayKey: 'oven'
+        );
+
+        try {
+            static::getDatabase()->updateRelationship('ovens', 'cakes', newKey: 'owner');
+            $this->fail('Failed to throw exception');
+        } catch (DuplicateException $e) {
+            $this->assertEquals('Attribute already exists', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
+            $this->fail('Failed to throw exception');
+        } catch (DuplicateException $e) {
+            $this->assertEquals('Attribute already exists', $e->getMessage());
+        }
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

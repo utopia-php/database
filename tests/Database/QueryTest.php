@@ -181,6 +181,20 @@ class QueryTest extends TestCase
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals('title', $query->getValues()[0]);
         $this->assertEquals('director', $query->getValues()[1]);
+
+        $query = Query::parse('between("age", 15, 18)');
+
+        $this->assertEquals('between', $query->getMethod());
+        $this->assertEquals('age', $query->getAttribute());
+        $this->assertEquals(15, $query->getValues()[0]);
+        $this->assertEquals(18, $query->getValues()[1]);
+
+        $query = Query::parse('between("lastUpdate", "DATE1", "DATE2")');
+
+        $this->assertEquals('between', $query->getMethod());
+        $this->assertEquals('lastUpdate', $query->getAttribute());
+        $this->assertEquals('DATE1', $query->getValues()[0]);
+        $this->assertEquals('DATE2', $query->getValues()[1]);
     }
 
     public function testParseV2(): void
@@ -437,6 +451,8 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('cursorBefore'));
         $this->assertTrue(Query::isMethod('isNull'));
         $this->assertTrue(Query::isMethod('isNotNull'));
+        $this->assertTrue(Query::isMethod('between'));
+        $this->assertTrue(Query::isMethod('select'));
 
         $this->assertTrue(Query::isMethod(Query::TYPE_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_NOTEQUAL));
@@ -454,6 +470,8 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORBEFORE));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
 
         /*
         Tests for aliases if we enable them:

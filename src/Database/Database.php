@@ -9,6 +9,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -3268,7 +3269,7 @@ class Database
         }
 
         if (!empty($value)) {
-            throw new Exception('Can not delete document because it has at least one related document.');
+            throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 
         if (
@@ -3280,7 +3281,7 @@ class Database
             ]));
 
             if ($related) {
-                throw new Exception('Can not delete document because it has at least one related document.');
+                throw new RestrictedException('Cannot delete document because it has at least one related document.');
             }
         }
     }

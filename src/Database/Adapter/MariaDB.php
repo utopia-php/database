@@ -398,7 +398,6 @@ class MariaDB extends SQL
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
 
-
         $sql = '';
 
         switch ($type) {

@@ -4032,12 +4032,12 @@ abstract class Base extends TestCase
         $person4 = static::getDatabase()->getDocument('person', 'person4');
         $this->assertEquals(true, $person4->isEmpty());
 
-        // Can not delete document while still related to another with on delete set to restrict
+        // Cannot delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('person', 'person1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Can delete child document while still related to another with on delete set to restrict
@@ -4573,12 +4573,12 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $country8->isEmpty());
 
 
-        // Can not delete document while still related to another with on delete set to restrict
+        // Cannot delete document while still related to another with on delete set to restrict
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null
@@ -4946,7 +4946,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteDocument('artist', 'artist1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null
@@ -5474,7 +5474,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteDocument('customer', 'customer1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null
@@ -5828,7 +5828,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteDocument('movie', 'movie1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null
@@ -6327,7 +6327,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteDocument('store', 'store1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null
@@ -6646,7 +6646,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteDocument('playlist', 'playlist1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null
@@ -7120,7 +7120,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteDocument('students', 'student1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Can not delete document because it has at least one related document.', $e->getMessage());
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
         // Change on delete to set null

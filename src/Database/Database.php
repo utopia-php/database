@@ -1230,8 +1230,8 @@ class Database
     public function deleteAttribute(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () =>$this->getCollection($collection));
-
         $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
 
         $attribute = null;
 
@@ -1247,7 +1247,20 @@ class Database
             throw new Exception('Attribute not found');
         }
 
+        foreach ($indexes as $indexKey => $index) {
+            $indexAttributes = $index->getAttribute('attributes', []);
+
+            $indexAttributes = \array_filter($indexAttributes, fn ($attribute) => $attribute !== $id);
+
+            if (empty($indexAttributes)) {
+                unset($indexes[$indexKey]);
+            } else {
+                $index->setAttribute('attributes', $indexAttributes);
+            }
+        }
+
         $collection->setAttribute('attributes', \array_values($attributes));
+        $collection->setAttribute('indexes', \array_values($indexes));
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));

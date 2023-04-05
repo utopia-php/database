@@ -1250,7 +1250,7 @@ class Database
         }
 
         if ($attribute['type'] === self::VAR_RELATIONSHIP) {
-            throw new Exception("Can't delete relationship attribute.");
+            throw new Exception('Cannot delete relationship as an attribute, use deleteRelationship instead');
         }
 
         foreach ($indexes as $indexKey => $index) {

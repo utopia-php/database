@@ -2969,10 +2969,9 @@ class Database
                     foreach ($removedDocuments as $relation) {
                         $junction = $this->getJunctionCollection($collection->getId(), $relatedCollection->getId(), $side);
 
-                        $queryKey = $side === Database::RELATION_SIDE_PARENT ? $twoWayKey : $key;
-
                         $junctions = $this->find($junction, [
-                            Query::equal($queryKey, [$relation]),
+                            Query::equal($key, [$relation]),
+                            Query::equal($twoWayKey, [$document->getId()]),
                             Query::limit(PHP_INT_MAX)
                         ]);
 

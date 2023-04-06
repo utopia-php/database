@@ -279,6 +279,7 @@ class MariaDB extends SQL
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
         $id = $this->filter($id);
+        $twoWayKey = $this->filter($twoWayKey);
         $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
 
         switch ($type) {
@@ -332,6 +333,8 @@ class MariaDB extends SQL
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
 
         if (!\is_null($newKey)) {
             $newKey = $this->filter($newKey);
@@ -397,6 +400,8 @@ class MariaDB extends SQL
         $relatedName = $this->filter($relatedCollection);
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
 
         $sql = '';
 

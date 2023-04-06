@@ -2083,13 +2083,13 @@ class Database
             return new Document();
         }
 
+        $document = $this->casting($collection, $document);
+        $document = $this->decode($collection, $document, $selections);
         $this->map = [];
+
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
             $this->silent(fn () => $this->getDocumentRelationships($collection, $document, $nestedSelections));
         }
-
-        $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document, $selections);
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -3909,12 +3909,40 @@ class Database
             $attribute['type'] !== self::VAR_RELATIONSHIP
         );
 
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) =>
+                $attribute['type'] === self::VAR_RELATIONSHIP
+        );
+
+        foreach ($relationships as $relationship) {
+            $key = $relationship['$id'] ?? '';
+
+            if (\array_key_exists($key, (array)$document)
+                || \array_key_exists($this->adapter->filter($key), (array)$document)) {
+                $value = $document->getAttribute($key);
+                $value ??= $document->getAttribute($this->adapter->filter($key));
+                $document->removeAttribute($this->adapter->filter($key));
+                $document->setAttribute($key, $value);
+            }
+        }
+
         $attributes = array_merge($attributes, $this->getInternalAttributes());
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if (\is_null($value)) {
+                $value = $document->getAttribute($this->adapter->filter($key));
+
+                if (!\is_null($value)) {
+                    $document->removeAttribute($this->adapter->filter($key));
+                }
+            }
+
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 

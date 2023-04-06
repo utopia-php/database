@@ -122,6 +122,11 @@ class Database
     protected Cache $cache;
 
     /**
+     * @var array<string>
+     */
+    protected array $map = [];
+
+    /**
      * @var array<string, bool>
      */
     protected array $primitives = [
@@ -2078,6 +2083,7 @@ class Database
             return new Document();
         }
 
+        $this->map = [];
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
             $this->silent(fn () => $this->getDocumentRelationships($collection, $document, $nestedSelections));
         }
@@ -2096,6 +2102,21 @@ class Database
             if ($relationship['options']['twoWay']) {
                 $hasTwoWayRelationship = true;
                 break;
+            }
+        }
+
+        if (!empty($this->map)) {
+            foreach ($this->map as $key) {
+                list($k, $v) = explode('|', $key);
+                $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
+                $cache = $this->cache->load($ck, self::TTL);
+                if (empty($cache)) {
+                    $cache = [];
+                }
+                if (!in_array($v, $cache)) {
+                    $cache[] = $v;
+                }
+                $this->cache->save($ck, $cache);
             }
         }
 
@@ -2134,6 +2155,11 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            $k = $relatedCollection->getId() . ':' . $value . '|' .$collection->getId().':'.$document->getId();
+            if (!\in_array($k, $this->map) && !empty($value)) {
+                $this->map[] = $k;
+            }
 
             $relationship->setAttribute('collection', $collection->getId());
             $relationship->setAttribute('document', $document->getId());
@@ -2688,6 +2714,16 @@ class Database
 
         if ($this->resolveRelationships) {
             $this->silent(fn () => $this->getDocumentRelationships($collection, $document));
+        }
+
+        $ck = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+        $cache = $this->cache->load($ck, self::TTL);
+        if (!empty($cache)) {
+            foreach ($cache as $v) {
+                list($collectionName, $collectionValue) = explode(':', $v);
+                $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collectionName . ':' . $collectionValue . ':*');
+            }
+            $this->cache->purge($ck);
         }
 
         $document = $this->decode($collection, $document);

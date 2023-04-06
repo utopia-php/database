@@ -246,6 +246,26 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
     }
 
+    public function testAttributeKeyWithSymbols(): void
+    {
+        static::getDatabase()->createCollection('attributesWithKeys');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributesWithKeys', 'key_with.sym$bols', Database::VAR_STRING, 128, true));
+
+        $document = static::getDatabase()->createDocument('attributesWithKeys', new Document([
+            'key_with.sym$bols' => 'value',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ]
+        ]));
+
+        $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
+
+        $document = static::getDatabase()->getDocument('attributesWithKeys', $document->getId());
+
+        $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
+    }
+
     /**
      * @depends testAttributeCaseInsensitivity
      */

@@ -3879,6 +3879,15 @@ class Database
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if (\is_null($value)) {
+                $value = $document->getAttribute($this->adapter->filter($key));
+
+                if (!\is_null($value)) {
+                    $document->removeAttribute($this->adapter->filter($key));
+                }
+            }
+
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 

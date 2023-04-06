@@ -3987,8 +3987,8 @@ abstract class Base extends TestCase
 
         $person3 = static::getDatabase()->getDocument('person', 'person3');
         // Todo: This is failing
-//        $this->assertEquals($libraryDocument['name'], $person3['library']['name']);
-//        $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
+        $this->assertEquals($libraryDocument['name'], $person3['library']['name']);
+        $this->assertEquals('library3', $person3->getAttribute('library')['$id']);
 
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {

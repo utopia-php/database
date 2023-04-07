@@ -10,7 +10,7 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
-class NewDB extends Adapter
+class Utopia extends Adapter
 {
 
 use Exception;

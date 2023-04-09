@@ -3296,6 +3296,14 @@ class Database
      */
     private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
+        if($value instanceof Document && $value->isEmpty()){
+            $value = null;
+        }
+
+        if (!empty($value) && $side === Database::RELATION_SIDE_PARENT) {
+            throw new RestrictedException('Cannot delete document because it has at least one related document.');
+        }
+
         if (
             $relationType === Database::RELATION_ONE_TO_ONE
             && $side === Database::RELATION_SIDE_CHILD
@@ -3316,10 +3324,6 @@ class Database
                     $related->setAttribute($twoWayKey, null)
                 ));
             });
-        }
-
-        if (!empty($value)) {
-            throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 
         if (

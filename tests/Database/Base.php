@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Exception\Timeout;
@@ -4206,7 +4207,7 @@ abstract class Base extends TestCase
         }
 
         // Create document with relationship with nested data
-        static::getDatabase()->createDocument('country', new Document([
+        $doc = new Document([
             '$id' => 'country1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -4224,7 +4225,32 @@ abstract class Base extends TestCase
                 'name' => 'London',
                 'code' => 'LON',
             ],
-        ]));
+        ]);
+
+        static::getDatabase()->createDocument('country', $doc);
+        $country1 = static::getDatabase()->getDocument('country', 'country1');
+        $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
+
+        try {
+            static::getDatabase()->deleteDocument('country', 'country1');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(RestrictedException::class, $e);
+        }
+
+        $this->assertTrue(static::getDatabase()->deleteDocument('city', 'city1'));
+
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertTrue($city1->isEmpty());
+
+        $country1 = static::getDatabase()->getDocument('country', 'country1');
+        $this->assertTrue($country1->getAttribute('city')->isEmpty());
+
+        $this->assertTrue(static::getDatabase()->deleteDocument('country', 'country1'));
+
+        static::getDatabase()->createDocument('country', $doc);
+        $country1 = static::getDatabase()->getDocument('country', 'country1');
+        $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('city', new Document([

@@ -4882,6 +4882,18 @@ abstract class Base extends TestCase
         $artist1 = static::getDatabase()->getDocument('artist', 'artist1');
         $this->assertEquals('Album 1 Updated', $artist1->getAttribute('albums')[0]->getAttribute('name'));
 
+        $albumId = $artist1->getAttribute('albums')[0]->getAttribute('$id');
+        $albumDocument = static::getDatabase()->getDocument('album', $albumId);
+        $albumDocument->setAttribute('name', 'Album 1 Updated!!!');
+        static::getDatabase()->updateDocument('album', $albumDocument->getId(), $albumDocument);
+        $albumDocument = static::getDatabase()->getDocument('album', $albumDocument->getId());
+        $artist1 = static::getDatabase()->getDocument('artist', $artist1->getId());
+
+        $this->assertEquals('Album 1 Updated!!!', $albumDocument['name']);
+        $this->assertEquals($albumDocument->getId(), $artist1->getAttribute('albums')[0]->getId());
+        //Todo: This is failing
+        $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
+
         // Create new document with no relationship
         $artist3 = static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist3',

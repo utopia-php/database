@@ -2105,17 +2105,15 @@ class Database
             }
         }
 
-        if (!empty($this->map)) {
-            foreach ($this->map as $key) {
-                list($k, $v) = explode('|', $key);
-                $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
-                $cache = $this->cache->load($ck, self::TTL);
-                if (empty($cache)) {
-                    $cache = [];
-                }
-                if (!in_array($v, $cache)) {
-                    $cache[] = $v;
-                }
+        foreach ($this->map as $key => $value) {
+            list($k, $v) = explode('=>', $key);
+            $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
+            $cache = $this->cache->load($ck, self::TTL * 5);
+            if (empty($cache)) {
+                $cache = [];
+            }
+            if (!in_array($v, $cache)) {
+                $cache[] = $v;
                 $this->cache->save($ck, $cache);
             }
         }
@@ -2156,9 +2154,12 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
-            $k = $relatedCollection->getId() . ':' . $value . '|' .$collection->getId().':'.$document->getId();
-            if (!\in_array($k, $this->map) && !empty($value)) {
-                $this->map[] = $k;
+            if(!empty($value)){
+                $k = $relatedCollection->getId() . ':' . $value . '=>' .$collection->getId().':'.$document->getId();
+                if($relationType === Database::RELATION_ONE_TO_MANY){
+                    $k = $collection->getId().':'.$document->getId() . '=>' .$relatedCollection->getId() . ':' . $value;
+                }
+                $this->map[$k] = true;
             }
 
             $relationship->setAttribute('collection', $collection->getId());
@@ -2716,14 +2717,25 @@ class Database
             $this->silent(fn () => $this->getDocumentRelationships($collection, $document));
         }
 
-        $ck = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        $cache = $this->cache->load($ck, self::TTL);
-        if (!empty($cache)) {
-            foreach ($cache as $v) {
-                list($collectionName, $collectionValue) = explode(':', $v);
-                $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collectionName . ':' . $collectionValue . ':*');
+
+        if ($collection->getId() !== self::METADATA){ // Important!
+            $relationships = \array_filter(
+                $collection->getAttribute('attributes', []),
+                fn ($attribute) =>
+                    $attribute['type'] === Database::VAR_RELATIONSHIP
+            );
+
+            if(count($relationships) > 0){
+                $ck = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+                $cache = $this->cache->load($ck, self::TTL);
+                if (!empty($cache)) {
+                    foreach ($cache as $v) {
+                        list($collectionName, $collectionValue) = explode(':', $v);
+                        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collectionName . ':' . $collectionValue . ':*');
+                    }
+                    $this->cache->purge($ck);
+                }
             }
-            $this->cache->purge($ck);
         }
 
         $document = $this->decode($collection, $document);

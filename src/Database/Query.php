@@ -482,9 +482,13 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @return Query
+     * @throws Exception
      */
     public static function equal(string $attribute, array $values): self
     {
+        if(empty($values)){
+            Throw new Exception('Equal operator requires values');
+        }
         return new self(self::TYPE_EQUAL, $attribute, $values);
     }
 
@@ -506,9 +510,13 @@ class Query
      * @param string $attribute
      * @param mixed $value
      * @return Query
+     * @throws Exception
      */
     public static function lessThan(string $attribute, mixed $value): self
     {
+        if($value === null){
+            Throw new Exception("lessThan operator can't be null");
+        }
         return new self(self::TYPE_LESSER, $attribute, [$value]);
     }
 
@@ -518,9 +526,13 @@ class Query
      * @param string $attribute
      * @param mixed $value
      * @return Query
+     * @throws Exception
      */
     public static function lessThanEqual(string $attribute, mixed $value): self
     {
+        if($value === null){
+            Throw new Exception("LessThanEqual operator can't be null");
+        }
         return new self(self::TYPE_LESSEREQUAL, $attribute, [$value]);
     }
 
@@ -530,9 +542,13 @@ class Query
      * @param string $attribute
      * @param mixed $value
      * @return Query
+     * @throws Exception
      */
     public static function greaterThan(string $attribute, mixed $value): self
     {
+        if($value === null){
+            Throw new Exception("GreaterThan operator can't be null");
+        }
         return new self(self::TYPE_GREATER, $attribute, [$value]);
     }
 
@@ -545,6 +561,9 @@ class Query
      */
     public static function greaterThanEqual(string $attribute, mixed$value): self
     {
+        if($value === null){
+            Throw new Exception("GreaterThanEqual operator can't be null");
+        }
         return new self(self::TYPE_GREATEREQUAL, $attribute, [$value]);
     }
 
@@ -557,6 +576,9 @@ class Query
      */
     public static function contains(string $attribute, array $values): self
     {
+        if(empty($values)){
+            Throw new Exception('Contains operator requires values');
+        }
         return new self(self::TYPE_CONTAINS, $attribute, $values);
     }
 
@@ -579,9 +601,13 @@ class Query
      * @param string $attribute
      * @param mixed $value
      * @return Query
+     * @throws Exception
      */
     public static function search(string $attribute, mixed $value): self
     {
+        if($value === '' || $value === null){
+            Throw new Exception("Search operator can't be empty");
+        }
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }
 

@@ -815,6 +815,79 @@ abstract class Base extends TestCase
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
     }
 
+    public function testEmptyOperatorValues(): void
+    {
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::equal('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Equal operator requires values', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', ''),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Search operator can't be empty", $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThan('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("lessThan operator can't be null", $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThanEqual('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("LessThanEqual operator can't be null", $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThan('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("GreaterThan operator can't be null", $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThanEqual('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("GreaterThanEqual operator can't be null", $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::contains('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Contains operator requires values', $e->getMessage());
+        }
+    }
 
     /**
      * @depends testCreateDocument

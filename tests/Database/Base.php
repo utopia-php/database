@@ -817,7 +817,6 @@ abstract class Base extends TestCase
 
     public function testEmptyOperatorValues(): void
     {
-
         try {
             static::getDatabase()->findOne('documents', [
                 Query::equal('string', []),
@@ -831,6 +830,16 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->findOne('documents', [
                 Query::search('string', ''),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Search operator can't be empty", $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', null),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {

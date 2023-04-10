@@ -2823,7 +2823,7 @@ class Database
                             if (
                                 $oldValue?->getId() !== $value
                                 && $this->findOne($relatedCollection->getId(), [
-                                    Query::equal($twoWayKey, [$document->getId()]),
+                                    Query::equal($twoWayKey, [$value]),
                                 ])
                             ) {
                                 // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
@@ -2843,7 +2843,7 @@ class Database
                                 if (
                                     $oldValue?->getId() !== $value->getId()
                                     && $this->findOne($relatedCollection->getId(), [
-                                        Query::equal($twoWayKey, [$document->getId()]),
+                                        Query::equal($twoWayKey, [$value->getId()]),
                                     ])
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation

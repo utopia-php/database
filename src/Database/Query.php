@@ -531,7 +531,7 @@ class Query
     public static function lessThanEqual(string $attribute, mixed $value): self
     {
         if ($value === null) {
-            throw new Exception("LessThanEqual operator can't be null");
+            throw new Exception('Less than equal queries cannot have a null value.');
         }
         return new self(self::TYPE_LESSEREQUAL, $attribute, [$value]);
     }
@@ -547,7 +547,7 @@ class Query
     public static function greaterThan(string $attribute, mixed $value): self
     {
         if ($value === null) {
-            throw new Exception("GreaterThan operator can't be null");
+            throw new Exception('Greater than queries cannot have a null value.');
         }
         return new self(self::TYPE_GREATER, $attribute, [$value]);
     }
@@ -560,10 +560,10 @@ class Query
      * @return Query
      * @throws Exception
      */
-    public static function greaterThanEqual(string $attribute, mixed$value): self
+    public static function greaterThanEqual(string $attribute, mixed $value): self
     {
         if ($value === null) {
-            throw new Exception("GreaterThanEqual operator can't be null");
+            throw new Exception('Greater than equal queries cannot have a null value.');
         }
         return new self(self::TYPE_GREATEREQUAL, $attribute, [$value]);
     }
@@ -579,7 +579,7 @@ class Query
     public static function contains(string $attribute, array $values): self
     {
         if (empty($values)) {
-            throw new Exception('Contains operator requires values');
+            throw new Exception('Contains queries require at least one value.');
         }
         return new self(self::TYPE_CONTAINS, $attribute, $values);
     }

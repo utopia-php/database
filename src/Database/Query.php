@@ -515,7 +515,7 @@ class Query
     public static function lessThan(string $attribute, mixed $value): self
     {
         if ($value === null) {
-            throw new Exception("lessThan operator can't be null");
+            throw new Exception('Less than queries cannot have a null value.');
         }
         return new self(self::TYPE_LESSER, $attribute, [$value]);
     }

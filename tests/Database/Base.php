@@ -9714,7 +9714,7 @@ abstract class Base extends TestCase
 
         $drivers = static::getDatabase()->getCollection('drivers');
         $licenses = static::getDatabase()->getCollection('licenses');
-        $junction = static::getDatabase()->getCollection('_licenses_drivers');
+        $junction = static::getDatabase()->getCollection('_' . $licenses->getInternalId() . '_' . $drivers->getInternalId());
 
         $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
         $this->assertEquals(0, \count($drivers->getAttribute('indexes')));
@@ -9739,6 +9739,11 @@ abstract class Base extends TestCase
 
     public function testUpdateRelationshipToExistingKey(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('ovens');
         static::getDatabase()->createCollection('cakes');
 
@@ -9771,8 +9776,13 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testRelationshipKeyWithSymbols(): void
+    public function testOneToOneRelationshipKeyWithSymbols(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('$symbols_coll.ection1');
         static::getDatabase()->createCollection('$symbols_coll.ection2');
 
@@ -9804,6 +9814,126 @@ abstract class Base extends TestCase
 
         $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection1')->getId());
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection2')->getId());
+    }
+
+    public function testOneToManyRelationshipKeyWithSymbols(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('$symbols_coll.ection3');
+        static::getDatabase()->createCollection('$symbols_coll.ection4');
+
+        static::getDatabase()->createRelationship(
+            collection: '$symbols_coll.ection3',
+            relatedCollection: '$symbols_coll.ection4',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        $doc1 = static::getDatabase()->createDocument('$symbols_coll.ection4', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ]
+        ]));
+        $doc2 = static::getDatabase()->createDocument('$symbols_coll.ection3', new Document([
+            '$id' => ID::unique(),
+            '$symbols_coll.ection4' => [$doc1->getId()],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ]
+        ]));
+
+        $doc1 = static::getDatabase()->getDocument('$symbols_coll.ection4', $doc1->getId());
+        $doc2 = static::getDatabase()->getDocument('$symbols_coll.ection3', $doc2->getId());
+
+        $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection3')->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection4')[0]->getId());
+    }
+
+    public function testManyToOneRelationshipKeyWithSymbols(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('$symbols_coll.ection5');
+        static::getDatabase()->createCollection('$symbols_coll.ection6');
+
+        static::getDatabase()->createRelationship(
+            collection: '$symbols_coll.ection5',
+            relatedCollection: '$symbols_coll.ection6',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        $doc1 = static::getDatabase()->createDocument('$symbols_coll.ection6', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ]
+        ]));
+        $doc2 = static::getDatabase()->createDocument('$symbols_coll.ection5', new Document([
+            '$id' => ID::unique(),
+            '$symbols_coll.ection6' => $doc1->getId(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ]
+        ]));
+
+        $doc1 = static::getDatabase()->getDocument('$symbols_coll.ection6', $doc1->getId());
+        $doc2 = static::getDatabase()->getDocument('$symbols_coll.ection5', $doc2->getId());
+
+        $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection5')[0]->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection6')->getId());
+    }
+
+    public function testManyToManyRelationshipKeyWithSymbols(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('$symbols_coll.ection7');
+        static::getDatabase()->createCollection('$symbols_coll.ection8');
+
+        static::getDatabase()->createRelationship(
+            collection: '$symbols_coll.ection7',
+            relatedCollection: '$symbols_coll.ection8',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+        );
+
+        $doc1 = static::getDatabase()->createDocument('$symbols_coll.ection8', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ]
+        ]));
+        $doc2 = static::getDatabase()->createDocument('$symbols_coll.ection7', new Document([
+            '$id' => ID::unique(),
+            '$symbols_coll.ection8' => [$doc1->getId()],
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ]
+        ]));
+
+        $doc1 = static::getDatabase()->getDocument('$symbols_coll.ection8', $doc1->getId());
+        $doc2 = static::getDatabase()->getDocument('$symbols_coll.ection7', $doc2->getId());
+
+        $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection7')[0]->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection8')[0]->getId());
     }
 
     public function testEvents(): void

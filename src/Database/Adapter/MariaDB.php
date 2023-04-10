@@ -365,7 +365,10 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $junction = $this->getSQLTable('_' . $collection . '_' . $relatedCollection);
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
 
                 if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`;";
@@ -427,13 +430,16 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
                 $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection . '_' . $relatedCollection)
-                    : $this->getSQLTable('_' . $relatedCollection . '_' . $collection);
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId())
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId());
 
                 $perms = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection . '_' . $relatedCollection . '_perms')
-                    : $this->getSQLTable('_' . $relatedCollection . '_' . $collection . '_perms');
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId() . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId() . '_perms');
 
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;

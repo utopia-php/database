@@ -363,7 +363,6 @@ class Mongo extends Adapter
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
-        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 
@@ -399,6 +398,11 @@ class Mongo extends Adapter
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
                 if (!\is_null($newKey)) {
                     $this->getClient()->update($junction, updates: $renameKey, multi: true);
                 }

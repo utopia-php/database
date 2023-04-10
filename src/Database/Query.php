@@ -487,7 +487,7 @@ class Query
     public static function equal(string $attribute, array $values): self
     {
         if (empty($values)) {
-            throw new Exception('Equal operator requires values');
+            throw new Exception('Equal queries require at least one value.');
         }
         return new self(self::TYPE_EQUAL, $attribute, $values);
     }

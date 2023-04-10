@@ -498,9 +498,13 @@ class Query
      * @param string $attribute
      * @param mixed $value
      * @return Query
+     * @throws Exception
      */
     public static function notEqual(string $attribute, mixed $value): self
     {
+        if ($value === null) {
+            throw new Exception('Not equal queries cannot have a null value, Please use Is not null operator.');
+        }
         return new self(self::TYPE_NOTEQUAL, $attribute, [$value]);
     }
 
@@ -607,9 +611,14 @@ class Query
      */
     public static function search(string $attribute, mixed $value): self
     {
-        if ($value === '' || $value === null) {
-            throw new Exception("Search operator can't be empty");
+        if ($value === null) {
+            throw new Exception('Search queries cannot have a null value.');
         }
+
+        if ($value === '') {
+            throw new Exception('Search queries cannot have an empty value.');
+        }
+
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }
 

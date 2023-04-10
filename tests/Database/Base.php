@@ -824,17 +824,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Equal operator requires values', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::search('string', ''),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Search operator can't be empty", $e->getMessage());
+            $this->assertEquals('Equal queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -844,7 +834,37 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Search operator can't be empty", $e->getMessage());
+            $this->assertEquals('Search queries cannot have a null value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', ''),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Search queries cannot have an empty value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Search queries cannot have a null value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::notEqual('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Not equal queries cannot have a null value, Please use Is not null operator.', $e->getMessage());
         }
 
         try {
@@ -854,7 +874,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("lessThan operator can't be null", $e->getMessage());
+            $this->assertEquals('Less than queries cannot have a null value.', $e->getMessage());
         }
 
         try {
@@ -864,7 +884,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("LessThanEqual operator can't be null", $e->getMessage());
+            $this->assertEquals('Less than equal queries cannot have a null value.', $e->getMessage());
         }
 
         try {
@@ -874,7 +894,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("GreaterThan operator can't be null", $e->getMessage());
+            $this->assertEquals('Greater than queries cannot have a null value.', $e->getMessage());
         }
 
         try {
@@ -884,7 +904,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("GreaterThanEqual operator can't be null", $e->getMessage());
+            $this->assertEquals('Greater than equal queries cannot have a null value.', $e->getMessage());
         }
 
         try {
@@ -894,7 +914,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Contains operator requires values', $e->getMessage());
+            $this->assertEquals('Contains queries require at least one value.', $e->getMessage());
         }
     }
 

@@ -50,7 +50,9 @@ class SQLiteTest extends Base
             unlink($sqliteDir);
         }
 
-        $pdo = new PDO("sqlite:".$sqliteDir, null, null, SQLite::getPDOAttributes());
+        $dsn = $sqliteDir;
+        $dsn = 'memory'; // Overwrite for fast tests
+        $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);

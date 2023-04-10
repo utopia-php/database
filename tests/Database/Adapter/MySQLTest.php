@@ -69,4 +69,9 @@ class MySQLTest extends Base
 
         return self::$database = $database;
     }
+
+    public static function killDatabase(): void
+    {
+        self::$database = null;
+    }
 }

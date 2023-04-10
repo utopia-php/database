@@ -31,6 +31,8 @@ abstract class Base extends TestCase
      */
     abstract protected static function getDatabase(): Database;
 
+    abstract protected static function killDatabase(): void;
+
     /**
      * @return string
      */
@@ -10017,5 +10019,11 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
+    }
+
+    public function testLast(): void
+    {
+        $this->expectNotToPerformAssertions();
+        static::killDatabase();
     }
 }

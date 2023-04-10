@@ -829,7 +829,7 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->findOne('documents', [
-                Query::search('string', null),
+                Query::search('$id', null),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {

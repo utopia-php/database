@@ -558,6 +558,7 @@ class Query
      * @param string $attribute
      * @param mixed $value
      * @return Query
+     * @throws Exception
      */
     public static function greaterThanEqual(string $attribute, mixed$value): self
     {
@@ -573,6 +574,7 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @return Query
+     * @throws Exception
      */
     public static function contains(string $attribute, array $values): self
     {

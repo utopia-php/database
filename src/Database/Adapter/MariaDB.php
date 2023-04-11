@@ -209,8 +209,7 @@ class MariaDB extends SQL
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                MODIFY `{$id}` {$type};")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
             ->execute();
     }
 
@@ -230,8 +229,7 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP COLUMN `{$id}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;")
             ->execute();
     }
 

@@ -781,7 +781,7 @@ class Database
             }
         }
 
-        $collection->setAttribute('attributes', new Document([
+        $attribute = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
@@ -793,7 +793,9 @@ class Database
             'format' => $format,
             'formatOptions' => $formatOptions,
             'filters' => $filters,
-        ]), Document::SET_TYPE_APPEND);
+        ]);
+
+        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
@@ -833,7 +835,11 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        $attribute = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+
+        if (!$created) {
+            throw new Exception('Failed to create attribute');
+        }
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -841,7 +847,7 @@ class Database
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
 
-        return $attribute;
+        return true;
     }
 
     /**
@@ -1183,7 +1189,12 @@ class Database
             }
 
             if ($altering) {
-                $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+
+                if (!$updated) {
+                    throw new Exception('Failed to update attribute');
+                }
+
                 $this->deleteCachedCollection($collection);
             }
 
@@ -1273,6 +1284,10 @@ class Database
 
         $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
 
+        if (!$deleted) {
+            throw new Exception('Failed to delete attribute');
+        }
+
         $collection->setAttribute('attributes', \array_values($attributes));
         $collection->setAttribute('indexes', \array_values($indexes));
 
@@ -1280,10 +1295,9 @@ class Database
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
-
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
 
-        return $deleted;
+        return true;
     }
 
     /**
@@ -1413,7 +1427,7 @@ class Database
             throw new LimitException('Row width limit reached. Cannot create new attribute.');
         }
 
-        $collection->setAttribute('attributes', new Document([
+        $relationship = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => Database::VAR_RELATIONSHIP,
@@ -1427,9 +1441,9 @@ class Database
                 'onDelete' => $onDelete,
                 'side' => Database::RELATION_SIDE_PARENT,
             ],
-        ]), Document::SET_TYPE_APPEND);
+        ]);
 
-        $relatedCollection->setAttribute('attributes', new Document([
+        $twoWayRelationship = new Document([
             '$id' => ID::custom($twoWayKey),
             'key' => $twoWayKey,
             'type' => Database::VAR_RELATIONSHIP,
@@ -1443,7 +1457,10 @@ class Database
                 'onDelete' => $onDelete,
                 'side' => Database::RELATION_SIDE_CHILD,
             ],
-        ]), Document::SET_TYPE_APPEND);
+        ]);
+
+        $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
+        $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
         if ($type === self::RELATION_MANY_TO_MANY) {
             $this->silent(fn () => $this->createCollection('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId(), [
@@ -1483,7 +1500,7 @@ class Database
             ]));
         }
 
-        $relationship = $this->adapter->createRelationship(
+        $created = $this->adapter->createRelationship(
             $collection->getId(),
             $relatedCollection->getId(),
             $type,
@@ -1491,6 +1508,10 @@ class Database
             $id,
             $twoWayKey
         );
+
+        if (!$created) {
+            throw new Exception('Failed to create attribute');
+        }
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
             $this->updateDocument(self::METADATA, $collection->getId(), $collection);
@@ -1522,7 +1543,7 @@ class Database
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
 
-        return $relationship;
+        return true;
     }
 
     /**
@@ -1627,7 +1648,7 @@ class Database
             }
 
             if ($altering) {
-                $this->adapter->updateRelationship(
+                $updated = $this->adapter->updateRelationship(
                     $collection->getId(),
                     $relatedCollection->getId(),
                     $type,
@@ -1637,6 +1658,10 @@ class Database
                     $newKey,
                     $newTwoWayKey
                 );
+
+                if (!$updated) {
+                    throw new Exception('Failed to update relationship');
+                }
             }
 
             $this->deleteCachedCollection($collection->getId());
@@ -1793,12 +1818,16 @@ class Database
             $side
         );
 
+        if (!$deleted) {
+            throw new Exception('Failed to delete relationship');
+        }
+
         $this->deleteCachedCollection($collection->getId());
         $this->deleteCachedCollection($relatedCollection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
 
-        return $deleted;
+        return true;
     }
 
     /**

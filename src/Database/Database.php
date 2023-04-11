@@ -2755,7 +2755,7 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->cleanDocumentMapCache($collection, $id);
+        $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
@@ -3265,7 +3265,7 @@ class Database
             $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
         }
 
-        $this->cleanDocumentMapCache($collection, $id);
+        $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
@@ -4245,7 +4245,7 @@ class Database
      * @return void
      * @throws Exception
      */
-    private function cleanDocumentMapCache(Document $collection, string $id): void
+    private function purgeRelatedDocuments(Document $collection, string $id): void
     {
         if ($collection->getId() === self::METADATA) {
             return;

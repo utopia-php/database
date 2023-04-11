@@ -7788,6 +7788,7 @@ abstract class Base extends TestCase
             '$id' => 'country1',
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Country 1',
             'cities' => [
@@ -7795,12 +7796,14 @@ abstract class Base extends TestCase
                     '$id' => 'city1',
                     '$permissions' => [
                         Permission::read(Role::any()),
+                        Permission::update(Role::any()),
                     ],
                     'name' => 'City 1',
                     'mayor' => [
                         '$id' => 'mayor1',
                         '$permissions' => [
                             Permission::read(Role::any()),
+                            Permission::update(Role::any()),
                         ],
                         'name' => 'Mayor 1',
                     ],
@@ -7848,7 +7851,28 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
 
+        // Insert docs to cache:
         $country1 = static::getDatabase()->getDocument('countries', 'country1');
+        $mayor1 = static::getDatabase()->getDocument('mayors', 'mayor1');
+        $this->assertEquals('City 1', $mayor1['city']['name']);
+        $this->assertEquals('City 1', $country1['cities'][0]['name']);
+
+        static::getDatabase()->updateDocument('cities', 'city1', new Document([
+            '$id' => 'city1',
+            '$collection' => 'cities',
+            'name' => 'City 1 updated',
+            'mayor' => 'mayor1', // we don't support partial updates at the moment
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        $mayor1 = static::getDatabase()->getDocument('mayors', 'mayor1');
+        $country1 = static::getDatabase()->getDocument('countries', 'country1');
+
+        $this->assertEquals('City 1 updated', $mayor1['city']['name']);
+        $this->assertEquals('City 1 updated', $country1['cities'][0]['name']);
         $this->assertEquals('city1', $country1['cities'][0]['$id']);
         $this->assertEquals('city2', $country1['cities'][1]['$id']);
         $this->assertEquals('mayor1', $country1['cities'][0]['mayor']['$id']);

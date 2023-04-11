@@ -5100,7 +5100,6 @@ abstract class Base extends TestCase
 
         static::getDatabase()->deleteDocument('album', 'album_1');
         $artist = static::getDatabase()->getDocument('artist', $artist->getId());
-        //todo: fix from failing
         $this->assertCount(49, $artist->getAttribute('newAlbums'));
 
         static::getDatabase()->deleteDocument('artist', $artist->getId());

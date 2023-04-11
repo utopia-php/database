@@ -202,6 +202,45 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        $collection = $this->getDocument(Database::METADATA, $name);
+
+        if ($collection->isEmpty()) {
+            throw new Exception('Collection not found');
+        }
+
+        $indexes = \json_decode($collection->getAttribute('indexes', []), true);
+
+        foreach ($indexes as $index) {
+            $attributes = $index['attributes'];
+            if ($attributes === [$id]) {
+                $this->deleteIndex($name, $index['$id']);
+            } elseif (\in_array($id, $attributes)) {
+                $this->deleteIndex($name, $index['$id']);
+                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders']);
+            }
+        }
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
+                DROP COLUMN `{$id}`;")
+            ->execute();
+    }
+
+    /**
      * Rename Index
      *
      * @param string $collection
@@ -217,17 +256,18 @@ class SQLite extends MariaDB
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexs = json_decode($collectionDocument['indexes'], true);
+        $indexes = json_decode($collectionDocument['indexes'], true);
         $index = null;
 
-        foreach ($indexs as $node) {
+        foreach ($indexes as $node) {
             if ($node['key'] === $old) {
                 $index = $node;
                 break;
             }
         }
 
-        if ($index && $this->deleteIndex($collection, $old)
+        if ($index
+            && $this->deleteIndex($collection, $old)
             && $this->createIndex(
                 $collection,
                 $new,
@@ -595,6 +635,11 @@ class SQLite extends MariaDB
      * @return bool
      */
     public function getSupportForTimeouts(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForRelationships(): bool
     {
         return false;
     }

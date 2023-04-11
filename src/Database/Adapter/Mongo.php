@@ -292,6 +292,15 @@ class Mongo extends Adapter
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $this->getClient()->update(
+            $collection,
+            [],
+            ['$unset' => [$id => '']],
+            multi: true
+        );
+
         return true;
     }
 
@@ -305,6 +314,162 @@ class Mongo extends Adapter
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $this->getClient()->update(
+            $collection,
+            [],
+            ['$rename' => [$id => $name]],
+            multi: true
+        );
+
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayKey
+     * @return bool
+     */
+    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
+    {
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null
+    ): bool {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+
+        $renameKey = [
+            '$rename' => [
+                $key => $newKey,
+            ]
+        ];
+
+        $renameTwoWayKey = [
+            '$rename' => [
+                $twoWayKey => $newTwoWayKey,
+            ]
+        ];
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($junction, updates: $renameKey, multi: true);
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                if ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $this->getClient()->dropCollection($junction);
+                break;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
         return true;
     }
 
@@ -360,6 +525,48 @@ class Mongo extends Adapter
     }
 
     /**
+     * Rename Index.
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     *
+     * @return bool
+     * @throws Exception
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $indexes = json_decode($collectionDocument['indexes'], true);
+        $index = null;
+
+        foreach ($indexes as $node) {
+            if ($node['key'] === $old) {
+                $index = $node;
+                break;
+            }
+        }
+
+        if ($index
+            && $this->deleteIndex($collection, $old)
+            && $this->createIndex(
+                $collection,
+                $new,
+                $index['type'],
+                $index['attributes'],
+                $index['lengths'] ?? [],
+                $index['orders'] ?? [],
+            )) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Delete Index
      *
      * @param string $collection
@@ -396,7 +603,7 @@ class Mongo extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        if (!empty($selections)) {
+        if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -540,20 +747,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * Rename Index.
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     *
-     * @return bool
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        return true;
-    }
-
-    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id
@@ -614,7 +807,7 @@ class Mongo extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        if (!empty($selections)) {
+        if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -1268,6 +1461,11 @@ class Mongo extends Adapter
     public function getSupportForTimeouts(): bool
     {
         return true;
+    }
+
+    public function getSupportForRelationships(): bool
+    {
+        return false;
     }
 
     /**

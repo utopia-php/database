@@ -86,8 +86,8 @@ class Postgres extends SQL
         /**
          * @var array<string> $attributes
          */
-        $stmt = $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+        $stmt = $this->getPDO()->prepare("
+            CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
@@ -95,31 +95,43 @@ class Postgres extends SQL
                 \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\")
-                )");
-        //,
-        //INDEX (\"_createdAt\"),
-        //INDEX (\"_updatedAt\")
-        $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(_uid));");
+            );
+        ");
+
+        $stmtIndex = $this->getPDO()->prepare("
+            CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(\"_uid\"));
+            CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
+            CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+        ");
+
         try {
             $stmt->execute();
             $stmtIndex->execute();
 
-            $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-                        \"_id\" SERIAL NOT NULL,
-                        \"_type\" VARCHAR(12) NOT NULL,
-                        \"_permission\" VARCHAR(255) NOT NULL,
-                        \"_document\" VARCHAR(255) NOT NULL,
-                        PRIMARY KEY (\"_id\")
-                    )")
-                ->execute();
+            $this->getPDO()->prepare("
+                CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
+                    \"_id\" SERIAL NOT NULL,
+                    \"_type\" VARCHAR(12) NOT NULL,
+                    \"_permission\" VARCHAR(255) NOT NULL,
+                    \"_document\" VARCHAR(255) NOT NULL,
+                    PRIMARY KEY (\"_id\")
+                );
+            ")->execute();
 
-            foreach ($indexes as &$index) {
+            foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
+                $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes');
+                $indexOrders = $index->getAttribute('orders', []);
 
-                $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
+                $this->createIndex(
+                    $id,
+                    $indexId,
+                    $indexType,
+                    $indexAttributes,
+                    [],
+                    $indexOrders
+                );
             }
         } catch (Exception $e) {
             $this->getPDO()->rollBack();
@@ -131,7 +143,6 @@ class Postgres extends SQL
         }
 
         // Update $this->getIndexCount when adding another default index
-        // return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
 
         return true;
     }
@@ -256,6 +267,199 @@ class Postgres extends SQL
     }
 
     /**
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param string $relatedCollection
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayKey = ''
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $id = $this->filter($id);
+        $twoWayKey = $this->filter($twoWayKey);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN \"{$id}\" {$sqlType} DEFAULT NULL;";
+
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN \"{$twoWayKey}\" {$sqlType} DEFAULT NULL;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN \"{$twoWayKey}\" {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN \"{$id}\" {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                return true;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        if (!\is_null($newKey)) {
+            $newKey = $this->filter($newKey);
+        }
+        if (!\is_null($newTwoWayKey)) {
+            $newTwoWayKey = $this->filter($newTwoWayKey);
+        }
+
+        $sql = '';
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$junction} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$junction} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                }
+                break;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        if (empty($sql)) {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                } else {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                } else {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId())
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId());
+
+                $perms = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId() . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId() . '_perms');
+
+                $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
+                break;
+            default:
+                throw new Exception('Invalid relationship type.');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection
@@ -290,7 +494,7 @@ class Postgres extends SQL
             }
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attribute = "lower(\"{$attribute}\"::text) {$order}";
+                $attribute = "LOWER(\"{$attribute}\"::text) {$order}";
             } else {
                 $attribute = "\"{$attribute}\" {$order}";
             }
@@ -308,6 +512,7 @@ class Postgres extends SQL
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteIndex(string $collection, string $id): bool
     {
@@ -982,7 +1187,7 @@ class Postgres extends SQL
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): string
     {
-        if (empty($selections)) {
+        if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {
                 return "\"{$prefix}\".*";
             }
@@ -1084,8 +1289,8 @@ class Postgres extends SQL
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
 
-            case Database::VAR_DOCUMENT:
-                return 'VARCHAR';
+            case Database::VAR_RELATIONSHIP:
+                return 'VARCHAR(255)';
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';

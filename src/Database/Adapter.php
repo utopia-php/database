@@ -203,7 +203,6 @@ abstract class Adapter
      * @param int $size
      * @param bool $signed
      * @param bool $array
-     *
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
@@ -241,6 +240,46 @@ abstract class Adapter
      * @return bool
      */
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayKey
+     * @return bool
+     */
+    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool;
+
+    /**
+     * Update Relationship
+     *
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     */
+    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
+
+    /**
+     * Delete Relationship
+     *
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     */
+    abstract public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool;
 
     /**
      * Rename Index
@@ -442,6 +481,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForTimeouts(): bool;
+
+    /**
+     * Are relationships supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForRelationships(): bool;
 
     /**
      * Get current attribute count from collection document

@@ -349,9 +349,9 @@ abstract class SQL extends Adapter
                     $total += 1;
                     break;
 
-                case Database::VAR_DOCUMENT:
-                    // CHAR(255)
-                    $total += 255;
+                case Database::VAR_RELATIONSHIP:
+                    // INT(11)
+                    $total += 4;
                     break;
 
                 case Database::VAR_DATETIME:
@@ -669,6 +669,11 @@ abstract class SQL extends Adapter
     public function getSupportForQueryContains(): bool
     {
         return false;
+    }
+
+    public function getSupportForRelationships(): bool
+    {
+        return true;
     }
 
     /**

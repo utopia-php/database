@@ -2117,7 +2117,7 @@ class Database
         $this->map = [];
 
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-            $this->silent(fn () => $this->getDocumentRelationships($collection, $document, $nestedSelections));
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
         $relationships = \array_filter(
@@ -2169,7 +2169,7 @@ class Database
      * @return Document
      * @throws Throwable
      */
-    private function getDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2427,13 +2427,13 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
         }
 
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->getDocumentRelationships($collection, $document));
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
         $document = $this->decode($collection, $document);
@@ -2446,11 +2446,11 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @return void
+     * @return Document
      * @throws Exception
      * @throws Throwable
      */
-    private function createDocumentRelationships(Document $collection, Document $document): void
+    private function createDocumentRelationships(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2473,7 +2473,7 @@ class Database
                 $document->removeAttribute($key);
 
                 if ($index === \count($relationships) - 1) {
-                    return;
+                    return $document;
                 }
 
                 continue;
@@ -2563,6 +2563,8 @@ class Database
                     throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
             }
         }
+
+        return $document;
     }
 
     /**
@@ -2742,13 +2744,13 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
+            $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
         }
 
         $document = $this->adapter->updateDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->getDocumentRelationships($collection, $document));
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
         if ($collection->getId() !== self::METADATA) { // Important!
@@ -2785,12 +2787,12 @@ class Database
      * @param Document $old
      * @param Document $document
      *
-     * @return void
+     * @return Document
      * @throws AuthorizationException
      * @throws StructureException
      * @throws Throwable
      */
-    private function updateDocumentRelationships(Document $collection, Document $old, Document $document): void
+    private function updateDocumentRelationships(Document $collection, Document $old, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2818,7 +2820,7 @@ class Database
                 $document->removeAttribute($key);
 
                 if ($index === \count($relationships) - 1) {
-                    return;
+                    return $document;
                 }
 
                 continue;
@@ -3115,6 +3117,8 @@ class Database
                     break;
             }
         }
+
+        return $document;
     }
 
     private function getJunctionCollection(Document $collection, Document $relatedCollection, string $side): string
@@ -3277,7 +3281,7 @@ class Database
         }
 
         if ($this->resolveRelationships) {
-            $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+            $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
         }
 
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
@@ -3292,7 +3296,7 @@ class Database
     /**
      * @throws Exception
      */
-    private function deleteDocumentRelationships(Document $collection, Document $document): void
+    private function deleteDocumentRelationships(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -3322,6 +3326,8 @@ class Database
                     break;
             }
         }
+
+        return $document;
     }
 
     /**
@@ -3560,6 +3566,7 @@ class Database
      *
      * @return array<Document>
      * @throws Exception
+     * @throws Throwable
      */
     public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
@@ -3663,7 +3670,7 @@ class Database
 
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-                $node = $this->silent(fn () => $this->getDocumentRelationships($collection, $node, $nestedSelections));
+                $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);

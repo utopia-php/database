@@ -5098,6 +5098,10 @@ abstract class Base extends TestCase
 
         $this->assertEquals(50, $count);
 
+        static::getDatabase()->deleteDocument('album', 'album_1');
+        $artist = static::getDatabase()->getDocument('artist', $artist->getId());
+        $this->assertCount(49, $artist->getAttribute('newAlbums'));
+
         static::getDatabase()->deleteDocument('artist', $artist->getId());
 
         $albums = static::getDatabase()->find('album', [

@@ -1443,6 +1443,14 @@ class Database
             ],
         ]);
 
+        $relationType = match ($type) {
+            self::RELATION_ONE_TO_MANY => self::RELATION_MANY_TO_ONE,
+            self::RELATION_MANY_TO_ONE => self::RELATION_ONE_TO_MANY,
+            self::RELATION_MANY_TO_MANY => self::RELATION_MANY_TO_MANY,
+            self::RELATION_ONE_TO_ONE => self::RELATION_ONE_TO_ONE,
+            default => throw new Exception('Invalid relation type'),
+        };
+
         $twoWayRelationship = new Document([
             '$id' => ID::custom($twoWayKey),
             'key' => $twoWayKey,
@@ -1451,7 +1459,7 @@ class Database
             'default' => null,
             'options' => [
                 'relatedCollection' => $collection->getId(),
-                'relationType' => $type,
+                'relationType' => $relationType,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $id,
                 'onDelete' => $onDelete,

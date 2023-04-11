@@ -5165,7 +5165,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('customer', $attribute['$id']);
                 $this->assertEquals('customer', $attribute['key']);
                 $this->assertEquals('customer', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
+                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('accounts', $attribute['options']['twoWayKey']);
             }
@@ -6000,7 +6000,7 @@ abstract class Base extends TestCase
                 $this->assertEquals('products', $attribute['$id']);
                 $this->assertEquals('products', $attribute['key']);
                 $this->assertEquals('product', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
+                $this->assertEquals(Database::RELATION_ONE_TO_MANY, $attribute['options']['relationType']);
                 $this->assertEquals(true, $attribute['options']['twoWay']);
                 $this->assertEquals('store', $attribute['options']['twoWayKey']);
             }

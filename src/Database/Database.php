@@ -4247,7 +4247,7 @@ class Database
      */
     private function cleanDocumentMapCache(Document $collection, string $id): void
     {
-        if($collection->getId() === self::METADATA){
+        if ($collection->getId() === self::METADATA) {
             return;
         }
 
@@ -4257,7 +4257,7 @@ class Database
                 $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        if(empty($relationships)){
+        if (empty($relationships)) {
             return;
         }
 

@@ -3648,7 +3648,8 @@ class Database
         }
 
         $queries = \array_values($queries);
-        $results = $this->adapter->find(
+
+        $getResults = fn() => $this->adapter->find(
             $collection->getId(),
             $queries,
             $limit ?? 25,
@@ -3659,6 +3660,8 @@ class Database
             $cursorDirection ?? Database::CURSOR_AFTER,
             $timeout
         );
+
+        $results = in_array($collection->getId(), $collectionsWithoutAuthorization) ? Authorization::skip($getResults) : $getResults();
 
         $attributes = $collection->getAttribute('attributes', []);
 

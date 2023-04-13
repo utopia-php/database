@@ -2142,7 +2142,7 @@ class Database
         foreach ($this->map as $key => $value) {
             list($k, $v) = explode('=>', $key);
             $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
-            $cache = $this->cache->load($ck, self::TTL * 5);
+            $cache = $this->cache->load($ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
             }
@@ -2753,28 +2753,9 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
-        if ($collection->getId() !== self::METADATA) { // Important!
-            $relationships = \array_filter(
-                $collection->getAttribute('attributes', []),
-                fn ($attribute) =>
-                    $attribute['type'] === Database::VAR_RELATIONSHIP
-            );
-
-            if (count($relationships) > 0) {
-                $ck = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-                $cache = $this->cache->load($ck, self::TTL);
-                if (!empty($cache)) {
-                    foreach ($cache as $v) {
-                        list($collectionName, $collectionValue) = explode(':', $v);
-                        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collectionName . ':' . $collectionValue . ':*');
-                    }
-                    $this->cache->purge($ck);
-                }
-            }
-        }
-
         $document = $this->decode($collection, $document);
 
+        $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
@@ -3284,6 +3265,7 @@ class Database
             $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
         }
 
+        $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
@@ -4255,5 +4237,38 @@ class Database
             }
         }
         return $queries;
+    }
+
+    /**
+     * @param Document $collection
+     * @param string $id
+     * @return void
+     * @throws Exception
+     */
+    private function purgeRelatedDocuments(Document $collection, string $id): void
+    {
+        if ($collection->getId() === self::METADATA) {
+            return;
+        }
+
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) =>
+                $attribute['type'] === Database::VAR_RELATIONSHIP
+        );
+
+        if (empty($relationships)) {
+            return;
+        }
+
+        $key = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+        $cache = $this->cache->load($key, self::TTL);
+        if (!empty($cache)) {
+            foreach ($cache as $v) {
+                list($collectionId, $documentId) = explode(':', $v);
+                $this->deleteCachedDocument($collectionId, $documentId);
+            }
+            $this->cache->purge($key);
+        }
     }
 }

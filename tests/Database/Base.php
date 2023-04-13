@@ -9966,6 +9966,71 @@ abstract class Base extends TestCase
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection8')[0]->getId());
     }
 
+
+    public function testOneToManyTwoWayRelationshipWithSkippedAuth(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        Authorization::cleanRoles();
+        Authorization::setRole('any');
+
+        static::getDatabase()->createCollection('parent');
+        static::getDatabase()->createCollection('child');
+
+        static::getDatabase()->createAttribute('parent', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('child', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('child', 'number', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'accounts'
+        );
+
+        static::getDatabase()->createDocument('parent', new Document([
+            '$id' => 'customer1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Customer 1',
+            'accounts' => [
+                [
+                    '$id' => 'account1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'name' => 'Account 1',
+                    'number' => '123456789',
+                ],
+                [
+                    '$id' => 'account2',
+                    '$permissions' => [
+                        Permission::read(Role::user('user1'))
+                    ],
+                    'name' => 'Account 2',
+                    'number' => '987654321',
+                ]
+            ],
+        ]));
+
+        $customers = static::getDatabase()->find('parent');
+        $accounts = $customers[0]->getAttribute('accounts', []);
+
+        $this->assertEquals(1, \count($accounts));
+
+        $customers = static::getDatabase()->find('parent', collectionsWithoutAuthorization: ['child']);
+        $accounts = $customers[0]->getAttribute('accounts', []);
+        $this->assertEquals(2, \count($accounts));
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

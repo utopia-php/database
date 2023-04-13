@@ -2015,7 +2015,7 @@ class Database
      * @return Document
      * @throws Exception|Throwable
      */
-    public function getDocument(string $collection, string $id, array $queries = []): Document
+    public function getDocument(string $collection, string $id, array $queries = [], array $collectionsWithoutAuthorization = []): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
@@ -2117,7 +2117,7 @@ class Database
         $this->map = [];
 
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections, $collectionsWithoutAuthorization));
         }
 
         $relationships = \array_filter(
@@ -2166,10 +2166,11 @@ class Database
      * @param Document $collection
      * @param Document $document
      * @param array<Query> $queries
+     * @param array<string> $collectionsWithoutAuthorization
      * @return Document
      * @throws Throwable
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = [], array $collectionsWithoutAuthorization = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2244,6 +2245,7 @@ class Database
                     $skipFetch = true;
                 }
             }
+            $skipAuthorization = in_array($relatedCollection->getId(), $collectionsWithoutAuthorization);
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
@@ -2263,6 +2265,10 @@ class Database
                     $this->relationshipFetchMap[] = $relationship;
 
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+
+                    $getRelated = fn() => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+
+                    $related = $skipAuthorization ? Authorization::skip($getRelated) : $getRelated();
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2295,11 +2301,13 @@ class Database
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchMap[] = $relationship;
 
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
+                    $getRelatedDocuments = fn() => $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
                         ...$queries
-                    ]);
+                    ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+
+                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2339,11 +2347,13 @@ class Database
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchMap[] = $relationship;
 
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
+                    $getRelatedDocuments = fn() => $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
                         ...$queries
-                    ]);
+                    ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+
+                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2369,10 +2379,12 @@ class Database
 
                     $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    $junctions = $this->skipRelationships(fn () => $this->find($junction, [
+                    $getJunctions = fn() => $this->skipRelationships(fn () => $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX)
-                    ]));
+                    ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
+
+                    $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : $getJunctions();
 
                     $related = [];
                     foreach ($junctions as $junction) {
@@ -2399,6 +2411,7 @@ class Database
      *
      * @param string $collection
      * @param Document $document
+     * @param array<string> $collectionsWithoutAuthorization
      *
      * @return Document
      *
@@ -2406,7 +2419,7 @@ class Database
      * @throws StructureException
      * @throws Exception|Throwable
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(string $collection, Document $document, array $collectionsWithoutAuthorization = []): Document
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -2433,7 +2446,7 @@ class Database
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $collectionsWithoutAuthorization));
         }
 
         $document = $this->decode($collection, $document);
@@ -2446,11 +2459,12 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
+     * @param array<string> $collectionsWithoutAuthorization
      * @return Document
      * @throws Exception
      * @throws Throwable
      */
-    private function createDocumentRelationships(Document $collection, Document $document): Document
+    private function createDocumentRelationships(Document $collection, Document $document, array $collectionsWithoutAuthorization = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -3545,12 +3559,13 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $timeout
+     * @param array<string> $collectionsWithoutAuthorization
      *
      * @return array<Document>
      * @throws Exception
      * @throws Throwable
      */
-    public function find(string $collection, array $queries = [], ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $timeout = null, array $collectionsWithoutAuthorization = []): array
     {
         if (!\is_null($timeout) && $timeout <= 0) {
             throw new Exception('Timeout must be greater than 0');
@@ -3652,7 +3667,7 @@ class Database
 
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-                $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
+                $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections, $collectionsWithoutAuthorization));
             }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);

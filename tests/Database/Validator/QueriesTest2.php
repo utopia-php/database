@@ -64,6 +64,7 @@ class QueriesTest2 extends TestCase
                 'array' => false,
             ])
         ];
+
         $validator = new Queries(
             new Cursor(),
             new Filter($attributes),
@@ -71,6 +72,7 @@ class QueriesTest2 extends TestCase
             new Offset(),
             new Order($attributes),
         );
+
         $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid(['limit(10)']), $validator->getDescription());

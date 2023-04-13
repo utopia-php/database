@@ -8,7 +8,6 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Document as DocumentValidator;
 
 class QueriesTest extends TestCase
@@ -102,17 +101,28 @@ class QueriesTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testQueries(): void
+    public function testValidQueries(): void
     {
         $validator = new DocumentValidator($this->collection['attributes'], $this->collection['indexes']);
 
         $queries = [
             'notEqual("title", ["Iron Man", "Ant Man"])',
             'equal("description", "Best movie ever")',
+            'lessThanEqual("price", 6.50)',
             'lessThan("price", 6.50)',
             'greaterThan("rating", 4)',
+            'greaterThanEqual("rating", 6)',
             'between("price", 1.50, 6.50)',
+            'search("title", "SEO")',
+            'startsWith("title", "Good")',
+            'endsWith("title", "Night")',
+            'isNull("title")',
+            'isNotNull("title")',
+            'cursorAfter("a")',
+            'cursorBefore("b")',
             'orderAsc("title")',
+            'limit(10)',
+            'offset(10)',
         ];
 
         $queries[] = Query::orderDesc('');
@@ -126,5 +136,30 @@ class QueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
     }
+
+    /**
+     * @throws Exception
+     */
+    public function testInvalidQueries(): void
+    {
+        $validator = new DocumentValidator($this->collection['attributes'], $this->collection['indexes']);
+
+        $queries = ['search("description", "iron")'];
+        $this->assertFalse($validator->isValid($queries));
+        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
+
+        $queries = ['equal("not_found", 4)'];
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
+
+        $queries = ['limit(-1)'];
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Query not valid: Invalid limit: Value must be a valid range between 0 and 9,223,372,036,854,775,808', $validator->getDescription());
+
+        $queries = ['equal("title", [])'];
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('We want this to fail!!!!!!', $validator->getDescription());
+    }
+
 
 }

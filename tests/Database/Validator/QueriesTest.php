@@ -2,13 +2,14 @@
 
 namespace Utopia\Tests\Validator;
 
+use Exception;
 use Utopia\Database\Helpers\ID;
-use Utopia\Database\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Query as DatabaseQuery;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Document as DocumentValidator;
 
 class QueriesTest extends TestCase
 {
@@ -18,14 +19,7 @@ class QueriesTest extends TestCase
     protected array $collection = [];
 
     /**
-     * @var array<string>
-     */
-    protected array $queries = [];
-
-    protected ?Query $queryValidator = null;
-
-    /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function setUp(): void
     {
@@ -73,87 +67,32 @@ class QueriesTest extends TestCase
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
+                ])
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('testindex2'),
+                    'type' => 'key',
+                    'attributes' => [
+                        'title',
+                        'description',
+                        'price'
+                    ],
+                    'orders' => [
+                        'ASC',
+                        'DESC'
+                    ],
                 ]),
                 new Document([
-                    '$id' => 'published',
-                    'key' => 'published',
-                    'type' => Database::VAR_BOOLEAN,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'tags',
-                    'key' => 'tags',
-                    'type' => Database::VAR_STRING,
-                    'size' => 55,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => true,
-                    'filters' => [],
+                    '$id' => ID::custom('testindex3'),
+                    'type' => 'fulltext',
+                    'attributes' => [
+                        'title'
+                    ],
+                    'orders' => []
                 ]),
             ],
-            'indexes' => [],
         ];
-
-        $this->queryValidator = new Query($this->collection['attributes']);
-
-        $query1 = 'notEqual("title", ["Iron Man", "Ant Man"])';
-        $query2 = 'equal("description", "Best movie ever")';
-
-        array_push($this->queries, $query1, $query2);
-
-        // Constructor expects array<Document> $indexes
-        // Object property declaration cannot initialize a Document object
-        // Add array<Document> $indexes separately
-        $index1 = new Document([
-            '$id' => ID::custom('testindex'),
-            'type' => 'key',
-            'attributes' => [
-                'title',
-                'description'
-            ],
-            'orders' => [
-                'ASC',
-                'DESC'
-            ],
-        ]);
-
-        $index2 = new Document([
-            '$id' => ID::custom('testindex2'),
-            'type' => 'key',
-            'attributes' => [
-                'title',
-                'description',
-                'price'
-            ],
-            'orders' => [
-                'ASC',
-                'DESC'
-            ],
-        ]);
-
-        $index3 = new Document([
-            '$id' => ID::custom('testindex3'),
-            'type' => 'fulltext',
-            'attributes' => [
-                'title'
-            ],
-            'orders' => []
-        ]);
-
-        $index4 = new Document([
-            '$id' => 'testindex4',
-            'type' => 'key',
-            'attributes' => [
-                'description'
-            ],
-            'orders' => []
-        ]);
-
-        $this->collection['indexes'] = [$index1, $index2, $index3, $index4];
     }
 
     public function tearDown(): void
@@ -161,162 +100,31 @@ class QueriesTest extends TestCase
     }
 
     /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function testQueries(): void
     {
-        // test for SUCCESS
-        $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
+        $validator = new DocumentValidator($this->collection['attributes'], $this->collection['indexes']);
 
-        $this->assertEquals(true, $validator->isValid($this->queries), $validator->getDescription());
+        $queries = [
+            'notEqual("title", ["Iron Man", "Ant Man"])',
+            'equal("description", "Best movie ever")',
+            'lessThan("price", 6.50)',
+            'greaterThan("rating", 4)',
+            'between("price", 1.50, 6.50)',
+            'orderAsc("title")',
+        ];
 
-        $this->queries[] = 'lessThan("price", 6.50)';
-        $this->queries[] = 'greaterThanEqual("price", 5.50)';
-        $this->assertEquals(true, $validator->isValid($this->queries));
+        $queries[] = Query::orderDesc('');
+        $this->assertEquals(true, $validator->isValid($queries));
 
-        $queries = [DatabaseQuery::orderDesc('')];
-        $this->assertEquals(true, $validator->isValid($queries), $validator->getDescription());
+        $queries = ['search("description", "iron")'];
+        $this->assertFalse($validator->isValid($queries));
+        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
 
-        // test for FAILURE
-
-        $this->queries[] = 'greaterThan("rating", 4)';
-
-        $this->assertFalse($validator->isValid($this->queries));
-        $this->assertEquals("Index not found: title,description,price,rating", $validator->getDescription());
-
-        // test for queued index
-        $query1 = 'lessThan("price", 6.50)';
-        $query2 = 'notEqual("title", ["Iron Man", "Ant Man"])';
-
-        $this->queries = [$query1, $query2];
-        $this->assertEquals(false, $validator->isValid($this->queries));
-        $this->assertEquals("Index not found: price,title", $validator->getDescription());
-
-        // test fulltext
-
-        $query3 = 'search("description", "iron")';
-        $this->queries = [$query3];
-        $this->assertEquals(false, $validator->isValid($this->queries));
-        $this->assertEquals("Search method requires fulltext index: description", $validator->getDescription());
+        $queries = ['equal("not_found", 4)'];
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
     }
 
-    /**
-     * @throws \Exception
-     */
-    public function testLooseOrderQueries(): void
-    {
-        $validator = new Queries(
-            $this->queryValidator,
-            [
-                new Document([
-                    '$id' => 'title',
-                    'key' => 'title',
-                    'type' => Database::VAR_STRING,
-                    'size' => 256,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'rating',
-                    'key' => 'rating',
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'price',
-                    'key' => 'price',
-                    'type' => Database::VAR_FLOAT,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            [
-                new Document([
-                    '$id' => 'testindex5',
-                    'type' => 'key',
-                    'attributes' => [
-                        'title',
-                        'price',
-                        'rating'
-                    ],
-                    'orders' => []
-                ]),
-                new Document([
-                    '$id' => 'key-price',
-                    'type' => 'key',
-                    'attributes' => [
-                        'price'
-                    ],
-                    'orders' => []
-                ])
-            ],
-            true,
-        );
-
-        // Test for SUCCESS
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("price", 6.50)',
-            'lessThanEqual("title", "string")',
-            'lessThanEqual("rating", 2002)',
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("price", 6.50)',
-            'lessThanEqual("title", "string")',
-            'lessThanEqual("rating", 2002)',
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("price", 6.50)',
-            'lessThanEqual("rating", 2002)',
-            'lessThanEqual("title", "string")',
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("title", "string")',
-            'lessThanEqual("price", 6.50)',
-            'lessThanEqual("rating", 2002)',
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("title", "string")',
-            'lessThanEqual("rating", 2002)',
-            'lessThanEqual("price", 6.50)',
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("rating", 2002)',
-            'lessThanEqual("title", "string")',
-            'lessThanEqual("price", 6.50)',
-        ]));
-
-        $this->assertTrue($validator->isValid([
-            'lessThanEqual("rating", 2002)',
-            'lessThanEqual("price", 6.50)',
-            'lessThanEqual("title", "string")',
-        ]));
-    }
-
-    /**
-     * @throws \Exception
-     */
-    public function testIsStrict(): void
-    {
-        $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes']);
-
-        $this->assertEquals(true, $validator->isStrict());
-
-        $validator = new Queries($this->queryValidator, $this->collection['attributes'], $this->collection['indexes'], false);
-
-        $this->assertEquals(false, $validator->isStrict());
-    }
 }

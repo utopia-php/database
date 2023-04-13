@@ -2011,6 +2011,7 @@ class Database
      * @param string $collection
      * @param string $id
      * @param Query[] $queries
+     * @param array<string> $collectionsWithoutAuthorization
      *
      * @return Document
      * @throws Exception|Throwable
@@ -2266,7 +2267,7 @@ class Database
 
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
-                    $getRelated = fn() => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+                    $getRelated = fn () => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
                     $related = $skipAuthorization ? Authorization::skip($getRelated) : $getRelated();
 
@@ -2301,7 +2302,7 @@ class Database
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchMap[] = $relationship;
 
-                    $getRelatedDocuments = fn() => $this->find($relatedCollection->getId(), [
+                    $getRelatedDocuments = fn () => $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
                         ...$queries
@@ -2347,7 +2348,7 @@ class Database
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchMap[] = $relationship;
 
-                    $getRelatedDocuments = fn() => $this->find($relatedCollection->getId(), [
+                    $getRelatedDocuments = fn () => $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
                         ...$queries
@@ -2379,7 +2380,7 @@ class Database
 
                     $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    $getJunctions = fn() => $this->skipRelationships(fn () => $this->find($junction, [
+                    $getJunctions = fn () => $this->skipRelationships(fn () => $this->find($junction, [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX)
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
@@ -2446,7 +2447,7 @@ class Database
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $collectionsWithoutAuthorization));
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
         }
 
         $document = $this->decode($collection, $document);

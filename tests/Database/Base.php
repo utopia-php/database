@@ -10021,13 +10021,22 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Find
         $customers = static::getDatabase()->find('parent');
         $accounts = $customers[0]->getAttribute('accounts', []);
-
         $this->assertEquals(1, \count($accounts));
 
         $customers = static::getDatabase()->find('parent', collectionsWithoutAuthorization: ['child']);
         $accounts = $customers[0]->getAttribute('accounts', []);
+        $this->assertEquals(2, \count($accounts));
+
+        // Get Document
+        $customer1 = static::getDatabase()->getDocument('parent', 'customer1');
+        $accounts = $customer1->getAttribute('accounts', []);
+        $this->assertEquals(1, \count($accounts));
+
+        $customer2 = static::getDatabase()->getDocument('parent', 'customer1', collectionsWithoutAuthorization: ['child']);
+        $accounts = $customer2->getAttribute('accounts', []);
         $this->assertEquals(2, \count($accounts));
     }
 

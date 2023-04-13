@@ -158,7 +158,7 @@ class QueriesTest extends TestCase
 
         $queries = ['equal("title", [])'];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('We want this to fail!!!!!!', $validator->getDescription());
+        $this->assertEquals('We want this to fail!', $validator->getDescription());
     }
 
 

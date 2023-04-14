@@ -2178,8 +2178,6 @@ class Database
      */
     private function populateDocumentRelationships(Document $collection, Document $document, array $queries = [], array $collectionsWithoutAuthorization = []): Document
     {
-        Authorization::enable();
-
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter(
@@ -2254,40 +2252,83 @@ class Database
                 }
             }
 
-            $skipAuthorization = in_array($relatedCollection->getId(), $collectionsWithoutAuthorization);
+            Authorization::enforce(function () use ($collection, $twoWayKey, $side, $queries, $relationship, $twoWay, $key, $document, $skipFetch, $value, $relationType, $collectionsWithoutAuthorization, $relatedCollection) {
+                $skipAuthorization = in_array($relatedCollection->getId(), $collectionsWithoutAuthorization);
 
-            switch ($relationType) {
-                case Database::RELATION_ONE_TO_ONE:
-                    if (\is_null($value)) {
-                        break;
-                    }
+                switch ($relationType) {
+                    case Database::RELATION_ONE_TO_ONE:
+                        if (\is_null($value)) {
+                            break;
+                        }
 
-                    if ($skipFetch) {
-                        $document->removeAttribute($key);
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
-
-                    $getRelated = fn () => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
-
-                    $related = $skipAuthorization ? Authorization::skip($getRelated) : $getRelated();
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
-
-                    $document->setAttribute($key, $related);
-                    break;
-                case Database::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!$twoWay) {
+                        if ($skipFetch) {
                             $document->removeAttribute($key);
                         }
-                        if ($twoWay && !\is_null($value) && !$skipFetch) {
+
+                        if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                            break;
+                        }
+
+                        $this->relationshipFetchDepth++;
+                        $this->relationshipFetchMap[] = $relationship;
+
+                        $getRelated = fn () => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+
+                        $related = $skipAuthorization ? Authorization::skip($getRelated) : $getRelated();
+
+                        $this->relationshipFetchDepth--;
+                        \array_pop($this->relationshipFetchMap);
+
+                        $document->setAttribute($key, $related);
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                        if ($side === Database::RELATION_SIDE_CHILD) {
+                            if (!$twoWay) {
+                                $document->removeAttribute($key);
+                            }
+                            if ($twoWay && !\is_null($value) && !$skipFetch) {
+                                $this->relationshipFetchDepth++;
+                                $this->relationshipFetchMap[] = $relationship;
+
+                                $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+
+                                $this->relationshipFetchDepth--;
+                                \array_pop($this->relationshipFetchMap);
+
+                                $document->setAttribute($key, $related);
+                            }
+                            break;
+                        }
+
+                        if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                            break;
+                        }
+
+                        $this->relationshipFetchDepth++;
+                        $this->relationshipFetchMap[] = $relationship;
+
+                        $getRelatedDocuments = fn () => $this->find($relatedCollection->getId(), [
+                            Query::equal($twoWayKey, [$document->getId()]),
+                            Query::limit(PHP_INT_MAX),
+                            ...$queries
+                        ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+
+                        $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
+
+                        $this->relationshipFetchDepth--;
+                        \array_pop($this->relationshipFetchMap);
+
+                        foreach ($relatedDocuments as $related) {
+                            $related->removeAttribute($twoWayKey);
+                        }
+
+                        $document->setAttribute($key, $relatedDocuments);
+                        break;
+                    case Database::RELATION_MANY_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            if (\is_null($value) || $skipFetch) {
+                                break;
+                            }
                             $this->relationshipFetchDepth++;
                             $this->relationshipFetchMap[] = $relationship;
 
@@ -2297,117 +2338,76 @@ class Database
                             \array_pop($this->relationshipFetchMap);
 
                             $document->setAttribute($key, $related);
-                        }
-                        break;
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
-
-                    $getRelatedDocuments = fn () => $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
-
-                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $document->setAttribute($key, $relatedDocuments);
-                    break;
-                case Database::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if (\is_null($value) || $skipFetch) {
                             break;
                         }
+
+                        if (!$twoWay) {
+                            $document->removeAttribute($key);
+                            break;
+                        }
+
+                        if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
+                            break;
+                        }
+
                         $this->relationshipFetchDepth++;
                         $this->relationshipFetchMap[] = $relationship;
 
-                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                        $getRelatedDocuments = fn () => $this->find($relatedCollection->getId(), [
+                            Query::equal($twoWayKey, [$document->getId()]),
+                            Query::limit(PHP_INT_MAX),
+                            ...$queries
+                        ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
+
+                        $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
+
+                        $this->relationshipFetchDepth--;
+                        \array_pop($this->relationshipFetchMap);
+
+
+                        foreach ($relatedDocuments as $related) {
+                            $related->removeAttribute($twoWayKey);
+                        }
+
+                        $document->setAttribute($key, $relatedDocuments);
+                        break;
+                    case Database::RELATION_MANY_TO_MANY:
+                        if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                            break;
+                        }
+
+                        if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                            break;
+                        }
+
+                        $this->relationshipFetchDepth++;
+                        $this->relationshipFetchMap[] = $relationship;
+
+                        $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+
+                        $getJunctions = fn () => $this->skipRelationships(fn () => $this->find($junction, [
+                            Query::equal($twoWayKey, [$document->getId()]),
+                            Query::limit(PHP_INT_MAX)
+                        ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
+
+                        $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : $getJunctions();
+
+                        $related = [];
+                        foreach ($junctions as $junction) {
+                            $related[] = $this->getDocument(
+                                $relatedCollection->getId(),
+                                $junction->getAttribute($key),
+                                $queries
+                            );
+                        }
 
                         $this->relationshipFetchDepth--;
                         \array_pop($this->relationshipFetchMap);
 
                         $document->setAttribute($key, $related);
                         break;
-                    }
-
-                    if (!$twoWay) {
-                        $document->removeAttribute($key);
-                        break;
-                    }
-
-                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
-
-                    $getRelatedDocuments = fn () => $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
-
-                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
-
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $document->setAttribute($key, $relatedDocuments);
-                    break;
-                case Database::RELATION_MANY_TO_MANY:
-                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
-                        break;
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
-
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
-
-                    $getJunctions = fn () => $this->skipRelationships(fn () => $this->find($junction, [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX)
-                    ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
-
-                    $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : $getJunctions();
-
-                    $related = [];
-                    foreach ($junctions as $junction) {
-                        $related[] = $this->getDocument(
-                            $relatedCollection->getId(),
-                            $junction->getAttribute($key),
-                            $queries
-                        );
-                    }
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
-
-                    $document->setAttribute($key, $related);
-                    break;
-            }
+                }
+            });
         }
 
         return $document;

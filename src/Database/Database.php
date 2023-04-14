@@ -2354,7 +2354,7 @@ class Database
                         ...$queries
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
-                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : Authorization::enforce($getRelatedDocuments);
+                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments;
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2385,7 +2385,7 @@ class Database
                         Query::limit(PHP_INT_MAX)
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
 
-                    $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : Authorization::enforce($getJunctions);
+                    $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : $getJunctions;
 
                     $related = [];
                     foreach ($junctions as $junction) {

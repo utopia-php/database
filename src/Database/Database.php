@@ -2269,7 +2269,7 @@ class Database
 
                     $getRelated = fn () => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
-                    $related = $skipAuthorization ? Authorization::skip($getRelated) : Authorization::enforce($getRelated);
+                    $related = $skipAuthorization ? Authorization::skip($getRelated) : $getRelated;
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2308,7 +2308,7 @@ class Database
                         ...$queries
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
-                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : Authorization::enforce($getRelatedDocuments);
+                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments;
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);

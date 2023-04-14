@@ -2173,6 +2173,8 @@ class Database
      */
     private function populateDocumentRelationships(Document $collection, Document $document, array $queries = [], array $collectionsWithoutAuthorization = []): Document
     {
+        Authorization::enable();
+
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter(
@@ -2246,6 +2248,7 @@ class Database
                     $skipFetch = true;
                 }
             }
+
             $skipAuthorization = in_array($relatedCollection->getId(), $collectionsWithoutAuthorization);
 
             switch ($relationType) {
@@ -3649,7 +3652,7 @@ class Database
 
         $queries = \array_values($queries);
 
-        $getResults = fn() => $this->adapter->find(
+        $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
             $limit ?? 25,

@@ -170,6 +170,25 @@ class Authorization extends Validator
     }
 
     /**
+     * Enforce Authorization
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public static function enforce(callable $callback): mixed
+    {
+        $initialStatus = self::$status;
+        self::enable();
+
+        try {
+            return $callback();
+        } finally {
+            self::$status = $initialStatus;
+        }
+    }
+
+    /**
      * Enable Authorization checks
      *
      * @return void

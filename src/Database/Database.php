@@ -2269,7 +2269,7 @@ class Database
 
                     $getRelated = fn () => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
-                    $related = $skipAuthorization ? Authorization::skip($getRelated) : $getRelated();
+                    $related = $skipAuthorization ? Authorization::skip($getRelated) : Authorization::enforce($getRelated);
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2308,7 +2308,7 @@ class Database
                         ...$queries
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
-                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
+                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : Authorization::enforce($getRelatedDocuments);
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2354,7 +2354,7 @@ class Database
                         ...$queries
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 
-                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : $getRelatedDocuments();
+                    $relatedDocuments = $skipAuthorization ? Authorization::skip($getRelatedDocuments) : Authorization::enforce($getRelatedDocuments);
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchMap);
@@ -2385,7 +2385,7 @@ class Database
                         Query::limit(PHP_INT_MAX)
                     ], collectionsWithoutAuthorization: $collectionsWithoutAuthorization));
 
-                    $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : $getJunctions();
+                    $junctions = $skipAuthorization ? Authorization::skip($getJunctions) : Authorization::enforce($getJunctions);
 
                     $related = [];
                     foreach ($junctions as $junction) {

@@ -2101,7 +2101,12 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
+        $getDocument = fn () => $this->adapter->getDocument($collection->getId(), $id, $queries);
+
+        $document = \in_array($collection->getId(), $collectionsWithoutAuthorization)
+            ? Authorization::skip($getDocument)
+            : $getDocument();
+
         $document->setAttribute('$collection', $collection->getId());
 
         if ($document->isEmpty()) {
@@ -2267,8 +2272,6 @@ class Database
 
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchMap[] = $relationship;
-
-                    $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                     $getRelated = fn () => $this->getDocument($relatedCollection->getId(), $value, $queries, collectionsWithoutAuthorization: $collectionsWithoutAuthorization);
 

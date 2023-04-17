@@ -10083,6 +10083,42 @@ abstract class Base extends TestCase
      * @param array<Document> $data
      * @depends testCollectionPermissionsCreateWorks
      */
+    public function testCollectionPermissionsFindWorks(array $data): array
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+        $this->assertNotEmpty($documents);
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
+    public function testCollectionPermissionsFindThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+        $this->assertEmpty($documents);
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
     public function testCollectionPermissionsUpdateWorks(array $data): array
     {
         [$collection, $document] = $data;

@@ -3606,6 +3606,13 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->getAttribute('documentSecurity', true) === false) {
+            $authorization = new Authorization(self::PERMISSION_READ);
+            if ($authorization->isValid($collection->getRead())) {
+                $skipAuth = true;
+            }
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) =>
@@ -3680,7 +3687,7 @@ class Database
         }
 
         $queries = \array_values($queries);
-        $results = $this->adapter->find(
+        $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
             $limit ?? 25,
@@ -3691,6 +3698,8 @@ class Database
             $cursorDirection ?? Database::CURSOR_AFTER,
             $timeout
         );
+
+        $results = $skipAuth ?? false ? Authorization::skip($getResults) : $getResults();
 
         $attributes = $collection->getAttribute('attributes', []);
 

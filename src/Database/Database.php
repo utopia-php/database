@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use InvalidArgumentException;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -16,6 +17,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -59,7 +61,7 @@ class Database
     public const ORDER_DESC = 'DESC';
 
     // Permissions
-    public const PERMISSION_CREATE= 'create';
+    public const PERMISSION_CREATE = 'create';
     public const PERMISSION_READ = 'read';
     public const PERMISSION_UPDATE = 'update';
     public const PERMISSION_DELETE = 'delete';
@@ -224,6 +226,16 @@ class Database
                 'array' => false,
                 'filters' => ['json'],
             ],
+            [
+                '$id' => 'documentSecurity',
+                'key' => 'documentSecurity',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => []
+            ]
         ],
         'indexes' => [],
     ];
@@ -361,8 +373,10 @@ class Database
     /**
      * Silent event generation for all the calls inside the callback
      *
-     * @param callable $callback
-     * @return mixed
+     * @template T
+     * @param ?\DateTime $requestTimestamp
+     * @param callable(): T $callback
+     * @return T
      */
     public function silent(callable $callback): mixed
     {
@@ -379,8 +393,10 @@ class Database
     /**
      * Skip relationships for all the calls inside the callback
      *
-     * @param callable $callback
-     * @return mixed
+     * @template T
+     * @param ?\DateTime $requestTimestamp
+     * @param callable(): T $callback
+     * @return T
      */
     public function skipRelationships(callable $callback): mixed
     {
@@ -532,6 +548,7 @@ class Database
             ['name', self::VAR_STRING, 512, true],
             ['attributes', self::VAR_STRING, 1000000, false],
             ['indexes', self::VAR_STRING, 1000000, false],
+            ['documentSecurity', self::VAR_BOOLEAN, 0, false],
         ]);
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
@@ -595,8 +612,20 @@ class Database
      * @return Document
      * @throws DuplicateException
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
+        $permissions ??= [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $validator = new Permissions();
+        if (!$validator->isValid($permissions)) {
+            throw new InvalidArgumentException($validator->getDescription());
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
@@ -611,15 +640,11 @@ class Database
 
         $collection = new Document([
             '$id' => ID::custom($id),
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
+            '$permissions' => $permissions,
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
+            'documentSecurity' => $documentSecurity
         ]);
 
         // Check index limits, if given
@@ -1248,7 +1273,7 @@ class Database
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn () =>$this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1730,7 +1755,7 @@ class Database
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn () =>$this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
 
@@ -2078,7 +2103,7 @@ class Database
         $queries = \array_values($queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
-
+        $documentSecurity = $collection->getAttribute('documentSecurity', true);
         $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
@@ -2090,9 +2115,11 @@ class Database
         if ($cache = $this->cache->load($cacheKey, self::TTL)) {
             $document = new Document($cache);
 
-            if ($collection->getId() !== self::METADATA
-                && !$validator->isValid($document->getRead())) {
-                return new Document();
+            if ($collection->getId() !== self::METADATA) {
+                $isValid = $documentSecurity ? $validator->isValid($document->getRead()) : $validator->isValid($collection->getRead());
+                if (!$isValid) {
+                    return new Document();
+                }
             }
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
@@ -2107,9 +2134,11 @@ class Database
             return $document;
         }
 
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getRead())) {
-            return new Document();
+        if ($collection->getId() !== self::METADATA) {
+            $isValid = $documentSecurity ? $validator->isValid($document->getRead()) : $validator->isValid($collection->getRead());
+            if (!$isValid) {
+                return new Document();
+            }
         }
 
         $document = $this->casting($collection, $document);
@@ -2189,9 +2218,9 @@ class Database
             $side = $relationship['options']['side'];
 
             if (!empty($value)) {
-                $k = $relatedCollection->getId() . ':' . $value . '=>' .$collection->getId().':'.$document->getId();
+                $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
                 if ($relationType === Database::RELATION_ONE_TO_MANY) {
-                    $k = $collection->getId().':'.$document->getId() . '=>' .$relatedCollection->getId() . ':' . $value;
+                    $k = $collection->getId() . ':' . $document->getId() . '=>' . $relatedCollection->getId() . ':' . $value;
                 }
                 $this->map[$k] = true;
             }
@@ -2226,8 +2255,8 @@ class Database
                 // collection as an existing relationship, but a different two-way key (the third condition),
                 // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                 $transitive = (($existingKey === $twoWayKey
-                        && $existingCollection === $relatedCollection->getId()
-                        && $existingSide !== $side)
+                    && $existingCollection === $relatedCollection->getId()
+                    && $existingSide !== $side)
                     || ($existingTwoWayKey === $key
                         && $existingRelatedCollection === $collection->getId()
                         && $existingSide !== $side)
@@ -2410,6 +2439,13 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->getId() !== self::METADATA && $collection->getAttribute('documentSecurity', true) === false) {
+            $authorization = new Authorization(self::PERMISSION_CREATE);
+            if (!$authorization->isValid($collection->getCreate())) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+
         $time = DateTime::now();
 
         $document
@@ -2420,10 +2456,14 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection);
+        $validator = new Permissions();
+        if (!$validator->isValid($document->getPermissions())) {
+            throw new InvalidArgumentException($validator->getDescription());
+        }
 
-        if (!$validator->isValid($document)) {
-            throw new StructureException($validator->getDescription());
+        $structure = new Structure($collection);
+        if (!$structure->isValid($document)) {
+            throw new StructureException($structure->getDescription());
         }
 
         if ($this->resolveRelationships) {
@@ -2607,7 +2647,7 @@ class Database
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
-            if (! isset($relation['$permissions'])) {
+            if (!isset($relation['$permissions'])) {
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
 
@@ -2620,9 +2660,9 @@ class Database
                 $related->setAttribute($attribute, $value);
             }
 
-            $depth ++;
+            $depth++;
             $related = $this->updateDocument($relatedCollection->getId(), $related->getId(), $related);
-            $depth --;
+            $depth--;
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
@@ -2724,9 +2764,11 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($old->getUpdate())) {
-            throw new AuthorizationException($validator->getDescription());
+        if ($collection->getId() !== self::METADATA) {
+            $isValid = $collection->getAttribute('documentSecurity', true) ? $validator->isValid($old->getUpdate()) : $validator->isValid($collection->getUpdate());
+            if (!$isValid) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         // Check if document was updated after the request timestamp
@@ -2864,7 +2906,7 @@ class Database
 
                                 $this->relationshipUpdateDepth++;
                                 if ($related->isEmpty()) {
-                                    if (! isset($value['$permissions'])) {
+                                    if (!isset($value['$permissions'])) {
                                         $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                     }
                                     $related = $this->createDocument(
@@ -2958,7 +3000,7 @@ class Database
                                 $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                                 if ($related->isEmpty()) {
-                                    if (! isset($value['$permissions'])) {
+                                    if (!isset($value['$permissions'])) {
                                         $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                     }
                                     $this->createDocument(
@@ -2987,7 +3029,7 @@ class Database
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
 
                         if ($related->isEmpty()) {
-                            if (! isset($value['$permissions'])) {
+                            if (!isset($value['$permissions'])) {
                                 $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
                             }
                             $this->createDocument(
@@ -3056,7 +3098,7 @@ class Database
                             $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                             if ($related->isEmpty()) {
-                                if (! isset($value['$permissions'])) {
+                                if (!isset($value['$permissions'])) {
                                     $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                 }
                                 $related = $this->createDocument(
@@ -3134,8 +3176,10 @@ class Database
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getUpdate())) {
+        if (
+            $collection->getId() !== self::METADATA
+            && !$validator->isValid($document->getUpdate())
+        ) {
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -3195,8 +3239,10 @@ class Database
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getUpdate())) {
+        if (
+            $collection->getId() !== self::METADATA
+            && !$validator->isValid($document->getUpdate())
+        ) {
             throw new AuthorizationException($validator->getDescription());
         }
 
@@ -3245,14 +3291,16 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $validator = new Authorization(self::PERMISSION_DELETE);
-
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getDelete())) {
-            throw new AuthorizationException($validator->getDescription());
+        $validator = new Authorization(self::PERMISSION_DELETE);
+
+        if ($collection->getId() !== self::METADATA) {
+            $isValid = $collection->getAttribute('documentSecurity', true) ? $validator->isValid($document->getDelete()) : $validator->isValid($collection->getDelete());
+            if (!$isValid) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         // Check if document was updated after the request timestamp
@@ -3441,10 +3489,10 @@ class Database
 
                 foreach ($junctions as $document) {
                     $this->skipRelationships(fn () =>
-                        $this->deleteDocument(
-                            $junction,
-                            $document->getId()
-                        ));
+                    $this->deleteDocument(
+                        $junction,
+                        $document->getId()
+                    ));
                 }
                 break;
         }
@@ -3455,10 +3503,10 @@ class Database
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 $this->skipRelationships(fn () =>
-                    $this->deleteDocument(
-                        $relatedCollection->getId(),
-                        $value->getId()
-                    ));
+                $this->deleteDocument(
+                    $relatedCollection->getId(),
+                    $value->getId()
+                ));
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
@@ -3466,10 +3514,10 @@ class Database
                 }
                 foreach ($value as $relation) {
                     $this->skipRelationships(fn () =>
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $relation->getId()
-                        ));
+                    $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $relation->getId()
+                    ));
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
@@ -3484,10 +3532,10 @@ class Database
 
                 foreach ($value as $relation) {
                     $this->skipRelationships(fn () =>
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $relation->getId()
-                        ));
+                    $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $relation->getId()
+                    ));
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -3950,14 +3998,16 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-                $attribute['type'] === self::VAR_RELATIONSHIP
+            $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
 
-            if (\array_key_exists($key, (array)$document)
-                || \array_key_exists($this->adapter->filter($key), (array)$document)) {
+            if (
+                \array_key_exists($key, (array)$document)
+                || \array_key_exists($this->adapter->filter($key), (array)$document)
+            ) {
                 $value = $document->getAttribute($key);
                 $value ??= $document->getAttribute($this->adapter->filter($key));
                 $document->removeAttribute($this->adapter->filter($key));
@@ -4254,7 +4304,7 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
+            $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         if (empty($relationships)) {

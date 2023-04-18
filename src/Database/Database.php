@@ -606,6 +606,8 @@ class Database
      * @param string $id
      * @param array<Document> $attributes
      * @param array<Document> $indexes
+     * @param array<string> $permissions
+     * @param bool $documentSecurity
      *
      * @return Document
      * @throws DuplicateException
@@ -3613,8 +3615,7 @@ class Database
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn (Document $attribute) =>
-            $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
         $grouped = Query::groupByType($queries);

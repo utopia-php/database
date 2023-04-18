@@ -154,7 +154,6 @@ class Authorization extends Validator
      * Skips authorization for the code to be executed inside the callback
      *
      * @template T
-     * @param ?\DateTime $requestTimestamp
      * @param callable(): T $callback
      * @return T
      */

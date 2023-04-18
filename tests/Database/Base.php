@@ -9999,6 +9999,7 @@ abstract class Base extends TestCase
 
     /**
      * @depends testCollectionPermissions
+     * @return array<Document>
      */
     public function testCollectionPermissionsCreateWorks(Document $collection): array
     {
@@ -10040,8 +10041,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsGetWorks(array $data): array
     {
@@ -10061,8 +10063,8 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
      */
     public function testCollectionPermissionsGetThrowsException(array $data): void
     {
@@ -10080,8 +10082,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsFindWorks(array $data): array
     {
@@ -10089,6 +10092,14 @@ abstract class Base extends TestCase
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+        $this->assertNotEmpty($documents);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
 
         $documents = static::getDatabase()->find(
             $collection->getId()
@@ -10115,9 +10126,10 @@ abstract class Base extends TestCase
         $this->assertEmpty($documents);
     }
 
-        /**
-     * @param array<Document> $data
+    /**
      * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsCountWorks(array $data): array
     {
@@ -10153,8 +10165,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsUpdateWorks(array $data): array
     {
@@ -10226,6 +10239,9 @@ abstract class Base extends TestCase
         ));
     }
 
+    /**
+     * @return array<Document>
+     */
     public function testCollectionPermissionsRelationships(): array
     {
         $collection = static::getDatabase()->createCollection('collectionSecurity.Parent', permissions: [
@@ -10299,8 +10315,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsRelationships
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsRelationshipsCreateWorks(array $data): array
     {
@@ -10351,8 +10368,8 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsRelationships
+     * @param array<Document> $data
      */
     public function testCollectionPermissionsRelationshipsCreateThrowsException(array $data): void
     {
@@ -10373,8 +10390,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsRelationshipsGetWorks(array $data): array
     {
@@ -10413,8 +10431,9 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @param array<Document> $data
      * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
      */
     public function testCollectionPermissionsRelationshipsUpdateWorks(array $data): array
     {

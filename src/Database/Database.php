@@ -97,7 +97,8 @@ class Database
     public const EVENT_DATABASE_DELETE = 'database_delete';
 
     public const EVENT_COLLECTION_LIST = 'collection_list';
-    public const EVENT_COLLECTION_CREATE = 'collection_delete';
+    public const EVENT_COLLECTION_CREATE = 'collection_create';
+    public const EVENT_COLLECTION_UPDATE = 'collection_update';
     public const EVENT_COLLECTION_READ = 'collection_read';
     public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
@@ -674,6 +675,38 @@ class Database
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
         return $createdCollection;
+    }
+
+    /**
+     * Update Collections Permissions.
+     *
+     * @param string $id
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
+     * @param array<string> $permissions
+     * @param bool $documentSecurity
+     *
+     * @return Document
+     * @throws DuplicateException
+     */
+    public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
+    {
+        $validator = new Permissions();
+        if (!$validator->isValid($permissions)) {
+            throw new InvalidArgumentException($validator->getDescription());
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($id));
+
+        $collection
+            ->setAttribute('$permissions', $permissions)
+            ->setAttribute('documentSecurity', $documentSecurity);
+
+        $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+
+        $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+
+        return $collection;
     }
 
     /**

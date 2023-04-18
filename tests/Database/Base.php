@@ -10221,7 +10221,7 @@ abstract class Base extends TestCase
         Authorization::setRole(Role::any()->toString());
 
         $this->expectException(AuthorizationException::class);
-        $document = static::getDatabase()->deleteDocument(
+        static::getDatabase()->deleteDocument(
             $collection->getId(),
             $document->getId()
         );
@@ -10254,7 +10254,7 @@ abstract class Base extends TestCase
             Permission::read(Role::users()),
             Permission::update(Role::users()),
             Permission::delete(Role::users())
-        ], documentSecurity: false);
+        ], documentSecurity: true);
 
         $this->assertInstanceOf(Document::class, $collection);
 
@@ -10271,7 +10271,7 @@ abstract class Base extends TestCase
             Permission::read(Role::users()),
             Permission::update(Role::users()),
             Permission::delete(Role::users())
-        ], documentSecurity: false);
+        ], documentSecurity: true);
 
         $this->assertInstanceOf(Document::class, $collectionOneToOne);
 
@@ -10296,7 +10296,7 @@ abstract class Base extends TestCase
             Permission::read(Role::users()),
             Permission::update(Role::users()),
             Permission::delete(Role::users())
-        ], documentSecurity: false);
+        ], documentSecurity: true);
 
         $this->assertInstanceOf(Document::class, $collectionOneToMany);
 
@@ -10359,7 +10359,7 @@ abstract class Base extends TestCase
                 ], [
                     '$id' => ID::unique(),
                     '$permissions' => [
-                        Permission::read(Role::user('random')),
+                        Permission::read(Role::user('torsten')),
                         Permission::update(Role::user('random')),
                         Permission::delete(Role::user('random'))
                     ],
@@ -10410,7 +10410,25 @@ abstract class Base extends TestCase
             $collection->getId(),
             $document->getId()
         );
+
         $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $document = static::getDatabase()->getDocument(
+            $collection->getId(),
+            $document->getId()
+        );
+
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
         $this->assertFalse($document->isEmpty());
 
         return $data;

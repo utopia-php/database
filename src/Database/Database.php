@@ -681,8 +681,6 @@ class Database
      * Update Collections Permissions.
      *
      * @param string $id
-     * @param array<Document> $attributes
-     * @param array<Document> $indexes
      * @param array<string> $permissions
      * @param bool $documentSecurity
      *
@@ -2145,22 +2143,22 @@ class Database
             $cacheKey .= ':*';
         }
 
-        if ($cache = $this->cache->load($cacheKey, self::TTL)) {
-            $document = new Document($cache);
+        // if ($cache = $this->cache->load($cacheKey, self::TTL)) {
+        //     $document = new Document($cache);
 
-            if ($collection->getId() !== self::METADATA) {
-                if (!$validator->isValid([
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
-                ])) {
-                    return new Document();
-                }
-            }
+        //     if ($collection->getId() !== self::METADATA) {
+        //         if (!$validator->isValid([
+        //             ...$collection->getRead(),
+        //             ...($documentSecurity ? $document->getRead() : [])
+        //         ])) {
+        //             return new Document();
+        //         }
+        //     }
 
-            $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+        //     $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
-            return $document;
-        }
+        //     return $document;
+        // }
 
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
         $document->setAttribute('$collection', $collection->getId());

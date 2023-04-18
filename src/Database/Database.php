@@ -3703,9 +3703,9 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = $this->resolveRelationships ? \array_filter($attributes, function (Document $attribute) {
-            return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
-        }) : [];
+        $relationships = $this->resolveRelationships
+            ? \array_filter($attributes, fn (Document $attribute) =>  $attribute->getAttribute('type') === self::VAR_RELATIONSHIP)
+            : [];
 
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
@@ -3866,10 +3866,18 @@ class Database
             throw new Exception("Collection not found");
         }
 
+        if ($collection->getAttribute('documentSecurity', true) === false) {
+            $authorization = new Authorization(self::PERMISSION_READ);
+            if ($authorization->isValid($collection->getRead())) {
+                $skipAuth = true;
+            }
+        }
+
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
-        $count = $this->adapter->count($collection->getId(), $queries, $max);
+        $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
+        $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
 

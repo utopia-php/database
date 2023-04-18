@@ -10115,6 +10115,43 @@ abstract class Base extends TestCase
         $this->assertEmpty($documents);
     }
 
+        /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
+    public function testCollectionPermissionsCountWorks(array $data): array
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $count = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertNotEmpty($count);
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
+    public function testCollectionPermissionsCountThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $count = static::getDatabase()->count(
+            $collection->getId()
+        );
+        $this->assertEmpty($count);
+    }
+
     /**
      * @param array<Document> $data
      * @depends testCollectionPermissionsCreateWorks

@@ -1015,7 +1015,11 @@ abstract class Base extends TestCase
 
     public function testFind(): void
     {
-        static::getDatabase()->createCollection('movies');
+        Authorization::setRole(Role::any()->toString());
+        static::getDatabase()->createCollection('movies', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ], documentSecurity: true);
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
@@ -2668,11 +2672,12 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testWritePermissionsSuccess(Document $document): Document
+    public function testWritePermissionsSuccess(Document $document): void
     {
         Authorization::cleanRoles();
 
-        $document = static::getDatabase()->createDocument('documents', new Document([
+        $this->expectException(AuthorizationException::class);
+        static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2686,12 +2691,6 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
-
-        $this->assertEquals(false, $document->isEmpty());
-
-        Authorization::setRole(Role::any()->toString());
-
-        return $document;
     }
 
     /**
@@ -3010,6 +3009,7 @@ abstract class Base extends TestCase
      */
     public function testUniqueIndexDuplicateUpdate(): void
     {
+        Authorization::setRole(Role::users()->toString());
         // create document then update to conflict with index
         $document = static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
@@ -3665,9 +3665,12 @@ abstract class Base extends TestCase
 
     public function testWritePermissions(): void
     {
+        Authorization::setRole(Role::any()->toString());
         $database = static::getDatabase();
 
-        $database->createCollection('animals');
+        $database->createCollection('animals', permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true);
 
         $database->createAttribute('animals', 'type', Database::VAR_STRING, 128, true);
 
@@ -9017,9 +9020,9 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection('lawns');
-        static::getDatabase()->createCollection('trees');
-        static::getDatabase()->createCollection('birds');
+        static::getDatabase()->createCollection('lawns', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        static::getDatabase()->createCollection('trees', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        static::getDatabase()->createCollection('birds', permissions: [Permission::create(Role::any())], documentSecurity: true);
 
         static::getDatabase()->createAttribute('lawns', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('trees', 'name', Database::VAR_STRING, 255, true);
@@ -9092,7 +9095,8 @@ abstract class Base extends TestCase
             $this->expectNotToPerformAssertions();
             return;
         }
-
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
         $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 

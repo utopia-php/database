@@ -2116,7 +2116,10 @@ class Database
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
-                if (!$validator->isValid($collection->getRead()) || ($documentSecurity && !$validator->isValid($document->getRead()))) {
+                if (!$validator->isValid([
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $document->getRead() : [])
+                ])) {
                     return new Document();
                 }
             }
@@ -2134,7 +2137,10 @@ class Database
         }
 
         if ($collection->getId() !== self::METADATA) {
-            if (!$validator->isValid($collection->getRead()) || ($documentSecurity && !$validator->isValid($document->getRead()))) {
+            if (!$validator->isValid([
+                ...$collection->getRead(),
+                ...($documentSecurity ? $document->getRead() : [])
+            ])) {
                 return new Document();
             }
         }
@@ -2764,7 +2770,11 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid($collection->getUpdate()) || ($documentSecurity && !$validator->isValid($old->getUpdate()))) {
+
+            if (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $old->getUpdate() : [])
+            ])) {
                 throw new AuthorizationException($validator->getDescription());
             }
         }
@@ -3296,7 +3306,10 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid($collection->getDelete()) || ($documentSecurity && !$validator->isValid($document->getDelete()))) {
+            if (!$validator->isValid([
+                ...$collection->getDelete(),
+                ...($documentSecurity ? $document->getDelete() : [])
+            ])) {
                 throw new AuthorizationException($validator->getDescription());
             }
         }

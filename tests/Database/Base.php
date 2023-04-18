@@ -10453,6 +10453,58 @@ abstract class Base extends TestCase
         $this->assertTrue($document->isEmpty());
     }
 
+        /**
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsRelationshipsFindWorks(array $data)
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+
+        $this->assertIsArray($documents);
+        $this->assertCount(1, $documents);
+        $document = $documents[0];
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+
+        $this->assertIsArray($documents);
+        $this->assertCount(1, $documents);
+        $document = $documents[0];
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('unknown')->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+
+        $this->assertIsArray($documents);
+        $this->assertCount(0, $documents);
+    }
+
     /**
      * @depends testCollectionPermissionsRelationshipsCreateWorks
      * @param array<Document> $data

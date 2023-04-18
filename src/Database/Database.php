@@ -3905,11 +3905,9 @@ class Database
             throw new Exception("Collection not found");
         }
 
-        if ($collection->getAttribute('documentSecurity', true) === false) {
-            $authorization = new Authorization(self::PERMISSION_READ);
-            if ($authorization->isValid($collection->getRead())) {
-                $skipAuth = true;
-            }
+        $authorization = new Authorization(self::PERMISSION_READ);
+        if ($authorization->isValid($collection->getRead())) {
+            $skipAuth = true;
         }
 
         $queries = Query::groupByType($queries)['filters'];

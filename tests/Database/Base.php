@@ -10034,7 +10034,8 @@ abstract class Base extends TestCase
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
             ],
             'test' => 'lorem ipsum'
         ]));

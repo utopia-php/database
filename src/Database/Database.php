@@ -374,7 +374,6 @@ class Database
      * Silent event generation for all the calls inside the callback
      *
      * @template T
-     * @param ?\DateTime $requestTimestamp
      * @param callable(): T $callback
      * @return T
      */
@@ -394,7 +393,6 @@ class Database
      * Skip relationships for all the calls inside the callback
      *
      * @template T
-     * @param ?\DateTime $requestTimestamp
      * @param callable(): T $callback
      * @return T
      */

@@ -10401,7 +10401,7 @@ abstract class Base extends TestCase
      */
     public function testCollectionPermissionsRelationshipsGetWorks(array $data): array
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        [$collection, $document] = $data;
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
@@ -10440,7 +10440,7 @@ abstract class Base extends TestCase
      */
     public function testCollectionPermissionsRelationshipsGetThrowsException(array $data): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        [$collection, $document] = $data;
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());

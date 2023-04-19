@@ -616,10 +616,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
         $permissions ??= [
-            Permission::read(Role::any()),
             Permission::create(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any()),
         ];
 
         $validator = new Permissions();

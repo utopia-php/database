@@ -10401,7 +10401,7 @@ abstract class Base extends TestCase
      */
     public function testCollectionPermissionsRelationshipsGetWorks(array $data): array
     {
-        [$collection, $document] = $data;
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
@@ -10440,7 +10440,7 @@ abstract class Base extends TestCase
      */
     public function testCollectionPermissionsRelationshipsGetThrowsException(array $data): void
     {
-        [$collection, $document] = $data;
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
@@ -10517,11 +10517,30 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
 
-        $this->assertInstanceOf(Document::class, static::getDatabase()->updateDocument(
+        $document = static::getDatabase()->updateDocument(
+            $collection->getId(),
+            $document->getId(),
+            $document
+        );
+
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $document = static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
             $document->setAttribute('test', 'ipsum')
-        ));
+        );
+
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
 
         return $data;
     }

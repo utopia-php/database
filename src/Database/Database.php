@@ -2827,10 +2827,14 @@ class Database
 
         $this->adapter->updateDocument($collection->getId(), $document);
 
+        if ($this->resolveRelationships) {
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+        }
+
+        $document = $this->decode($collection, $document);
+
         $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
-
-        $document = $this->silent(fn() => $this->getDocument($collection->getId(), $document->getId()));
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 

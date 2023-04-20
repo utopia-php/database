@@ -10453,12 +10453,11 @@ abstract class Base extends TestCase
         $this->assertTrue($document->isEmpty());
     }
 
-        /**
+    /**
      * @depends testCollectionPermissionsRelationshipsCreateWorks
      * @param array<Document> $data
-     * @return array<Document>
      */
-    public function testCollectionPermissionsRelationshipsFindWorks(array $data)
+    public function testCollectionPermissionsRelationshipsFindWorks(array $data): void
     {
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 

@@ -2825,16 +2825,19 @@ class Database
             $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
         }
 
-        $document = $this->adapter->updateDocument($collection->getId(), $document);
+        $this->adapter->updateDocument($collection->getId(), $document);
 
-        if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-        }
+        // TODO: `updateDocumentRelationships` removes the attributes, and for 1-1 relations, it also removes the id that is needed for 1-1 relationships
+        // if ($this->resolveRelationships) {
+        //     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+        // }
 
-        $document = $this->decode($collection, $document);
+        // $document = $this->decode($collection, $document);
 
         $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $document = $this->silent(fn () => $this->getDocument($collection->getId(), $document->getId()));
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 

@@ -3528,8 +3528,7 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(fn () =>
-                    $this->deleteDocument(
+                    $this->skipRelationships(fn () => $this->deleteDocument(
                         $junction,
                         $document->getId()
                     ));
@@ -3555,8 +3554,7 @@ class Database
                     break;
                 }
                 foreach ($value as $relation) {
-                    $this->skipRelationships(fn () =>
-                    $this->deleteDocument(
+                    $this->skipRelationships(fn () => $this->deleteDocument(
                         $relatedCollection->getId(),
                         $relation->getId()
                     ));
@@ -3573,8 +3571,7 @@ class Database
                 ]);
 
                 foreach ($value as $relation) {
-                    $this->skipRelationships(fn () =>
-                    $this->deleteDocument(
+                    $this->skipRelationships(fn () => $this->deleteDocument(
                         $relatedCollection->getId(),
                         $relation->getId()
                     ));

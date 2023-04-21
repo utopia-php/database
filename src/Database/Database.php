@@ -2307,15 +2307,12 @@ class Database
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
-                    if (\is_null($value)) {
+                    if ($skipFetch || $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
+                        $document->removeAttribute($key);
                         break;
                     }
 
-                    if ($skipFetch) {
-                        $document->removeAttribute($key);
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if (\is_null($value)) {
                         break;
                     }
 

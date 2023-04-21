@@ -3541,7 +3541,7 @@ class Database
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
-                if ($document !== null) {
+                if ($value !== null) {
                     $this->skipRelationships(fn () =>
                     $this->deleteDocument(
                         $relatedCollection->getId(),

@@ -3541,11 +3541,13 @@ class Database
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
-                $this->skipRelationships(fn () =>
-                $this->deleteDocument(
-                    $relatedCollection->getId(),
-                    $value->getId()
-                ));
+                if ($document !== null) {
+                    $this->skipRelationships(fn () =>
+                    $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $value->getId()
+                    ));
+                }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {

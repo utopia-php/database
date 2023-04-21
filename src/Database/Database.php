@@ -2140,6 +2140,7 @@ class Database
             $cacheKey .= ':*';
         }
 
+        //TODO: fix cache with relationships
         // if ($cache = $this->cache->load($cacheKey, self::TTL)) {
         //     $document = new Document($cache);
 

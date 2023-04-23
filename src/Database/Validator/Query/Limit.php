@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Query;
+use Utopia\Validator\Numeric;
 use Utopia\Validator\Range;
 
 class Limit extends Base
@@ -19,38 +20,38 @@ class Limit extends Base
         $this->maxLimit = $maxLimit;
     }
 
-    protected function isValidLimit($limit): bool
-    {
-        $validator = new Range(0, $this->maxLimit);
-        if ($validator->isValid($limit)) {
-            return true;
-        }
-
-        $this->message = 'Invalid limit: ' . $validator->getDescription();
-        return false;
-    }
-
     /**
      * Is valid.
      *
      * Returns true if method is limit values are within range.
      *
      * @param Query $value
-     *
      * @return bool
      */
-    public function isValid($query): bool
+    public function isValid($value): bool
     {
-        // Validate method
-        $method = $query->getMethod();
+        $method = $value->getMethod();
 
         if ($method !== Query::TYPE_LIMIT) {
             $this->message = 'Query method invalid: ' . $method;
             return false;
         }
 
-        $limit = $query->getValue();
-        return $this->isValidLimit($limit);
+        $limit = $value->getValue();
+
+        $validator = new Numeric();
+        if (!$validator->isValid($limit)) {
+            $this->message = 'Invalid limit: ' . $validator->getDescription();
+            return false;
+        }
+
+        $validator = new Range(1, $this->maxLimit);
+        if (!$validator->isValid($limit)) {
+            $this->message = 'Invalid limit: ' . $validator->getDescription();
+            return false;
+        }
+
+        return true;
     }
 
     public function getMethodType(): string

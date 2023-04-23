@@ -107,7 +107,6 @@ class Filter extends Base
      */
     public function isValid($query): bool
     {
-        // Validate method
         $method = $query->getMethod();
         $attribute = $query->getAttribute();
 
@@ -124,6 +123,7 @@ class Filter extends Base
             case Query::TYPE_BETWEEN:
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
+            case Query::TYPE_CONTAINS: // todo: What to do about unsupported operators?
                 $values = $query->getValues();
                 return $this->isValidAttributeAndValues($attribute, $values);
 

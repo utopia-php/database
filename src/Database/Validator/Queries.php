@@ -41,22 +41,21 @@ class Queries extends Validator
     }
 
     /**
-     * Is valid.
-     *
-     * Returns false if:
-     * 1. any query in $value is invalid based on $validator
-     *
-     * Otherwise, returns true.
-     *
-     * @param mixed $value
+     * @param array $value
      * @return bool
      */
     public function isValid($value): bool
     {
+        if(!is_array($value)){
+            $this->message = "Queries must be an array";
+            return false;
+        }
+
         foreach ($value as $query) {
             if (!$query instanceof Query) {
                 try {
                     $query = Query::parse($query);
+
                 } catch (\Throwable) {
                     $this->message = "Invalid query: {$query}";
                     return false;
@@ -83,30 +82,29 @@ class Queries extends Validator
                 Query::TYPE_IS_NOT_NULL,
                 Query::TYPE_BETWEEN,
                 Query::TYPE_STARTS_WITH,
+                Query::TYPE_CONTAINS,
                 Query::TYPE_ENDS_WITH => Base::METHOD_TYPE_FILTER,
                 default => '',
             };
 
-            $methodIsValid = false;
             foreach ($this->validators as $validator) {
                 if ($validator->getMethodType() !== $methodType) {
                     continue;
                 }
+
                 if (!$validator->isValid($query)) {
                     $this->message = 'Query not valid: ' . $validator->getDescription();
                     return false;
                 }
 
-                $methodIsValid = true;
+                return true;
             }
 
-            if (!$methodIsValid) {
-                $this->message = 'Query method not valid: ' . $method;
-                return false;
-            }
+            $this->message = 'Query method invalid: ' . $method;
+            return false;
         }
 
-        return true;
+        return false;
     }
 
     /**

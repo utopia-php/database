@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Exception;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
@@ -17,7 +18,7 @@ class Document extends IndexedQueries
      * Expression constructor
      *
      * @param UtopiaDocument[] $attributes
-     * @throws \Exception
+     * @throws Exception
      */
     public function __construct(array $attributes, array $indexes)
     {
@@ -40,7 +41,7 @@ class Document extends IndexedQueries
         $validators = [
             new Limit(),
             new Offset(),
-            new Cursor(),
+            new Cursor(), // I think this should be checks against $attributes?
             new Filter($attributes),
             new Order($attributes),
             new Select($attributes),

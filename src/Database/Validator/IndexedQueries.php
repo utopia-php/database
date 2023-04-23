@@ -57,24 +57,15 @@ class IndexedQueries extends Queries
     }
 
     /**
-     * Is valid.
-     *
-     * Returns false if:
-     * 1. any query in $value is invalid based on $validator
-     * 2. there is no index with an exact match of the filters
-     * 3. there is no index with an exact match of the order attributes
-     *
-     * Otherwise, returns true.
-     *
      * @param mixed $value
      * @return bool
+     * @throws Exception
      */
     public function isValid($value): bool
     {
         if (!parent::isValid($value)) {
             return false;
         }
-
         $queries = [];
         foreach ($value as $query) {
             if (!$query instanceof Query) {

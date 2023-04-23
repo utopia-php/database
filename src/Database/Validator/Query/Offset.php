@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Query;
+use Utopia\Validator\Numeric;
 use Utopia\Validator\Range;
 
 class Offset extends Base
@@ -17,38 +18,34 @@ class Offset extends Base
         $this->maxOffset = $maxOffset;
     }
 
-    protected function isValidOffset($offset): bool
-    {
-        $validator = new Range(0, $this->maxOffset);
-        if ($validator->isValid($offset)) {
-            return true;
-        }
-
-        $this->message = 'Invalid offset: ' . $validator->getDescription();
-        return false;
-    }
-
     /**
-     * Is valid.
-     *
-     * Returns true if method is offset and values are within range.
-     *
      * @param Query $value
-     *
      * @return bool
      */
-    public function isValid($query): bool
+    public function isValid($value): bool
     {
-        // Validate method
-        $method = $query->getMethod();
+        $method = $value->getMethod();
 
         if ($method !== Query::TYPE_OFFSET) {
             $this->message = 'Query method invalid: ' . $method;
             return false;
         }
 
-        $offset = $query->getValue();
-        return $this->isValidOffset($offset);
+        $offset = $value->getValue();
+
+        $validator = new Numeric();
+        if (!$validator->isValid($offset)) {
+            $this->message = 'Invalid limit: ' . $validator->getDescription();
+            return false;
+        }
+
+        $validator = new Range(0, $this->maxOffset);
+        if (!$validator->isValid($offset)) {
+            $this->message = 'Invalid offset: ' . $validator->getDescription();
+            return false;
+        }
+
+        return true;
     }
 
     public function getMethodType(): string

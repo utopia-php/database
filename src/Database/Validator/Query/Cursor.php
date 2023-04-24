@@ -26,7 +26,7 @@ class Cursor extends Base
         if ($method === Query::TYPE_CURSORAFTER || $method === Query::TYPE_CURSORBEFORE) {
             $cursor = $value->getValue();
 
-            if($cursor instanceof Document){
+            if ($cursor instanceof Document) {
                 $cursor = $cursor->getId();
             }
 

@@ -2,14 +2,18 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 
 class Order extends Base
 {
+    /**
+     * @var array<int|string, mixed>
+     */
     protected array $schema = [];
 
     /**
-     * Query constructor
+     * @param array<Document> $attributes
      */
     public function __construct(array $attributes = [])
     {
@@ -18,7 +22,11 @@ class Order extends Base
         }
     }
 
-    protected function isValidAttribute($attribute): bool
+    /**
+     * @param string $attribute
+     * @return bool
+     */
+    protected function isValidAttribute(string $attribute): bool
     {
         // Search for attribute in schema
         if (!isset($this->schema[$attribute])) {
@@ -36,8 +44,7 @@ class Order extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $value
-     *
+     * @param Query $query
      * @return bool
      */
     public function isValid($query): bool

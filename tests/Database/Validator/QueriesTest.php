@@ -159,8 +159,5 @@ class QueriesTest extends TestCase
         $queries = ['equal("title", [])']; // empty array
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Query not valid: equal queries require at least one value.', $validator->getDescription());
-
     }
-
-
 }

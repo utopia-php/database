@@ -49,7 +49,7 @@ class IndexedQueries extends Queries
             'attributes' => ['$updatedAt']
         ]);
 
-        foreach ($indexes ?? [] as $index) {
+        foreach ($indexes as $index) {
             $this->indexes[] = $index;
         }
 

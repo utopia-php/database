@@ -3,17 +3,22 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 
 class Filter extends Base
 {
     protected string $message = 'Invalid query';
+
+    /**
+     * @var array<int|string, mixed>
+     */
     protected array $schema = [];
+
     private int $maxValuesCount;
 
     /**
-     * Query constructor
-     *
+     * @param array<Document> $attributes
      * @param int $maxValuesCount
      */
     public function __construct(array $attributes = [], int $maxValuesCount = 100)
@@ -25,7 +30,11 @@ class Filter extends Base
         $this->maxValuesCount = $maxValuesCount;
     }
 
-    protected function isValidAttribute($attribute): bool
+    /**
+     * @param string $attribute
+     * @return bool
+     */
+    protected function isValidAttribute(string $attribute): bool
     {
         if (\str_contains($attribute, '.')) {
             // For relationships, just validate the top level.
@@ -49,6 +58,11 @@ class Filter extends Base
         return true;
     }
 
+    /**
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return bool
+     */
     protected function isValidAttributeAndValues(string $attribute, array $values): bool
     {
         if (!$this->isValidAttribute($attribute)) {
@@ -115,7 +129,7 @@ class Filter extends Base
             case Query::TYPE_BETWEEN:
             case Query::TYPE_CONTAINS: // todo: What to do about unsupported operators?
                 $values = $query->getValues();
-                if(empty($values) || (isset($values[0]) && empty($values[0]))){
+                if (empty($values) || (isset($values[0]) && empty($values[0]))) {
                     $this->message = $method . ' queries require at least one value.';
                     return false;
                 }

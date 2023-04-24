@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Document;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Validator;
 use Utopia\Database\Query;
@@ -41,12 +42,12 @@ class Queries extends Validator
     }
 
     /**
-     * @param array $value
+     * @param mixed $value
      * @return bool
      */
     public function isValid($value): bool
     {
-        if(!is_array($value)){
+        if (!is_array($value)) {
             $this->message = "Queries must be an array";
             return false;
         }
@@ -55,7 +56,6 @@ class Queries extends Validator
             if (!$query instanceof Query) {
                 try {
                     $query = Query::parse($query);
-
                 } catch (\Throwable) {
                     $this->message = "Invalid query: {$query}";
                     return false;

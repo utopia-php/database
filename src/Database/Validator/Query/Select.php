@@ -2,15 +2,18 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 
 class Select extends Base
 {
+    /**
+     * @var array<int|string, mixed>
+     */
     protected array $schema = [];
 
     /**
-     * Query constructor
-     *
+     * @param array<Document> $attributes
      */
     public function __construct(array $attributes = [])
     {

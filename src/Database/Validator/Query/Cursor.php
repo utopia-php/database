@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\UID;
 
@@ -18,13 +19,17 @@ class Cursor extends Base
      *
      * @return bool
      */
-    public function isValid($query): bool
+    public function isValid($value): bool
     {
-        // Validate method
-        $method = $query->getMethod();
+        $method = $value->getMethod();
 
         if ($method === Query::TYPE_CURSORAFTER || $method === Query::TYPE_CURSORBEFORE) {
-            $cursor = $query->getValue();
+            $cursor = $value->getValue();
+
+            if($cursor instanceof Document){
+                $cursor = $cursor->getId();
+            }
+
             $validator = new UID();
             if ($validator->isValid($cursor)) {
                 return true;

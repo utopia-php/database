@@ -6,9 +6,6 @@ use Utopia\Database\Query;
 
 class Order extends Base
 {
-    /**
-     * @var array
-     */
     protected array $schema = [];
 
     /**

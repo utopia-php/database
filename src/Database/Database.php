@@ -15,6 +15,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Document as DocumentValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Structure;
 
@@ -3557,6 +3558,13 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+//        $validator = new DocumentValidator($attributes, $indexes);
+//        if(!$validator->isValid($queries)){
+//            throw new Exception($validator->getDescription());
+//        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -3643,8 +3651,6 @@ class Database
             $cursorDirection ?? Database::CURSOR_AFTER,
             $timeout
         );
-
-        $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = $this->resolveRelationships ? \array_filter($attributes, function (Document $attribute) {
             return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;

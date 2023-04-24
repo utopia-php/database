@@ -18,6 +18,7 @@ class Document extends IndexedQueries
      * Expression constructor
      *
      * @param UtopiaDocument[] $attributes
+     * @param UtopiaDocument[] $indexes
      * @throws Exception
      */
     public function __construct(array $attributes, array $indexes)

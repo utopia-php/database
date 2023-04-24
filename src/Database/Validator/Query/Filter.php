@@ -7,16 +7,8 @@ use Utopia\Database\Query;
 
 class Filter extends Base
 {
-    /**
-     * @var string
-     */
     protected string $message = 'Invalid query';
-
-    /**
-     * @var array
-     */
-    protected $schema = [];
-
+    protected array $schema = [];
     private int $maxValuesCount;
 
     /**
@@ -40,11 +32,12 @@ class Filter extends Base
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
 
-            // TODO: Remove this when nested queries are supported
-            if (isset($this->schema[$attribute])) {
-                $this->message = 'Cannot query nested attribute on: ' . $attribute;
-                return false;
-            }
+            // TODO: This must be taken care of in appwrite now...
+
+//            if (isset($this->schema[$attribute])) {
+//                $this->message = 'Cannot query nested attribute on: ' . $attribute;
+//                return false;
+//            }
         }
 
         // Search for attribute in schema
@@ -109,7 +102,6 @@ class Filter extends Base
     {
         $method = $query->getMethod();
         $attribute = $query->getAttribute();
-
         switch ($method) {
             case Query::TYPE_EQUAL:
             case Query::TYPE_NOTEQUAL:
@@ -121,11 +113,18 @@ class Filter extends Base
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_BETWEEN:
-            case Query::TYPE_IS_NULL:
-            case Query::TYPE_IS_NOT_NULL:
             case Query::TYPE_CONTAINS: // todo: What to do about unsupported operators?
                 $values = $query->getValues();
+                if(empty($values) || (isset($values[0]) && empty($values[0]))){
+                    $this->message = $method . ' queries require at least one value.';
+                    return false;
+                }
+
                 return $this->isValidAttributeAndValues($attribute, $values);
+
+            case Query::TYPE_IS_NULL:
+            case Query::TYPE_IS_NOT_NULL:
+                return $this->isValidAttributeAndValues($attribute, $query->getValues());
 
             default:
                 return false;

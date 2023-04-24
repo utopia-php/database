@@ -138,7 +138,7 @@ class QueryTest extends TestCase
         $validator = new \Utopia\Database\Validator\Document($this->attributes, []);
 
         $this->assertEquals(false, $validator->isValid([Query::parse('eqqual("title", "Iron Man")')]));
-        $this->assertEquals('Query method invalid: eqqual', $validator->getDescription());
+        $this->assertEquals('Query method not valid: eqqual', $validator->getDescription());
     }
 
     public function testAttributeNotFound(): void

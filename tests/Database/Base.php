@@ -10048,6 +10048,89 @@ abstract class Base extends TestCase
             $database->delete('hellodb');
         });
     }
+//
+//    public function testEmptyOperatorValues(): void
+//    {
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::equal('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: equal queries require at least one value.', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::search('string', null),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: Query type does not match expected: string', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::notEqual('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: notEqual queries require at least one value.', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::lessThan('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: lessThan queries require at least one value.', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::lessThanEqual('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: lessThanEqual queries require at least one value.', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::greaterThan('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: greaterThan queries require at least one value.', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::greaterThanEqual('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: greaterThanEqual queries require at least one value.', $e->getMessage());
+//        }
+//
+//        try {
+//            static::getDatabase()->findOne('documents', [
+//                Query::contains('string', []),
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch (Exception $e) {
+//            $this->assertInstanceOf(Exception::class, $e);
+//            $this->assertEquals('Query not valid: contains queries require at least one value.', $e->getMessage());
+//        }
+//    }
 
     public function testLast(): void
     {

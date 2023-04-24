@@ -156,9 +156,9 @@ class QueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Query not valid: Invalid limit: Value must be a valid range between 1 and 9,223,372,036,854,775,808', $validator->getDescription());
 
-//        $queries = ['equal("title", [])']; // empty array
-//        $this->assertEquals(false, $validator->isValid($queries));
-//        $this->assertEquals('We want  this to fail!', $validator->getDescription());
+        $queries = ['equal("title", [])']; // empty array
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Query not valid: equal queries require at least one value.', $validator->getDescription());
 
     }
 

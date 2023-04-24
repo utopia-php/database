@@ -87,24 +87,26 @@ class Queries extends Validator
                 default => '',
             };
 
+            $methodIsValid = false;
             foreach ($this->validators as $validator) {
                 if ($validator->getMethodType() !== $methodType) {
                     continue;
                 }
-
                 if (!$validator->isValid($query)) {
                     $this->message = 'Query not valid: ' . $validator->getDescription();
                     return false;
                 }
 
-                return true;
+                $methodIsValid = true;
             }
 
-            $this->message = 'Query method invalid: ' . $method;
-            return false;
+            if (!$methodIsValid) {
+                $this->message = 'Query method not valid: ' . $method;
+                return false;
+            }
         }
 
-        return false;
+        return true;
     }
 
     /**

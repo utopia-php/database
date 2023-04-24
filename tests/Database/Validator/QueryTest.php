@@ -107,12 +107,14 @@ class QueryTest extends TestCase
         $validator = new \Utopia\Database\Validator\Document($this->attributes, []);
 
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", ["Iron Man", "Ant Man"])')]));
+        $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", "Iron Man")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("description", "Best movie ever")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('greaterThan("rating", 4)')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('lessThan("price", 6.50)')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('lessThanEqual("price", 6)')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('contains("tags", "action")')]));
+        $this->assertEquals(true, $validator->isValid([Query::parse('contains("tags", ["action1", "action2"])')]));
+        $this->assertEquals(true, $validator->isValid([Query::parse('contains("tags", "action1")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('cursorAfter("docId")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('cursorBefore("docId")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('orderAsc("title")')]));
@@ -158,16 +160,6 @@ class QueryTest extends TestCase
         $this->assertEquals(false, $response);
         $this->assertEquals('Query not valid: Query type does not match expected: string', $validator->getDescription());
     }
-
-//    public function testMethodWrongType(): void
-//    {
-//        $validator = new \Utopia\Database\Validator\Document($this->attributes, []);
-//
-//        $response = $validator->isValid([Query::parse('contains("title", "Iron")')]);
-//
-//        $this->assertEquals(false, $response);
-//        $this->assertEquals('Query method only supported on array attributes: contains', $validator->getDescription());
-//    }
 
     public function testQueryDate(): void
     {

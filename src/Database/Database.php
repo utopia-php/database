@@ -2369,7 +2369,12 @@ class Database
                     break;
                 case Database::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {
-                        if (\is_null($value) || $skipFetch) {
+                        if ($skipFetch || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
+                            $document->removeAttribute($key);
+                            break;
+                        }
+
+                        if (\is_null($value)) {
                             break;
                         }
                         $this->relationshipFetchDepth++;

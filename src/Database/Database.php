@@ -3213,11 +3213,15 @@ class Database
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if (
-            $collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getUpdate())
-        ) {
-            throw new AuthorizationException($validator->getDescription());
+
+        if ($collection->getId() !== self::METADATA) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            if (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $document->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
@@ -3276,11 +3280,15 @@ class Database
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if (
-            $collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getUpdate())
-        ) {
-            throw new AuthorizationException($validator->getDescription());
+
+        if ($collection->getId() !== self::METADATA) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            if (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $document->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
@@ -3646,9 +3654,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $authorization = new Authorization(self::PERMISSION_READ);
-        if ($authorization->isValid($collection->getRead())) {
-            $skipAuth = true;
-        }
+        $skipAuth = $authorization->isValid($collection->getRead());
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -3735,7 +3741,7 @@ class Database
             $timeout
         );
 
-        $results = $skipAuth ?? false ? Authorization::skip($getResults) : $getResults();
+        $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         $attributes = $collection->getAttribute('attributes', []);
 

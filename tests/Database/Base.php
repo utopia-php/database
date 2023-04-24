@@ -10507,6 +10507,42 @@ abstract class Base extends TestCase
     /**
      * @depends testCollectionPermissionsRelationshipsCreateWorks
      * @param array<Document> $data
+     */
+    public function testCollectionPermissionsRelationshipsCountWorks(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertEquals(1, $documents);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $documents = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertEquals(1, $documents);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('unknown')->toString());
+
+        $documents = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertEquals(0, $documents);
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
      * @return array<Document>
      */
     public function testCollectionPermissionsRelationshipsUpdateWorks(array $data): array

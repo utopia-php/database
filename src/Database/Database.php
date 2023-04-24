@@ -2328,10 +2328,11 @@ class Database
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!$twoWay) {
+                        if (!$twoWay || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                             $document->removeAttribute($key);
+                            break;
                         }
-                        if ($twoWay && !\is_null($value) && !$skipFetch) {
+                        if (!\is_null($value)) {
                             $this->relationshipFetchDepth++;
                             $this->relationshipFetchMap[] = $relationship;
 
@@ -2345,7 +2346,7 @@ class Database
                         break;
                     }
 
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                         break;
                     }
 

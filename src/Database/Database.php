@@ -2086,8 +2086,7 @@ class Database
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn (Document $attribute) =>
-            $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
         $selects = Query::groupByType($queries)['selections'];
@@ -2140,23 +2139,22 @@ class Database
             $cacheKey .= ':*';
         }
 
-        //TODO: fix cache with relationships
-        // if ($cache = $this->cache->load($cacheKey, self::TTL)) {
-        //     $document = new Document($cache);
+        if ($cache = $this->cache->load($cacheKey, self::TTL)) {
+            $document = new Document($cache);
 
-        //     if ($collection->getId() !== self::METADATA) {
-        //         if (!$validator->isValid([
-        //             ...$collection->getRead(),
-        //             ...($documentSecurity ? $document->getRead() : [])
-        //         ])) {
-        //             return new Document();
-        //         }
-        //     }
+            if ($collection->getId() !== self::METADATA) {
+                if (!$validator->isValid([
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $document->getRead() : [])
+                ])) {
+                    return new Document();
+                }
+            }
 
-        //     $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+            $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
-        //     return $document;
-        // }
+            return $document;
+        }
 
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
         $document->setAttribute('$collection', $collection->getId());
@@ -2214,8 +2212,8 @@ class Database
             }
         }
 
-        // Don't save to cache if there is a two-way relationship
-        if (!$hasTwoWayRelationship) {
+        // Don't save to cache if it's part of a two-way relationship or a relationship at all
+        if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($cacheKey, $document->getArrayCopy());
         }
 

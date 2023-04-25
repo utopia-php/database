@@ -9971,6 +9971,49 @@ abstract class Base extends TestCase
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection8')[0]->getId());
     }
 
+    public function testCollectionUpdate(): Document
+    {
+        $collection = static::getDatabase()->createCollection('collectionSecurity', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users())
+        ], documentSecurity: false);
+
+        $this->assertInstanceOf(Document::class, $collection);
+
+        $collection = static::getDatabase()->getCollection('collectionSecurity');
+
+        $this->assertFalse($collection->getAttribute('documentSecurity'));
+        $this->assertIsArray($collection->getPermissions());
+        $this->assertCount(4, $collection->getPermissions());
+
+        $collection = static::getDatabase()->updateCollection('collectionSecurity', [], true);
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+        $this->assertIsArray($collection->getPermissions());
+        $this->assertEmpty($collection->getPermissions());
+
+        $collection = static::getDatabase()->getCollection('collectionSecurity');
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+        $this->assertIsArray($collection->getPermissions());
+        $this->assertEmpty($collection->getPermissions());
+
+        return $collection;
+    }
+
+    /**
+     * @depends testCollectionUpdate
+     */
+    public function testCollectionUpdatePermissionsThrowException(Document $collection): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        static::getDatabase()->updateCollection($collection->getId(), permissions: [
+            'i dont work'
+        ], documentSecurity: false);
+    }
+
     public function testCollectionPermissions(): Document
     {
         $collection = static::getDatabase()->createCollection('collectionSecurity', permissions: [

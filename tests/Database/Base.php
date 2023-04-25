@@ -9973,7 +9973,7 @@ abstract class Base extends TestCase
 
     public function testCollectionUpdate(): Document
     {
-        $collection = static::getDatabase()->createCollection('collectionSecurity', permissions: [
+        $collection = static::getDatabase()->createCollection('collectionUpdate', permissions: [
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
@@ -9982,19 +9982,19 @@ abstract class Base extends TestCase
 
         $this->assertInstanceOf(Document::class, $collection);
 
-        $collection = static::getDatabase()->getCollection('collectionSecurity');
+        $collection = static::getDatabase()->getCollection('collectionUpdate');
 
         $this->assertFalse($collection->getAttribute('documentSecurity'));
         $this->assertIsArray($collection->getPermissions());
         $this->assertCount(4, $collection->getPermissions());
 
-        $collection = static::getDatabase()->updateCollection('collectionSecurity', [], true);
+        $collection = static::getDatabase()->updateCollection('collectionUpdate', [], true);
 
         $this->assertTrue($collection->getAttribute('documentSecurity'));
         $this->assertIsArray($collection->getPermissions());
         $this->assertEmpty($collection->getPermissions());
 
-        $collection = static::getDatabase()->getCollection('collectionSecurity');
+        $collection = static::getDatabase()->getCollection('collectionUpdate');
 
         $this->assertTrue($collection->getAttribute('documentSecurity'));
         $this->assertIsArray($collection->getPermissions());

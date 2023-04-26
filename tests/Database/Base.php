@@ -9245,51 +9245,56 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $bird3->isEmpty());
     }
 
-    public function testExceedMaxDepth(): void
+    public function testExceedMaxDepthOneToMany(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('level1');
-        static::getDatabase()->createCollection('level2');
-        static::getDatabase()->createCollection('level3');
-        static::getDatabase()->createCollection('level4');
+        $level1Collection = 'level1OneToMany';
+        $level2Collection = 'level2OneToMany';
+        $level3Collection = 'level3OneToMany';
+        $level4Collection = 'level4OneToMany';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
 
         static::getDatabase()->createRelationship(
-            collection: 'level1',
-            relatedCollection: 'level2',
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
         );
         static::getDatabase()->createRelationship(
-            collection: 'level2',
-            relatedCollection: 'level3',
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
         );
         static::getDatabase()->createRelationship(
-            collection: 'level3',
-            relatedCollection: 'level4',
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
         );
 
         // Exceed create depth
-        $level1 = static::getDatabase()->createDocument('level1', new Document([
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
             '$id' => 'level1',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ],
-            'level2' => [
+            $level2Collection => [
                 [
                     '$id' => 'level2',
-                    'level3' => [
+                    $level3Collection => [
                         [
                             '$id' => 'level3',
-                            'level4' => [
+                            $level4Collection => [
                                 [
                                     '$id' => 'level4',
                                 ],
@@ -9299,32 +9304,32 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-        $this->assertEquals(1, count($level1['level2']));
-        $this->assertEquals('level2', $level1['level2'][0]->getId());
-        $this->assertEquals(1, count($level1['level2'][0]['level3']));
-        $this->assertEquals('level3', $level1['level2'][0]['level3'][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+        $this->assertEquals(1, count($level1[$level2Collection]));
+        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
+        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
+        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey('level4', $level1[$level2Collection][0][$level3Collection][0]);
 
         // Exceed fetch depth
-        $level1 = static::getDatabase()->getDocument('level1', 'level1');
-        $this->assertEquals(1, count($level1['level2']));
-        $this->assertEquals('level2', $level1['level2'][0]->getId());
-        $this->assertEquals(1, count($level1['level2'][0]['level3']));
-        $this->assertEquals('level3', $level1['level2'][0]['level3'][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertEquals(1, count($level1[$level2Collection]));
+        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
+        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
+        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
 
 
         // Exceed update depth
         $level1 = static::getDatabase()->updateDocument(
-            'level1',
+            $level1Collection,
             'level1',
             $level1
-            ->setAttribute('level2', [new Document([
+            ->setAttribute($level2Collection, [new Document([
                 '$id' => 'level2new',
-                'level3' => [
+                $level3Collection => [
                     [
                         '$id' => 'level3new',
-                        'level4' => [
+                        $level4Collection => [
                             [
                                 '$id' => 'level4new',
                             ],
@@ -9333,11 +9338,309 @@ abstract class Base extends TestCase
                 ],
             ])])
         );
-        $this->assertEquals(1, count($level1['level2']));
-        $this->assertEquals('level2new', $level1['level2'][0]->getId());
-        $this->assertEquals(1, count($level1['level2'][0]['level3']));
-        $this->assertEquals('level3new', $level1['level2'][0]['level3'][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+        $this->assertEquals(1, count($level1[$level2Collection]));
+        $this->assertEquals('level2new', $level1[$level2Collection][0]->getId());
+        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
+        $this->assertEquals('level3new', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+    }
+
+    public function testExceedMaxDepthOneToOne(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1OneToOne';
+        $level2Collection = 'level2OneToOne';
+        $level3Collection = 'level3OneToOne';
+        $level4Collection = 'level4OneToOne';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        // Exceed create depth
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                '$id' => 'level2',
+                $level3Collection => [
+                    '$id' => 'level3',
+                    $level4Collection => [
+                        '$id' => 'level4',
+                    ],
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Confirm the 4th level document exists
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+
+        $this->assertArrayHasKey($level4Collection, $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+    }
+
+    public function testExceedMaxDepthOneToOneNull(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1OneToOneNull';
+        $level2Collection = 'level2OneToOneNull';
+        $level3Collection = 'level3OneToOneNull';
+        $level4Collection = 'level4OneToOneNull';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                '$id' => 'level2',
+                $level3Collection => [
+                    '$id' => 'level3',
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+    }
+
+    public function testExceedMaxDepthManyToOneParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1ManyToOneParent';
+        $level2Collection = 'level2ManyToOneParent';
+        $level3Collection = 'level3ManyToOneParent';
+        $level4Collection = 'level4ManyToOneParent';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                '$id' => 'level2',
+                $level3Collection => [
+                    '$id' => 'level3',
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Add level 4 document
+        $level3 = $level1[$level2Collection][$level3Collection];
+        $level3->setAttribute($level4Collection, new Document([
+            '$id' => 'level4',
+        ]));
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+
+        // Confirm level 4 document is set
+        $this->assertArrayHasKey($level4Collection, $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+
+        // Exceed fetch depth at level 1
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+    }
+
+    public function testExceedMaxDepthOneToManyChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1OneToManyChild';
+        $level2Collection = 'level2OneToManyChild';
+        $level3Collection = 'level3OneToManyChild';
+        $level4Collection = 'level4OneToManyChild';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                [
+                    '$id' => 'level2',
+                    $level3Collection => [
+                        [
+                            '$id' => 'level3'
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection][0]);
+        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+
+        $level3 = $level1[$level2Collection][0][$level3Collection][0];
+        $level3->setAttribute($level4Collection, [new Document(['$id' => 'level4'])]);
+        static::getDatabase()->updateDocument($level3Collection, 'level3', $level3);
+
+        // Verify level 4 document is set
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertArrayHasKey($level4Collection, $level3);
+        $this->assertEquals('level4', $level3[$level4Collection][0]->getId());
+
+        // Exceed fetch depth
+        $level4 = static::getDatabase()->getDocument($level4Collection, 'level4');
+        $this->assertArrayHasKey($level3Collection, $level4);
+        $this->assertEquals('level3', $level4[$level3Collection]->getId());
+        $this->assertArrayHasKey($level2Collection, $level4[$level3Collection]);
+        $this->assertEquals('level2', $level4[$level3Collection][$level2Collection]->getId());
+        $this->assertArrayNotHasKey($level1Collection, $level4[$level3Collection][$level2Collection]);
     }
 
     public function testCreateRelationshipMissingCollection(): void

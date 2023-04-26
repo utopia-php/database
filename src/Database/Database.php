@@ -2307,15 +2307,12 @@ class Database
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
-                    if (\is_null($value)) {
+                    if ($skipFetch || $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
+                        $document->removeAttribute($key);
                         break;
                     }
 
-                    if ($skipFetch) {
-                        $document->removeAttribute($key);
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if (\is_null($value)) {
                         break;
                     }
 
@@ -2331,10 +2328,11 @@ class Database
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!$twoWay) {
+                        if (!$twoWay || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                             $document->removeAttribute($key);
+                            break;
                         }
-                        if ($twoWay && !\is_null($value) && !$skipFetch) {
+                        if (!\is_null($value)) {
                             $this->relationshipFetchDepth++;
                             $this->relationshipFetchMap[] = $relationship;
 
@@ -2348,7 +2346,7 @@ class Database
                         break;
                     }
 
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                         break;
                     }
 
@@ -2372,7 +2370,12 @@ class Database
                     break;
                 case Database::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {
-                        if (\is_null($value) || $skipFetch) {
+                        if ($skipFetch || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
+                            $document->removeAttribute($key);
+                            break;
+                        }
+
+                        if (\is_null($value)) {
                             break;
                         }
                         $this->relationshipFetchDepth++;

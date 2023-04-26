@@ -9310,6 +9310,12 @@ abstract class Base extends TestCase
         $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
         $this->assertArrayNotHasKey('level4', $level1[$level2Collection][0][$level3Collection][0]);
 
+        // Make sure level 4 document was not created
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals(0, count($level3[$level4Collection]));
+        $level4 = static::getDatabase()->getDocument($level4Collection, 'level4');
+        $this->assertTrue($level4->isEmpty());
+
         // Exceed fetch depth
         $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
         $this->assertEquals(1, count($level1[$level2Collection]));
@@ -9343,6 +9349,12 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
         $this->assertEquals('level3new', $level1[$level2Collection][0][$level3Collection][0]->getId());
         $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+
+        // Make sure level 4 document was not created
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3new');
+        $this->assertEquals(0, count($level3[$level4Collection]));
+        $level4 = static::getDatabase()->getDocument($level4Collection, 'level4new');
+        $this->assertTrue($level4->isEmpty());
     }
 
     public function testExceedMaxDepthOneToOne(): void
@@ -9404,10 +9416,15 @@ abstract class Base extends TestCase
         $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
         $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
 
-        // Confirm the 4th level document exists
+        // Confirm the 4th level document does not exist
         $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertNull($level3[$level4Collection]);
 
-        $this->assertArrayHasKey($level4Collection, $level3);
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, new Document([
+            '$id' => 'level4',
+        ]));
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
         $this->assertEquals('level4', $level3[$level4Collection]->getId());
 
         // Exceed fetch depth
@@ -9465,6 +9482,9 @@ abstract class Base extends TestCase
                 '$id' => 'level2',
                 $level3Collection => [
                     '$id' => 'level3',
+                    $level4Collection => [
+                        '$id' => 'level4',
+                    ],
                 ],
             ],
         ]));
@@ -9473,6 +9493,19 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
         $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
         $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertNull($level3[$level4Collection]);
+
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, new Document([
+            '$id' => 'level4',
+        ]));
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
 
         // Exceed fetch depth
         $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
@@ -9529,6 +9562,9 @@ abstract class Base extends TestCase
                 '$id' => 'level2',
                 $level3Collection => [
                     '$id' => 'level3',
+                    $level4Collection => [
+                        '$id' => 'level4',
+                    ],
                 ],
             ],
         ]));
@@ -9538,26 +9574,20 @@ abstract class Base extends TestCase
         $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
         $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
 
-        // Exceed fetch depth
-        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
-        $this->assertArrayHasKey($level2Collection, $level1);
-        $this->assertEquals('level2', $level1[$level2Collection]->getId());
-        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
-        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
-        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertNull($level3[$level4Collection]);
 
-        // Add level 4 document
-        $level3 = $level1[$level2Collection][$level3Collection];
+        // Create level 4 document
         $level3->setAttribute($level4Collection, new Document([
             '$id' => 'level4',
         ]));
         $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
-
-        // Confirm level 4 document is set
-        $this->assertArrayHasKey($level4Collection, $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
         $this->assertEquals('level4', $level3[$level4Collection]->getId());
 
-        // Exceed fetch depth at level 1
+        // Exceed fetch depth
         $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
         $this->assertArrayHasKey($level2Collection, $level1);
         $this->assertEquals('level2', $level1[$level2Collection]->getId());
@@ -9613,7 +9643,12 @@ abstract class Base extends TestCase
                     '$id' => 'level2',
                     $level3Collection => [
                         [
-                            '$id' => 'level3'
+                            '$id' => 'level3',
+                            $level4Collection => [
+                                [
+                                    '$id' => 'level4',
+                                ],
+                            ]
                         ],
                     ],
                 ],
@@ -9625,9 +9660,16 @@ abstract class Base extends TestCase
         $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
         $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
 
-        $level3 = $level1[$level2Collection][0][$level3Collection][0];
-        $level3->setAttribute($level4Collection, [new Document(['$id' => 'level4'])]);
-        static::getDatabase()->updateDocument($level3Collection, 'level3', $level3);
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals(0, count($level3[$level4Collection]));
+
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, [new Document([
+            '$id' => 'level4',
+        ])]);
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+        $this->assertEquals('level4', $level3[$level4Collection][0]->getId());
 
         // Verify level 4 document is set
         $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');

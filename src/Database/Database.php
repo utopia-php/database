@@ -3421,7 +3421,11 @@ class Database
             $value = null;
         }
 
-        if (!empty($value) && $side === Database::RELATION_SIDE_PARENT) {
+        if (
+            !empty($value)
+            && $relationType !== Database::RELATION_MANY_TO_ONE
+            && $side === Database::RELATION_SIDE_PARENT
+        ) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 
@@ -3598,11 +3602,13 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key) {
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $document->getAttribute($key)
-                        );
+                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key, $side) {
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $this->deleteDocument(
+                                $relatedCollection->getId(),
+                                $document->getAttribute($key)
+                            );
+                        }
                         $this->deleteDocument(
                             $junction,
                             $document->getId()

@@ -7244,6 +7244,14 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('students', 'student2');
         $this->assertEquals(true, $library->isEmpty());
 
+        // Delete child, should not delete parent
+        static::getDatabase()->deleteDocument('classes', 'class6');
+
+        // Check only child was deleted
+        $student6 = static::getDatabase()->getDocument('students', 'student6');
+        $this->assertEquals(false, $student6->isEmpty());
+        $this->assertEmpty($student6->getAttribute('newClasses'));
+
         $library = static::getDatabase()->getDocument('classes', 'class2');
         $this->assertEquals(true, $library->isEmpty());
 

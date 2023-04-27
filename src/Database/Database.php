@@ -3602,11 +3602,13 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key) {
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $document->getAttribute($key)
-                        );
+                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key, $side) {
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $this->deleteDocument(
+                                $relatedCollection->getId(),
+                                $document->getAttribute($key)
+                            );
+                        }
                         $this->deleteDocument(
                             $junction,
                             $document->getId()

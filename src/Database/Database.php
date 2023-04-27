@@ -3421,7 +3421,11 @@ class Database
             $value = null;
         }
 
-        if (!empty($value) && $side === Database::RELATION_SIDE_PARENT) {
+        if (
+            !empty($value)
+            && $relationType !== Database::RELATION_MANY_TO_ONE
+            && $side === Database::RELATION_SIDE_PARENT
+        ) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 

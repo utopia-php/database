@@ -6402,13 +6402,17 @@ abstract class Base extends TestCase
         $store7 = static::getDatabase()->getDocument('store', 'store7');
         $this->assertEquals(true, $store7->isEmpty());
 
-        // Try to delete document while still related to another with on delete: restrict
+        // Try to delete child while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('store', 'store1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
+
+        // Delete parent while still related to another with on delete: restrict
+        $result = static::getDatabase()->deleteDocument('product', 'product5');
+        $this->assertEquals(true, $result);
 
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
@@ -6421,7 +6425,7 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteDocument('store', 'store1');
 
         // Check relation was set to null
-        $review1 = static::getDatabase()->getDocument('product', 'product1');
+        static::getDatabase()->getDocument('product', 'product1');
         $this->assertEquals(null, $product1->getAttribute('newStore'));
 
         // Change on delete to cascade

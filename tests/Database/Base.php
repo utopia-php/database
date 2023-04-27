@@ -3,6 +3,7 @@
 namespace Utopia\Tests;
 
 use Exception;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
@@ -1014,7 +1015,11 @@ abstract class Base extends TestCase
 
     public function testFind(): void
     {
-        static::getDatabase()->createCollection('movies');
+        Authorization::setRole(Role::any()->toString());
+        static::getDatabase()->createCollection('movies', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ], documentSecurity: true);
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
@@ -2667,11 +2672,12 @@ abstract class Base extends TestCase
     /**
      * @depends testCreateDocument
      */
-    public function testWritePermissionsSuccess(Document $document): Document
+    public function testWritePermissionsSuccess(Document $document): void
     {
         Authorization::cleanRoles();
 
-        $document = static::getDatabase()->createDocument('documents', new Document([
+        $this->expectException(AuthorizationException::class);
+        static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2685,12 +2691,6 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
-
-        $this->assertEquals(false, $document->isEmpty());
-
-        Authorization::setRole(Role::any()->toString());
-
-        return $document;
     }
 
     /**
@@ -3009,6 +3009,7 @@ abstract class Base extends TestCase
      */
     public function testUniqueIndexDuplicateUpdate(): void
     {
+        Authorization::setRole(Role::users()->toString());
         // create document then update to conflict with index
         $document = static::getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
@@ -3664,9 +3665,12 @@ abstract class Base extends TestCase
 
     public function testWritePermissions(): void
     {
+        Authorization::setRole(Role::any()->toString());
         $database = static::getDatabase();
 
-        $database->createCollection('animals');
+        $database->createCollection('animals', permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true);
 
         $database->createAttribute('animals', 'type', Database::VAR_STRING, 128, true);
 
@@ -6398,13 +6402,17 @@ abstract class Base extends TestCase
         $store7 = static::getDatabase()->getDocument('store', 'store7');
         $this->assertEquals(true, $store7->isEmpty());
 
-        // Try to delete document while still related to another with on delete: restrict
+        // Try to delete child while still related to another with on delete: restrict
         try {
             static::getDatabase()->deleteDocument('store', 'store1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
+
+        // Delete parent while still related to another with on delete: restrict
+        $result = static::getDatabase()->deleteDocument('product', 'product5');
+        $this->assertEquals(true, $result);
 
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
@@ -6417,7 +6425,7 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteDocument('store', 'store1');
 
         // Check relation was set to null
-        $review1 = static::getDatabase()->getDocument('product', 'product1');
+        static::getDatabase()->getDocument('product', 'product1');
         $this->assertEquals(null, $product1->getAttribute('newStore'));
 
         // Change on delete to cascade
@@ -7235,6 +7243,14 @@ abstract class Base extends TestCase
         // Check parent and child were deleted
         $library = static::getDatabase()->getDocument('students', 'student2');
         $this->assertEquals(true, $library->isEmpty());
+
+        // Delete child, should not delete parent
+        static::getDatabase()->deleteDocument('classes', 'class6');
+
+        // Check only child was deleted
+        $student6 = static::getDatabase()->getDocument('students', 'student6');
+        $this->assertEquals(false, $student6->isEmpty());
+        $this->assertEmpty($student6->getAttribute('newClasses'));
 
         $library = static::getDatabase()->getDocument('classes', 'class2');
         $this->assertEquals(true, $library->isEmpty());
@@ -9016,9 +9032,9 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection('lawns');
-        static::getDatabase()->createCollection('trees');
-        static::getDatabase()->createCollection('birds');
+        static::getDatabase()->createCollection('lawns', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        static::getDatabase()->createCollection('trees', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        static::getDatabase()->createCollection('birds', permissions: [Permission::create(Role::any())], documentSecurity: true);
 
         static::getDatabase()->createAttribute('lawns', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('trees', 'name', Database::VAR_STRING, 255, true);
@@ -9091,7 +9107,8 @@ abstract class Base extends TestCase
             $this->expectNotToPerformAssertions();
             return;
         }
-
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
         $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 
@@ -9240,51 +9257,56 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $bird3->isEmpty());
     }
 
-    public function testExceedMaxDepth(): void
+    public function testExceedMaxDepthOneToMany(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('level1');
-        static::getDatabase()->createCollection('level2');
-        static::getDatabase()->createCollection('level3');
-        static::getDatabase()->createCollection('level4');
+        $level1Collection = 'level1OneToMany';
+        $level2Collection = 'level2OneToMany';
+        $level3Collection = 'level3OneToMany';
+        $level4Collection = 'level4OneToMany';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
 
         static::getDatabase()->createRelationship(
-            collection: 'level1',
-            relatedCollection: 'level2',
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
         );
         static::getDatabase()->createRelationship(
-            collection: 'level2',
-            relatedCollection: 'level3',
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
         );
         static::getDatabase()->createRelationship(
-            collection: 'level3',
-            relatedCollection: 'level4',
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
         );
 
         // Exceed create depth
-        $level1 = static::getDatabase()->createDocument('level1', new Document([
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
             '$id' => 'level1',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ],
-            'level2' => [
+            $level2Collection => [
                 [
                     '$id' => 'level2',
-                    'level3' => [
+                    $level3Collection => [
                         [
                             '$id' => 'level3',
-                            'level4' => [
+                            $level4Collection => [
                                 [
                                     '$id' => 'level4',
                                 ],
@@ -9294,32 +9316,38 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-        $this->assertEquals(1, count($level1['level2']));
-        $this->assertEquals('level2', $level1['level2'][0]->getId());
-        $this->assertEquals(1, count($level1['level2'][0]['level3']));
-        $this->assertEquals('level3', $level1['level2'][0]['level3'][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+        $this->assertEquals(1, count($level1[$level2Collection]));
+        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
+        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
+        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey('level4', $level1[$level2Collection][0][$level3Collection][0]);
+
+        // Make sure level 4 document was not created
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals(0, count($level3[$level4Collection]));
+        $level4 = static::getDatabase()->getDocument($level4Collection, 'level4');
+        $this->assertTrue($level4->isEmpty());
 
         // Exceed fetch depth
-        $level1 = static::getDatabase()->getDocument('level1', 'level1');
-        $this->assertEquals(1, count($level1['level2']));
-        $this->assertEquals('level2', $level1['level2'][0]->getId());
-        $this->assertEquals(1, count($level1['level2'][0]['level3']));
-        $this->assertEquals('level3', $level1['level2'][0]['level3'][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertEquals(1, count($level1[$level2Collection]));
+        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
+        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
+        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
 
 
         // Exceed update depth
         $level1 = static::getDatabase()->updateDocument(
-            'level1',
+            $level1Collection,
             'level1',
             $level1
-            ->setAttribute('level2', [new Document([
+            ->setAttribute($level2Collection, [new Document([
                 '$id' => 'level2new',
-                'level3' => [
+                $level3Collection => [
                     [
                         '$id' => 'level3new',
-                        'level4' => [
+                        $level4Collection => [
                             [
                                 '$id' => 'level4new',
                             ],
@@ -9328,11 +9356,345 @@ abstract class Base extends TestCase
                 ],
             ])])
         );
-        $this->assertEquals(1, count($level1['level2']));
-        $this->assertEquals('level2new', $level1['level2'][0]->getId());
-        $this->assertEquals(1, count($level1['level2'][0]['level3']));
-        $this->assertEquals('level3new', $level1['level2'][0]['level3'][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1['level2'][0]['level3'][0]);
+        $this->assertEquals(1, count($level1[$level2Collection]));
+        $this->assertEquals('level2new', $level1[$level2Collection][0]->getId());
+        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
+        $this->assertEquals('level3new', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+
+        // Make sure level 4 document was not created
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3new');
+        $this->assertEquals(0, count($level3[$level4Collection]));
+        $level4 = static::getDatabase()->getDocument($level4Collection, 'level4new');
+        $this->assertTrue($level4->isEmpty());
+    }
+
+    public function testExceedMaxDepthOneToOne(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1OneToOne';
+        $level2Collection = 'level2OneToOne';
+        $level3Collection = 'level3OneToOne';
+        $level4Collection = 'level4OneToOne';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        // Exceed create depth
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                '$id' => 'level2',
+                $level3Collection => [
+                    '$id' => 'level3',
+                    $level4Collection => [
+                        '$id' => 'level4',
+                    ],
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertNull($level3[$level4Collection]);
+
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, new Document([
+            '$id' => 'level4',
+        ]));
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+    }
+
+    public function testExceedMaxDepthOneToOneNull(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1OneToOneNull';
+        $level2Collection = 'level2OneToOneNull';
+        $level3Collection = 'level3OneToOneNull';
+        $level4Collection = 'level4OneToOneNull';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                '$id' => 'level2',
+                $level3Collection => [
+                    '$id' => 'level3',
+                    $level4Collection => [
+                        '$id' => 'level4',
+                    ],
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertNull($level3[$level4Collection]);
+
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, new Document([
+            '$id' => 'level4',
+        ]));
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+    }
+
+    public function testExceedMaxDepthManyToOneParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1ManyToOneParent';
+        $level2Collection = 'level2ManyToOneParent';
+        $level3Collection = 'level3ManyToOneParent';
+        $level4Collection = 'level4ManyToOneParent';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                '$id' => 'level2',
+                $level3Collection => [
+                    '$id' => 'level3',
+                    $level4Collection => [
+                        '$id' => 'level4',
+                    ],
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertNull($level3[$level4Collection]);
+
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, new Document([
+            '$id' => 'level4',
+        ]));
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+
+        // Exceed fetch depth
+        $level1 = static::getDatabase()->getDocument($level1Collection, 'level1');
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
+        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+    }
+
+    public function testExceedMaxDepthOneToManyChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $level1Collection = 'level1OneToManyChild';
+        $level2Collection = 'level2OneToManyChild';
+        $level3Collection = 'level3OneToManyChild';
+        $level4Collection = 'level4OneToManyChild';
+
+        static::getDatabase()->createCollection($level1Collection);
+        static::getDatabase()->createCollection($level2Collection);
+        static::getDatabase()->createCollection($level3Collection);
+        static::getDatabase()->createCollection($level4Collection);
+
+        static::getDatabase()->createRelationship(
+            collection: $level1Collection,
+            relatedCollection: $level2Collection,
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level2Collection,
+            relatedCollection: $level3Collection,
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+        static::getDatabase()->createRelationship(
+            collection: $level3Collection,
+            relatedCollection: $level4Collection,
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        $level1 = static::getDatabase()->createDocument($level1Collection, new Document([
+            '$id' => 'level1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            $level2Collection => [
+                [
+                    '$id' => 'level2',
+                    $level3Collection => [
+                        [
+                            '$id' => 'level3',
+                            $level4Collection => [
+                                [
+                                    '$id' => 'level4',
+                                ],
+                            ]
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+        $this->assertArrayHasKey($level2Collection, $level1);
+        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection][0]);
+        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+
+        // Confirm the 4th level document does not exist
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertEquals(0, count($level3[$level4Collection]));
+
+        // Create level 4 document
+        $level3->setAttribute($level4Collection, [new Document([
+            '$id' => 'level4',
+        ])]);
+        $level3 = static::getDatabase()->updateDocument($level3Collection, $level3->getId(), $level3);
+        $this->assertEquals('level4', $level3[$level4Collection][0]->getId());
+
+        // Verify level 4 document is set
+        $level3 = static::getDatabase()->getDocument($level3Collection, 'level3');
+        $this->assertArrayHasKey($level4Collection, $level3);
+        $this->assertEquals('level4', $level3[$level4Collection][0]->getId());
+
+        // Exceed fetch depth
+        $level4 = static::getDatabase()->getDocument($level4Collection, 'level4');
+        $this->assertArrayHasKey($level3Collection, $level4);
+        $this->assertEquals('level3', $level4[$level3Collection]->getId());
+        $this->assertArrayHasKey($level2Collection, $level4[$level3Collection]);
+        $this->assertEquals('level2', $level4[$level3Collection][$level2Collection]->getId());
+        $this->assertArrayNotHasKey($level1Collection, $level4[$level3Collection][$level2Collection]);
     }
 
     public function testCreateRelationshipMissingCollection(): void
@@ -9964,6 +10326,706 @@ abstract class Base extends TestCase
 
         $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection7')[0]->getId());
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection8')[0]->getId());
+    }
+
+    public function testCollectionUpdate(): Document
+    {
+        $collection = static::getDatabase()->createCollection('collectionUpdate', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users())
+        ], documentSecurity: false);
+
+        $this->assertInstanceOf(Document::class, $collection);
+
+        $collection = static::getDatabase()->getCollection('collectionUpdate');
+
+        $this->assertFalse($collection->getAttribute('documentSecurity'));
+        $this->assertIsArray($collection->getPermissions());
+        $this->assertCount(4, $collection->getPermissions());
+
+        $collection = static::getDatabase()->updateCollection('collectionUpdate', [], true);
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+        $this->assertIsArray($collection->getPermissions());
+        $this->assertEmpty($collection->getPermissions());
+
+        $collection = static::getDatabase()->getCollection('collectionUpdate');
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+        $this->assertIsArray($collection->getPermissions());
+        $this->assertEmpty($collection->getPermissions());
+
+        return $collection;
+    }
+
+    /**
+     * @depends testCollectionUpdate
+     */
+    public function testCollectionUpdatePermissionsThrowException(Document $collection): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        static::getDatabase()->updateCollection($collection->getId(), permissions: [
+            'i dont work'
+        ], documentSecurity: false);
+    }
+
+    public function testCollectionPermissions(): Document
+    {
+        $collection = static::getDatabase()->createCollection('collectionSecurity', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users())
+        ], documentSecurity: false);
+
+        $this->assertInstanceOf(Document::class, $collection);
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: $collection->getId(),
+            id: 'test',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        return $collection;
+    }
+
+    public function testCollectionPermissionsExceptions(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        static::getDatabase()->createCollection('collectionSecurity', permissions: [
+            'i dont work'
+        ]);
+    }
+
+    /**
+     * @depends testCollectionPermissions
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsCreateWorks(Document $collection): array
+    {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $document = static::getDatabase()->createDocument($collection->getId(), new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::user('random')),
+                Permission::update(Role::user('random')),
+                Permission::delete(Role::user('random'))
+            ],
+            'test' => 'lorem'
+        ]));
+        $this->assertInstanceOf(Document::class, $document);
+
+        return [$collection, $document];
+    }
+
+
+    /**
+     * @depends testCollectionPermissions
+     */
+    public function testCollectionPermissionsCreateThrowsException(Document $collection): void
+    {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+        $this->expectException(AuthorizationException::class);
+
+        static::getDatabase()->createDocument($collection->getId(), new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            'test' => 'lorem ipsum'
+        ]));
+    }
+
+    /**
+     * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsGetWorks(array $data): array
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $document = static::getDatabase()->getDocument(
+            $collection->getId(),
+            $document->getId()
+        );
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertFalse($document->isEmpty());
+
+        return $data;
+    }
+
+    /**
+     * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     */
+    public function testCollectionPermissionsGetThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $document = static::getDatabase()->getDocument(
+            $collection->getId(),
+            $document->getId(),
+        );
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertTrue($document->isEmpty());
+    }
+
+    /**
+     * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsFindWorks(array $data): array
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+        $this->assertNotEmpty($documents);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+        $this->assertNotEmpty($documents);
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
+    public function testCollectionPermissionsFindThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+        $this->assertEmpty($documents);
+    }
+
+    /**
+     * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsCountWorks(array $data): array
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $count = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertNotEmpty($count);
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
+    public function testCollectionPermissionsCountThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $count = static::getDatabase()->count(
+            $collection->getId()
+        );
+        $this->assertEmpty($count);
+    }
+
+    /**
+     * @depends testCollectionPermissionsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsUpdateWorks(array $data): array
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $this->assertInstanceOf(Document::class, static::getDatabase()->updateDocument(
+            $collection->getId(),
+            $document->getId(),
+            $document->setAttribute('test', 'ipsum')
+        ));
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsCreateWorks
+     */
+    public function testCollectionPermissionsUpdateThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $this->expectException(AuthorizationException::class);
+        $document = static::getDatabase()->updateDocument(
+            $collection->getId(),
+            $document->getId(),
+            $document->setAttribute('test', 'ipsum')
+        );
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsUpdateWorks
+     */
+    public function testCollectionPermissionsDeleteThrowsException(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $this->expectException(AuthorizationException::class);
+        static::getDatabase()->deleteDocument(
+            $collection->getId(),
+            $document->getId()
+        );
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsUpdateWorks
+     */
+    public function testCollectionPermissionsDeleteWorks(array $data): void
+    {
+        [$collection, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $this->assertTrue(static::getDatabase()->deleteDocument(
+            $collection->getId(),
+            $document->getId()
+        ));
+    }
+
+    /**
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsRelationships(): array
+    {
+        $collection = static::getDatabase()->createCollection('collectionSecurity.Parent', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users())
+        ], documentSecurity: true);
+
+        $this->assertInstanceOf(Document::class, $collection);
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: $collection->getId(),
+            id: 'test',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $collectionOneToOne = static::getDatabase()->createCollection('collectionSecurity.OneToOne', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users())
+        ], documentSecurity: true);
+
+        $this->assertInstanceOf(Document::class, $collectionOneToOne);
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: $collectionOneToOne->getId(),
+            id: 'test',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $this->assertTrue(static::getDatabase()->createRelationship(
+            collection: $collection->getId(),
+            relatedCollection: $collectionOneToOne->getId(),
+            type: Database::RELATION_ONE_TO_ONE,
+            id: Database::RELATION_ONE_TO_ONE,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        ));
+
+        $collectionOneToMany = static::getDatabase()->createCollection('collectionSecurity.OneToMany', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users())
+        ], documentSecurity: true);
+
+        $this->assertInstanceOf(Document::class, $collectionOneToMany);
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: $collectionOneToMany->getId(),
+            id: 'test',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $this->assertTrue(static::getDatabase()->createRelationship(
+            collection: $collection->getId(),
+            relatedCollection: $collectionOneToMany->getId(),
+            type: Database::RELATION_ONE_TO_MANY,
+            id: Database::RELATION_ONE_TO_MANY,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        ));
+
+        return [$collection, $collectionOneToOne, $collectionOneToMany];
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationships
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsRelationshipsCreateWorks(array $data): array
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany] = $data;
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $document = static::getDatabase()->createDocument($collection->getId(), new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::user('random')),
+                Permission::update(Role::user('random')),
+                Permission::delete(Role::user('random'))
+            ],
+            'test' => 'lorem',
+            Database::RELATION_ONE_TO_ONE => [
+                '$id' => ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::user('random')),
+                    Permission::update(Role::user('random')),
+                    Permission::delete(Role::user('random'))
+                ],
+                'test' => 'lorem ipsum'
+            ],
+            Database::RELATION_ONE_TO_MANY => [
+                [
+                    '$id' => ID::unique(),
+                    '$permissions' => [
+                        Permission::read(Role::user('random')),
+                        Permission::update(Role::user('random')),
+                        Permission::delete(Role::user('random'))
+                    ],
+                    'test' => 'lorem ipsum'
+                ], [
+                    '$id' => ID::unique(),
+                    '$permissions' => [
+                        Permission::read(Role::user('torsten')),
+                        Permission::update(Role::user('random')),
+                        Permission::delete(Role::user('random'))
+                    ],
+                    'test' => 'dolor'
+                ]
+            ],
+        ]));
+        $this->assertInstanceOf(Document::class, $document);
+
+        return [...$data, $document];
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationships
+     * @param array<Document> $data
+     */
+    public function testCollectionPermissionsRelationshipsCreateThrowsException(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+        $this->expectException(AuthorizationException::class);
+
+        static::getDatabase()->createDocument($collection->getId(), new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ],
+            'test' => 'lorem ipsum'
+        ]));
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsRelationshipsGetWorks(array $data): array
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $document = static::getDatabase()->getDocument(
+            $collection->getId(),
+            $document->getId()
+        );
+
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $document = static::getDatabase()->getDocument(
+            $collection->getId(),
+            $document->getId()
+        );
+
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     */
+    public function testCollectionPermissionsRelationshipsGetThrowsException(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $document = static::getDatabase()->getDocument(
+            $collection->getId(),
+            $document->getId(),
+        );
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertTrue($document->isEmpty());
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     */
+    public function testCollectionPermissionsRelationshipsFindWorks(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+
+        $this->assertIsArray($documents);
+        $this->assertCount(1, $documents);
+        $document = $documents[0];
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+
+        $this->assertIsArray($documents);
+        $this->assertCount(1, $documents);
+        $document = $documents[0];
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
+        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->isEmpty());
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('unknown')->toString());
+
+        $documents = static::getDatabase()->find(
+            $collection->getId()
+        );
+
+        $this->assertIsArray($documents);
+        $this->assertCount(0, $documents);
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     */
+    public function testCollectionPermissionsRelationshipsCountWorks(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $documents = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertEquals(1, $documents);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        $documents = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertEquals(1, $documents);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('unknown')->toString());
+
+        $documents = static::getDatabase()->count(
+            $collection->getId()
+        );
+
+        $this->assertEquals(0, $documents);
+    }
+
+    /**
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     * @param array<Document> $data
+     * @return array<Document>
+     */
+    public function testCollectionPermissionsRelationshipsUpdateWorks(array $data): array
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        static::getDatabase()->updateDocument(
+            $collection->getId(),
+            $document->getId(),
+            $document
+        );
+
+        $this->assertTrue(true);
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('random')->toString());
+
+        static::getDatabase()->updateDocument(
+            $collection->getId(),
+            $document->getId(),
+            $document->setAttribute('test', 'ipsum')
+        );
+
+        $this->assertTrue(true);
+
+        return $data;
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsRelationshipsCreateWorks
+     */
+    public function testCollectionPermissionsRelationshipsUpdateThrowsException(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $this->expectException(AuthorizationException::class);
+        $document = static::getDatabase()->updateDocument(
+            $collection->getId(),
+            $document->getId(),
+            $document->setAttribute('test', 'ipsum')
+        );
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsRelationshipsUpdateWorks
+     */
+    public function testCollectionPermissionsRelationshipsDeleteThrowsException(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $this->expectException(AuthorizationException::class);
+        $document = static::getDatabase()->deleteDocument(
+            $collection->getId(),
+            $document->getId()
+        );
+    }
+
+    /**
+     * @param array<Document> $data
+     * @depends testCollectionPermissionsRelationshipsUpdateWorks
+     */
+    public function testCollectionPermissionsRelationshipsDeleteWorks(array $data): void
+    {
+        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::users()->toString());
+
+        $this->assertTrue(static::getDatabase()->deleteDocument(
+            $collection->getId(),
+            $document->getId()
+        ));
     }
 
     public function testEvents(): void

@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use InvalidArgumentException;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -17,6 +18,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Document as DocumentsValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -60,7 +62,7 @@ class Database
     public const ORDER_DESC = 'DESC';
 
     // Permissions
-    public const PERMISSION_CREATE= 'create';
+    public const PERMISSION_CREATE = 'create';
     public const PERMISSION_READ = 'read';
     public const PERMISSION_UPDATE = 'update';
     public const PERMISSION_DELETE = 'delete';
@@ -96,7 +98,8 @@ class Database
     public const EVENT_DATABASE_DELETE = 'database_delete';
 
     public const EVENT_COLLECTION_LIST = 'collection_list';
-    public const EVENT_COLLECTION_CREATE = 'collection_delete';
+    public const EVENT_COLLECTION_CREATE = 'collection_create';
+    public const EVENT_COLLECTION_UPDATE = 'collection_update';
     public const EVENT_COLLECTION_READ = 'collection_read';
     public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
@@ -225,6 +228,16 @@ class Database
                 'array' => false,
                 'filters' => ['json'],
             ],
+            [
+                '$id' => 'documentSecurity',
+                'key' => 'documentSecurity',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => []
+            ]
         ],
         'indexes' => [],
     ];
@@ -253,8 +266,12 @@ class Database
     protected bool $resolveRelationships = true;
 
     private int $relationshipFetchDepth = 1;
-    private int $relationshipCreateDepth = 1;
-    private int $relationshipUpdateDepth = 1;
+
+    /**
+     * Stack of collection IDs when creating or updating related documents
+     * @var array<string>
+     */
+    private array $relationshipWriteStack = [];
 
     /**
      * @var array<array<string, mixed>>
@@ -362,8 +379,9 @@ class Database
     /**
      * Silent event generation for all the calls inside the callback
      *
-     * @param callable $callback
-     * @return mixed
+     * @template T
+     * @param callable(): T $callback
+     * @return T
      */
     public function silent(callable $callback): mixed
     {
@@ -380,8 +398,9 @@ class Database
     /**
      * Skip relationships for all the calls inside the callback
      *
-     * @param callable $callback
-     * @return mixed
+     * @template T
+     * @param callable(): T $callback
+     * @return T
      */
     public function skipRelationships(callable $callback): mixed
     {
@@ -533,6 +552,7 @@ class Database
             ['name', self::VAR_STRING, 512, true],
             ['attributes', self::VAR_STRING, 1000000, false],
             ['indexes', self::VAR_STRING, 1000000, false],
+            ['documentSecurity', self::VAR_BOOLEAN, 0, false],
         ]);
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
@@ -592,12 +612,23 @@ class Database
      * @param string $id
      * @param array<Document> $attributes
      * @param array<Document> $indexes
+     * @param array<string> $permissions
+     * @param bool $documentSecurity
      *
      * @return Document
      * @throws DuplicateException
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = []): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
+        $permissions ??= [
+            Permission::create(Role::any()),
+        ];
+
+        $validator = new Permissions();
+        if (!$validator->isValid($permissions)) {
+            throw new InvalidArgumentException($validator->getDescription());
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
@@ -612,15 +643,11 @@ class Database
 
         $collection = new Document([
             '$id' => ID::custom($id),
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
+            '$permissions' => $permissions,
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
+            'documentSecurity' => $documentSecurity
         ]);
 
         // Check index limits, if given
@@ -650,6 +677,36 @@ class Database
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
         return $createdCollection;
+    }
+
+    /**
+     * Update Collections Permissions.
+     *
+     * @param string $id
+     * @param array<string> $permissions
+     * @param bool $documentSecurity
+     *
+     * @return Document
+     * @throws DuplicateException
+     */
+    public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
+    {
+        $validator = new Permissions();
+        if (!$validator->isValid($permissions)) {
+            throw new InvalidArgumentException($validator->getDescription());
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($id));
+
+        $collection
+            ->setAttribute('$permissions', $permissions)
+            ->setAttribute('documentSecurity', $documentSecurity);
+
+        $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+
+        $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+
+        return $collection;
     }
 
     /**
@@ -1249,7 +1306,7 @@ class Database
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn () =>$this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -1731,7 +1788,7 @@ class Database
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
-        $collection = $this->silent(fn () =>$this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
 
@@ -2034,8 +2091,7 @@ class Database
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn (Document $attribute) =>
-            $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
         $selects = Query::groupByType($queries)['selections'];
@@ -2079,7 +2135,7 @@ class Database
         $queries = \array_values($queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
-
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
@@ -2091,9 +2147,13 @@ class Database
         if ($cache = $this->cache->load($cacheKey, self::TTL)) {
             $document = new Document($cache);
 
-            if ($collection->getId() !== self::METADATA
-                && !$validator->isValid($document->getRead())) {
-                return new Document();
+            if ($collection->getId() !== self::METADATA) {
+                if (!$validator->isValid([
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $document->getRead() : [])
+                ])) {
+                    return new Document();
+                }
             }
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
@@ -2108,9 +2168,13 @@ class Database
             return $document;
         }
 
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getRead())) {
-            return new Document();
+        if ($collection->getId() !== self::METADATA) {
+            if (!$validator->isValid([
+                ...$collection->getRead(),
+                ...($documentSecurity ? $document->getRead() : [])
+            ])) {
+                return new Document();
+            }
         }
 
         $document = $this->casting($collection, $document);
@@ -2153,8 +2217,8 @@ class Database
             }
         }
 
-        // Don't save to cache if there is a two-way relationship
-        if (!$hasTwoWayRelationship) {
+        // Don't save to cache if it's part of a two-way relationship or a relationship at all
+        if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($cacheKey, $document->getArrayCopy());
         }
 
@@ -2190,9 +2254,9 @@ class Database
             $side = $relationship['options']['side'];
 
             if (!empty($value)) {
-                $k = $relatedCollection->getId() . ':' . $value . '=>' .$collection->getId().':'.$document->getId();
+                $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
                 if ($relationType === Database::RELATION_ONE_TO_MANY) {
-                    $k = $collection->getId().':'.$document->getId() . '=>' .$relatedCollection->getId() . ':' . $value;
+                    $k = $collection->getId() . ':' . $document->getId() . '=>' . $relatedCollection->getId() . ':' . $value;
                 }
                 $this->map[$k] = true;
             }
@@ -2227,8 +2291,8 @@ class Database
                 // collection as an existing relationship, but a different two-way key (the third condition),
                 // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                 $transitive = (($existingKey === $twoWayKey
-                        && $existingCollection === $relatedCollection->getId()
-                        && $existingSide !== $side)
+                    && $existingCollection === $relatedCollection->getId()
+                    && $existingSide !== $side)
                     || ($existingTwoWayKey === $key
                         && $existingRelatedCollection === $collection->getId()
                         && $existingSide !== $side)
@@ -2248,15 +2312,12 @@ class Database
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
-                    if (\is_null($value)) {
+                    if ($skipFetch || $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
+                        $document->removeAttribute($key);
                         break;
                     }
 
-                    if ($skipFetch) {
-                        $document->removeAttribute($key);
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if (\is_null($value)) {
                         break;
                     }
 
@@ -2272,10 +2333,11 @@ class Database
                     break;
                 case Database::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!$twoWay) {
+                        if (!$twoWay || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                             $document->removeAttribute($key);
+                            break;
                         }
-                        if ($twoWay && !\is_null($value) && !$skipFetch) {
+                        if (!\is_null($value)) {
                             $this->relationshipFetchDepth++;
                             $this->relationshipFetchMap[] = $relationship;
 
@@ -2289,7 +2351,7 @@ class Database
                         break;
                     }
 
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
+                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
                         break;
                     }
 
@@ -2313,7 +2375,12 @@ class Database
                     break;
                 case Database::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {
-                        if (\is_null($value) || $skipFetch) {
+                        if ($skipFetch || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
+                            $document->removeAttribute($key);
+                            break;
+                        }
+
+                        if (\is_null($value)) {
                             break;
                         }
                         $this->relationshipFetchDepth++;
@@ -2411,6 +2478,13 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->getId() !== self::METADATA) {
+            $authorization = new Authorization(self::PERMISSION_CREATE);
+            if (!$authorization->isValid($collection->getCreate())) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+
         $time = DateTime::now();
 
         $document
@@ -2421,10 +2495,14 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection);
+        $validator = new Permissions();
+        if (!$validator->isValid($document->getPermissions())) {
+            throw new InvalidArgumentException($validator->getDescription());
+        }
 
-        if (!$validator->isValid($document)) {
-            throw new StructureException($validator->getDescription());
+        $structure = new Structure($collection);
+        if (!$structure->isValid($document)) {
+            throw new StructureException($structure->getDescription());
         }
 
         if ($this->resolveRelationships) {
@@ -2461,6 +2539,8 @@ class Database
             $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
+        $stackCount = count($this->relationshipWriteStack);
+
         foreach ($relationships as $index => $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
@@ -2470,98 +2550,96 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
-            if ($this->relationshipCreateDepth > Database::RELATION_MAX_DEPTH) {
+            if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->relationshipWriteStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);
-
-                if ($index === \count($relationships) - 1) {
-                    return $document;
-                }
 
                 continue;
             }
 
-            switch (\gettype($value)) {
-                case 'array':
-                    // List of documents or IDs
-                    foreach ($value as $related) {
-                        switch (\gettype($related)) {
-                            case 'object':
-                                if (!$related instanceof Document) {
+            $this->relationshipWriteStack[] = $collection->getId();
+
+            try {
+                switch (\gettype($value)) {
+                    case 'array':
+                        // List of documents or IDs
+                        foreach ($value as $related) {
+                            switch (\gettype($related)) {
+                                case 'object':
+                                    if (!$related instanceof Document) {
+                                        throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                                    }
+                                    $this->relateDocuments(
+                                        $collection,
+                                        $relatedCollection,
+                                        $key,
+                                        $document,
+                                        $related,
+                                        $relationType,
+                                        $twoWay,
+                                        $twoWayKey,
+                                        $side,
+                                    );
+                                    break;
+                                case 'string':
+                                    $this->relateDocumentsById(
+                                        $collection,
+                                        $relatedCollection,
+                                        $key,
+                                        $document->getId(),
+                                        $related,
+                                        $relationType,
+                                        $twoWay,
+                                        $twoWayKey,
+                                        $side,
+                                    );
+                                    break;
+                                default:
                                     throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
-                                }
-                                $this->relateDocuments(
-                                    $collection,
-                                    $relatedCollection,
-                                    $key,
-                                    $document,
-                                    $related,
-                                    $relationType,
-                                    $twoWay,
-                                    $twoWayKey,
-                                    $side,
-                                    $this->relationshipCreateDepth
-                                );
-                                break;
-                            case 'string':
-                                $this->relateDocumentsById(
-                                    $collection,
-                                    $relatedCollection,
-                                    $key,
-                                    $document->getId(),
-                                    $related,
-                                    $relationType,
-                                    $twoWay,
-                                    $twoWayKey,
-                                    $side,
-                                    $this->relationshipCreateDepth
-                                );
-                                break;
-                            default:
-                                throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                            }
                         }
-                    }
-                    $document->removeAttribute($key);
-                    break;
-                case 'object':
-                    if (!$value instanceof Document) {
+                        $document->removeAttribute($key);
+                        break;
+                    case 'object':
+                        if (!$value instanceof Document) {
+                            throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                        }
+                        $relatedId = $this->relateDocuments(
+                            $collection,
+                            $relatedCollection,
+                            $key,
+                            $document,
+                            $value,
+                            $relationType,
+                            $twoWay,
+                            $twoWayKey,
+                            $side,
+                        );
+                        $document->setAttribute($key, $relatedId);
+                        break;
+                    case 'string':
+                        // Single document ID
+                        $this->relateDocumentsById(
+                            $collection,
+                            $relatedCollection,
+                            $key,
+                            $document->getId(),
+                            $value,
+                            $relationType,
+                            $twoWay,
+                            $twoWayKey,
+                            $side,
+                        );
+                        break;
+                    case 'NULL':
+                        // TODO: This might need to depend on the relation type, to be either set to null or removed?
+                        $document->removeAttribute($key);
+                        // No related document
+                        break;
+                    default:
                         throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
-                    }
-                    $relatedId = $this->relateDocuments(
-                        $collection,
-                        $relatedCollection,
-                        $key,
-                        $document,
-                        $value,
-                        $relationType,
-                        $twoWay,
-                        $twoWayKey,
-                        $side,
-                        $this->relationshipCreateDepth
-                    );
-                    $document->setAttribute($key, $relatedId);
-                    break;
-                case 'string':
-                    // Single document ID
-                    $this->relateDocumentsById(
-                        $collection,
-                        $relatedCollection,
-                        $key,
-                        $document->getId(),
-                        $value,
-                        $relationType,
-                        $twoWay,
-                        $twoWayKey,
-                        $side,
-                        $this->relationshipCreateDepth
-                    );
-                    break;
-                case 'NULL':
-                    // TODO: This might need to depend on the relation type, to be either set to null or removed?
-                    $document->removeAttribute($key);
-                    // No related document
-                    break;
-                default:
-                    throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                }
+            } finally {
+                \array_pop($this->relationshipWriteStack);
             }
         }
 
@@ -2569,6 +2647,8 @@ class Database
     }
 
     /**
+     * @return string related document ID
+     *
      * @throws AuthorizationException
      * @throws Throwable
      * @throws StructureException
@@ -2583,7 +2663,6 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side,
-        int &$depth
     ): string {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
@@ -2608,22 +2687,18 @@ class Database
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
-            if (! isset($relation['$permissions'])) {
+            if (!isset($relation['$permissions'])) {
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
 
-            $depth++;
             $related = $this->createDocument($relatedCollection->getId(), $relation);
-            $depth--;
         } elseif ($related->getAttributes() != $relation->getAttributes()) {
             // If the related document exists and the data is not the same, update it
             foreach ($relation->getAttributes() as $attribute => $value) {
                 $related->setAttribute($attribute, $value);
             }
 
-            $depth ++;
             $related = $this->updateDocument($relatedCollection->getId(), $related->getId(), $related);
-            $depth --;
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
@@ -2653,7 +2728,6 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side,
-        int &$depth
     ): void {
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
@@ -2725,9 +2799,15 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($old->getUpdate())) {
-            throw new AuthorizationException($validator->getDescription());
+        if ($collection->getId() !== self::METADATA) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+            if (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $old->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         // Check if document was updated after the request timestamp
@@ -2748,7 +2828,7 @@ class Database
             $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
         }
 
-        $document = $this->adapter->updateDocument($collection->getId(), $document);
+        $this->adapter->updateDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -2782,6 +2862,8 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
+        $stackCount = count($this->relationshipWriteStack);
+
         foreach ($relationships as $index => $relationship) {
             /** @var string $key */
             $key = $relationship['key'];
@@ -2798,120 +2880,222 @@ class Database
                 continue;
             }
 
-            if ($this->relationshipUpdateDepth > Database::RELATION_MAX_DEPTH) {
+            if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->relationshipWriteStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);
-
-                if ($index === \count($relationships) - 1) {
-                    return $document;
-                }
 
                 continue;
             }
 
-            switch ($relationType) {
-                case Database::RELATION_ONE_TO_ONE:
-                    if (!$twoWay) {
-                        if ($value instanceof Document) {
-                            $relationId = $this->relateDocuments(
-                                $collection,
-                                $relatedCollection,
-                                $key,
-                                $document,
-                                $value,
-                                $relationType,
-                                false,
-                                $twoWayKey,
-                                $side,
-                                $this->relationshipUpdateDepth
-                            );
-                            $document->setAttribute($key, $relationId);
-                        }
-                        break;
-                    }
+            $this->relationshipWriteStack[] = $collection->getId();
 
-                    switch (\gettype($value)) {
-                        case 'string':
-                            $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
-
-                            if (
-                                $oldValue?->getId() !== $value
-                                && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
-                                    Query::equal($twoWayKey, [$value]),
-                                ]))
-                            ) {
-                                // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                throw new DuplicateException('Document already has a related document');
-                            }
-
-                            $this->skipRelationships(fn () => $this->updateDocument(
-                                $relatedCollection->getId(),
-                                $related->getId(),
-                                $related->setAttribute($twoWayKey, $document->getId())
-                            ));
-                            break;
-                        case 'object':
+            try {
+                switch ($relationType) {
+                    case Database::RELATION_ONE_TO_ONE:
+                        if (!$twoWay) {
                             if ($value instanceof Document) {
-                                $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
+                                $relationId = $this->relateDocuments(
+                                    $collection,
+                                    $relatedCollection,
+                                    $key,
+                                    $document,
+                                    $value,
+                                    $relationType,
+                                    false,
+                                    $twoWayKey,
+                                    $side,
+                                );
+                                $document->setAttribute($key, $relationId);
+                            }
+                            break;
+                        }
+
+                        switch (\gettype($value)) {
+                            case 'string':
+                                $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
 
                                 if (
-                                    $oldValue?->getId() !== $value->getId()
+                                    $oldValue?->getId() !== $value
                                     && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
-                                        Query::equal($twoWayKey, [$value->getId()]),
+                                        Query::equal($twoWayKey, [$value]),
                                     ]))
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                     throw new DuplicateException('Document already has a related document');
                                 }
 
-                                $this->relationshipUpdateDepth++;
-                                if ($related->isEmpty()) {
-                                    if (! isset($value['$permissions'])) {
-                                        $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
-                                    }
-                                    $related = $this->createDocument(
-                                        $relatedCollection->getId(),
-                                        $value->setAttribute($twoWayKey, $document->getId())
-                                    );
-                                } else {
-                                    $related = $this->updateDocument(
-                                        $relatedCollection->getId(),
-                                        $related->getId(),
-                                        $value->setAttribute($twoWayKey, $document->getId())
-                                    );
-                                }
-                                $this->relationshipUpdateDepth--;
-
-                                $document->setAttribute($key, $related->getId());
-                                break;
-                            }
-                            // no break
-                        case 'NULL':
-                            if (!\is_null($oldValue?->getId())) {
-                                $oldRelated = $this->skipRelationships(
-                                    fn () =>
-                                    $this->getDocument($relatedCollection->getId(), $oldValue->getId())
-                                );
                                 $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
-                                    $oldRelated->getId(),
-                                    $oldRelated->setAttribute($twoWayKey, null)
+                                    $related->getId(),
+                                    $related->setAttribute($twoWayKey, $document->getId())
+                                ));
+                                break;
+                            case 'object':
+                                if ($value instanceof Document) {
+                                    $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
+
+                                    if (
+                                        $oldValue?->getId() !== $value->getId()
+                                        && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                            Query::equal($twoWayKey, [$value->getId()]),
+                                        ]))
+                                    ) {
+                                        // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
+                                        throw new DuplicateException('Document already has a related document');
+                                    }
+
+                                    $this->relationshipWriteStack[] = $relatedCollection->getId();
+                                    if ($related->isEmpty()) {
+                                        if (!isset($value['$permissions'])) {
+                                            $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                        }
+                                        $related = $this->createDocument(
+                                            $relatedCollection->getId(),
+                                            $value->setAttribute($twoWayKey, $document->getId())
+                                        );
+                                    } else {
+                                        $related = $this->updateDocument(
+                                            $relatedCollection->getId(),
+                                            $related->getId(),
+                                            $value->setAttribute($twoWayKey, $document->getId())
+                                        );
+                                    }
+                                    \array_pop($this->relationshipWriteStack);
+
+                                    $document->setAttribute($key, $related->getId());
+                                    break;
+                                }
+                                // no break
+                            case 'NULL':
+                                if (!\is_null($oldValue?->getId())) {
+                                    $oldRelated = $this->skipRelationships(
+                                        fn () =>
+                                        $this->getDocument($relatedCollection->getId(), $oldValue->getId())
+                                    );
+                                    $this->skipRelationships(fn () => $this->updateDocument(
+                                        $relatedCollection->getId(),
+                                        $oldRelated->getId(),
+                                        $oldRelated->setAttribute($twoWayKey, null)
+                                    ));
+                                }
+                                break;
+                            default:
+                                throw new Exception('Invalid type for relationship. Must be either a document, document ID or null.');
+                        }
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                    case Database::RELATION_MANY_TO_ONE:
+                        if (
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
+                            || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
+                        ) {
+                            if (\is_null($value)) {
+                                break;
+                            }
+
+                            if (!\is_array($value)) {
+                                throw new Exception('Invalid value for relationship');
+                            }
+
+                            $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
+
+                            $newIds = \array_map(function ($item) {
+                                if (\is_string($item)) {
+                                    return $item;
+                                } elseif ($item instanceof Document) {
+                                    return $item->getId();
+                                } else {
+                                    throw new Exception('Invalid value for relationship');
+                                }
+                            }, $value);
+
+                            $removedDocuments = \array_diff($oldIds, $newIds);
+
+                            foreach ($removedDocuments as $relation) {
+                                $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                    $relatedCollection->getId(),
+                                    $relation
+                                ));
+
+                                $this->skipRelationships(fn () => $this->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $relation->getId(),
+                                    $relation->setAttribute($twoWayKey, null)
                                 ));
                             }
-                            break;
-                        default:
-                            throw new Exception('Invalid type for relationship. Must be either a document, document ID or null.');
-                    }
-                    break;
-                case Database::RELATION_ONE_TO_MANY:
-                case Database::RELATION_MANY_TO_ONE:
-                    if (
-                        ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
-                        || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
-                    ) {
-                        if (\is_null($value)) {
+
+                            foreach ($value as $relation) {
+                                if (\is_string($relation)) {
+                                    $related = $this->skipRelationships(
+                                        fn () =>
+                                        $this->getDocument($relatedCollection->getId(), $relation)
+                                    );
+
+                                    $this->skipRelationships(fn () => $this->updateDocument(
+                                        $relatedCollection->getId(),
+                                        $related->getId(),
+                                        $related->setAttribute($twoWayKey, $document->getId())
+                                    ));
+                                } elseif ($relation instanceof Document) {
+                                    $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
+
+                                    if ($related->isEmpty()) {
+                                        if (!isset($value['$permissions'])) {
+                                            $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                        }
+                                        $this->createDocument(
+                                            $relatedCollection->getId(),
+                                            $relation->setAttribute($twoWayKey, $document->getId())
+                                        );
+                                    } else {
+                                        $this->updateDocument(
+                                            $relatedCollection->getId(),
+                                            $related->getId(),
+                                            $relation->setAttribute($twoWayKey, $document->getId())
+                                        );
+                                    }
+                                } else {
+                                    throw new Exception('Invalid value for relationship');
+                                }
+                            }
+
+                            $document->removeAttribute($key);
                             break;
                         }
 
+                        if (\is_string($value)) {
+                            $this->deleteCachedDocument($relatedCollection->getId(), $value);
+                        } elseif ($value instanceof Document) {
+                            $related = $this->getDocument($relatedCollection->getId(), $value->getId());
+
+                            if ($related->isEmpty()) {
+                                if (!isset($value['$permissions'])) {
+                                    $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                }
+                                $this->createDocument(
+                                    $relatedCollection->getId(),
+                                    $value
+                                );
+                            } elseif ($related->getAttributes() != $value->getAttributes()) {
+                                $this->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $related->getId(),
+                                    $value
+                                );
+                                $this->deleteCachedDocument($relatedCollection->getId(), $related->getId());
+                            }
+
+                            $document->setAttribute($key, $value->getId());
+                        } elseif (\is_null($value)) {
+                            break;
+                        } else {
+                            throw new Exception('Invalid value for relationship');
+                        }
+
+                        break;
+                    case Database::RELATION_MANY_TO_MANY:
+                        if (\is_null($value)) {
+                            break;
+                        }
                         if (!\is_array($value)) {
                             throw new Exception('Invalid value for relationship');
                         }
@@ -2931,172 +3115,71 @@ class Database
                         $removedDocuments = \array_diff($oldIds, $newIds);
 
                         foreach ($removedDocuments as $relation) {
-                            $relation = $this->skipRelationships(fn () => $this->getDocument(
-                                $relatedCollection->getId(),
-                                $relation
-                            ));
+                            $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                            $this->skipRelationships(fn () => $this->updateDocument(
-                                $relatedCollection->getId(),
-                                $relation->getId(),
-                                $relation->setAttribute($twoWayKey, null)
-                            ));
+                            $junctions = $this->find($junction, [
+                                Query::equal($key, [$relation]),
+                                Query::equal($twoWayKey, [$document->getId()]),
+                                Query::limit(PHP_INT_MAX)
+                            ]);
+
+                            foreach ($junctions as $junction) {
+                                $this->deleteDocument($junction->getCollection(), $junction->getId());
+                            }
                         }
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                $related = $this->skipRelationships(
-                                    fn () =>
-                                    $this->getDocument($relatedCollection->getId(), $relation)
-                                );
-
-                                $this->skipRelationships(fn () => $this->updateDocument(
-                                    $relatedCollection->getId(),
-                                    $related->getId(),
-                                    $related->setAttribute($twoWayKey, $document->getId())
-                                ));
+                                if (\in_array($relation, $oldIds)) {
+                                    continue;
+                                }
                             } elseif ($relation instanceof Document) {
                                 $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                                 if ($related->isEmpty()) {
-                                    if (! isset($value['$permissions'])) {
+                                    if (!isset($value['$permissions'])) {
                                         $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                     }
-                                    $this->createDocument(
+                                    $related = $this->createDocument(
                                         $relatedCollection->getId(),
-                                        $relation->setAttribute($twoWayKey, $document->getId())
+                                        $relation
                                     );
-                                } else {
-                                    $this->updateDocument(
+                                } elseif ($related->getAttributes() != $relation->getAttributes()) {
+                                    $related = $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $related->getId(),
-                                        $relation->setAttribute($twoWayKey, $document->getId())
+                                        $relation
                                     );
                                 }
+
+                                if (\in_array($relation->getId(), $oldIds)) {
+                                    continue;
+                                }
+
+                                $relation = $related->getId();
                             } else {
                                 throw new Exception('Invalid value for relationship');
                             }
+
+                            $this->skipRelationships(fn () => $this->createDocument(
+                                $this->getJunctionCollection($collection, $relatedCollection, $side),
+                                new Document([
+                                    $key => $relation,
+                                    $twoWayKey => $document->getId(),
+                                    '$permissions' => [
+                                        Permission::read(Role::any()),
+                                        Permission::update(Role::any()),
+                                        Permission::delete(Role::any()),
+                                    ],
+                                ])
+                            ));
                         }
 
                         $document->removeAttribute($key);
                         break;
-                    }
-
-                    if (\is_string($value)) {
-                        $this->deleteCachedDocument($relatedCollection->getId(), $value);
-                    } elseif ($value instanceof Document) {
-                        $related = $this->getDocument($relatedCollection->getId(), $value->getId());
-
-                        if ($related->isEmpty()) {
-                            if (! isset($value['$permissions'])) {
-                                $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
-                            }
-                            $this->createDocument(
-                                $relatedCollection->getId(),
-                                $value
-                            );
-                        } elseif ($related->getAttributes() != $value->getAttributes()) {
-                            $this->updateDocument(
-                                $relatedCollection->getId(),
-                                $related->getId(),
-                                $value
-                            );
-                            $this->deleteCachedDocument($relatedCollection->getId(), $related->getId());
-                        }
-
-                        $document->setAttribute($key, $value->getId());
-                    } elseif (\is_null($value)) {
-                        break;
-                    } else {
-                        throw new Exception('Invalid value for relationship');
-                    }
-
-                    break;
-                case Database::RELATION_MANY_TO_MANY:
-                    if (\is_null($value)) {
-                        break;
-                    }
-                    if (!\is_array($value)) {
-                        throw new Exception('Invalid value for relationship');
-                    }
-
-                    $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
-
-                    $newIds = \array_map(function ($item) {
-                        if (\is_string($item)) {
-                            return $item;
-                        } elseif ($item instanceof Document) {
-                            return $item->getId();
-                        } else {
-                            throw new Exception('Invalid value for relationship');
-                        }
-                    }, $value);
-
-                    $removedDocuments = \array_diff($oldIds, $newIds);
-
-                    foreach ($removedDocuments as $relation) {
-                        $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
-
-                        $junctions = $this->find($junction, [
-                            Query::equal($key, [$relation]),
-                            Query::equal($twoWayKey, [$document->getId()]),
-                            Query::limit(PHP_INT_MAX)
-                        ]);
-
-                        foreach ($junctions as $junction) {
-                            $this->deleteDocument($junction->getCollection(), $junction->getId());
-                        }
-                    }
-
-                    foreach ($value as $relation) {
-                        if (\is_string($relation)) {
-                            if (\in_array($relation, $oldIds)) {
-                                continue;
-                            }
-                        } elseif ($relation instanceof Document) {
-                            $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-
-                            if ($related->isEmpty()) {
-                                if (! isset($value['$permissions'])) {
-                                    $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
-                                }
-                                $related = $this->createDocument(
-                                    $relatedCollection->getId(),
-                                    $relation
-                                );
-                            } elseif ($related->getAttributes() != $relation->getAttributes()) {
-                                $related = $this->updateDocument(
-                                    $relatedCollection->getId(),
-                                    $related->getId(),
-                                    $relation
-                                );
-                            }
-
-                            if (\in_array($relation->getId(), $oldIds)) {
-                                continue;
-                            }
-
-                            $relation = $related->getId();
-                        } else {
-                            throw new Exception('Invalid value for relationship');
-                        }
-
-                        $this->skipRelationships(fn () => $this->createDocument(
-                            $this->getJunctionCollection($collection, $relatedCollection, $side),
-                            new Document([
-                                $key => $relation,
-                                $twoWayKey => $document->getId(),
-                                '$permissions' => [
-                                    Permission::read(Role::any()),
-                                    Permission::update(Role::any()),
-                                    Permission::delete(Role::any()),
-                                ],
-                            ])
-                        ));
-                    }
-
-                    $document->removeAttribute($key);
-                    break;
+                }
+            } finally {
+                \array_pop($this->relationshipWriteStack);
             }
         }
 
@@ -3135,9 +3218,15 @@ class Database
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getUpdate())) {
-            throw new AuthorizationException($validator->getDescription());
+
+        if ($collection->getId() !== self::METADATA) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            if (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $document->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
@@ -3196,9 +3285,15 @@ class Database
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getUpdate())) {
-            throw new AuthorizationException($validator->getDescription());
+
+        if ($collection->getId() !== self::METADATA) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            if (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $document->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
@@ -3246,14 +3341,19 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $validator = new Authorization(self::PERMISSION_DELETE);
-
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->getId() !== self::METADATA
-            && !$validator->isValid($document->getDelete())) {
-            throw new AuthorizationException($validator->getDescription());
+        $validator = new Authorization(self::PERMISSION_DELETE);
+
+        if ($collection->getId() !== self::METADATA) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            if (!$validator->isValid([
+                ...$collection->getDelete(),
+                ...($documentSecurity ? $document->getDelete() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
+            }
         }
 
         // Check if document was updated after the request timestamp
@@ -3322,7 +3422,11 @@ class Database
             $value = null;
         }
 
-        if (!empty($value) && $side === Database::RELATION_SIDE_PARENT) {
+        if (
+            !empty($value)
+            && $relationType !== Database::RELATION_MANY_TO_ONE
+            && $side === Database::RELATION_SIDE_PARENT
+        ) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 
@@ -3441,11 +3545,10 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(fn () =>
-                        $this->deleteDocument(
-                            $junction,
-                            $document->getId()
-                        ));
+                    $this->skipRelationships(fn () => $this->deleteDocument(
+                        $junction,
+                        $document->getId()
+                    ));
                 }
                 break;
         }
@@ -3455,22 +3558,23 @@ class Database
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
-                $this->skipRelationships(fn () =>
+                if ($value !== null) {
+                    $this->skipRelationships(fn () =>
                     $this->deleteDocument(
                         $relatedCollection->getId(),
                         $value->getId()
                     ));
+                }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
                 foreach ($value as $relation) {
-                    $this->skipRelationships(fn () =>
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $relation->getId()
-                        ));
+                    $this->skipRelationships(fn () => $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $relation->getId()
+                    ));
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
@@ -3484,11 +3588,10 @@ class Database
                 ]);
 
                 foreach ($value as $relation) {
-                    $this->skipRelationships(fn () =>
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $relation->getId()
-                        ));
+                    $this->skipRelationships(fn () => $this->deleteDocument(
+                        $relatedCollection->getId(),
+                        $relation->getId()
+                    ));
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -3500,11 +3603,13 @@ class Database
                 ]);
 
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key) {
-                        $this->deleteDocument(
-                            $relatedCollection->getId(),
-                            $document->getAttribute($key)
-                        );
+                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key, $side) {
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $this->deleteDocument(
+                                $relatedCollection->getId(),
+                                $document->getAttribute($key)
+                            );
+                        }
                         $this->deleteDocument(
                             $junction,
                             $document->getId()
@@ -3566,10 +3671,12 @@ class Database
             throw new Exception($validator->getDescription());
         }
 
+        $authorization = new Authorization(self::PERMISSION_READ);
+        $skipAuth = $authorization->isValid($collection->getRead());
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn (Document $attribute) =>
-            $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
         $grouped = Query::groupByType($queries);
@@ -3640,7 +3747,7 @@ class Database
         }
 
         $queries = \array_values($queries);
-        $results = $this->adapter->find(
+        $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
             $limit ?? 25,
@@ -3652,9 +3759,13 @@ class Database
             $timeout
         );
 
-        $relationships = $this->resolveRelationships ? \array_filter($attributes, function (Document $attribute) {
-            return $attribute->getAttribute('type') === self::VAR_RELATIONSHIP;
-        }) : [];
+        $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $relationships = $this->resolveRelationships
+            ? \array_filter($attributes, fn (Document $attribute) =>  $attribute->getAttribute('type') === self::VAR_RELATIONSHIP)
+            : [];
 
         foreach ($results as $index => &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
@@ -3815,10 +3926,16 @@ class Database
             throw new Exception("Collection not found");
         }
 
+        $authorization = new Authorization(self::PERMISSION_READ);
+        if ($authorization->isValid($collection->getRead())) {
+            $skipAuth = true;
+        }
+
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
-        $count = $this->adapter->count($collection->getId(), $queries, $max);
+        $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
+        $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
 
@@ -3956,14 +4073,16 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-                $attribute['type'] === self::VAR_RELATIONSHIP
+            $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
 
-            if (\array_key_exists($key, (array)$document)
-                || \array_key_exists($this->adapter->filter($key), (array)$document)) {
+            if (
+                \array_key_exists($key, (array)$document)
+                || \array_key_exists($this->adapter->filter($key), (array)$document)
+            ) {
                 $value = $document->getAttribute($key);
                 $value ??= $document->getAttribute($this->adapter->filter($key));
                 $document->removeAttribute($this->adapter->filter($key));
@@ -4260,7 +4379,7 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
+            $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         if (empty($relationships)) {

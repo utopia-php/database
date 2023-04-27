@@ -1,16 +1,15 @@
 <?php
 
-namespace Utopia\Database\Validator;
+namespace Utopia\Database\Validator\Queries;
 
 use Exception;
-use Utopia\Database\Validator\Query\Select;
 use Utopia\Database\Database;
+use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Query\Select;
 
-class DocumentValidator extends Queries
+class Document extends Queries
 {
     /**
-     * Expression constructor
-     *
      * @param array $attributes
      * @throws Exception
      */

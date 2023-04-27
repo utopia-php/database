@@ -1,16 +1,17 @@
 <?php
 
-namespace Utopia\Database\Validator;
+namespace Utopia\Database\Validator\Queries;
 
 use Exception;
+use Utopia\Database\Database;
+use Utopia\Database\Document as UtopiaDocument;
+use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
-use Utopia\Database\Database;
-use Utopia\Database\Document as UtopiaDocument;
 
 class Documents extends IndexedQueries
 {

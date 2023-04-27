@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Document;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Validator;
 use Utopia\Database\Query;

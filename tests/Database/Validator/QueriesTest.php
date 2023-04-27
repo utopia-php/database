@@ -3,161 +3,80 @@
 namespace Utopia\Tests\Validator;
 
 use Exception;
-use Utopia\Database\Helpers\ID;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
-use Utopia\Database\Validator\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Query\Cursor;
+use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\Limit;
+use Utopia\Database\Validator\Query\Offset;
+use Utopia\Database\Validator\Query\Order;
 
 class QueriesTest extends TestCase
 {
-    /**
-     * @var array<string, mixed>
-     */
-    protected array $collection = [];
-
-    /**
-     * @throws Exception
-     */
     public function setUp(): void
     {
-        $this->collection = [
-            '$id' => Database::METADATA,
-            '$collection' => Database::METADATA,
-            'name' => 'movies',
-            'attributes' => [
-                new Document([
-                    '$id' => 'title',
-                    'key' => 'title',
-                    'type' => Database::VAR_STRING,
-                    'size' => 256,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'description',
-                    'key' => 'description',
-                    'type' => Database::VAR_STRING,
-                    'size' => 1000000,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'rating',
-                    'key' => 'rating',
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => 'price',
-                    'key' => 'price',
-                    'type' => Database::VAR_FLOAT,
-                    'size' => 5,
-                    'required' => true,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ])
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('testindex2'),
-                    'type' => 'key',
-                    'attributes' => [
-                        'title',
-                        'description',
-                        'price'
-                    ],
-                    'orders' => [
-                        'ASC',
-                        'DESC'
-                    ],
-                ]),
-                new Document([
-                    '$id' => ID::custom('testindex3'),
-                    'type' => 'fulltext',
-                    'attributes' => [
-                        'title'
-                    ],
-                    'orders' => []
-                ]),
-            ],
-        ];
     }
 
     public function tearDown(): void
     {
     }
 
-    /**
-     * @throws Exception
-     */
-    public function testValidQueries(): void
+    public function testEmptyQueries(): void
     {
-        $validator = new DocumentsValidator($this->collection['attributes'], $this->collection['indexes']);
+        $validator = new Queries();
 
-        $queries = [
-            'notEqual("title", ["Iron Man", "Ant Man"])',
-            'equal("description", "Best movie ever")',
-            'lessThanEqual("price", 6.50)',
-            'lessThan("price", 6.50)',
-            'greaterThan("rating", 4)',
-            'greaterThanEqual("rating", 6)',
-            'between("price", 1.50, 6.50)',
-            'search("title", "SEO")',
-            'startsWith("title", "Good")',
-            'endsWith("title", "Night")',
-            'isNull("title")',
-            'isNotNull("title")',
-            'cursorAfter("a")',
-            'cursorBefore("b")', // Todo: This should fail?
-            'orderAsc("title")',
-            'limit(10)',
-            'offset(10)',
-        ];
+        $this->assertEquals(true, $validator->isValid([]));
+    }
 
-        $queries[] = Query::orderDesc('');
-        $this->assertEquals(true, $validator->isValid($queries));
+    public function testInvalidQuery(): void
+    {
+        $validator = new Queries();
 
-        $queries = ['search("description", "iron")'];
-        $this->assertFalse($validator->isValid($queries));
-        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
+        $this->assertEquals(false, $validator->isValid(["this.is.invalid"]));
+    }
 
-        $queries = ['equal("not_found", 4)'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
+    public function testInvalidMethod(): void
+    {
+        $validator = new Queries();
+        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+
+        $validator = new Queries(new Limit());
+        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+    }
+
+    public function testInvalidValue(): void
+    {
+        $validator = new Queries(new Limit());
+        $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
     /**
      * @throws Exception
      */
-    public function testInvalidQueries(): void
+    public function testValid(): void
     {
-        $validator = new DocumentsValidator($this->collection['attributes'], $this->collection['indexes']);
+        $attributes = [
+            new Document([
+                'key' => 'name',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ])
+        ];
 
-        $queries = ['search("description", "iron")'];
-        $this->assertFalse($validator->isValid($queries));
-        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
+        $validator = new Queries(
+            new Cursor(),
+            new Filter($attributes),
+            new Limit(),
+            new Offset(),
+            new Order($attributes),
+        );
 
-        $queries = ['equal("not_found", 4)'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
-
-        $queries = ['limit(-1)'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Invalid limit: Value must be a valid range between 1 and 9,223,372,036,854,775,808', $validator->getDescription());
-
-        $queries = ['equal("title", [])']; // empty array
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: equal queries require at least one value.', $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(['limit(10)']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(['offset(10)']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid(['orderAsc("name")']), $validator->getDescription());
     }
 }

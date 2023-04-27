@@ -268,7 +268,7 @@ class Database
 
     /**
      * Stack of collection IDs when creating or updating related documents
-     * @var string[]
+     * @var array<string>
      */
     private array $relationshipWriteStack = [];
 

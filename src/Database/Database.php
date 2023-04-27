@@ -15,7 +15,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Document as DocumentValidator;
+use Utopia\Database\Validator\Document as DocumentsValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Structure;
 
@@ -3561,10 +3561,10 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-//        $validator = new DocumentValidator($attributes, $indexes);
-//        if(!$validator->isValid($queries)){
-//            throw new Exception($validator->getDescription());
-//        }
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if(!$validator->isValid($queries)){
+            throw new Exception($validator->getDescription());
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),

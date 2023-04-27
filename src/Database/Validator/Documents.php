@@ -12,7 +12,7 @@ use Utopia\Database\Validator\Query\Select;
 use Utopia\Database\Database;
 use Utopia\Database\Document as UtopiaDocument;
 
-class Document extends IndexedQueries
+class Documents extends IndexedQueries
 {
     /**
      * Expression constructor

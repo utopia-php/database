@@ -2911,7 +2911,10 @@ class Database
                         switch (\gettype($value)) {
                             case 'string':
                                 $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
-
+                                // Don't try to update if the related document doesn't exist
+                                if ($related->isEmpty()) {
+                                    break;
+                                }
                                 if (
                                     $oldValue?->getId() !== $value
                                     && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
@@ -3421,7 +3424,7 @@ class Database
             $value = null;
         }
 
-        if (!empty($value) && $side === Database::RELATION_SIDE_PARENT) {
+        if (!empty($value)) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
 
@@ -3563,6 +3566,12 @@ class Database
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
+                    if ($value !== null) {
+                        $this->skipRelationships(fn () => $this->deleteDocument(
+                            $relatedCollection->getId(),
+                            $value->getId()
+                        ));
+                    }
                     break;
                 }
                 foreach ($value as $relation) {
@@ -3574,6 +3583,12 @@ class Database
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($value !== null) {
+                        $this->skipRelationships(fn () => $this->deleteDocument(
+                            $relatedCollection->getId(),
+                            $value->getId()
+                        ));
+                    }
                     break;
                 }
 

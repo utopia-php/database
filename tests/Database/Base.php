@@ -4244,13 +4244,15 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(RestrictedException::class, $e);
         }
 
-        $this->assertTrue(static::getDatabase()->deleteDocument('city', 'city1'));
+        try {
+            static::getDatabase()->deleteDocument('city', 'city1');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(RestrictedException::class, $e);
+        }
 
-        $city1 = static::getDatabase()->getDocument('city', 'city1');
-        $this->assertTrue($city1->isEmpty());
-
-        $country1 = static::getDatabase()->getDocument('country', 'country1');
-        $this->assertTrue($country1->getAttribute('city')->isEmpty());
+        $country1->setAttribute('city', null);
+        $country1 = static::getDatabase()->updateDocument('country', $country1->getId(), $country1);
 
         $this->assertTrue(static::getDatabase()->deleteDocument('country', 'country1'));
 
@@ -5557,6 +5559,13 @@ abstract class Base extends TestCase
             $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
 
+        try {
+            static::getDatabase()->deleteDocument('account', 'account1');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
+        }
+
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
             collection: 'customer',
@@ -5593,6 +5602,16 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('account', 'account2');
+        $this->assertEquals(true, $library->isEmpty());
+
+        // Delete child, will delete parent
+        static::getDatabase()->deleteDocument('account', 'account3');
+
+        // Check parent and child were deleted
+        $library = static::getDatabase()->getDocument('customer', 'customer3');
+        $this->assertEquals(true, $library->isEmpty());
+
+        $library = static::getDatabase()->getDocument('account', 'account3');
         $this->assertEquals(true, $library->isEmpty());
 
         // Delete relationship
@@ -6409,6 +6428,12 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
+        try {
+            static::getDatabase()->deleteDocument('product', 'product1');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
+        }
 
         // Change on delete to set null
         static::getDatabase()->updateRelationship(
@@ -6439,6 +6464,16 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $library->isEmpty());
 
         $library = static::getDatabase()->getDocument('product', 'product2');
+        $this->assertEquals(true, $library->isEmpty());
+
+        // Delete parent, will delete child
+        static::getDatabase()->deleteDocument('product', 'product3');
+
+        // Check parent and child were deleted
+        $library = static::getDatabase()->getDocument('store', 'store3');
+        $this->assertEquals(true, $library->isEmpty());
+
+        $library = static::getDatabase()->getDocument('product', 'product3');
         $this->assertEquals(true, $library->isEmpty());
 
         // Delete relationship
@@ -9215,7 +9250,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $deleted);
         $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
-        $this->assertEquals(0, count($lawn1['trees']));
+        $this->assertTrue($lawn1->isEmpty());
 
         // Create document with no permissions
         static::getDatabase()->createDocument('lawns', new Document([

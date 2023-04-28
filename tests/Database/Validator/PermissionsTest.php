@@ -24,7 +24,7 @@ class PermissionsTest extends TestCase
     }
 
     /**
-     * @throws \Exception
+     * @throws Utopia\Database\Exception
      */
     public function testSingleMethodSingleValue()
     {

@@ -3,10 +3,11 @@
 namespace Utopia\Database\Adapter;
 
 use PDO;
-use Exception;
 use PDOException;
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\ID;
 use Utopia\Database\Exception\Duplicate;
 
@@ -367,7 +368,7 @@ class SQLite extends MySQL
             switch ($e->getCode()) {
                 case "1062":
                 case "23000":
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new Duplicate('Duplicated document');
                 break;
                 default:
                     throw $e;
@@ -554,7 +555,7 @@ class SQLite extends MySQL
                 switch ($e->getCode()) {
                     case '1062':
                     case '23000':
-                        throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                        throw new Duplicate('Duplicated document');
 
                     default:
                         throw $e;
@@ -607,7 +608,7 @@ class SQLite extends MySQL
                 return 'UNIQUE INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, ${Database::INDEX_UNIQUE}");
         }
     }
 
@@ -638,7 +639,7 @@ class SQLite extends MySQL
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, ${Database::INDEX_UNIQUE}");
                 break;
         }
 

@@ -3,7 +3,7 @@
 namespace Utopia\Database;
 
 use ArrayObject;
-use Exception;
+use Utopia\Database\Exception as DatabaseException;
 
 class Document extends ArrayObject
 {
@@ -17,14 +17,14 @@ class Document extends ArrayObject
      * Construct a new fields object
      *
      * @param array $input
-     * @throws Exception
+     * @throws DatabaseException
      * @see ArrayObject::__construct
      *
      */
     public function __construct(array $input = [])
     {
         if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
-            throw new Exception('$permissions must be of type array');
+            throw new DatabaseException('$permissions must be of type array');
         }
 
         foreach ($input as $key => &$value) {

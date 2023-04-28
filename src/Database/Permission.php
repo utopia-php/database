@@ -251,4 +251,3 @@ class Permission
         return $permission->toString();
     }
 }
-

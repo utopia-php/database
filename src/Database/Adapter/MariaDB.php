@@ -3,8 +3,9 @@
 namespace Utopia\Database\Adapter;
 
 use PDO;
-use Exception;
 use PDOException;
+use Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -767,8 +768,8 @@ class MariaDB extends Adapter
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new Exception('Failed to delete document');
-            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+            $stmt->execute() || throw new DatabaseException('Failed to delete document');
+            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
             throw new Exception($th->getMessage());
@@ -922,7 +923,7 @@ class MariaDB extends Adapter
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
@@ -1311,7 +1312,7 @@ class MariaDB extends Adapter
                     $total += 19; // 2022-06-26 14:46:24
                     break;
                 default:
-                    throw new Exception('Unknown Type');
+                    throw new DatabaseException("Unknown Type. Must be one of ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DOCUMENT}, ${Database::VAR_DATETIME}");
                     break;
             }
         }
@@ -1666,7 +1667,7 @@ class MariaDB extends Adapter
                 return 'DATETIME(3)';
                 break;
             default:
-                throw new Exception('Unknown Type');
+                throw new DatabaseException("Unknown Type. Must be one of ${Database::VAR_INTEGER}, ${Database::VAR_FLOAT}, ${Database::VAR_BOOLEAN}, ${Database::VAR_DOCUMENT}, ${Database::VAR_DATETIME}");
         }
     }
 
@@ -1731,7 +1732,7 @@ class MariaDB extends Adapter
                 return '>=';
 
             default:
-                throw new Exception('Unknown method:' . $method);
+                throw new DatabaseException('Unknown method:' . $method . ". Must be one of ${Query::TYPE_EQUAL}, ${Query::TYPE_NOTEQUAL}, ${Query::TYPE_LESSER}, ${Query::TYPE_LESSEREQUAL}, ${Query::TYPE_GREATER}, ${Query::TYPE_GREATEREQUAL}");
                 break;
         }
     }
@@ -1757,7 +1758,7 @@ class MariaDB extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, ${Database::INDEX_UNIQUE}, ${Database::INDEX_FULLTEXT}");
         }
     }
 
@@ -1788,7 +1789,7 @@ class MariaDB extends Adapter
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown Index Type:' . $type . ". Must be one of ${Database::INDEX_KEY}, ${Database::INDEX_ARRAY}, ${Database::INDEX_UNIQUE}, ${Database::INDEX_FULLTEXT}");
                 break;
         }
 

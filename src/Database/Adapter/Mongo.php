@@ -413,7 +413,7 @@ class Mongo extends Adapter
                 }
                 break;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -469,7 +469,7 @@ class Mongo extends Adapter
                 $this->getClient()->dropCollection($junction);
                 break;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -862,7 +862,7 @@ class Mongo extends Adapter
             $attribute = $orderAttributes[0];
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
 
             $orderOperatorInternalId = Query::TYPE_GREATER;

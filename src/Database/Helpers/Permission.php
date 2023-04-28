@@ -108,14 +108,14 @@ class Permission
         if (!$hasIdentifier) {
             $dimensionParts = \explode('/', $fullRole);
             if (\count($dimensionParts) !== 2) {
-                throw new DatabaseException('Only one dimension can be provided.');
+                throw new DatabaseException('Only one dimension can be provided');
             }
 
             $role = $dimensionParts[0];
             $dimension = $dimensionParts[1];
 
             if (empty($dimension)) {
-                throw new DatabaseException('Dimension must not be empty.');
+                throw new DatabaseException('Dimension must not be empty');
             }
             return new self($permission, $role, '', $dimension);
         }
@@ -123,14 +123,14 @@ class Permission
         // Has both identifier and dimension
         $dimensionParts = \explode('/', $roleParts[1]);
         if (\count($dimensionParts) !== 2) {
-            throw new DatabaseException('Only one dimension can be provided.');
+            throw new DatabaseException('Only one dimension can be provided');
         }
 
         $identifier = $dimensionParts[0];
         $dimension = $dimensionParts[1];
 
         if (empty($dimension)) {
-            throw new DatabaseException('Dimension must not be empty.');
+            throw new DatabaseException('Dimension must not be empty');
         }
 
         return new self($permission, $role, $identifier, $dimension);

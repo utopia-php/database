@@ -631,7 +631,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
-            throw new DuplicateException('Collection ' . $id . ' Exists!');
+            throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);

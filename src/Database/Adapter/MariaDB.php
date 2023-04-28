@@ -298,7 +298,7 @@ class MariaDB extends SQL
             case Database::RELATION_MANY_TO_MANY:
                 return true;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->getPDO()
@@ -377,7 +377,7 @@ class MariaDB extends SQL
                 }
                 break;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         if (empty($sql)) {
@@ -443,7 +443,7 @@ class MariaDB extends SQL
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         if (empty($sql)) {
@@ -842,7 +842,7 @@ class MariaDB extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        $stmt->execute() || throw new DatabaseException('Failed to update Attribute');
+        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
         return true;
     }
 
@@ -1025,7 +1025,7 @@ class MariaDB extends SQL
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
@@ -1346,7 +1346,7 @@ class MariaDB extends SQL
             'double', 'string' => PDO::PARAM_STR,
             'integer', 'boolean' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,
-            default => throw new DatabaseException('Unknown PDO Type for ' . gettype($value)),
+            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }
 

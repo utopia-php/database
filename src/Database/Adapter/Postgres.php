@@ -310,7 +310,7 @@ class Postgres extends SQL
             case Database::RELATION_MANY_TO_MANY:
                 return true;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->getPDO()
@@ -389,7 +389,7 @@ class Postgres extends SQL
                 }
                 break;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         if (empty($sql)) {
@@ -452,7 +452,7 @@ class Postgres extends SQL
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
             default:
-                throw new DatabaseException('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->getPDO()

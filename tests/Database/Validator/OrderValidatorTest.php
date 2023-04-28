@@ -11,19 +11,19 @@ use Utopia\Database\Query;
 class OrderValidatorTest extends TestCase
 {
     /**
-     * @var Document[]
+     * @var array<Document>
      */
-    protected $schema;
+    protected array $schema;
 
     /**
-     * @var Document[]
+     * @var array<Document>
      */
-    protected $indexesSchema;
+    protected array $indexesSchema;
 
     /**
-     * @var array
+     * @var array<array<string, mixed>>
      */
-    protected $attributes = [
+    protected array $attributes = [
         [
             '$id' => 'title',
             'key' => 'title',
@@ -87,9 +87,9 @@ class OrderValidatorTest extends TestCase
     ];
 
     /**
-     * @var array
+     * @var array<array<string, mixed>>
      */
-    protected $indexes = [
+    protected array $indexes = [
         [
             '$id' => 'index1',
             'type' => Database::INDEX_KEY,
@@ -113,15 +113,18 @@ class OrderValidatorTest extends TestCase
         ],
     ];
 
+    /**
+     * @throws \Exception
+     */
     public function setUp(): void
     {
-        // Query validator expects Document[]
+        // Query validator expects array<Document>
         foreach ($this->attributes as $attribute) {
             $this->schema[] = new Document($attribute);
         }
 
-           // Query validator expects Document[]
-           foreach ($this->indexes as $index) {
+        // Query validator expects array<Document>
+        foreach ($this->indexes as $index) {
             $this->indexesSchema[] = new Document($index);
         }
     }
@@ -130,7 +133,7 @@ class OrderValidatorTest extends TestCase
     {
     }
 
-    public function testQuery()
+    public function testQuery(): void
     {
         $validator = new OrderAttributes($this->schema, $this->indexesSchema);
 

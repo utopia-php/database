@@ -5,36 +5,36 @@ namespace Utopia\Tests;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 class DocumentTest extends TestCase
 {
     /**
      * @var Document
      */
-    protected $document = null;
+    protected ?Document $document = null;
 
     /**
      * @var Document
      */
-    protected $empty = null;
-    
+    protected ?Document $empty = null;
+
     /**
      * @var string
      */
-    protected $id = null;
-    
+    protected ?string $id = null;
+
     /**
      * @var string
      */
-    protected $collection = null;
+    protected ?string $collection = null;
 
     public function setUp(): void
     {
         $this->id = uniqid();
-        
+
         $this->collection = uniqid();
 
         $this->document = new Document([
@@ -68,43 +68,43 @@ class DocumentTest extends TestCase
     {
     }
 
-    public function testId()
+    public function testId(): void
     {
         $this->assertEquals($this->id, $this->document->getId());
         $this->assertEquals(null, $this->empty->getId());
     }
 
-    public function testCollection()
+    public function testCollection(): void
     {
         $this->assertEquals($this->collection, $this->document->getCollection());
         $this->assertEquals(null, $this->empty->getCollection());
     }
 
-    public function testGetCreate()
+    public function testGetCreate(): void
     {
         $this->assertEquals(['any', 'user:creator'], $this->document->getCreate());
         $this->assertEquals([], $this->empty->getCreate());
     }
 
-    public function testGetRead()
+    public function testGetRead(): void
     {
         $this->assertEquals(['user:123', 'team:123'], $this->document->getRead());
         $this->assertEquals([], $this->empty->getRead());
     }
 
-    public function testGetUpdate()
+    public function testGetUpdate(): void
     {
         $this->assertEquals(['any', 'user:updater'], $this->document->getUpdate());
         $this->assertEquals([], $this->empty->getUpdate());
     }
 
-    public function testGetDelete()
+    public function testGetDelete(): void
     {
         $this->assertEquals(['any', 'user:deleter'], $this->document->getDelete());
         $this->assertEquals([], $this->empty->getDelete());
     }
 
-    public function testGetPermissionByType()
+    public function testGetPermissionByType(): void
     {
         $this->assertEquals(['any','user:creator'], $this->document->getPermissionsByType(Database::PERMISSION_CREATE));
         $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_CREATE));
@@ -119,7 +119,7 @@ class DocumentTest extends TestCase
         $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
     }
 
-    public function testGetPermissions()
+    public function testGetPermissions(): void
     {
         $this->assertEquals([
             Permission::read(Role::user(ID::custom('123'))),
@@ -133,7 +133,7 @@ class DocumentTest extends TestCase
         ], $this->document->getPermissions());
     }
 
-    public function testGetAttributes()
+    public function testGetAttributes(): void
     {
         $this->assertEquals([
             'title' => 'This is a test.',
@@ -148,20 +148,20 @@ class DocumentTest extends TestCase
         ], $this->document->getAttributes());
     }
 
-    public function testGetAttribute()
+    public function testGetAttribute(): void
     {
         $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
     }
 
-    public function testSetAttribute()
+    public function testSetAttribute(): void
     {
         $this->assertEquals('This is a test.', $this->document->getAttribute('title', ''));
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
-        
+
         $this->document->setAttribute('title', 'New title');
-     
+
         $this->assertEquals('New title', $this->document->getAttribute('title', ''));
         $this->assertEquals('', $this->document->getAttribute('titlex', ''));
 
@@ -175,19 +175,19 @@ class DocumentTest extends TestCase
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
     }
 
-    public function testRemoveAttribute()
+    public function testRemoveAttribute(): void
     {
         $this->document->removeAttribute('list');
         $this->assertEquals([], $this->document->getAttribute('list', []));
     }
 
-    public function testFind()
+    public function testFind(): void
     {
         $this->assertEquals(null, $this->document->find('find', 'one'));
-        
+
         $this->document->setAttribute('findString', 'demo');
         $this->assertEquals($this->document, $this->document->find('findString', 'demo'));
-        
+
         $this->document->setAttribute('findArray', ['demo']);
         $this->assertEquals(null, $this->document->find('findArray', 'demo'));
         $this->assertEquals($this->document, $this->document->find('findArray', ['demo']));
@@ -197,7 +197,7 @@ class DocumentTest extends TestCase
         $this->assertEquals(null, $this->document->find('name', 'v', 'children'));
     }
 
-    public function testFindAndReplace()
+    public function testFindAndReplace(): void
     {
         $document = new Document([
             '$id' => ID::custom($this->id),
@@ -223,13 +223,13 @@ class DocumentTest extends TestCase
         $this->assertEquals(true, $document->findAndReplace('name', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
         $this->assertEquals('1', $document->getAttribute('children')[0]['name']);
         $this->assertEquals(true, $document->getAttribute('children')[0]['test']);
-        
+
         // Array with wrong value
         $this->assertEquals(false, $document->findAndReplace('name', 'xy', new Document(['name' => '1', 'test' => true]), 'children'));
-        
+
         // Array with wrong key
         $this->assertEquals(false, $document->findAndReplace('namex', 'x', new Document(['name' => '1', 'test' => true]), 'children'));
-        
+
         // No array
         $this->assertEquals(true, $document->findAndReplace('title', 'This is a test.', 'new'));
         $this->assertEquals('new', $document->getAttribute('title'));
@@ -241,7 +241,7 @@ class DocumentTest extends TestCase
         $this->assertEquals(false, $document->findAndReplace('titlex', 'This is a test.', 'new'));
     }
 
-    public function testFindAndRemove()
+    public function testFindAndRemove(): void
     {
         $document = new Document([
             '$id' => ID::custom($this->id),
@@ -266,13 +266,13 @@ class DocumentTest extends TestCase
         $this->assertEquals(true, $document->findAndRemove('name', 'x', 'children'));
         $this->assertEquals('y', $document->getAttribute('children')[1]['name']);
         $this->assertCount(2, $document->getAttribute('children'));
-        
+
         // Array with wrong value
         $this->assertEquals(false, $document->findAndRemove('name', 'xy', 'children'));
-        
+
         // Array with wrong key
         $this->assertEquals(false, $document->findAndRemove('namex', 'x', 'children'));
-        
+
         // No array
         $this->assertEquals(true, $document->findAndRemove('title', 'This is a test.'));
         $this->assertEquals(false, $document->isset('title'));
@@ -284,20 +284,20 @@ class DocumentTest extends TestCase
         $this->assertEquals(false, $document->findAndRemove('titlex', 'This is a test.'));
     }
 
-    public function testIsEmpty()
+    public function testIsEmpty(): void
     {
         $this->assertEquals(false, $this->document->isEmpty());
         $this->assertEquals(true, $this->empty->isEmpty());
     }
 
-    public function testIsSet()
+    public function testIsSet(): void
     {
         $this->assertEquals(false, $this->document->isSet('titlex'));
         $this->assertEquals(false, $this->empty->isSet('titlex'));
         $this->assertEquals(true, $this->document->isSet('title'));
     }
 
-    public function testGetArrayCopy()
+    public function testGetArrayCopy(): void
     {
         $this->assertEquals([
             '$id' => ID::custom($this->id),

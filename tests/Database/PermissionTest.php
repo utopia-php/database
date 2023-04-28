@@ -3,13 +3,14 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
+use Utopia\Database\Database;
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 class PermissionTest extends TestCase
 {
-    public function testOutputFromString()
+    public function testOutputFromString(): void
     {
         $permission = Permission::parse('read("any")');
         $this->assertEquals('read', $permission->getPermission());
@@ -140,7 +141,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('unverified', $permission->getDimension());
     }
 
-    public function testInputFromParameters()
+    public function testInputFromParameters(): void
     {
         $permission = new Permission('read', 'any');
         $this->assertEquals('read("any")', $permission->toString());
@@ -191,7 +192,7 @@ class PermissionTest extends TestCase
         $this->assertEquals('delete("team:123/admin")', $permission->toString());
     }
 
-    public function testInputFromRoles()
+    public function testInputFromRoles(): void
     {
         $permission = Permission::read(Role::any());
         $this->assertEquals('read("any")', $permission);
@@ -252,5 +253,36 @@ class PermissionTest extends TestCase
 
         $permission = Permission::delete(Role::guests());
         $this->assertEquals('delete("guests")', $permission);
+
+        $permission = Permission::write(Role::any());
+        $this->assertEquals('write("any")', $permission);
+    }
+
+    public function testInvalidFormats(): void
+    {
+        $this->expectException(\Exception::class);
+        Permission::parse('read');
+
+        $this->expectException(\Exception::class);
+        Permission::parse('read(("any")');
+
+        $this->expectException(\Exception::class);
+        Permission::parse('read("users/un/verified")');
+
+        $this->expectException(\Exception::class);
+        Permission::parse('read("users/")');
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function testAggregation(): void
+    {
+        $permissions = ['write("any")'];
+        $parsed = Permission::aggregate($permissions);
+        $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
+
+        $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
+        $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
     }
 }

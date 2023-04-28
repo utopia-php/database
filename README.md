@@ -1,6 +1,6 @@
 # Utopia Database
 
-[![Build Status](https://travis-ci.org/utopia-php/abuse.svg?branch=master)](https://travis-ci.com/utopia-php/database)
+[![Build Status](https://travis-ci.org/utopia-php/database.svg?branch=master)](https://travis-ci.com/utopia-php/database)
 ![Total Downloads](https://img.shields.io/packagist/dt/utopia-php/database.svg)
 [![Discord](https://img.shields.io/discord/564160730845151244?label=discord)](https://appwrite.io/discord)
 
@@ -90,7 +90,7 @@ $database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true
 $database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true);
 $database->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true);
 $database->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true);
-$database->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, true, true);
+$database->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, true, true);
 
 // Create an Index
 $database->createIndex('movies', 'index1', Database::INDEX_KEY, ['year'], [128], [Database::ORDER_ASC]);
@@ -119,8 +119,20 @@ static::getDatabase()->createDocument('movies', new Document([
     'year' => 2019,
     'price' => 25.99,
     'active' => true,
-    'generes' => ['science fiction', 'action', 'comics'],
+    'genres' => ['science fiction', 'action', 'comics'],
 ]));
+```
+
+**Get Document**:
+
+```php
+// Get document with all attributes
+$document = static::getDatabase()->getDocument('movies', '1');
+
+// Get document with a sub-set of attributes
+$document = static::getDatabase()->getDocument('movies', '1', [
+    Query::select(['name', 'director', 'year']),
+]);
 ```
 
 **Find:**
@@ -140,7 +152,7 @@ Below is a list of supported adapters, and their compatibly tested versions alon
 | MariaDB | ✅ | 10.5 |
 | MySQL | ✅ | 8.0 |
 | Postgres | 🛠 | 13.0 |
-| MongoDB | ✅ | 3.6 |
+| MongoDB | ✅ | 5.0 |
 | SQLlite | ✅ | 3.38 |
 
 ` ✅  - supported, 🛠  - work in progress`
@@ -160,16 +172,28 @@ Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP ve
 
 ## Tests
 
+To run tests, you first need to bring up the example Docker stack with the following command:
+
+```bash
+docker compose up -d --build
+```
+
 To run all unit tests, use the following Docker command:
 
 ```bash
-docker-compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+```
+
+To run tests for a single file, use the following Docker command structure:
+
+```bash
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/[FILE_PATH]
 ```
 
 To run static code analysis, use the following Psalm command:
 
 ```bash
-docker-compose exec tests vendor/bin/psalm --show-info=true
+docker compose exec tests vendor/bin/psalm --show-info=true
 ```
 ### Load testing
 
@@ -184,7 +208,7 @@ To test your DB changes under load:
 #### Load the database
 
 ```bash
-docker-compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[name]]
+docker compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[name]]
 
 # [adapter]: either 'mongodb' or 'mariadb', no quotes
 # [limit]: integer of total documents to generate
@@ -194,7 +218,7 @@ docker-compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[
 #### Create indexes
 
 ```bash
-docker-compose exec tests bin/index --adapter=[adapter] --name=[name]
+docker compose exec tests bin/index --adapter=[adapter] --name=[name]
 
 # [adapter]: either 'mongodb' or 'mariadb', no quotes
 # [name]: name of filled database by bin/load
@@ -203,7 +227,7 @@ docker-compose exec tests bin/index --adapter=[adapter] --name=[name]
 #### Run Query Suite
 
 ```bash
-docker-compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[name]
+docker compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[name]
 
 # [adapter]: either 'mongodb' or 'mariadb', no quotes
 # [limit]: integer of query limit (default 25)
@@ -213,7 +237,7 @@ docker-compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[
 #### Visualize Query Results
 
 ```bash
-docker-compose exec tests bin/compare
+docker compose exec tests bin/compare
 ```
 
 Navigate to `localhost:8708` to visualize query results.

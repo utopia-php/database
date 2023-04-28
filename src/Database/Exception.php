@@ -1,7 +1,7 @@
 <?php
 
-namespace Utopia\Database; 
-  
+namespace Utopia\Database;
+
 class Exception extends \Exception
 {
 }

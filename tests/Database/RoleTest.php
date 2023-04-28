@@ -3,13 +3,12 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Role;
 
 class RoleTest extends TestCase
 {
-    public function testOutputFromString()
+    public function testOutputFromString(): void
     {
         $role = Role::parse('any');
         $this->assertEquals('any', $role->getRole());
@@ -52,7 +51,7 @@ class RoleTest extends TestCase
         $this->assertEquals('verified', $role->getDimension());
     }
 
-    public function testInputFromParameters()
+    public function testInputFromParameters(): void
     {
         $role = new Role('any');
         $this->assertEquals('any', $role->toString());
@@ -73,7 +72,7 @@ class RoleTest extends TestCase
         $this->assertEquals('team:123/456', $role->toString());
     }
 
-    public function testInputFromRoles()
+    public function testInputFromRoles(): void
     {
         $role = Role::any();
         $this->assertEquals('any', $role->toString());
@@ -94,7 +93,7 @@ class RoleTest extends TestCase
         $this->assertEquals('team:123/456', $role->toString());
     }
 
-    public function testInputFromID()
+    public function testInputFromID(): void
     {
         $role = Role::user(ID::custom('123'));
         $this->assertEquals('user:123', $role->toString());

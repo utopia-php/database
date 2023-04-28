@@ -3,20 +3,17 @@
 namespace Utopia\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\ID;
-use Utopia\Database\Permission;
-use Utopia\Database\Role;
+use Utopia\Database\Helpers\ID;
 
 class IDTest extends TestCase
 {
-
-    public function testCustomID()
+    public function testCustomID(): void
     {
         $id = ID::custom('test');
         $this->assertEquals('test', $id);
     }
 
-    public function testUniqueID()
+    public function testUniqueID(): void
     {
         $id = ID::unique();
         $this->assertNotEmpty($id);

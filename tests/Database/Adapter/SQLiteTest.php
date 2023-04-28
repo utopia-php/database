@@ -12,10 +12,7 @@ use Utopia\Tests\Base;
 
 class SQLiteTest extends Base
 {
-    /**
-     * @var Database
-     */
-    static $database = null;
+    public static ?Database $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -24,26 +21,16 @@ class SQLiteTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
         return "sqlite";
     }
 
     /**
-     * Return row limit of adapter
      *
      * @return int
      */
-    static function getAdapterRowLimit(): int
-    {
-        return SQLite::getRowLimit();
-    }
-
-    /**
-     *
-     * @return int
-     */
-    static function getUsedIndexes(): int
+    public static function getUsedIndexes(): int
     {
         return SQLite::getCountOfDefaultIndexes();
     }
@@ -51,19 +38,21 @@ class SQLiteTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 
         $sqliteDir = __DIR__."/database.sql";
 
-        if(file_exists($sqliteDir)) {
+        if (file_exists($sqliteDir)) {
             unlink($sqliteDir);
         }
 
-        $pdo = new PDO("sqlite:".$sqliteDir, null, null, SQLite::getPDOAttributes());
+        $dsn = $sqliteDir;
+        $dsn = 'memory'; // Overwrite for fast tests
+        $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
@@ -76,5 +65,10 @@ class SQLiteTest extends Base
         $database->setNamespace('myapp_'.uniqid());
 
         return self::$database = $database;
+    }
+
+    public static function killDatabase(): void
+    {
+        self::$database = null;
     }
 }

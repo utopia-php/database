@@ -46,6 +46,7 @@ class Select extends Base
                 // Utopia will validate each nested level during the recursive calls.
                 $attribute = \explode('.', $attribute)[0];
             }
+
             if (!isset($this->schema[$attribute]) && $attribute !== '*') {
                 $this->message = 'Attribute not found in schema: ' . $attribute;
                 return false;

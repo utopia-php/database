@@ -3667,7 +3667,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         $validator = new DocumentsQueriesValidator($attributes, $indexes);
-        if(!$validator->isValid($queries)){
+        if (!$validator->isValid($queries)) {
             throw new Exception($validator->getDescription());
         }
 

@@ -21,7 +21,7 @@ class OrderTest extends TestCase
                 ]),
             ],
         );
-        
+
         // Test for Success
         $this->assertEquals($validator->isValid(Query::orderAsc('attr')), true, $validator->getDescription());
         $this->assertEquals($validator->isValid(Query::orderAsc('')), true, $validator->getDescription());

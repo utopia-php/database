@@ -10,7 +10,7 @@ use Utopia\Database\Validator\Query\Select;
 class Document extends Queries
 {
     /**
-     * @param array $attributes
+     * @param array<mixed> $attributes
      * @throws Exception
      */
     public function __construct(array $attributes)

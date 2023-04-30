@@ -11,7 +11,7 @@ class CursorTest extends TestCase
     public function testValue(): void
     {
         $validator = new Cursor();
-        
+
         // Test for Success
         $this->assertEquals($validator->isValid(new Query(Query::TYPE_CURSORAFTER, values: ['asdf'])), true, $validator->getDescription());
         $this->assertEquals($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: ['asdf'])), true, $validator->getDescription());

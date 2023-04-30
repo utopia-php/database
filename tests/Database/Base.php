@@ -10286,6 +10286,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection5')[0]->getId());
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection6')->getId());
+
     }
 
     public function testManyToManyRelationshipKeyWithSymbols(): void

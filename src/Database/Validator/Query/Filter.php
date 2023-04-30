@@ -99,12 +99,6 @@ class Filter extends Base
             }
         }
 
-        if ($attributeSchema['array'] && !is_array($values)) {
-            var_dump('Query method only supported on array');
-            $this->message = 'Query method only supported on array';
-            return false;
-        }
-
         return true;
     }
 

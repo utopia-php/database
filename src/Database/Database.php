@@ -3661,12 +3661,13 @@ class Database
         if (!\is_null($timeout) && $timeout <= 0) {
             throw new Exception('Timeout must be greater than 0');
         }
-
+        var_dump('-------------------------------');
+        var_dump($collection);
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        var_dump('-------------------------------');
+
         var_dump($queries);
         var_dump($attributes);
         var_dump('-------------------------------');

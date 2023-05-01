@@ -3666,6 +3666,11 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
+        var_dump('-------------------------------');
+        var_dump($queries);
+        var_dump($attributes);
+        var_dump('-------------------------------');
+
         $validator = new DocumentsQueriesValidator($attributes, $indexes);
         if (!$validator->isValid($queries)) {
             throw new Exception($validator->getDescription());

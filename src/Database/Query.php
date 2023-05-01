@@ -698,11 +698,10 @@ class Query
      * Filters $queries for $types
      *
      * @param array<Query> $queries
-     * @param string ...$types
-     *
+     * @param array $types
      * @return array<Query>
      */
-    public static function getByType(array $queries, string ...$types): array
+    public static function getByType(array $queries, array $types): array
     {
         $filtered = [];
         foreach ($queries as $query) {

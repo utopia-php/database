@@ -18,8 +18,7 @@ class Order extends Base
     public function __construct(array $attributes = [])
     {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('$id')] = $attribute->getArrayCopy();
-            //$this->schema[$attribute->getAttribute('key')] = $attribute->getArrayCopy();
+            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }
     }
 

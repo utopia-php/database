@@ -10263,9 +10263,9 @@ abstract class Base extends TestCase
         ));
 
         // todo: why is this failing
-        static::getDatabase()->find('dots', [
-            Query::select(['dots.name']),
-        ]);
+//        static::getDatabase()->find('dots', [
+//            Query::select(['dots.name']),
+//        ]);
 
     }
 

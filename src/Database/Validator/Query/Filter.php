@@ -17,6 +17,8 @@ class Filter extends Base
 
     private int $maxValuesCount;
 
+    public static bool $NESTING_QUERIES = false;
+
     /**
      * @param array<Document> $attributes
      * @param int $maxValuesCount
@@ -37,16 +39,20 @@ class Filter extends Base
     protected function isValidAttribute(string $attribute): bool
     {
         if (\str_contains($attribute, '.')) {
+
+            // Check for special symbol `.`
+            if (isset($this->schema[$attribute])) {
+                return true;
+            }
+
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
 
-            // TODO: This must be taken care of in appwrite now...
-
-//            if (isset($this->schema[$attribute])) {
-//                $this->message = 'Cannot query nested attribute on: ' . $attribute;
-//                return false;
-//            }
+            if (!Filter::$NESTING_QUERIES && isset($this->schema[$attribute])) {
+                $this->message = 'Cannot query nested attribute on: ' . $attribute;
+                return false;
+            }
         }
 
         // Search for attribute in schema
@@ -70,6 +76,10 @@ class Filter extends Base
         }
 
         if (\str_contains($attribute, '.')) {
+            // Check for special symbol `.`
+            if (isset($this->schema[$attribute])) {
+                return true;
+            }
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];

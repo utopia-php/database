@@ -39,8 +39,8 @@ class Documents extends IndexedQueries
         ]);
 
         $attributes[] = new Document([
-            '$id' => '$createdAt',
-            'key' => '$createdAt',
+            '$id' => '$updatedAt',
+            'key' => '$updatedAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);

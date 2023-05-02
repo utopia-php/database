@@ -21,6 +21,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -42,6 +43,7 @@ abstract class Base extends TestCase
     public function setUp(): void
     {
         Authorization::setRole('any');
+        Filter::$NESTING_QUERIES = true;
     }
 
     public function tearDown(): void

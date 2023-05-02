@@ -59,6 +59,7 @@ class QueriesTest extends TestCase
     {
         $attributes = [
             new Document([
+                '$id' => 'name',
                 'key' => 'name',
                 'type' => Database::VAR_STRING,
                 'array' => false,

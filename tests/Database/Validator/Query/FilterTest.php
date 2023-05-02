@@ -19,6 +19,7 @@ class FilterTest extends TestCase
         $validator = new Filter(
             attributes: [
                 new Document([
+                    '$id' => 'attr',
                     'key' => 'attr',
                     'type' => Database::VAR_STRING,
                     'array' => false,

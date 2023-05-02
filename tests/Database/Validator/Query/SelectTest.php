@@ -15,6 +15,7 @@ class SelectTest extends TestCase
         $validator = new Select(
             attributes: [
                 new Document([
+                    '$id' => 'attr',
                     'key' => 'attr',
                     'type' => Database::VAR_STRING,
                     'array' => false,

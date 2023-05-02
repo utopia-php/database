@@ -16,17 +16,22 @@ class Document extends Queries
     public function __construct(array $attributes)
     {
         $attributes[] = new \Utopia\Database\Document([
+            '$id' => '$id',
             'key' => '$id',
             'type' => Database::VAR_STRING,
             'array' => false,
         ]);
+
         $attributes[] = new \Utopia\Database\Document([
+            '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);
+
         $attributes[] = new \Utopia\Database\Document([
-            'key' => '$updatedAt',
+            '$id' => '$createdAt',
+            'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);

@@ -4,7 +4,7 @@ namespace Utopia\Database\Validator\Queries;
 
 use Exception;
 use Utopia\Database\Database;
-use Utopia\Database\Document as UtopiaDocument;
+use Utopia\Database\Document;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
@@ -18,24 +18,29 @@ class Documents extends IndexedQueries
     /**
      * Expression constructor
      *
-     * @param UtopiaDocument[] $attributes
-     * @param UtopiaDocument[] $indexes
+     * @param array<mixed> $attributes
+     * @param array<mixed> $indexes
      * @throws Exception
      */
     public function __construct(array $attributes, array $indexes)
     {
-        $attributes[] = new UtopiaDocument([
+        $attributes[] = new Document([
+            '$id' => '$id',
             'key' => '$id',
             'type' => Database::VAR_STRING,
             'array' => false,
         ]);
-        $attributes[] = new UtopiaDocument([
+
+        $attributes[] = new Document([
+            '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);
-        $attributes[] = new UtopiaDocument([
-            'key' => '$updatedAt',
+
+        $attributes[] = new Document([
+            '$id' => '$createdAt',
+            'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);

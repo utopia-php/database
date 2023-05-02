@@ -66,6 +66,16 @@ class DocumentsQueriesTest extends TestCase
                     'signed' => true,
                     'array' => false,
                     'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'is_bool',
+                    'key' => 'is_bool',
+                    'type' => Database::VAR_BOOLEAN,
+                    'size' => 0,
+                    'required' => false,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
                 ])
             ],
             'indexes' => [
@@ -128,13 +138,8 @@ class DocumentsQueriesTest extends TestCase
         $queries[] = Query::orderDesc('');
         $this->assertEquals(true, $validator->isValid($queries));
 
-        $queries = ['search("description", "iron")'];
-        $this->assertFalse($validator->isValid($queries));
-        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
-
-        $queries = ['equal("not_found", 4)'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
+        $queries = ['equal("is_bool", false)'];
+        $this->assertEquals(true, $validator->isValid($queries));
     }
 
     /**
@@ -145,7 +150,16 @@ class DocumentsQueriesTest extends TestCase
         $validator = new DocumentsQueries($this->collection['attributes'], $this->collection['indexes']);
 
         $queries = ['search("description", "iron")'];
-        $this->assertFalse($validator->isValid($queries));
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
+
+
+        $queries = ['equal("not_found", 4)'];
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
+
+        $queries = ['search("description", "iron")'];
+        $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
 
         $queries = ['equal("not_found", 4)'];

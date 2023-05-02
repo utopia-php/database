@@ -139,7 +139,8 @@ class Filter extends Base
             case Query::TYPE_BETWEEN:
             case Query::TYPE_CONTAINS: // todo: What to do about unsupported operators?
                 $values = $query->getValues();
-                if (empty($values) || (isset($values[0]) && empty($values[0]))) {
+
+                if (is_null($values) || (is_array($values) && isset($values[0]) && empty($values[0]) && $values[0] !== false)) {
                     $this->message = $method . ' queries require at least one value.';
                     return false;
                 }

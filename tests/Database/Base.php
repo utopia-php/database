@@ -77,6 +77,72 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    public function testSymbolDots(): void
+    {
+        static::getDatabase()->createCollection('dots.father');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'dots.father',
+            id: 'dots.name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $document = static::getDatabase()->find('dots.father', [
+            Query::select(['dots.name']),
+        ]);
+        $this->assertEmpty($document);
+
+        static::getDatabase()->createCollection('dots');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'dots',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        static::getDatabase()->createRelationship(
+            collection: 'dots.father',
+            relatedCollection: 'dots',
+            type: Database::RELATION_ONE_TO_ONE
+        );
+
+        static::getDatabase()->createDocument('dots.father', new Document([
+            '$id' => ID::custom('father'),
+            'dots.name' => 'shmuel',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'dots' => [
+                '$id' => ID::custom('child'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+        ]
+        ]));
+
+        $documents = static::getDatabase()->find('dots.father', [
+            Query::select(['*']),
+        ]);
+
+        $this->assertEquals('shmuel', $documents[0]['dots.name']);
+
+        $documents = static::getDatabase()->find('dots.father', [
+            Query::select(['dots.name'])
+        ]);
+
+        $this->assertEquals('shmuel', $documents[0]['dots.name']);
+    }
+
     public function testCreatedAtUpdatedAt(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
@@ -10248,24 +10314,6 @@ abstract class Base extends TestCase
 
         $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection3')->getId());
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection4')[0]->getId());
-    }
-
-    public function testSymbolDots(): void
-    {
-        static::getDatabase()->createCollection('dots');
-
-        $this->assertTrue(static::getDatabase()->createAttribute(
-            collection: 'dots',
-            id: 'dots.name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        // todo: why is this failing
-//        static::getDatabase()->find('dots', [
-//            Query::select(['dots.name']),
-//        ]);
     }
 
     public function testManyToOneRelationshipKeyWithSymbols(): void

@@ -39,7 +39,6 @@ class Filter extends Base
     protected function isValidAttribute(string $attribute): bool
     {
         if (\str_contains($attribute, '.')) {
-
             // Check for special symbol `.`
             if (isset($this->schema[$attribute])) {
                 return true;

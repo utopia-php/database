@@ -42,9 +42,8 @@ class Select extends Base
 
         foreach ($query->getValues() as $attribute) {
             if (\str_contains($attribute, '.')) {
-
                 //special symbols with `dots`
-                if(isset($this->schema[$attribute])){
+                if (isset($this->schema[$attribute])) {
                     continue;
                 }
 

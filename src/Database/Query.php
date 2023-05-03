@@ -698,7 +698,7 @@ class Query
      * Filters $queries for $types
      *
      * @param array<Query> $queries
-     * @param array $types
+     * @param array<string> $types
      * @return array<Query>
      */
     public static function getByType(array $queries, array $types): array

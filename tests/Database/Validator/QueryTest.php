@@ -277,4 +277,36 @@ class QueryTest extends TestCase
         }
     }
 
+    /**
+     * @throws Exception
+     */
+    public function testQueryEmpty(): void
+    {
+        $validator = new DocumentsQueries($this->attributes, []);
+
+        $response = $validator->isValid([Query::equal('title', [''])]);
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid([Query::equal('published', [false])]);
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid([Query::equal('price', [0])]);
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid([Query::greaterThan('price', 0)]);
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid([Query::greaterThan('published', false)]);
+        $this->assertEquals(true, $response);
+
+        $response = $validator->isValid([Query::equal('price', [])]);
+        $this->assertEquals(false, $response);
+
+        $response = $validator->isValid([Query::greaterThan('price', null)]);
+        $this->assertEquals(false, $response);
+
+        $response = $validator->isValid([Query::isNull('price')]);
+        $this->assertEquals(true, $response);
+    }
+
 }

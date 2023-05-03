@@ -78,7 +78,6 @@ class DocumentQueriesTest extends TestCase
     public function testInvalidQueries(): void
     {
         $validator = new DocumentQueries($this->collection['attributes']);
-        // $queries = [Query::select(['movies.price'])];
 
         $queries = [Query::limit(1)]; // We only accept Select queries
         $this->assertEquals(false, $validator->isValid($queries));

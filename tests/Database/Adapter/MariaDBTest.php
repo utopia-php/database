@@ -1,6 +1,5 @@
 <?php
 
-
 namespace Utopia\Tests\Adapter;
 
 use PDO;

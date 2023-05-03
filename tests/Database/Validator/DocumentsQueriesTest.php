@@ -118,9 +118,11 @@ class DocumentsQueriesTest extends TestCase
         $queries = [
             'notEqual("title", ["Iron Man", "Ant Man"])',
             'equal("description", "Best movie ever")',
+            'equal("description", [""])',
             'lessThanEqual("price", 6.50)',
             'lessThan("price", 6.50)',
             'greaterThan("rating", 4)',
+            'greaterThan("rating", 0)',
             'greaterThanEqual("rating", 6)',
             'between("price", 1.50, 6.50)',
             'search("title", "SEO")',

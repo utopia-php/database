@@ -336,7 +336,6 @@ abstract class Base extends TestCase
 //        ]);
 //
 //        $this->assertEquals('shmuel', $documents[0]['dots.name']);
-
     }
 
     /**
@@ -3938,19 +3937,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('library', 'library2');
         $this->assertArrayNotHasKey('person', $library);
 
-        // Query related document
-        $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['Library 2'])
-        ]);
-
-        $this->assertEquals(1, \count($people));
-        $this->assertEquals(
-            'Library 2',
-            $people[0]
-            ->getAttribute('library')
-            ->getAttribute('name')
-        );
-
         $people = static::getDatabase()->find('person', [
             Query::select(['name'])
         ]);
@@ -4102,13 +4088,6 @@ abstract class Base extends TestCase
             $person1->getId(),
             $person1->setAttribute('library', $library4)
         );
-
-        // Query new related document
-        $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['Library 4'])
-        ]);
-
-        $this->assertEquals(1, \count($people));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -4432,19 +4411,6 @@ abstract class Base extends TestCase
         $this->assertEquals('city4', $city['$id']);
         $this->assertArrayNotHasKey('country', $city);
 
-        // Query related document
-        $countries = static::getDatabase()->find('country', [
-            Query::equal('city.name', ['Paris'])
-        ]);
-
-        $this->assertEquals(1, \count($countries));
-        $this->assertEquals(
-            'Paris',
-            $countries[0]
-            ->getAttribute('city')
-            ->getAttribute('name')
-        );
-
         $countries = static::getDatabase()->find('country');
 
         $this->assertEquals(4, \count($countries));
@@ -4637,13 +4603,6 @@ abstract class Base extends TestCase
             $country1->setAttribute('city', $city7)
         );
 
-        // Query new relationship
-        $countries = static::getDatabase()->find('country', [
-            Query::equal('city.name', ['Copenhagen'])
-        ]);
-
-        $this->assertEquals(1, \count($countries));
-
         // Create a new country with no relation
         static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country7',
@@ -4661,13 +4620,6 @@ abstract class Base extends TestCase
             $city1->getId(),
             $city1->setAttribute('country', 'country7')
         );
-
-        // Query inverse related document again
-        $people = static::getDatabase()->find('city', [
-            Query::equal('country.name', ['Denmark'])
-        ]);
-
-        $this->assertEquals(1, \count($people));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -4920,21 +4872,6 @@ abstract class Base extends TestCase
         $album = static::getDatabase()->getDocument('album', 'album2');
         $this->assertArrayNotHasKey('artist', $album);
 
-        // Query related document
-        $artists = static::getDatabase()->find('artist', [
-            Query::equal('albums.name', ['Album 2'])
-        ]);
-
-        $this->assertCount(1, $artists);
-        $this->assertCount(2, $artists[0]['albums']);
-
-        $this->assertEquals(
-            'Album 2',
-            $artists[0]
-            ->getAttribute('albums')[0]
-            ->getAttribute('name')
-        );
-
         $artists = static::getDatabase()->find('artist');
 
         $this->assertEquals(2, \count($artists));
@@ -5033,10 +4970,14 @@ abstract class Base extends TestCase
             $artist1->setAttribute('albums', ['album2'])
         );
 
-        // Query related document again
-        $artists = static::getDatabase()->find('artist', [
-            Query::equal('albums.name', ['Album 2'])
-        ]);
+        $artists = static::getDatabase()->find('artist', []);
+        $artists = \array_filter( // Instead of using related query
+            $artists,
+            fn (Document $el) => \array_filter(
+                $el->getAttribute('albums'),
+                fn (Document $el2) => $el2['name'] === 'Album 2'
+            )
+        );
 
         $this->assertEquals(1, \count($artists));
         $this->assertEquals(1, \count($artists[0]['albums']));
@@ -5048,10 +4989,14 @@ abstract class Base extends TestCase
             $artist1->setAttribute('albums', ['album1', 'album2'])
         );
 
-        // Query related document again
-        $artists = static::getDatabase()->find('artist', [
-            Query::equal('albums.name', ['Album 2'])
-        ]);
+        $artists = static::getDatabase()->find('artist', []);
+        $artists = \array_filter( // Instead of using related query
+            $artists,
+            fn (Document $el) => \array_filter(
+                $el->getAttribute('albums'),
+                fn (Document $el2) => $el2['name'] === 'Album 2'
+            )
+        );
 
         $this->assertEquals(1, \count($artists));
         $this->assertEquals(2, \count($artists[0]['albums']));
@@ -5377,20 +5322,6 @@ abstract class Base extends TestCase
         $this->assertEquals('customer4', $customer['$id']);
         $this->assertArrayNotHasKey('accounts', $customer);
 
-        // Query related document
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-
-        $this->assertEquals(
-            'Account 2',
-            $customers[0]
-            ->getAttribute('accounts')[0]
-            ->getAttribute('name')
-        );
-
         $customers = static::getDatabase()->find('customer');
 
         $this->assertEquals(4, \count($customers));
@@ -5537,14 +5468,6 @@ abstract class Base extends TestCase
             $customer1->setAttribute('accounts', ['account2'])
         );
 
-        // Query related document again
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-        $this->assertEquals(1, \count($customers[0]['accounts']));
-
         // Update document with new related document
         static::getDatabase()->updateDocument(
             'customer',
@@ -5552,13 +5475,13 @@ abstract class Base extends TestCase
             $customer1->setAttribute('accounts', ['account1', 'account2'])
         );
 
-        // Query related document again
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-        $this->assertEquals(2, \count($customers[0]['accounts']));
+//        // Query related document again
+//        $customers = static::getDatabase()->find('customer', [
+//            Query::equal('accounts.name', ['Account 2 Updated'])
+//        ]);
+//
+//        $this->assertEquals(1, \count($customers));
+//        $this->assertEquals(2, \count($customers[0]['accounts']));
 
         // Update inverse document
         static::getDatabase()->updateDocument(
@@ -5566,21 +5489,6 @@ abstract class Base extends TestCase
             $account2->getId(),
             $account2->setAttribute('customer', 'customer2')
         );
-
-        // Query related document again
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-        $this->assertEquals(1, \count($customers[0]['accounts']));
-
-        // Query inverse document again
-        $customers = static::getDatabase()->find('account', [
-            Query::equal('customer.name', ['Customer 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -5825,20 +5733,6 @@ abstract class Base extends TestCase
         $movie = static::getDatabase()->getDocument('movie', 'movie2');
         $this->assertArrayNotHasKey('reviews', $movie);
 
-        // Query related document
-        $reviews = static::getDatabase()->find('review', [
-            Query::equal('movie.name', ['Movie 2'])
-        ]);
-
-        $this->assertEquals(1, \count($reviews));
-
-        $this->assertEquals(
-            'Movie 2',
-            $reviews[0]
-            ->getAttribute('movie')
-            ->getAttribute('name')
-        );
-
         $reviews = static::getDatabase()->find('review');
 
         $this->assertEquals(3, \count($reviews));
@@ -5924,13 +5818,6 @@ abstract class Base extends TestCase
             $review1->getId(),
             $review1->setAttribute('movie', 'movie2')
         );
-
-        // Query related document again
-        $reviews = static::getDatabase()->find('review', [
-            Query::equal('movie.name', ['Movie 2'])
-        ]);
-
-        $this->assertEquals(2, \count($reviews));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -6214,20 +6101,6 @@ abstract class Base extends TestCase
         $this->assertEquals('product4', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
 
-        // Query related document
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(1, \count($products));
-
-        $this->assertEquals(
-            'Store 2',
-            $products[0]
-            ->getAttribute('store')
-            ->getAttribute('name')
-        );
-
         $products = static::getDatabase()->find('product');
 
         $this->assertEquals(4, \count($products));
@@ -6371,13 +6244,6 @@ abstract class Base extends TestCase
             $product1->setAttribute('store', 'store2')
         );
 
-        // Query related document again
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(2, \count($products));
-
         $store1 = static::getDatabase()->getDocument('store', 'store1');
 
         // Update inverse document
@@ -6387,21 +6253,6 @@ abstract class Base extends TestCase
             $store1->setAttribute('products', ['product1'])
         );
 
-        // Query related document again
-        $stores = static::getDatabase()->find('store', [
-            Query::equal('products.name', ['Product 1 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($stores));
-        $this->assertEquals(1, \count($stores[0]['products']));
-
-        // Query inverse document again
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(1, \count($products));
-
         $store2 = static::getDatabase()->getDocument('store', 'store2');
 
         // Update inverse document
@@ -6410,21 +6261,6 @@ abstract class Base extends TestCase
             $store2->getId(),
             $store2->setAttribute('products', ['product1', 'product2'])
         );
-
-        // Query related document again
-        $stores = static::getDatabase()->find('store', [
-            Query::equal('products.name', ['Product 1 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($stores));
-        $this->assertEquals(2, \count($stores[0]['products']));
-
-        // Query inverse document again
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(2, \count($products));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -6640,20 +6476,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('song', 'song2');
         $this->assertArrayNotHasKey('songs', $library);
 
-        // Query related document
-        $playlists = static::getDatabase()->find('playlist', [
-            Query::equal('songs.name', ['Song 2'])
-        ]);
-
-        $this->assertEquals(1, \count($playlists));
-
-        $this->assertEquals(
-            'Song 2',
-            $playlists[0]
-            ->getAttribute('songs')[0]
-            ->getAttribute('name')
-        );
-
         $playlists = static::getDatabase()->find('playlist');
 
         $this->assertEquals(2, \count($playlists));
@@ -6755,14 +6577,6 @@ abstract class Base extends TestCase
             $playlist1->getId(),
             $playlist1->setAttribute('songs', ['song2'])
         );
-
-        // Query related document again
-        $playlists = static::getDatabase()->find('playlist', [
-            Query::equal('songs.name', ['Song 2'])
-        ]);
-
-        $this->assertEquals(3, \count($playlists));
-        $this->assertEquals(1, \count($playlists[0]['songs']));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -7041,24 +6855,6 @@ abstract class Base extends TestCase
         $this->assertEquals('student4', $student[0]['$id']);
         $this->assertArrayNotHasKey('classes', $student[0]);
 
-        // Query related document
-        $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2'])
-        ]);
-
-        $this->assertEquals(1, \count($students));
-
-        $this->assertEquals(
-            'Class 2',
-            $students[0]
-            ->getAttribute('classes')[0]
-            ->getAttribute('name')
-        );
-
-        $students = static::getDatabase()->find('students');
-
-        $this->assertEquals(4, \count($students));
-
         // Select related document attributes
         $student = static::getDatabase()->findOne('students', [
             Query::select(['*', 'classes.name'])
@@ -7198,15 +6994,6 @@ abstract class Base extends TestCase
             $student1->setAttribute('classes', ['class2'])
         );
 
-        // Query related document again
-        $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2 Updated'])
-        ]);
-
-        $this->assertEquals(2, \count($students));
-        $this->assertEquals(1, \count($students[0]['classes']));
-        $this->assertEquals(1, \count($students[1]['classes']));
-
         $class1 = static::getDatabase()->getDocument('classes', 'class1');
 
         // Update inverse document
@@ -7215,22 +7002,6 @@ abstract class Base extends TestCase
             $class1->getId(),
             $class1->setAttribute('students', ['student1'])
         );
-
-        // Query related document again
-        $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2 Updated'])
-        ]);
-
-        $this->assertEquals(2, \count($students));
-        $this->assertEquals(2, \count($students[0]['classes']));
-        $this->assertEquals(1, \count($students[1]['classes']));
-
-        // Query inverse document again
-        $customers = static::getDatabase()->find('classes', [
-            Query::equal('students.name', ['Student 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(

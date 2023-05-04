@@ -330,7 +330,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals('shmuel', $documents[0]['dots.name']);
 
-        //todo: abmigious syntax
+        //todo: ambiguous syntax
 //        $documents = static::getDatabase()->find('dots.father', [
 //            Query::select(['dots.name'])
 //        ]);

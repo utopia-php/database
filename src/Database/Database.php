@@ -794,6 +794,7 @@ class Database
      * @param string|null $format optional validation format of attribute
      * @param array<string, mixed> $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array<string> $filters
+     * @param int $minSize utf8mb4 chars length
      *
      * @return bool
      * @throws AuthorizationException

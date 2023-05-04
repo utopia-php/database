@@ -48,7 +48,7 @@ class Filter extends Base
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
 
-            if (!Filter::$NESTING_QUERIES && isset($this->schema[$attribute])) {
+            if (isset($this->schema[$attribute])) {
                 $this->message = 'Cannot query nested attribute on: ' . $attribute;
                 return false;
             }

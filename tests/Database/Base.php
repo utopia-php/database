@@ -43,7 +43,6 @@ abstract class Base extends TestCase
     public function setUp(): void
     {
         Authorization::setRole('any');
-        Filter::$NESTING_QUERIES = true;
     }
 
     public function tearDown(): void
@@ -75,72 +74,6 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
-    }
-
-    public function testSymbolDots(): void
-    {
-        static::getDatabase()->createCollection('dots.father');
-
-        $this->assertTrue(static::getDatabase()->createAttribute(
-            collection: 'dots.father',
-            id: 'dots.name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        $document = static::getDatabase()->find('dots.father', [
-            Query::select(['dots.name']),
-        ]);
-        $this->assertEmpty($document);
-
-        static::getDatabase()->createCollection('dots');
-
-        $this->assertTrue(static::getDatabase()->createAttribute(
-            collection: 'dots',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        static::getDatabase()->createRelationship(
-            collection: 'dots.father',
-            relatedCollection: 'dots',
-            type: Database::RELATION_ONE_TO_ONE
-        );
-
-        static::getDatabase()->createDocument('dots.father', new Document([
-            '$id' => ID::custom('father'),
-            'dots.name' => 'shmuel',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'dots' => [
-                '$id' => ID::custom('child'),
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-        ]
-        ]));
-
-        $documents = static::getDatabase()->find('dots.father', [
-            Query::select(['*']),
-        ]);
-
-        $this->assertEquals('shmuel', $documents[0]['dots.name']);
-
-        $documents = static::getDatabase()->find('dots.father', [
-            Query::select(['dots.name'])
-        ]);
-
-        $this->assertEquals('shmuel', $documents[0]['dots.name']);
     }
 
     public function testCreatedAtUpdatedAt(): void
@@ -336,6 +269,74 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('attributesWithKeys', $document->getId());
 
         $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
+    }
+
+    public function testSymbolDots(): void
+    {
+        static::getDatabase()->createCollection('dots.father');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'dots.father',
+            id: 'dots.name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $document = static::getDatabase()->find('dots.father', [
+            Query::select(['dots.name']),
+        ]);
+        $this->assertEmpty($document);
+
+        static::getDatabase()->createCollection('dots');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'dots',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        static::getDatabase()->createRelationship(
+            collection: 'dots.father',
+            relatedCollection: 'dots',
+            type: Database::RELATION_ONE_TO_ONE
+        );
+
+        static::getDatabase()->createDocument('dots.father', new Document([
+            '$id' => ID::custom('father'),
+            'dots.name' => 'shmuel',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'dots' => [
+                '$id' => ID::custom('child'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]
+        ]));
+
+        $documents = static::getDatabase()->find('dots.father', [
+            Query::select(['*']),
+        ]);
+
+        $this->assertEquals('shmuel', $documents[0]['dots.name']);
+
+        //todo: abmigious syntax
+//        $documents = static::getDatabase()->find('dots.father', [
+//            Query::select(['dots.name'])
+//        ]);
+//
+//        $this->assertEquals('shmuel', $documents[0]['dots.name']);
+
     }
 
     /**

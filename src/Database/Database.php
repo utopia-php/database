@@ -802,7 +802,7 @@ class Database
      * @throws StructureException
      * @throws Throwable
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = [], int $minSize = 0): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -843,6 +843,7 @@ class Database
             'key' => $id,
             'type' => $type,
             'size' => $size,
+            'minSize' => $minSize,
             'required' => $required,
             'default' => $default,
             'signed' => $signed,

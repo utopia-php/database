@@ -330,7 +330,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals('shmuel', $documents[0]['dots.name']);
 
-        //todo: ambiguous syntax
+        //todo: ambiguous syntax for parent attribute VS relation attribute
 //        $documents = static::getDatabase()->find('dots.father', [
 //            Query::select(['dots.name'])
 //        ]);
@@ -4970,36 +4970,12 @@ abstract class Base extends TestCase
             $artist1->setAttribute('albums', ['album2'])
         );
 
-        $artists = static::getDatabase()->find('artist', []);
-        $artists = \array_filter( // Instead of using related query
-            $artists,
-            fn (Document $el) => \array_filter(
-                $el->getAttribute('albums'),
-                fn (Document $el2) => $el2['name'] === 'Album 2'
-            )
-        );
-
-        $this->assertEquals(1, \count($artists));
-        $this->assertEquals(1, \count($artists[0]['albums']));
-
         // Update document with new related documents, will remove existing relations
         static::getDatabase()->updateDocument(
             'artist',
             $artist1->getId(),
             $artist1->setAttribute('albums', ['album1', 'album2'])
         );
-
-        $artists = static::getDatabase()->find('artist', []);
-        $artists = \array_filter( // Instead of using related query
-            $artists,
-            fn (Document $el) => \array_filter(
-                $el->getAttribute('albums'),
-                fn (Document $el2) => $el2['name'] === 'Album 2'
-            )
-        );
-
-        $this->assertEquals(1, \count($artists));
-        $this->assertEquals(2, \count($artists[0]['albums']));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(

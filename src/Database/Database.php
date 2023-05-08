@@ -1998,7 +1998,7 @@ class Database
                 break;
 
             case self::INDEX_FULLTEXT:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
+                if (!$this->adapter->getSupportForFulltextIndex()) {
                     throw new Exception('Fulltext index is not supported');
                 }
                 break;

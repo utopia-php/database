@@ -616,6 +616,7 @@ class Database
      *
      * @return Document
      * @throws DuplicateException
+     * @throws Exception|Throwable
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
@@ -634,12 +635,6 @@ class Database
             throw new DuplicateException('Collection ' . $id . ' Exists!');
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
-
-        if ($id === self::METADATA) {
-            return new Document($this->collection);
-        }
-
         $collection = new Document([
             '$id' => ID::custom($id),
             '$permissions' => $permissions,
@@ -648,6 +643,19 @@ class Database
             'indexes' => $indexes,
             'documentSecurity' => $documentSecurity
         ]);
+
+        $validator = new IndexValidator();
+        if (!$validator->isValid($collection)) {
+            throw new Exception($validator->getDescription());
+        }
+
+        $this->adapter->createCollection($id, $attributes, $indexes);
+
+        if ($id === self::METADATA) {
+            return new Document($this->collection);
+        }
+
+
 
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
@@ -1965,11 +1973,6 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = new IndexValidator($collection);
-        if (!$validator->isValid(['type' => $type, 'attributes' => $attributes])) {
-            throw new Exception($validator->getDescription());
-        }
-
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -2007,8 +2010,6 @@ class Database
                 throw new Exception('Unknown index type: ' . $type);
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
-
         $collection->setAttribute('indexes', new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -2017,6 +2018,13 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
+
+        $validator = new IndexValidator();
+        if (!$validator->isValid($collection)) {
+            throw new Exception($validator->getDescription());
+        }
+
+        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));

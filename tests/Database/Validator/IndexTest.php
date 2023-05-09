@@ -111,8 +111,8 @@ class IndexTest extends TestCase
                     '$id' => ID::custom('index1'),
                     'type' => Database::INDEX_FULLTEXT,
                     'attributes' => ['title', 'date'],
-                    'lengths' => [255],
-                    'orders' => [Database::ORDER_ASC],
+                    'lengths' => [],
+                    'orders' => [],
                 ],
             ],
         ];

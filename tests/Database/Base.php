@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use Exception;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -21,6 +22,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -73,6 +75,60 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
+    }
+
+    /**
+     * @throws Exception|Throwable
+     */
+    public function testIndexLength(): void
+    {
+
+        $collection = new Document([
+            '$id' => ID::custom('index_length'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title1'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 300,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('title2'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 500,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('index1'),
+                    'type' => Database::INDEX_KEY,
+                    'attributes' => ['title1', 'title2'],
+                    'lengths' => [301,100],
+                    'orders' => [],
+                ]),
+            ],
+        ]);
+
+        $validator = new Index();
+
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals('Index length is longer than the key part for "title1"', $validator->getDescription());
+
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection($collection->getId(), $collection->getAttribute('attributes'), $collection->getAttribute('indexes')));
+
+        die;
     }
 
     public function testCreatedAtUpdatedAt(): void
@@ -717,7 +773,7 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|\Throwable
+     * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|Throwable
      */
     public function testIncreaseDecrease(): Document
     {
@@ -4161,7 +4217,7 @@ abstract class Base extends TestCase
      * @throws LimitException
      * @throws DuplicateException
      * @throws StructureException
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function testOneToOneTwoWayRelationship(): void
     {

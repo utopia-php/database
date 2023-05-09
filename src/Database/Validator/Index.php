@@ -9,6 +9,7 @@ use Utopia\Database\Document;
 class Index extends Validator
 {
     protected string $message = 'Invalid Index';
+    const MAX = 768;
 
     /**
      * @var array<Document> $attributes
@@ -63,27 +64,32 @@ class Index extends Validator
             foreach ($index->getAttribute('attributes', []) as $ik => $ia){
                 $attribute = $this->attributes[$ia];
                 $attributeSize = $attribute->getAttribute('size', 0);
+
                 $indexLength = isset($index->getAttribute('lengths')[$ik]) ? $index->getAttribute('lengths')[$ik] : 0;
+                $indexLength = $indexLength === 0 ? $attributeSize : $indexLength;
+
+                if($indexLength > $attributeSize){
+                    $this->message = 'Index length is longer than the key part for "'.$ia.'"';
+                    return false;
+                }
 
                 // Todo: find tuning for Index type && Attribute type ...
                 // $index->getAttribute('type') === 'key'
 
-                var_dump($attributeSize);
                 var_dump($ia);
+                var_dump($attributeSize);
                 var_dump($indexLength);
 
-                $total += $attributeSize;
-
-                if($total > $attributeSize){
-                    $this->message = 'Index Length is longer that the attribute size (' . $attributeSize . ')';
-                    return false;
-                }
-
-                if($total > 768){
-                    $this->message = 'Index Length is longer that the max 768)';
-                    return false;
-                }
+                $total += $indexLength;
             }
+
+
+
+            if($total > self::MAX){
+                $this->message = 'Index Length is longer that the max ('.self::MAX.'))';
+                return false;
+            }
+
         }
 
         return true;
@@ -107,9 +113,9 @@ class Index extends Validator
             return false;
         }
 
-//        if(!$this->checkIndexLength($value)){
-//            return false;
-//        }
+        if(!$this->checkIndexLength($value)){
+            return false;
+        }
 
         return true;
     }

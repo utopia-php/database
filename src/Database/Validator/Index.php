@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Validator;
 use Utopia\Database\Document;
@@ -32,14 +33,15 @@ class Index extends Validator
     /**
      * @param Document $collection
      * @return bool
+     * @throws Exception
      */
     public function checkFulltextIndexNonString(Document $collection): bool
     {
         foreach ($collection->getAttribute('indexes', []) as $index){
             if($index->getAttribute('type') === Database::INDEX_FULLTEXT){
                 foreach ($index->getAttribute('attributes', []) as $ia) {
-                    $attribute = $this->attributes[$ia];
-                    if ($attribute->getAttribute('type') !== Database::VAR_STRING) {
+                    $attribute = $this->attributes[$ia] ?? new Document([]);
+                    if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
                         $this->message = 'Attribute "'.$attribute->getAttribute('key', $attribute->getAttribute('$id')).'" cannot be part of a FULLTEXT index';
                         return false;
                     }
@@ -62,6 +64,11 @@ class Index extends Validator
             $total = 0;
 
             foreach ($index->getAttribute('attributes', []) as $ik => $ia){
+                // Todo take care Internals...
+                if(in_array($ia, ['$id', '$createdAt', '$updatedAt'])){
+                    continue;
+                }
+
                 $attribute = $this->attributes[$ia];
                 $attributeSize = $attribute->getAttribute('size', 0);
 
@@ -69,7 +76,7 @@ class Index extends Validator
                 $indexLength = $indexLength === 0 ? $attributeSize : $indexLength;
 
                 if($indexLength > $attributeSize){
-                    $this->message = 'Index length is longer than the key part for "'.$ia.'"';
+                    $this->message = 'Index length("'.$indexLength.'") is longer than the key part for "'.$ia.'("'.$attributeSize.'")"';
                     return false;
                 }
 

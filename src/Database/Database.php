@@ -644,10 +644,10 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-//        $validator = new IndexValidator();
-//        if (!$validator->isValid($collection)) {
-//            throw new Exception($validator->getDescription());
-//        }
+        $validator = new IndexValidator();
+        if (!$validator->isValid($collection)) {
+            throw new Exception($validator->getDescription());
+        }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
 

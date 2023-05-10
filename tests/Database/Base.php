@@ -82,53 +82,82 @@ abstract class Base extends TestCase
      */
     public function testIndexLength(): void
     {
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('title1'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 300,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('title2'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 500,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['title1', 'title2'],
+                'lengths' => [301,100],
+                'orders' => [],
+            ]),
+        ];
 
         $collection = new Document([
             '$id' => ID::custom('index_length'),
             'name' => 'test',
-            'attributes' => [
-                new Document([
-                    '$id' => ID::custom('title1'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 300,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-                new Document([
-                    '$id' => ID::custom('title2'),
-                    'type' => Database::VAR_STRING,
-                    'format' => '',
-                    'size' => 500,
-                    'signed' => true,
-                    'required' => false,
-                    'default' => null,
-                    'array' => false,
-                    'filters' => [],
-                ]),
-            ],
-            'indexes' => [
-                new Document([
-                    '$id' => ID::custom('index1'),
-                    'type' => Database::INDEX_KEY,
-                    'attributes' => ['title1', 'title2'],
-                    'lengths' => [301,100],
-                    'orders' => [],
-                ]),
-            ],
+            'attributes' => $attributes,
+            'indexes' => $indexes
         ]);
 
         $validator = new Index();
 
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Index length is longer than the key part for "title1"', $validator->getDescription());
+        $this->assertEquals('Index length("301") is longer than the key part for "title1("300")"', $validator->getDescription());
 
-        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection($collection->getId(), $collection->getAttribute('attributes'), $collection->getAttribute('indexes')));
+        try {
+            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Index length is longer than the key part for "title1"', $e->getMessage());
+        }
 
-        die;
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['title1', 'title2'],
+                'lengths' => [300],
+                'orders' => [],
+            ]),
+        ];
+
+        $collection->setAttribute('indexes', $indexes);
+
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals('Index Length is longer that the max (768))', $validator->getDescription());
+
+        try {
+            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Index Length is longer that the max (768))', $e->getMessage());
+        }
+
     }
 
     public function testCreatedAtUpdatedAt(): void

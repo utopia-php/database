@@ -80,7 +80,7 @@ abstract class Base extends TestCase
     /**
      * @throws Exception|Throwable
      */
-    public function testIndexLength(): void
+    public function testIndexValidation(): void
     {
         $attributes = [
             new Document([
@@ -126,14 +126,15 @@ abstract class Base extends TestCase
 
         $validator = new Index();
 
+        $errorMessage = 'Index length("301") is longer than the key part for "title1("300")"';
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Index length("301") is longer than the key part for "title1("300")"', $validator->getDescription());
+        $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
             static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Index length is longer than the key part for "title1"', $e->getMessage());
+            $this->assertEquals($errorMessage, $e->getMessage());
         }
 
         $indexes = [
@@ -148,14 +149,55 @@ abstract class Base extends TestCase
 
         $collection->setAttribute('indexes', $indexes);
 
+        $errorMessage = 'Index Length is longer that the max (768))';
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Index Length is longer that the max (768))', $validator->getDescription());
+        $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
             static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Index Length is longer that the max (768))', $e->getMessage());
+            $this->assertEquals($errorMessage, $e->getMessage());
+        }
+
+        $attributes[] = new Document([
+            '$id' => ID::custom('integer'),
+            'type' => Database::VAR_INTEGER,
+            'format' => '',
+            'size' => 10000,
+            'signed' => true,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_FULLTEXT,
+                'attributes' => ['title1', 'integer'],
+                'lengths' => [],
+                'orders' => [],
+            ]),
+        ];
+
+        $collection = new Document([
+            '$id' => ID::custom('index_length'),
+            'name' => 'test',
+            'attributes' => $attributes,
+            'indexes' => $indexes
+        ]);
+
+        $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index';
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        try {
+            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals($errorMessage, $e->getMessage());
         }
 
     }

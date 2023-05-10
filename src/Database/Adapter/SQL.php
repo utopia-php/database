@@ -313,7 +313,7 @@ abstract class SQL extends Adapter
                             $total += 11;
                             break;
 
-                        case ($attribute['size'] > 16383):
+                        case ($attribute['size'] > 16381):
                             // 8 bytes length + 2 bytes for TEXT
                             $total += 10;
                             break;

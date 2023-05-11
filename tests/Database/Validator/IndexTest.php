@@ -61,6 +61,9 @@ class IndexTest extends TestCase
      */
     public function testAppwriteCollection(): void
     {
+
+        // Todo: Move this test to Appwrite...
+
         $validator = new Index();
 
         /** @var array $configs */
@@ -68,7 +71,6 @@ class IndexTest extends TestCase
 
         foreach ($collections as $collection) {
             $collection = $this->collectionArrayToDocuments($collection);
-            var_dump($collection);
             $this->assertTrue($validator->isValid($collection));
         }
     }
@@ -158,7 +160,45 @@ class IndexTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Attribute "date" cannot be part of a FULLTEXT index', $validator->getDescription());
+        $this->assertEquals('Index Length is longer that the max (768))', $validator->getDescription());
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testEmptyAttributes(): void
+    {
+        $validator = new Index();
+
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 769,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('index1'),
+                    'type' => Database::INDEX_KEY,
+                    'attributes' => [],
+                    'lengths' => [],
+                    'orders' => [],
+                ]),
+            ],
+        ]);
+
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals('No attributes provided for index', $validator->getDescription());
     }
 
 

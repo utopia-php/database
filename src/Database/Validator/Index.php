@@ -10,7 +10,7 @@ use Utopia\Database\Document;
 class Index extends Validator
 {
     protected string $message = 'Invalid Index';
-    const MAX = 768;
+    const MAX = 768; // 3072 bytes / mb4
 
     /**
      * @var array<Document> $attributes
@@ -28,6 +28,23 @@ class Index extends Validator
     public function getDescription(): string
     {
         return $this->message;
+    }
+
+    /**
+     * @param Document $collection
+     * @return bool
+     * @throws Exception
+     */
+    public function checkEmptyAttributes(Document $collection): bool
+    {
+        foreach ($collection->getAttribute('indexes', []) as $index){
+            if(empty($index->getAttribute('attributes', []))){
+                $this->message = 'No attributes provided for index';
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -58,39 +75,55 @@ class Index extends Validator
      */
     public function checkIndexLength(Document $collection): bool
     {
-
         foreach ($collection->getAttribute('indexes', []) as $index){
+
+            if($index->getAttribute('type') === Database::INDEX_FULLTEXT){
+                return true;
+            }
 
             $total = 0;
 
             foreach ($index->getAttribute('attributes', []) as $ik => $ia){
-                // Todo take care Internals...
+
+                // Todo Add internals to attributes collection...
                 if(in_array($ia, ['$id', '$createdAt', '$updatedAt'])){
                     continue;
                 }
 
                 $attribute = $this->attributes[$ia];
-                $attributeSize = $attribute->getAttribute('size', 0);
 
-                $indexLength = isset($index->getAttribute('lengths')[$ik]) ? $index->getAttribute('lengths')[$ik] : 0;
-                $indexLength = $indexLength === 0 ? $attributeSize : $indexLength;
+                var_dump($attribute->getAttribute('type'));
+
+                // Todo: find tuning for Index type && Attribute type ..
+                switch ($attribute->getAttribute('type')) {
+                    case Database::VAR_STRING:
+                        $attributeSize = $attribute->getAttribute('size', 0);
+                        $indexLength = isset($index->getAttribute('lengths')[$ik]) ? $index->getAttribute('lengths')[$ik] : 0;
+                        $indexLength = $indexLength === 0 ? $attributeSize : $indexLength;
+                        break;
+
+                    case Database::VAR_FLOAT:
+                        $attributeSize = 2; // 8 bytes / 4 mb4
+                        $indexLength = 2;
+                        break;
+
+                    default:
+                        $attributeSize = 1; // 4 bytes / 4 mb4
+                        $indexLength = 1;
+                        break;
+                }
+
+                var_dump($ia);
+                var_dump($attributeSize);
+                var_dump($indexLength);
 
                 if($indexLength > $attributeSize){
                     $this->message = 'Index length("'.$indexLength.'") is longer than the key part for "'.$ia.'("'.$attributeSize.'")"';
                     return false;
                 }
 
-                // Todo: find tuning for Index type && Attribute type ...
-                // $index->getAttribute('type') === 'key'
-
-                var_dump($ia);
-                var_dump($attributeSize);
-                var_dump($indexLength);
-
                 $total += $indexLength;
             }
-
-
 
             if($total > self::MAX){
                 $this->message = 'Index Length is longer that the max ('.self::MAX.'))';
@@ -100,7 +133,6 @@ class Index extends Validator
         }
 
         return true;
-
     }
 
     /**
@@ -109,11 +141,16 @@ class Index extends Validator
      * Returns true index if valid.
      * @param Document $value
      * @return bool
+     * @throws Exception
      */
     public function isValid($value): bool
     {
         foreach ($value->getAttribute('attributes', []) as $attribute){
             $this->attributes[$attribute->getAttribute('$id', $value->getAttribute('key'))] = $attribute;
+        }
+
+        if(!$this->checkEmptyAttributes($value)){
+            return false;
         }
 
         if(!$this->checkFulltextIndexNonString($value)){

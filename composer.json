@@ -32,7 +32,7 @@
     "require": {
         "ext-pdo": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "0.*.*",
+        "utopia-php/framework": "dev-fix-wildcard-edge-cases as 0.26.99",
         "utopia-php/cache": "0.8.*",
         "utopia-php/mongo": "0.2.*"
     },

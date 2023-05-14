@@ -112,7 +112,7 @@ class Index extends Validator
             }
 
             if ($total > self::MAX) {
-                $this->message = 'Index Length is longer that the max ('.self::MAX.'))';
+                $this->message = 'Index Length is longer than max ('.self::MAX.'))';
                 return false;
             }
         }

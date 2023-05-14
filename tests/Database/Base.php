@@ -149,7 +149,7 @@ abstract class Base extends TestCase
 
         $collection->setAttribute('indexes', $indexes);
 
-        $errorMessage = 'Index Length is longer that the max (768))';
+        $errorMessage = 'Index Length is longer than max (768))';
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals($errorMessage, $validator->getDescription());
 

@@ -157,7 +157,7 @@ class IndexTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Index Length is longer that the max (768))', $validator->getDescription());
+        $this->assertEquals('Index Length is longer than max (768))', $validator->getDescription());
     }
 
     /**

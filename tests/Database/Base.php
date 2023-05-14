@@ -966,13 +966,15 @@ abstract class Base extends TestCase
      */
     public function testFulltextIndexWithInteger(): void
     {
+        $this->expectException(Exception::class);
+
         if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-            $this->expectNotToPerformAssertions();
-            return;
+            $this->expectExceptionMessage('Fulltext index is not supported');
+        }
+        else {
+            $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
         }
 
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
     }
 

@@ -13,7 +13,6 @@ class IndexTest extends TestCase
 {
     public function setUp(): void
     {
-
     }
 
     public function tearDown(): void
@@ -21,7 +20,7 @@ class IndexTest extends TestCase
     }
 
     /**
-     * @param array $collection
+     * @param array<mixed> $collection
      * @return Document
      * @throws Exception
      */
@@ -61,12 +60,11 @@ class IndexTest extends TestCase
      */
     public function testAppwriteCollection(): void
     {
-
         // Todo: Move this test to Appwrite...
 
         $validator = new Index();
 
-        /** @var array $configs */
+        /** @var array<mixed> $collections */
         $collections = include __DIR__ . '/config/collections.php';
 
         foreach ($collections as $collection) {
@@ -122,7 +120,6 @@ class IndexTest extends TestCase
 
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals('Attribute "date" cannot be part of a FULLTEXT index', $validator->getDescription());
-
     }
 
     /**
@@ -200,6 +197,4 @@ class IndexTest extends TestCase
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals('No attributes provided for index', $validator->getDescription());
     }
-
-
 }

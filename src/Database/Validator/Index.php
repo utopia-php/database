@@ -35,7 +35,7 @@ class Index extends Validator
      * @return bool
      * @throws Exception
      */
-    public function checkEmptyAttributes(Document $collection): bool
+    public function checkEmptyIndexAttributes(Document $collection): bool
     {
         foreach ($collection->getAttribute('indexes', []) as $index){
             if(empty($index->getAttribute('attributes', []))){
@@ -82,19 +82,9 @@ class Index extends Validator
             }
 
             $total = 0;
-
             foreach ($index->getAttribute('attributes', []) as $ik => $ia){
-
-                // Todo Add internals to attributes collection...
-                if(in_array($ia, ['$id', '$createdAt', '$updatedAt'])){
-                    continue;
-                }
-
                 $attribute = $this->attributes[$ia];
 
-                var_dump($attribute->getAttribute('type'));
-
-                // Todo: find tuning for Index type && Attribute type ..
                 switch ($attribute->getAttribute('type')) {
                     case Database::VAR_STRING:
                         $attributeSize = $attribute->getAttribute('size', 0);
@@ -149,7 +139,22 @@ class Index extends Validator
             $this->attributes[$attribute->getAttribute('$id', $value->getAttribute('key'))] = $attribute;
         }
 
-        if(!$this->checkEmptyAttributes($value)){
+        $this->attributes['$id'] = new Document([
+            'type' => Database::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+        ]);
+
+        $this->attributes['$createdAt'] = new Document([
+            'type' => Database::VAR_DATETIME,
+            'size' => Database::LENGTH_KEY,
+        ]);
+
+        $this->attributes['$updatedAt'] = new Document([
+            'type' => Database::VAR_DATETIME,
+            'size' => Database::LENGTH_KEY,
+        ]);
+
+        if(!$this->checkEmptyIndexAttributes($value)){
             return false;
         }
 

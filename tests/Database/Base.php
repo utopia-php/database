@@ -970,8 +970,7 @@ abstract class Base extends TestCase
 
         if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
             $this->expectExceptionMessage('Fulltext index is not supported');
-        }
-        else {
+        } else {
             $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
         }
 

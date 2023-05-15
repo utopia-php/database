@@ -8,8 +8,6 @@ use Utopia\Database\Query;
 
 class Filter extends Base
 {
-    protected string $message = 'Invalid query';
-
     /**
      * @var array<int|string, mixed>
      */

@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
+use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -41,13 +42,13 @@ class IndexedQueriesTest extends TestCase
         $validator = new IndexedQueries();
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
 
-        $validator = new IndexedQueries([], [], new Limit());
+        $validator = new IndexedQueries([], [], [new Limit()]);
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
     public function testInvalidValue(): void
     {
-        $validator = new IndexedQueries([], [], new Limit());
+        $validator = new IndexedQueries([], [], [new Limit()]);
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
@@ -76,11 +77,13 @@ class IndexedQueriesTest extends TestCase
         $validator = new IndexedQueries(
             $attributes,
             $indexes,
-            new Cursor(),
-            new Filter($attributes),
-            new Limit(),
-            new Offset(),
-            new Order($attributes),
+            [
+                new Cursor(),
+                new Filter($attributes),
+                new Limit(),
+                new Offset(),
+                new Order($attributes)
+            ]
         );
         $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
@@ -109,11 +112,13 @@ class IndexedQueriesTest extends TestCase
         $validator = new IndexedQueries(
             $attributes,
             $indexes,
-            new Cursor(),
-            new Filter($attributes),
-            new Limit(),
-            new Offset(),
-            new Order($attributes),
+            [
+                new Cursor(),
+                new Filter($attributes),
+                new Limit(),
+                new Offset(),
+                new Order($attributes)
+            ]
         );
         $this->assertEquals(false, $validator->isValid(['equal("dne", "value")']), $validator->getDescription());
         $this->assertEquals(false, $validator->isValid(['orderAsc("dne")']), $validator->getDescription());

@@ -42,13 +42,13 @@ class QueriesTest extends TestCase
         $validator = new Queries();
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
 
-        $validator = new Queries(new Limit());
+        $validator = new Queries([new Limit()]);
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
     public function testInvalidValue(): void
     {
-        $validator = new Queries(new Limit());
+        $validator = new Queries([new Limit()]);
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
@@ -67,11 +67,13 @@ class QueriesTest extends TestCase
         ];
 
         $validator = new Queries(
-            new Cursor(),
-            new Filter($attributes),
-            new Limit(),
-            new Offset(),
-            new Order($attributes),
+            [
+                new Cursor(),
+                new Filter($attributes),
+                new Limit(),
+                new Offset(),
+                new Order($attributes)
+            ]
         );
 
         $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());

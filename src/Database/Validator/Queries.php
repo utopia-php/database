@@ -23,7 +23,7 @@ class Queries extends Validator
      *
      * @param array<Base> $validators
      */
-    public function __construct(array $validators)
+    public function __construct(array $validators = [])
     {
         $this->validators = $validators;
     }

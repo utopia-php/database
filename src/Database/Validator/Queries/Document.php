@@ -41,6 +41,6 @@ class Document extends Queries
             new Select($attributes),
         ];
 
-        parent::__construct(...$validators);
+        parent::__construct($validators);
     }
 }

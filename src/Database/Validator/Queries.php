@@ -47,7 +47,7 @@ class Queries extends Validator
     public function isValid($value): bool
     {
         if (!is_array($value)) {
-            $this->message = "Queries must be an array";
+            $this->message = 'Queries must be an array';
             return false;
         }
 
@@ -56,7 +56,7 @@ class Queries extends Validator
                 try {
                     $query = Query::parse($query);
                 } catch (\Throwable) {
-                    $this->message = "Invalid query: {$query}";
+                    $this->message = 'Invalid query: ' . $query;
                     return false;
                 }
             }

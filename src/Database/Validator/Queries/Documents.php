@@ -54,6 +54,6 @@ class Documents extends IndexedQueries
             new Select($attributes),
         ];
 
-        parent::__construct($attributes, $indexes, ...$validators);
+        parent::__construct($attributes, $indexes, $validators);
     }
 }

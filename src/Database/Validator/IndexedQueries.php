@@ -27,10 +27,10 @@ class IndexedQueries extends Queries
      *
      * @param array<Document> $attributes
      * @param array<Document> $indexes
-     * @param Base ...$validators
+     * @param array<Base> $validators
      * @throws Exception
      */
-    public function __construct(array $attributes = [], array $indexes = [], Base ...$validators)
+    public function __construct(array $attributes = [], array $indexes = [], array $validators = [])
     {
         $this->attributes = $attributes;
 
@@ -53,7 +53,7 @@ class IndexedQueries extends Queries
             $this->indexes[] = $index;
         }
 
-        parent::__construct(...$validators);
+        parent::__construct($validators);
     }
 
     /**

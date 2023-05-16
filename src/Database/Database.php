@@ -265,7 +265,6 @@ class Database
     protected bool $resolveRelationships = true;
 
     private int $relationshipFetchDepth = 1;
-    private int $relationshipDeleteDepth = 1;
 
     /**
      * Stack of collection IDs when creating or updating related documents
@@ -3403,10 +3402,6 @@ class Database
             $relationship->setAttribute('collection', $collection->getId());
             $relationship->setAttribute('document', $document->getId());
 
-            if ($this->relationshipDeleteDepth >= Database::RELATION_MAX_DEPTH) {
-                return $document;
-            }
-
             switch ($onDelete) {
                 case Database::RELATION_MUTATE_RESTRICT:
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
@@ -3644,7 +3639,6 @@ class Database
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($value !== null) {
-                    $this->relationshipDeleteDepth++;
                     $this->relationshipDeleteStack[] = $relationship;
 
                     $this->deleteDocument(
@@ -3652,7 +3646,6 @@ class Database
                         $value->getId()
                     );
 
-                    $this->relationshipDeleteDepth--;
                     \array_pop($this->relationshipDeleteStack);
                 }
                 break;
@@ -3661,7 +3654,6 @@ class Database
                     break;
                 }
 
-                $this->relationshipDeleteDepth++;
                 $this->relationshipDeleteStack[] = $relationship;
 
                 foreach ($value as $relation) {
@@ -3671,7 +3663,6 @@ class Database
                     );
                 }
 
-                $this->relationshipDeleteDepth--;
                 \array_pop($this->relationshipDeleteStack);
 
                 break;
@@ -3685,7 +3676,6 @@ class Database
                     Query::limit(PHP_INT_MAX)
                 ]);
 
-                $this->relationshipDeleteDepth++;
                 $this->relationshipDeleteStack[] = $relationship;
 
                 foreach ($value as $relation) {
@@ -3695,7 +3685,6 @@ class Database
                     );
                 }
 
-                $this->relationshipDeleteDepth--;
                 \array_pop($this->relationshipDeleteStack);
 
                 break;
@@ -3707,7 +3696,6 @@ class Database
                     Query::limit(PHP_INT_MAX)
                 ]);
 
-                $this->relationshipDeleteDepth++;
                 $this->relationshipDeleteStack[] = $relationship;
 
                 foreach ($junctions as $document) {
@@ -3723,9 +3711,7 @@ class Database
                     );
                 }
 
-                $this->relationshipDeleteDepth--;
                 \array_pop($this->relationshipDeleteStack);
-
                 break;
         }
     }

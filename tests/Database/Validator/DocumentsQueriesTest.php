@@ -174,6 +174,6 @@ class DocumentsQueriesTest extends TestCase
 
         $queries = ['equal("title", [])']; // empty array
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: equal queries require at least one value.', $validator->getDescription());
+        $this->assertEquals('Query not valid: Equal queries require at least one value.', $validator->getDescription());
     }
 }

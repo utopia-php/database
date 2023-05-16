@@ -1425,27 +1425,25 @@ abstract class Base extends TestCase
 
     public function testFindContains(): void
     {
-        /**
-         * Array contains condition
-         */
-        if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
-            $documents = static::getDatabase()->find('movies', [
-                Query::contains('generes', ['comics'])
-            ]);
-
-            $this->assertEquals(2, count($documents));
-
-            /**
-             * Array contains OR condition
-             */
-            $documents = static::getDatabase()->find('movies', [
-                Query::contains('generes', ['comics', 'kids']),
-            ]);
-
-            $this->assertEquals(4, count($documents));
+        if (!$this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        $this->assertEquals(true, true); // Test must do an assertion
+        $documents = static::getDatabase()->find('movies', [
+            Query::contains('generes', ['comics'])
+        ]);
+
+        $this->assertEquals(2, count($documents));
+
+        /**
+         * Array contains OR condition
+         */
+        $documents = static::getDatabase()->find('movies', [
+            Query::contains('generes', ['comics', 'kids']),
+        ]);
+
+        $this->assertEquals(4, count($documents));
     }
 
     public function testFindFulltext(): void
@@ -10934,7 +10932,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: equal queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: Equal queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -10954,7 +10952,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: notEqual queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: NotEqual queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -10964,7 +10962,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: lessThan queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: LessThan queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -10974,7 +10972,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: lessThanEqual queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: LessThanEqual queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -10984,7 +10982,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: greaterThan queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: GreaterThan queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -10994,7 +10992,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: greaterThanEqual queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: GreaterThanEqual queries require at least one value.', $e->getMessage());
         }
 
         try {
@@ -11004,7 +11002,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: contains queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: Contains queries require at least one value.', $e->getMessage());
         }
     }
 

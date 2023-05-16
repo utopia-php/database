@@ -50,7 +50,7 @@ class Select extends Base
                 }
 
                 // For relationships, just validate the top level.
-                // Utopia will validate each nested level during the recursive calls.
+                // Will validate each nested level during the recursive calls.
                 $attribute = \explode('.', $attribute)[0];
             }
 

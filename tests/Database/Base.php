@@ -273,17 +273,17 @@ abstract class Base extends TestCase
 
     public function testSymbolDots(): void
     {
-        static::getDatabase()->createCollection('dots.father');
+        static::getDatabase()->createCollection('dots.parent');
 
         $this->assertTrue(static::getDatabase()->createAttribute(
-            collection: 'dots.father',
+            collection: 'dots.parent',
             id: 'dots.name',
             type: Database::VAR_STRING,
             size: 255,
             required: false
         ));
 
-        $document = static::getDatabase()->find('dots.father', [
+        $document = static::getDatabase()->find('dots.parent', [
             Query::select(['dots.name']),
         ]);
         $this->assertEmpty($document);
@@ -299,14 +299,14 @@ abstract class Base extends TestCase
         ));
 
         static::getDatabase()->createRelationship(
-            collection: 'dots.father',
+            collection: 'dots.parent',
             relatedCollection: 'dots',
             type: Database::RELATION_ONE_TO_ONE
         );
 
-        static::getDatabase()->createDocument('dots.father', new Document([
+        static::getDatabase()->createDocument('dots.parent', new Document([
             '$id' => ID::custom('father'),
-            'dots.name' => 'shmuel',
+            'dots.name' => 'Bill clinton',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -324,18 +324,18 @@ abstract class Base extends TestCase
             ]
         ]));
 
-        $documents = static::getDatabase()->find('dots.father', [
+        $documents = static::getDatabase()->find('dots.parent', [
             Query::select(['*']),
         ]);
 
-        $this->assertEquals('shmuel', $documents[0]['dots.name']);
+        $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
 
         //todo: ambiguous syntax for parent attribute VS relation attribute
-//        $documents = static::getDatabase()->find('dots.father', [
-//            Query::select(['dots.name'])
-//        ]);
-//
-//        $this->assertEquals('shmuel', $documents[0]['dots.name']);
+        $documents = static::getDatabase()->find('dots.parent', [
+            Query::select(['dots.name'])
+        ]);
+
+        $this->assertEquals(null, $documents[0]['dots.name']); // Todo: Should be 'Bill clinton'
     }
 
     /**

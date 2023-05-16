@@ -41,7 +41,7 @@ class Queries extends Validator
     }
 
     /**
-     * @param array<mixed> $value
+     * @param array<Query|string> $value
      * @return bool
      */
     public function isValid($value): bool

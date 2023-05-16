@@ -276,12 +276,12 @@ class Database
     /**
      * @var array<Document>
      */
-    private array $relationshipFetchMap = [];
+    private array $relationshipFetchStack = [];
 
     /**
      * @var array<Document>
      */
-    private array $relationshipDeleteMap = [];
+    private array $relationshipDeleteStack = [];
 
     /**
      * @param Adapter $adapter
@@ -2268,7 +2268,7 @@ class Database
             $relationship->setAttribute('document', $document->getId());
 
             $skipFetch = false;
-            foreach ($this->relationshipFetchMap as $fetchedRelationship) {
+            foreach ($this->relationshipFetchStack as $fetchedRelationship) {
                 $existingKey = $fetchedRelationship['key'];
                 $existingCollection = $fetchedRelationship['collection'];
                 $existingRelatedCollection = $fetchedRelationship['options']['relatedCollection'];
@@ -2325,12 +2325,12 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
                     $document->setAttribute($key, $related);
                     break;
@@ -2342,12 +2342,12 @@ class Database
                         }
                         if (!\is_null($value)) {
                             $this->relationshipFetchDepth++;
-                            $this->relationshipFetchMap[] = $relationship;
+                            $this->relationshipFetchStack[] = $relationship;
 
                             $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                             $this->relationshipFetchDepth--;
-                            \array_pop($this->relationshipFetchMap);
+                            \array_pop($this->relationshipFetchStack);
 
                             $document->setAttribute($key, $related);
                         }
@@ -2359,7 +2359,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2368,7 +2368,7 @@ class Database
                     ]);
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
                     foreach ($relatedDocuments as $related) {
                         $related->removeAttribute($twoWayKey);
@@ -2387,12 +2387,12 @@ class Database
                             break;
                         }
                         $this->relationshipFetchDepth++;
-                        $this->relationshipFetchMap[] = $relationship;
+                        $this->relationshipFetchStack[] = $relationship;
 
                         $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                         $this->relationshipFetchDepth--;
-                        \array_pop($this->relationshipFetchMap);
+                        \array_pop($this->relationshipFetchStack);
 
                         $document->setAttribute($key, $related);
                         break;
@@ -2408,7 +2408,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2417,7 +2417,7 @@ class Database
                     ]);
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
 
                     foreach ($relatedDocuments as $related) {
@@ -2436,7 +2436,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
@@ -2455,7 +2455,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
                     $document->setAttribute($key, $related);
                     break;
@@ -3415,7 +3415,7 @@ class Database
                     $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
-                    foreach ($this->relationshipDeleteMap as $processedRelationship) {
+                    foreach ($this->relationshipDeleteStack as $processedRelationship) {
                         $existingKey = $processedRelationship['key'];
                         $existingCollection = $processedRelationship['collection'];
                         $existingRelatedCollection = $processedRelationship['options']['relatedCollection'];
@@ -3645,7 +3645,7 @@ class Database
             case Database::RELATION_ONE_TO_ONE:
                 if ($value !== null) {
                     $this->relationshipDeleteDepth++;
-                    $this->relationshipDeleteMap[] = $relationship;
+                    $this->relationshipDeleteStack[] = $relationship;
 
                     $this->deleteDocument(
                         $relatedCollection->getId(),
@@ -3653,7 +3653,7 @@ class Database
                     );
 
                     $this->relationshipDeleteDepth--;
-                    \array_pop($this->relationshipDeleteMap);
+                    \array_pop($this->relationshipDeleteStack);
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -3662,7 +3662,7 @@ class Database
                 }
 
                 $this->relationshipDeleteDepth++;
-                $this->relationshipDeleteMap[] = $relationship;
+                $this->relationshipDeleteStack[] = $relationship;
 
                 foreach ($value as $relation) {
                     $this->deleteDocument(
@@ -3672,7 +3672,7 @@ class Database
                 }
 
                 $this->relationshipDeleteDepth--;
-                \array_pop($this->relationshipDeleteMap);
+                \array_pop($this->relationshipDeleteStack);
 
                 break;
             case Database::RELATION_MANY_TO_ONE:
@@ -3686,7 +3686,7 @@ class Database
                 ]);
 
                 $this->relationshipDeleteDepth++;
-                $this->relationshipDeleteMap[] = $relationship;
+                $this->relationshipDeleteStack[] = $relationship;
 
                 foreach ($value as $relation) {
                     $this->deleteDocument(
@@ -3696,7 +3696,7 @@ class Database
                 }
 
                 $this->relationshipDeleteDepth--;
-                \array_pop($this->relationshipDeleteMap);
+                \array_pop($this->relationshipDeleteStack);
 
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -3708,7 +3708,7 @@ class Database
                 ]);
 
                 $this->relationshipDeleteDepth++;
-                $this->relationshipDeleteMap[] = $relationship;
+                $this->relationshipDeleteStack[] = $relationship;
 
                 foreach ($junctions as $document) {
                     if ($side === Database::RELATION_SIDE_PARENT) {
@@ -3724,7 +3724,7 @@ class Database
                 }
 
                 $this->relationshipDeleteDepth--;
-                \array_pop($this->relationshipDeleteMap);
+                \array_pop($this->relationshipDeleteStack);
 
                 break;
         }

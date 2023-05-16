@@ -271,7 +271,7 @@ abstract class Base extends TestCase
         $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
     }
 
-    public function testSymbolDots(): void
+    public function testAttributeNamesWithDots(): void
     {
         static::getDatabase()->createCollection('dots.parent');
 
@@ -5446,14 +5446,6 @@ abstract class Base extends TestCase
             $customer1->getId(),
             $customer1->setAttribute('accounts', ['account1', 'account2'])
         );
-
-//        // Query related document again
-//        $customers = static::getDatabase()->find('customer', [
-//            Query::equal('accounts.name', ['Account 2 Updated'])
-//        ]);
-//
-//        $this->assertEquals(1, \count($customers));
-//        $this->assertEquals(2, \count($customers[0]['accounts']));
 
         // Update inverse document
         static::getDatabase()->updateDocument(

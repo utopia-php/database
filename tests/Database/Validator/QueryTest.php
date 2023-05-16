@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries\Documents as DocumentsQueries;
+use Utopia\Database\Validator\Queries\Documents;
 
 class QueryTest extends TestCase
 {
@@ -108,7 +108,7 @@ class QueryTest extends TestCase
      */
     public function testQuery(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", ["Iron Man", "Ant Man"])')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", "Iron Man")')]));
@@ -137,7 +137,7 @@ class QueryTest extends TestCase
      */
     public function testInvalidMethod(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $this->assertEquals(false, $validator->isValid([Query::parse('eqqual("title", "Iron Man")')]));
         $this->assertEquals('Query method not valid: eqqual', $validator->getDescription());
@@ -148,7 +148,7 @@ class QueryTest extends TestCase
      */
     public function testAttributeNotFound(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::parse('equal("name", "Iron Man")')]);
 
@@ -166,7 +166,7 @@ class QueryTest extends TestCase
      */
     public function testAttributeWrongType(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::parse('equal("title", 1776)')]);
 
@@ -179,7 +179,7 @@ class QueryTest extends TestCase
      */
     public function testQueryDate(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
         $response = $validator->isValid([Query::parse('greaterThan("birthDay", "1960-01-01 10:10:10")')]);
         $this->assertEquals(true, $response);
     }
@@ -189,7 +189,7 @@ class QueryTest extends TestCase
      */
     public function testQueryLimit(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::parse('limit(25)')]);
         $this->assertEquals(true, $response);
@@ -209,7 +209,7 @@ class QueryTest extends TestCase
      */
     public function testQueryOffset(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::parse('offset(25)')]);
         $this->assertEquals(true, $response);
@@ -229,7 +229,7 @@ class QueryTest extends TestCase
      */
     public function testQueryOrder(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::parse('orderAsc("title")')]);
         $this->assertEquals(true, $response);
@@ -249,7 +249,7 @@ class QueryTest extends TestCase
      */
     public function testQueryCursor(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::parse('cursorAfter("asdf")')]);
         $this->assertEquals(true, $response);
@@ -282,7 +282,7 @@ class QueryTest extends TestCase
      */
     public function testQueryEmpty(): void
     {
-        $validator = new DocumentsQueries($this->attributes, []);
+        $validator = new Documents($this->attributes, []);
 
         $response = $validator->isValid([Query::equal('title', [''])]);
         $this->assertEquals(true, $response);

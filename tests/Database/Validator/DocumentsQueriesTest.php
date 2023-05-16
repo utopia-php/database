@@ -8,7 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries\Documents as DocumentsQueries;
+use Utopia\Database\Validator\Queries\Documents;
 
 class DocumentsQueriesTest extends TestCase
 {
@@ -113,7 +113,7 @@ class DocumentsQueriesTest extends TestCase
      */
     public function testValidQueries(): void
     {
-        $validator = new DocumentsQueries($this->collection['attributes'], $this->collection['indexes']);
+        $validator = new Documents($this->collection['attributes'], $this->collection['indexes']);
 
         $queries = [
             'notEqual("title", ["Iron Man", "Ant Man"])',
@@ -131,7 +131,7 @@ class DocumentsQueriesTest extends TestCase
             'isNull("title")',
             'isNotNull("title")',
             'cursorAfter("a")',
-            'cursorBefore("b")', // Todo: This should fail?
+            'cursorBefore("b")',
             'orderAsc("title")',
             'limit(10)',
             'offset(10)',
@@ -149,7 +149,7 @@ class DocumentsQueriesTest extends TestCase
      */
     public function testInvalidQueries(): void
     {
-        $validator = new DocumentsQueries($this->collection['attributes'], $this->collection['indexes']);
+        $validator = new Documents($this->collection['attributes'], $this->collection['indexes']);
 
         $queries = ['search("description", "iron")'];
         $this->assertEquals(false, $validator->isValid($queries));

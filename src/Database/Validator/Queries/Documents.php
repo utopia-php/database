@@ -48,7 +48,7 @@ class Documents extends IndexedQueries
         $validators = [
             new Limit(),
             new Offset(),
-            new Cursor(), // I think this should be checks against $attributes?
+            new Cursor(),
             new Filter($attributes),
             new Order($attributes),
             new Select($attributes),

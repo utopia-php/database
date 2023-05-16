@@ -101,13 +101,14 @@ class IndexedQueriesTest extends TestCase
                 'array' => false,
             ]),
         ];
+
         $indexes = [
             new Document([
-                'status' => 'available',
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['name'],
             ]),
         ];
+
         $validator = new IndexedQueries(
             $attributes,
             $indexes,

@@ -9,13 +9,11 @@ use Utopia\Database\Query;
 class Filter extends Base
 {
     /**
-     * @var array<int|string, mixed>
+     * @var array<array<mixed>>
      */
     protected array $schema = [];
 
     private int $maxValuesCount;
-
-    public static bool $NESTING_QUERIES = false;
 
     /**
      * @param array<Document> $attributes
@@ -43,7 +41,7 @@ class Filter extends Base
             }
 
             // For relationships, just validate the top level.
-            // Utopia will validate each nested level during the recursive calls.
+            // will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
 
             if (isset($this->schema[$attribute])) {
@@ -72,11 +70,8 @@ class Filter extends Base
             return false;
         }
 
-        if (\str_contains($attribute, '.')) {
-            // Check for special symbol `.`
-            if (isset($this->schema[$attribute])) {
-                return true;
-            }
+        // isset check if for special symbols "." in the attribute name
+        if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];

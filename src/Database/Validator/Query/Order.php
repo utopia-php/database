@@ -44,13 +44,17 @@ class Order extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $query
+     * @param Query $value
      * @return bool
      */
-    public function isValid($query): bool
+    public function isValid($value): bool
     {
-        $method = $query->getMethod();
-        $attribute = $query->getAttribute();
+        if (!$value instanceof Query) {
+            return false;
+        }
+
+        $method = $value->getMethod();
+        $attribute = $value->getAttribute();
 
         if ($method === Query::TYPE_ORDERASC || $method === Query::TYPE_ORDERDESC) {
             if ($attribute === '') {

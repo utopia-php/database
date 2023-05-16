@@ -29,18 +29,20 @@ class Select extends Base
      *
      * Otherwise, returns false
      *
-     * @param $query
+     * @param Query $value
      * @return bool
      */
-    public function isValid($query): bool
+    public function isValid($value): bool
     {
-        /* @var $query Query */
-
-        if ($query->getMethod() !== Query::TYPE_SELECT) {
+        if (!$value instanceof Query) {
             return false;
         }
 
-        foreach ($query->getValues() as $attribute) {
+        if ($value->getMethod() !== Query::TYPE_SELECT) {
+            return false;
+        }
+
+        foreach ($value->getValues() as $attribute) {
             if (\str_contains($attribute, '.')) {
                 //special symbols with `dots`
                 if (isset($this->schema[$attribute])) {

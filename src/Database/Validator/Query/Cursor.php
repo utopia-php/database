@@ -16,11 +16,14 @@ class Cursor extends Base
      * Otherwise, returns false
      *
      * @param Query $value
-     *
      * @return bool
      */
     public function isValid($value): bool
     {
+        if (!$value instanceof Query) {
+            return false;
+        }
+
         $method = $value->getMethod();
 
         if ($method === Query::TYPE_CURSORAFTER || $method === Query::TYPE_CURSORBEFORE) {

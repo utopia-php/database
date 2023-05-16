@@ -111,13 +111,13 @@ class Filter extends Base
      *
      * Otherwise, returns false
      *
-     * @param $query
+     * @param Query $value
      * @return bool
      */
-    public function isValid($query): bool
+    public function isValid($value): bool
     {
-        $method = $query->getMethod();
-        $attribute = $query->getAttribute();
+        $method = $value->getMethod();
+        $attribute = $value->getAttribute();
         switch ($method) {
             case Query::TYPE_EQUAL:
             case Query::TYPE_NOTEQUAL:
@@ -130,10 +130,10 @@ class Filter extends Base
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_BETWEEN:
             case Query::TYPE_CONTAINS: // todo: What to do about unsupported operators?
-                $values = $query->getValues();
+                $values = $value->getValues();
 
-                if ((is_array($values) && count($values) === 0) || (is_array($values[0]) && count($values[0]) === 0)) {
-                    $this->message = $method . ' queries require at least one value.';
+                if (count($values) === 0 || (is_array($values[0]) && count($values[0]) === 0)) {
+                    $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;
                 }
 
@@ -141,7 +141,7 @@ class Filter extends Base
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return $this->isValidAttributeAndValues($attribute, $query->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
             default:
                 return false;

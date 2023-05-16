@@ -30,10 +30,12 @@ class Limit extends Base
      */
     public function isValid($value): bool
     {
-        $method = $value->getMethod();
+        if (!$value instanceof Query) {
+            return false;
+        }
 
-        if ($method !== Query::TYPE_LIMIT) {
-            $this->message = 'Query method invalid: ' . $method;
+        if ($value->getMethod() !== Query::TYPE_LIMIT) {
+            $this->message = 'Query method invalid: ' . $value->getMethod();
             return false;
         }
 

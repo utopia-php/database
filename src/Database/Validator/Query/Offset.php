@@ -24,6 +24,10 @@ class Offset extends Base
      */
     public function isValid($value): bool
     {
+        if (!$value instanceof Query) {
+            return false;
+        }
+
         $method = $value->getMethod();
 
         if ($method !== Query::TYPE_OFFSET) {

@@ -14,6 +14,8 @@ use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
 {
+    protected int $maxVarcharLength = 16382;
+
     /**
      * Create Database
      *
@@ -1276,7 +1278,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > 16381) { // 16381 mysql vs 16383 maria
+                if ($size > $this->maxVarcharLength) {
                     return 'TEXT';
                 }
 

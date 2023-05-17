@@ -60,8 +60,8 @@ class Index extends Validator
     {
         foreach ($collection->getAttribute('indexes', []) as $index) {
             if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
-                foreach ($index->getAttribute('attributes', []) as $ia) {
-                    $attribute = $this->attributes[$ia] ?? new Document([]);
+                foreach ($index->getAttribute('attributes', []) as $attributeName) {
+                    $attribute = $this->attributes[$attributeName] ?? new Document([]);
                     if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
                         $this->message = 'Attribute "'.$attribute->getAttribute('key', $attribute->getAttribute('$id')).'" cannot be part of a FULLTEXT index';
                         return false;
@@ -87,13 +87,13 @@ class Index extends Validator
             $total = 0;
             $lengths = $index->getAttribute('lengths', []);
 
-            foreach ($index->getAttribute('attributes', []) as $ik => $attributeKey) {
-                $attribute = $this->attributes[$attributeKey];
+            foreach ($index->getAttribute('attributes', []) as $attributePosition => $attributeName) {
+                $attribute = $this->attributes[$attributeName];
 
                 switch ($attribute->getAttribute('type')) {
                     case Database::VAR_STRING:
                         $attributeSize = $attribute->getAttribute('size', 0);
-                        $indexLength = $lengths[$ik] ?? $attributeSize;
+                        $indexLength = $lengths[$attributePosition] ?? $attributeSize;
                         break;
 
                     case Database::VAR_FLOAT:

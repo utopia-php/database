@@ -108,7 +108,7 @@ class Index extends Validator
                 }
 
                 if ($indexLength > $attributeSize) {
-                    $this->message = 'Index length("'.$indexLength.'") is longer than the key part for "'.$attributeKey.'("'.$attributeSize.'")"';
+                    $this->message = 'Index length("'.$indexLength.'") is longer than the key part for "'.$attributeName.'("'.$attributeSize.'")"';
                     return false;
                 }
 
@@ -135,23 +135,12 @@ class Index extends Validator
     public function isValid($value): bool
     {
         foreach ($value->getAttribute('attributes', []) as $attribute) {
-            $this->attributes[$attribute->getAttribute('$id', $value->getAttribute('key'))] = $attribute;
+            $this->attributes[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute;
         }
 
-        $this->attributes['$id'] = new Document([
-            'type' => Database::VAR_STRING,
-            'size' => Database::LENGTH_KEY,
-        ]);
-
-        $this->attributes['$createdAt'] = new Document([
-            'type' => Database::VAR_DATETIME,
-            'size' => Database::LENGTH_KEY,
-        ]);
-
-        $this->attributes['$updatedAt'] = new Document([
-            'type' => Database::VAR_DATETIME,
-            'size' => Database::LENGTH_KEY,
-        ]);
+        foreach (Database::getInternalAttributes() as $internalAttribute){
+            $this->attributes[$internalAttribute->getAttribute('$id')] = $internalAttribute;
+        }
 
         if (!$this->checkEmptyIndexAttributes($value)) {
             return false;

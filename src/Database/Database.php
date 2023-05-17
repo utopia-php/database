@@ -143,7 +143,7 @@ class Database
      * List of Internal Ids
      * @var array<array<string, mixed>>
      */
-    protected array $attributes = [
+    protected static array $attributes = [
         [
             '$id' => '$id',
             'type' => self::VAR_STRING,
@@ -3990,10 +3990,10 @@ class Database
      * @return array<Document>
      * @throws Exception
      */
-    public function getInternalAttributes(): array
+    public static function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach ($this->attributes as $internal) {
+        foreach (self::$attributes as $internal) {
             $attributes[] = new Document($internal);
         }
         return $attributes;

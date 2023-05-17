@@ -62,7 +62,7 @@ class IndexTest extends TestCase
     {
         // Todo: Move this test to Appwrite...
 
-        $validator = new Index();
+        $validator = new Index(768);
 
         /** @var array<mixed> $collections */
         $collections = include __DIR__ . '/config/collections.php';
@@ -78,7 +78,7 @@ class IndexTest extends TestCase
      */
     public function testFulltextWithNonString(): void
     {
-        $validator = new Index();
+        $validator = new Index(768);
 
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -127,7 +127,7 @@ class IndexTest extends TestCase
      */
     public function testIndexLength(): void
     {
-        $validator = new Index();
+        $validator = new Index(768);
 
         $collection = new Document([
             '$id' => ID::custom('test'),
@@ -165,7 +165,7 @@ class IndexTest extends TestCase
      */
     public function testEmptyAttributes(): void
     {
-        $validator = new Index();
+        $validator = new Index(768);
 
         $collection = new Document([
             '$id' => ID::custom('test'),

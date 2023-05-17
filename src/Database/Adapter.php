@@ -22,6 +22,11 @@ abstract class Adapter
     protected array $debug = [];
 
     /**
+     * @var int
+     */
+    public int $maxIndexLength = 768;
+
+    /**
      * @param string $key
      * @param mixed $value
      *

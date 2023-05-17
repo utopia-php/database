@@ -10,15 +10,19 @@ use Utopia\Database\Document;
 class Index extends Validator
 {
     protected string $message = 'Invalid index';
-    public const MAX = 768; // 3072 bytes / mb4
+    protected int $maxLength;
 
     /**
      * @var array<Document> $attributes
      */
     protected array $attributes = [];
 
-    public function __construct()
+    /**
+     * @param int $maxLength
+     */
+    public function __construct(int $maxLength)
     {
+        $this->maxLength = $maxLength;
     }
 
     /**
@@ -111,8 +115,8 @@ class Index extends Validator
                 $total += $indexLength;
             }
 
-            if ($total > self::MAX) {
-                $this->message = 'Index Length is longer than max ('.self::MAX.'))';
+            if ($total > $this->maxLength) {
+                $this->message = 'Index Length is longer than max (' . $this->maxLength . '))';
                 return false;
             }
         }

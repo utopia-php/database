@@ -644,7 +644,7 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-        $validator = new IndexValidator();
+        $validator = new IndexValidator($this->adapter->maxIndexLength);
         if (!$validator->isValid($collection)) {
             throw new Exception($validator->getDescription());
         }
@@ -2017,7 +2017,7 @@ class Database
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
 
-        $validator = new IndexValidator();
+        $validator = new IndexValidator($this->adapter->maxIndexLength);
         if (!$validator->isValid($collection)) {
             throw new Exception($validator->getDescription());
         }

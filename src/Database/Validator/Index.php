@@ -9,7 +9,7 @@ use Utopia\Database\Document;
 
 class Index extends Validator
 {
-    protected string $message = 'Invalid Index';
+    protected string $message = 'Invalid index';
     public const MAX = 768; // 3072 bytes / mb4
 
     /**

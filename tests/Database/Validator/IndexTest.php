@@ -20,42 +20,6 @@ class IndexTest extends TestCase
     }
 
     /**
-     * @param array<mixed> $collection
-     * @return Document
-     * @throws Exception
-     */
-    public function collectionArrayToDocuments(array $collection): Document
-    {
-        $document = new Document();
-
-        foreach ($collection['attributes'] as $attribute) {
-            $document->setAttribute('attributes', new Document([
-                '$id' => ID::custom($attribute['$id']),
-                'type' => $attribute['type'],
-                'size' => $attribute['size'],
-                'required' => $attribute['required'],
-                'signed' => $attribute['signed'],
-                'array' => $attribute['array'],
-                'filters' => $attribute['filters'],
-                'default' => $attribute['default'] ?? null,
-                'format' => $attribute['format'] ?? ''
-            ]), Document::SET_TYPE_APPEND);
-        }
-
-        foreach ($collection['indexes'] as $index) {
-            $document->setAttribute('indexes', new Document([
-                '$id' => ID::custom($index['$id']),
-                'type' => $index['type'],
-                'attributes' => $index['attributes'],
-                'lengths' => $index['lengths'],
-                'orders' => $index['orders'],
-            ]), Document::SET_TYPE_APPEND);
-        }
-
-        return $document;
-    }
-
-    /**
      * @throws Exception
      */
     public function testFulltextWithNonString(): void

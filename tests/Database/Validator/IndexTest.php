@@ -58,24 +58,6 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
-    public function testAppwriteCollection(): void
-    {
-        // Todo: Move this test to Appwrite...
-
-        $validator = new Index(768);
-
-        /** @var array<mixed> $collections */
-        $collections = include __DIR__ . '/config/collections.php';
-
-        foreach ($collections as $collection) {
-            $collection = $this->collectionArrayToDocuments($collection);
-            $this->assertTrue($validator->isValid($collection));
-        }
-    }
-
-    /**
-     * @throws Exception
-     */
     public function testFulltextWithNonString(): void
     {
         $validator = new Index(768);

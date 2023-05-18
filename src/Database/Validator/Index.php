@@ -20,7 +20,7 @@ class Index extends Validator
     /**
      * @param int $maxLength
      */
-    public function __construct(int $maxLength)
+    public function __construct(int $maxLength = 768)
     {
         $this->maxLength = $maxLength;
     }

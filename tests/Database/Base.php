@@ -124,7 +124,7 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index(768);
+        $validator = new Index();
 
         $errorMessage = 'Index length("301") is longer than the key part for "title1("300")"';
         $this->assertFalse($validator->isValid($collection));

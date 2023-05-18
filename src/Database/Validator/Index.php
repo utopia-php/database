@@ -138,7 +138,7 @@ class Index extends Validator
             $this->attributes[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute;
         }
 
-        foreach (Database::getInternalAttributes() as $attribute){
+        foreach (Database::getInternalAttributes() as $attribute) {
             $this->attributes[$attribute->getAttribute('$id')] = $attribute;
         }
 

@@ -147,6 +147,35 @@ class Postgres extends SQL
         return true;
     }
 
+     /**
+     * Get Collection Size
+     * @param string $name
+     * @return int
+     * @throws Exception
+     * 
+     */
+
+     public function getCollectionSize(string $name): int
+     {
+         $database = $this->getDefaultDatabase();
+         $name = $this->filter($name);
+     
+         $query = $this->getPDO()->prepare("
+         SELECT pg_size_pretty(pg_total_relation_size(
+             '{$database}.{$name}'
+         )) AS total_size;
+         ");
+         $query->execute();
+         try {
+            $query->execute();
+            $size = $query->fetchColumn();
+        } catch (PDOException $e) {
+            throw new Exception("Invalid table name");
+        }
+         return (int) $size;
+     }
+    
+ 
     /**
      * Delete Collection
      *

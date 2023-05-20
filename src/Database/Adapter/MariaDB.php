@@ -142,6 +142,43 @@ class MariaDB extends SQL
     }
 
     /**
+     * Get Collection Size
+     * @param string $name
+     * @return int
+     * @throws Exception
+     * 
+     */
+
+     public function getCollectionSize(string $name): int
+     {
+         $database = $this->getDefaultDatabase();
+         $name = $this->filter($name);
+     
+         $query = $this->getPDO()->prepare("
+             SELECT 
+              data_length + index_length + data_free
+             FROM 
+                 information_schema.TABLES 
+             WHERE 
+                 table_schema = :database
+             AND 
+                 table_name = :name
+         ");
+         $query->bindParam(':database', $database);
+         $query->bindParam(':name', $name);
+         $query->execute();
+         try {
+            $query->execute();
+            $size = $query->fetchColumn();
+        } catch (PDOException $e) {
+            throw new Exception("Invalid table name");
+        }
+     
+         return (int) $size;
+     }
+
+
+    /**
      * Delete Collection
      * @param string $id
      * @return bool

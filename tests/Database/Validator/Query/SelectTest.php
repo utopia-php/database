@@ -6,13 +6,16 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Select;
 
 class SelectTest extends TestCase
 {
-    public function testValue(): void
+    protected Base|null $validator = null;
+
+    public function setUp(): void
     {
-        $validator = new Select(
+        $this->validator = new Select(
             attributes: [
                 new Document([
                     '$id' => 'attr',
@@ -22,11 +25,16 @@ class SelectTest extends TestCase
                 ]),
             ],
         );
+    }
 
-        // Test for Success
-        $this->assertEquals($validator->isValid(Query::select(['*', 'attr'])), true, $validator->getDescription());
+    public function testValueSuccess(): void
+    {
+        $this->assertTrue($this->validator->isValid(Query::select(['*', 'attr'])));
+    }
 
-        // Test for Failure
-        $this->assertEquals($validator->isValid(Query::limit(1)), false, $validator->getDescription());
+    public function testValueFailure(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::limit(1)));
+        $this->assertEquals('bla', $this->validator->getDescription());
     }
 }

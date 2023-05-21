@@ -6,13 +6,16 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Order;
 
 class OrderTest extends TestCase
 {
-    public function testValue(): void
+    protected Base|null $validator = null;
+
+    public function setUp(): void
     {
-        $validator = new Order(
+        $this->validator = new Order(
             attributes: [
                 new Document([
                     '$id' => 'attr',
@@ -22,22 +25,27 @@ class OrderTest extends TestCase
                 ]),
             ],
         );
+    }
 
-        // Test for Success
-        $this->assertEquals($validator->isValid(Query::orderAsc('attr')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderAsc('')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderDesc('attr')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderDesc('')), true, $validator->getDescription());
+    public function testValueSuccess(): void
+    {
+        $this->assertTrue($this->validator->isValid(Query::orderAsc('attr')));
+        $this->assertTrue($this->validator->isValid(Query::orderAsc('')));
+        $this->assertTrue($this->validator->isValid(Query::orderDesc('attr')));
+        $this->assertTrue($this->validator->isValid(Query::orderDesc('')));
+    }
 
-        // Test for Failure
-        $this->assertEquals($validator->isValid(Query::limit(-1)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::limit(101)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(-1)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(5001)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::equal('attr', ['v'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::equal('dne', ['v'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::equal('', ['v'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderDesc('dne')), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderAsc('dne')), false, $validator->getDescription());
+    public function testValueFailure(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::limit(-1)));
+        $this->assertEquals('xxx', $this->validator->getDescription());
+        $this->assertFalse($this->validator->isValid(Query::limit(101)));
+        $this->assertFalse($this->validator->isValid(Query::offset(-1)));
+        $this->assertFalse($this->validator->isValid(Query::offset(5001)));
+        $this->assertFalse($this->validator->isValid(Query::equal('attr', ['v'])));
+        $this->assertFalse($this->validator->isValid(Query::equal('dne', ['v'])));
+        $this->assertFalse($this->validator->isValid(Query::equal('', ['v'])));
+        $this->assertFalse($this->validator->isValid(Query::orderDesc('dne')));
+        $this->assertFalse($this->validator->isValid(Query::orderAsc('dne')));
     }
 }

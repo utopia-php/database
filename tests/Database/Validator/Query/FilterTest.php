@@ -2,21 +2,20 @@
 
 namespace Utopia\Tests\Validator\Query;
 
-use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Filter;
 
 class FilterTest extends TestCase
 {
-    /**
-     * @throws Exception
-     */
-    public function testValue(): void
+    protected Base|null $validator = null;
+
+    public function setUp(): void
     {
-        $validator = new Filter(
+        $this->validator = new Filter(
             attributes: [
                 new Document([
                     '$id' => 'attr',
@@ -26,30 +25,36 @@ class FilterTest extends TestCase
                 ]),
             ],
         );
-        // Test for Success
-        $this->assertEquals($validator->isValid(Query::between('attr', '1975-12-06', '2050-12-06')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::isNotNull('attr')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::isNull('attr')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::startsWith('attr', 'super')), true, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::endsWith('attr', 'man')), true, $validator->getDescription());
+    }
 
-        // Test for Failure
-        $this->assertEquals($validator->isValid(Query::select(['attr'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::limit(1)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::limit(0)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::limit(100)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::limit(-1)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::limit(101)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(1)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(0)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(5000)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(-1)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::offset(5001)), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::equal('dne', ['v'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::equal('', ['v'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderAsc('attr')), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(Query::orderDesc('attr')), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(new Query(Query::TYPE_CURSORAFTER, values: ['asdf'])), false, $validator->getDescription());
-        $this->assertEquals($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: ['asdf'])), false, $validator->getDescription());
+    public function testSuccess(): void
+    {
+        $this->assertTrue($this->validator->isValid(Query::between('attr', '1975-12-06', '2050-12-06')));
+        $this->assertTrue($this->validator->isValid(Query::isNotNull('attr')));
+        $this->assertTrue($this->validator->isValid(Query::isNull('attr')));
+        $this->assertTrue($this->validator->isValid(Query::startsWith('attr', 'super')));
+        $this->assertTrue($this->validator->isValid(Query::endsWith('attr', 'man')));
+    }
+
+    public function testFailure(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::select(['attr'])));
+        $this->assertEquals('Invalid query', $this->validator->getDescription());
+        $this->assertFalse($this->validator->isValid(Query::limit(1)));
+        $this->assertFalse($this->validator->isValid(Query::limit(0)));
+        $this->assertFalse($this->validator->isValid(Query::limit(100)));
+        $this->assertFalse($this->validator->isValid(Query::limit(-1)));
+        $this->assertFalse($this->validator->isValid(Query::limit(101)));
+        $this->assertFalse($this->validator->isValid(Query::offset(1)));
+        $this->assertFalse($this->validator->isValid(Query::offset(0)));
+        $this->assertFalse($this->validator->isValid(Query::offset(5000)));
+        $this->assertFalse($this->validator->isValid(Query::offset(-1)));
+        $this->assertFalse($this->validator->isValid(Query::offset(5001)));
+        $this->assertFalse($this->validator->isValid(Query::equal('dne', ['v'])));
+        $this->assertFalse($this->validator->isValid(Query::equal('', ['v'])));
+        $this->assertFalse($this->validator->isValid(Query::orderAsc('attr')));
+        $this->assertFalse($this->validator->isValid(Query::orderDesc('attr')));
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSORAFTER, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: ['asdf'])));
     }
 }

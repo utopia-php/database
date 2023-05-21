@@ -105,6 +105,23 @@ class Filter extends Base
     }
 
     /**
+     * @param array<mixed> $values
+     * @return bool
+     */
+    protected function isEmpty(array $values): bool
+    {
+        if (count($values) === 0) {
+            return true;
+        }
+
+        if (is_array($values[0]) && count($values[0]) === 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Is valid.
      *
      * Returns true if method is a filter method, attribute exists, and value matches attribute type
@@ -120,6 +137,16 @@ class Filter extends Base
         $attribute = $value->getAttribute();
         switch ($method) {
             case Query::TYPE_EQUAL:
+            case Query::TYPE_CONTAINS:
+                $values = $value->getValues();
+
+                if ($this->isEmpty($values)) {
+                    $this->message = \ucfirst($method) . ' queries require at least one value.';
+                    return false;
+                }
+
+                return $this->isValidAttributeAndValues($attribute, $values);
+
             case Query::TYPE_NOTEQUAL:
             case Query::TYPE_LESSER:
             case Query::TYPE_LESSEREQUAL:
@@ -129,15 +156,9 @@ class Filter extends Base
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_BETWEEN:
-            case Query::TYPE_CONTAINS:
                 $values = $value->getValues();
 
-                if (count($values) === 0) {
-                    $this->message = \ucfirst($method) . ' queries require at least one value.';
-                    return false;
-                }
-
-                if (is_array($values[0]) && count($values[0]) === 0) {
+                if ($this->isEmpty($values)) {
                     $this->message = \ucfirst($method) . ' can take only one value.';
                     return false;
                 }

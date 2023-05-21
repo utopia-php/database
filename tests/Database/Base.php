@@ -329,13 +329,6 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
-
-        //todo: ambiguous syntax for parent attribute VS relation attribute
-        $documents = static::getDatabase()->find('dots.parent', [
-            Query::select(['dots.name'])
-        ]);
-
-        $this->assertEquals(null, $documents[0]['dots.name']); // Todo: Should be 'Bill clinton'
     }
 
     /**

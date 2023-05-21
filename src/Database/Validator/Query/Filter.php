@@ -129,7 +129,7 @@ class Filter extends Base
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_BETWEEN:
-            case Query::TYPE_CONTAINS: // todo: What to do about unsupported operators?
+            case Query::TYPE_CONTAINS:
                 $values = $value->getValues();
 
                 if (count($values) === 0 || (is_array($values[0]) && count($values[0]) === 0)) {

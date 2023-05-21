@@ -10125,6 +10125,71 @@ abstract class Base extends TestCase
         $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection8')[0]->getId());
     }
 
+    public function testCascadeMultiDelete(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('cascadeMultiDelete1');
+        static::getDatabase()->createCollection('cascadeMultiDelete2');
+        static::getDatabase()->createCollection('cascadeMultiDelete3');
+
+        static::getDatabase()->createRelationship(
+            collection: 'cascadeMultiDelete1',
+            relatedCollection: 'cascadeMultiDelete2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'cascadeMultiDelete2',
+            relatedCollection: 'cascadeMultiDelete3',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        $root = static::getDatabase()->createDocument('cascadeMultiDelete1', new Document([
+            '$id' => 'cascadeMultiDelete1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            'cascadeMultiDelete2' => [
+                [
+                    '$id' => 'cascadeMultiDelete2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::delete(Role::any())
+                    ],
+                    'cascadeMultiDelete3' => [
+                        [
+                            '$id' => 'cascadeMultiDelete3',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                                Permission::delete(Role::any())
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+
+        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2'));
+        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2')[0]->getAttribute('cascadeMultiDelete3'));
+
+        $this->assertEquals(true, static::getDatabase()->deleteDocument('cascadeMultiDelete1', $root->getId()));
+
+        $multi2 = static::getDatabase()->getDocument('cascadeMultiDelete2', 'cascadeMultiDelete2');
+        $this->assertEquals(true, $multi2->isEmpty());
+
+        $multi3 = static::getDatabase()->getDocument('cascadeMultiDelete3', 'cascadeMultiDelete3');
+        $this->assertEquals(true, $multi3->isEmpty());
+    }
+
     public function testCollectionUpdate(): Document
     {
         $collection = static::getDatabase()->createCollection('collectionUpdate', permissions: [

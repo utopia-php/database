@@ -274,9 +274,14 @@ class Database
     private array $relationshipWriteStack = [];
 
     /**
-     * @var array<array<string, mixed>>
+     * @var array<Document>
      */
-    private array $relationshipFetchMap = [];
+    private array $relationshipFetchStack = [];
+
+    /**
+     * @var array<Document>
+     */
+    private array $relationshipDeleteStack = [];
 
     /**
      * @param Adapter $adapter
@@ -2238,11 +2243,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter(
-            $attributes,
-            fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
-        );
+        $relationships = \array_filter($attributes, function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -2265,7 +2268,7 @@ class Database
             $relationship->setAttribute('document', $document->getId());
 
             $skipFetch = false;
-            foreach ($this->relationshipFetchMap as $fetchedRelationship) {
+            foreach ($this->relationshipFetchStack as $fetchedRelationship) {
                 $existingKey = $fetchedRelationship['key'];
                 $existingCollection = $fetchedRelationship['collection'];
                 $existingRelatedCollection = $fetchedRelationship['options']['relatedCollection'];
@@ -2322,12 +2325,12 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
                     $document->setAttribute($key, $related);
                     break;
@@ -2339,12 +2342,12 @@ class Database
                         }
                         if (!\is_null($value)) {
                             $this->relationshipFetchDepth++;
-                            $this->relationshipFetchMap[] = $relationship;
+                            $this->relationshipFetchStack[] = $relationship;
 
                             $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                             $this->relationshipFetchDepth--;
-                            \array_pop($this->relationshipFetchMap);
+                            \array_pop($this->relationshipFetchStack);
 
                             $document->setAttribute($key, $related);
                         }
@@ -2356,7 +2359,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2365,7 +2368,7 @@ class Database
                     ]);
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
                     foreach ($relatedDocuments as $related) {
                         $related->removeAttribute($twoWayKey);
@@ -2384,12 +2387,12 @@ class Database
                             break;
                         }
                         $this->relationshipFetchDepth++;
-                        $this->relationshipFetchMap[] = $relationship;
+                        $this->relationshipFetchStack[] = $relationship;
 
                         $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
 
                         $this->relationshipFetchDepth--;
-                        \array_pop($this->relationshipFetchMap);
+                        \array_pop($this->relationshipFetchStack);
 
                         $document->setAttribute($key, $related);
                         break;
@@ -2405,7 +2408,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
@@ -2414,7 +2417,7 @@ class Database
                     ]);
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
 
                     foreach ($relatedDocuments as $related) {
@@ -2433,7 +2436,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth++;
-                    $this->relationshipFetchMap[] = $relationship;
+                    $this->relationshipFetchStack[] = $relationship;
 
                     $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
@@ -2452,7 +2455,7 @@ class Database
                     }
 
                     $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchMap);
+                    \array_pop($this->relationshipFetchStack);
 
                     $document->setAttribute($key, $related);
                     break;
@@ -2882,7 +2885,6 @@ class Database
 
             if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->relationshipWriteStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);
-
                 continue;
             }
 
@@ -3378,6 +3380,7 @@ class Database
 
     /**
      * @throws Exception
+     * @throws Throwable
      */
     private function deleteDocumentRelationships(Document $collection, Document $document): Document
     {
@@ -3397,6 +3400,9 @@ class Database
             $onDelete = $relationship['options']['onDelete'];
             $side = $relationship['options']['side'];
 
+            $relationship->setAttribute('collection', $collection->getId());
+            $relationship->setAttribute('document', $document->getId());
+
             switch ($onDelete) {
                 case Database::RELATION_MUTATE_RESTRICT:
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
@@ -3405,7 +3411,51 @@ class Database
                     $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
-                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    foreach ($this->relationshipDeleteStack as $processedRelationship) {
+                        $existingKey = $processedRelationship['key'];
+                        $existingCollection = $processedRelationship['collection'];
+                        $existingRelatedCollection = $processedRelationship['options']['relatedCollection'];
+                        $existingTwoWayKey = $processedRelationship['options']['twoWayKey'];
+                        $existingSide = $processedRelationship['options']['side'];
+
+                        // If this relationship has already been fetched for this document, skip it
+                        $reflexive = $processedRelationship == $relationship;
+
+                        // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
+                        $symmetric = $existingKey === $twoWayKey
+                            && $existingTwoWayKey === $key
+                            && $existingRelatedCollection === $collection->getId()
+                            && $existingCollection === $relatedCollection->getId()
+                            && $existingSide !== $side;
+
+                        // If this relationship is not directly related but relates across multiple collections, skip it.
+                        //
+                        // These conditions ensure that a relationship is considered transitive if it has the same
+                        // two-way key and related collection, but is on the opposite side of the relationship (the first and second conditions).
+                        //
+                        // They also ensure that a relationship is considered transitive if it has the same key and related
+                        // collection as an existing relationship, but a different two-way key (the third condition),
+                        // or the same two-way key as an existing relationship, but a different key (the fourth condition).
+                        $transitive = (($existingKey === $twoWayKey
+                                && $existingCollection === $relatedCollection->getId()
+                                && $existingSide !== $side)
+                            || ($existingTwoWayKey === $key
+                                && $existingRelatedCollection === $collection->getId()
+                                && $existingSide !== $side)
+                            || ($existingKey === $key
+                                && $existingTwoWayKey !== $twoWayKey
+                                && $existingRelatedCollection === $relatedCollection->getId()
+                                && $existingSide !== $side)
+                            || ($existingKey !== $key
+                                && $existingTwoWayKey === $twoWayKey
+                                && $existingRelatedCollection === $relatedCollection->getId()
+                                && $existingSide !== $side));
+
+                        if ($reflexive || $symmetric || $transitive) {
+                            break 2;
+                        }
+                    }
+                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWayKey, $side, $relationship);
                     break;
             }
         }
@@ -3415,9 +3465,17 @@ class Database
 
     /**
      * @throws Exception
+     * @throws Throwable
      */
-    private function deleteRestrict(Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
-    {
+    private function deleteRestrict(
+        Document $relatedCollection,
+        Document $document,
+        mixed $value,
+        string $relationType,
+        bool $twoWay,
+        string $twoWayKey,
+        string $side
+    ): void {
         if ($value instanceof Document && $value->isEmpty()) {
             $value = null;
         }
@@ -3444,6 +3502,7 @@ class Database
                     return;
                 }
 
+
                 $this->skipRelationships(fn () => $this->updateDocument(
                     $relatedCollection->getId(),
                     $related->getId(),
@@ -3466,8 +3525,16 @@ class Database
         }
     }
 
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
-    {
+    private function deleteSetNull(
+        Document $collection,
+        Document $relatedCollection,
+        Document $document,
+        mixed $value,
+        string $relationType,
+        bool $twoWay,
+        string $twoWayKey,
+        string $side
+    ): void {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if (!$twoWay && $side === Database::RELATION_SIDE_PARENT) {
@@ -3554,28 +3621,51 @@ class Database
         }
     }
 
-    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
-    {
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws Throwable
+     */
+    private function deleteCascade(
+        Document $collection,
+        Document $relatedCollection,
+        Document $document,
+        string $key,
+        mixed $value,
+        string $relationType,
+        string $twoWayKey,
+        string $side,
+        Document $relationship
+    ): void {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($value !== null) {
-                    $this->skipRelationships(fn () =>
+                    $this->relationshipDeleteStack[] = $relationship;
+
                     $this->deleteDocument(
                         $relatedCollection->getId(),
                         $value->getId()
-                    ));
+                    );
+
+                    \array_pop($this->relationshipDeleteStack);
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
+
+                $this->relationshipDeleteStack[] = $relationship;
+
                 foreach ($value as $relation) {
-                    $this->skipRelationships(fn () => $this->deleteDocument(
+                    $this->deleteDocument(
                         $relatedCollection->getId(),
                         $relation->getId()
-                    ));
+                    );
                 }
+
+                \array_pop($this->relationshipDeleteStack);
+
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
@@ -3587,12 +3677,17 @@ class Database
                     Query::limit(PHP_INT_MAX)
                 ]);
 
+                $this->relationshipDeleteStack[] = $relationship;
+
                 foreach ($value as $relation) {
-                    $this->skipRelationships(fn () => $this->deleteDocument(
+                    $this->deleteDocument(
                         $relatedCollection->getId(),
                         $relation->getId()
-                    ));
+                    );
                 }
+
+                \array_pop($this->relationshipDeleteStack);
+
                 break;
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
@@ -3602,20 +3697,22 @@ class Database
                     Query::limit(PHP_INT_MAX)
                 ]);
 
+                $this->relationshipDeleteStack[] = $relationship;
+
                 foreach ($junctions as $document) {
-                    $this->skipRelationships(function () use ($document, $junction, $relatedCollection, $key, $side) {
-                        if ($side === Database::RELATION_SIDE_PARENT) {
-                            $this->deleteDocument(
-                                $relatedCollection->getId(),
-                                $document->getAttribute($key)
-                            );
-                        }
+                    if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteDocument(
-                            $junction,
-                            $document->getId()
+                            $relatedCollection->getId(),
+                            $document->getAttribute($key)
                         );
-                    });
+                    }
+                    $this->deleteDocument(
+                        $junction,
+                        $document->getId()
+                    );
                 }
+
+                \array_pop($this->relationshipDeleteStack);
                 break;
         }
     }
@@ -3626,6 +3723,7 @@ class Database
      * @param string $collection
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteCachedCollection(string $collection): bool
     {

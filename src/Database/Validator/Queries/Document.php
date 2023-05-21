@@ -6,7 +6,7 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Select;
-use Utopia\Database\Document as utopiaDocument;
+use Utopia\Database\Document as DocumentValidator;
 
 class Document extends Queries
 {
@@ -16,21 +16,21 @@ class Document extends Queries
      */
     public function __construct(array $attributes)
     {
-        $attributes[] = new utopiaDocument([
+        $attributes[] = new DocumentValidator([
             '$id' => '$id',
             'key' => '$id',
             'type' => Database::VAR_STRING,
             'array' => false,
         ]);
 
-        $attributes[] = new utopiaDocument([
+        $attributes[] = new DocumentValidator([
             '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);
 
-        $attributes[] = new utopiaDocument([
+        $attributes[] = new DocumentValidator([
             '$id' => '$updatedAt',
             'key' => '$updatedAt',
             'type' => Database::VAR_DATETIME,

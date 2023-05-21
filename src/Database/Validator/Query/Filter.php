@@ -132,8 +132,13 @@ class Filter extends Base
             case Query::TYPE_CONTAINS:
                 $values = $value->getValues();
 
-                if (count($values) === 0 || (is_array($values[0]) && count($values[0]) === 0)) {
+                if (count($values) === 0) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
+                    return false;
+                }
+
+                if (is_array($values[0]) && count($values[0]) === 0) {
+                    $this->message = \ucfirst($method) . ' can take only one value.';
                     return false;
                 }
 

@@ -10937,7 +10937,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: NotEqual queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: NotEqual can take only one value.', $e->getMessage());
         }
 
         try {
@@ -10947,7 +10947,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: LessThan queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: LessThan can take only one value.', $e->getMessage());
         }
 
         try {
@@ -10957,7 +10957,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: LessThanEqual queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: LessThanEqual can take only one value.', $e->getMessage());
         }
 
         try {
@@ -10967,7 +10967,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: GreaterThan queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: GreaterThan can take only one value.', $e->getMessage());
         }
 
         try {
@@ -10977,7 +10977,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Query not valid: GreaterThanEqual queries require at least one value.', $e->getMessage());
+            $this->assertEquals('Query not valid: GreaterThanEqual can take only one value.', $e->getMessage());
         }
 
         try {

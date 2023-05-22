@@ -43,40 +43,145 @@ Attribute filters are functions that manipulate attributes before saving them to
 
 The database document interface only supports primitives types (`strings`, `integers`, `floats`, and `booleans`) translated to their native database types for each of the relevant database adapters. Complex types like arrays or objects will be encoded to JSON strings when stored and decoded back when fetched from their adapters.
 
-### Examples
+## Code Examples
 
-Some examples to help you get started.
+### Setting up different database adapters
 
-**Creating a database:**
+
+**MariaDB:**
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
 
 use PDO;
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Database\Adapter\MariaDB;
 
-$dbHost = 'mariadb';
+$dbHost = 'mariadbHost ';
 $dbPort = '3306';
 $dbUser = 'root';
 $dbPass = 'password';
-
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+$pdoConfig = [
     PDO::ATTR_TIMEOUT => 3, // Seconds
     PDO::ATTR_PERSISTENT => true,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_EMULATE_PREPARES => true,
     PDO::ATTR_STRINGIFY_FETCHES => true,
-]);
+];
+
+$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig );
 
 $cache = new Cache(new NoCache()); // or use any cache adapter you wish
 
 $database = new Database(new MariaDB($pdo), $cache);
-$database->setNamespace('mydb');
-$database->create(); // Creates a new schema named `mydb`
+```
+
+**MySql:**
+
+```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PDO;
+use Utopia\Database\Database;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Database\Adapter\MySQL;
+
+$dbHost = 'MySqlHost ';
+$dbPort = '3306';
+$dbUser = 'root';
+$dbPass = 'password';
+$pdoConfig = [
+    PDO::ATTR_TIMEOUT => 3, // Seconds
+    PDO::ATTR_PERSISTENT => true,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_EMULATE_PREPARES => true,
+    PDO::ATTR_STRINGIFY_FETCHES => true,
+];
+
+$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig );
+
+$cache = new Cache(new NoCache()); // or use any cache adapter you wish
+
+$database = new Database(new MySql($pdo), $cache);
+```
+
+
+**Postgres:**
+
+```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PDO;
+use Utopia\Database\Database;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Database\Adapter\Postgres;
+
+$dbHost = 'PostgresHost ';
+$dbPort = '3306';
+$dbUser = 'root';
+$dbPass = 'password';
+$pdoConfig = [
+    PDO::ATTR_TIMEOUT => 3, // Seconds
+    PDO::ATTR_PERSISTENT => true,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_EMULATE_PREPARES => true,
+    PDO::ATTR_STRINGIFY_FETCHES => true,
+];
+
+$pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, $pdoConfig );
+
+$cache = new Cache(new NoCache()); // or use any cache adapter you wish
+
+$database = new Database(new Postgres($pdo), $cache);
+```
+
+**MongoDB:**
+
+> This requires [utopia-php/mongo](https://packagist.org/packages/utopia-php/mongo)
+
+
+```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Utopia\Database\Database;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Mongo\Client; // from utopia-php/mongo
+
+$dbHost = 'MySqlHost ';
+$dbPort = 3306; // this should be a integer
+$dbUser = 'root';
+$dbPass = 'password';
+$dbName = 'dbName';
+$useCoroutine = true; // set to false if you don't want to use Swoole\Coroutine(set true for concurrent requests and better performance)
+
+
+$mongoClient = new Client($dbName, $dbHost, $dbPort, $dbUser, $dbPass, $useCoroutine);
+
+$cache = new Cache(new NoCache()); // or use any cache adapter you wish
+
+$database = new Database(new Mongo($client), new Cache(new NoCache()));
+```
+<br>
+
+> ## Below methods are available for all database adapters.
+
+<br>
+
+**Creating Schema/Database:**
+
+```php
+$nameOfTheDatabaseOrSchema = 'mydb';
+$database->setNamespace($nameOfTheDatabaseOrSchema);
+$database->create(); // Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. named 'mydb'
 ```
 
 **Creating a collection:**

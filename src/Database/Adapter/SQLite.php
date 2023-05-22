@@ -181,7 +181,7 @@ class SQLite extends MariaDB
         $size = $query->fetchColumn();
         return strval($size);
     } catch (PDOException $e) {
-        throw new Exception("Invalid table name");
+        throw new Exception($e->getMessage());
     }
 }
 

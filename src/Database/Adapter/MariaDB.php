@@ -171,7 +171,7 @@ class MariaDB extends SQL
             $query->execute();
             $size = $query->fetchColumn();
         } catch (PDOException $e) {
-            throw new Exception("Invalid table name");
+            throw new Exception($e->getMessage());
         }
      
          return strval($size);

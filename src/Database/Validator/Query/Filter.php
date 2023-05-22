@@ -147,11 +147,11 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $values);
 
-            case Query::TYPE_NOTEQUAL:
+            case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
-            case Query::TYPE_LESSEREQUAL:
+            case Query::TYPE_LESSER_EQUAL:
             case Query::TYPE_GREATER:
-            case Query::TYPE_GREATEREQUAL:
+            case Query::TYPE_GREATER_EQUAL:
             case Query::TYPE_SEARCH:
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:

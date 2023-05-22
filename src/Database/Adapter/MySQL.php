@@ -4,8 +4,8 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
-use Swoole\Database\PDOProxy;
 use Utopia\Database\Database;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Timeout;
 
 class MySQL extends MariaDB
@@ -47,7 +47,7 @@ class MySQL extends MariaDB
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
         return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';

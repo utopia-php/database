@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -12,6 +13,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 use Utopia\Mongo\Exception as MongoException;
@@ -161,7 +163,7 @@ class Mongo extends Adapter
         try {
             $this->getClient()->createCollection($id);
         } catch (MongoException $e) {
-            throw $e;
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
         $indexesCreated = $this->client->createIndexes($id, [
@@ -411,7 +413,7 @@ class Mongo extends Adapter
                 }
                 break;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -467,7 +469,7 @@ class Mongo extends Adapter
                 $this->getClient()->dropCollection($junction);
                 break;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -860,7 +862,7 @@ class Mongo extends Adapter
             $attribute = $orderAttributes[0];
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
 
             $orderOperatorInternalId = Query::TYPE_GREATER;
@@ -1266,35 +1268,22 @@ class Mongo extends Adapter
      */
     protected function getQueryOperator(string $operator): string
     {
-        switch ($operator) {
-            case Query::TYPE_EQUAL:
-                return '$eq';
-            case Query::TYPE_NOTEQUAL:
-                return '$ne';
-            case Query::TYPE_LESSER:
-                return '$lt';
-            case Query::TYPE_LESSEREQUAL:
-                return '$lte';
-            case Query::TYPE_GREATER:
-                return '$gt';
-            case Query::TYPE_GREATEREQUAL:
-                return '$gte';
-            case Query::TYPE_CONTAINS:
-                return '$in';
-            case Query::TYPE_SEARCH:
-                return '$search';
-            case Query::TYPE_BETWEEN:
-                return 'between'; // this is not an operator will be replaced with $gte/$lte
-            case Query::TYPE_IS_NULL:
-                return '$eq';
-            case Query::TYPE_IS_NOT_NULL:
-                return '$ne';
-            case Query::TYPE_STARTS_WITH:
-            case Query::TYPE_ENDS_WITH:
-                return '$regex';
-            default:
-                throw new Exception('Unknown Operator:' . $operator);
-        }
+        return match ($operator) {
+            Query::TYPE_EQUAL,
+            Query::TYPE_IS_NULL => '$eq',
+            Query::TYPE_NOT_EQUAL,
+            Query::TYPE_IS_NOT_NULL => '$ne',
+            Query::TYPE_LESSER => '$lt',
+            Query::TYPE_LESSER_EQUAL => '$lte',
+            Query::TYPE_GREATER => '$gt',
+            Query::TYPE_GREATER_EQUAL => '$gte',
+            Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_SEARCH => '$search',
+            Query::TYPE_BETWEEN => 'between',
+            Query::TYPE_STARTS_WITH,
+            Query::TYPE_ENDS_WITH => '$regex',
+            default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
+        };
     }
 
     protected function getQueryValue(string $method, mixed $value): mixed
@@ -1324,7 +1313,7 @@ class Mongo extends Adapter
         return match ($order) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
-            default => throw new Exception('Unknown sort order:' . $order),
+            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' .  Database::ORDER_DESC),
         };
     }
 
@@ -1553,12 +1542,12 @@ class Mongo extends Adapter
      * Return set namespace.
      *
      * @return string
-     * @throws \Exception
+     * @throws Exception
      */
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         return $this->namespace;
@@ -1570,12 +1559,12 @@ class Mongo extends Adapter
      * @param string $name
      * @param bool $reset
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new Exception('Missing database');
+            throw new DatabaseException('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -1588,12 +1577,12 @@ class Mongo extends Adapter
      *
      * @param string $namespace
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);

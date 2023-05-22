@@ -8,6 +8,7 @@ use PDOException;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
@@ -135,11 +136,11 @@ class Postgres extends SQL
             }
         } catch (Exception $e) {
             $this->getPDO()->rollBack();
-            throw new Exception('Failed to create collection: ' . $e->getMessage());
+            throw new DatabaseException('Failed to create collection: ' . $e->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         // Update $this->getIndexCount when adding another default index
@@ -309,7 +310,7 @@ class Postgres extends SQL
             case Database::RELATION_MANY_TO_MANY:
                 return true;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->getPDO()
@@ -388,7 +389,7 @@ class Postgres extends SQL
                 }
                 break;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         if (empty($sql)) {
@@ -451,7 +452,7 @@ class Postgres extends SQL
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->getPDO()
@@ -596,7 +597,7 @@ class Postgres extends SQL
 
             $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
+            $value = (is_bool($value)) ? ($value ? "true" : "false") : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -636,7 +637,7 @@ class Postgres extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -819,7 +820,7 @@ class Postgres extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -850,7 +851,7 @@ class Postgres extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        $stmt->execute() || throw new Exception('Failed to update Attribute');
+        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
         return true;
     }
 
@@ -877,15 +878,15 @@ class Postgres extends SQL
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new Exception('Failed to delete document');
-            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+            $stmt->execute() || throw new DatabaseException('Failed to delete document');
+            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
-            throw new Exception($th->getMessage());
+            throw new DatabaseException($th->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;
@@ -1031,7 +1032,7 @@ class Postgres extends SQL
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
@@ -1297,7 +1298,7 @@ class Postgres extends SQL
                 return 'TIMESTAMP(3)';
 
             default:
-                throw new Exception('Unknown Type: ' . $type);
+                throw new DatabaseException('Unknown Type: ' . $type);
         }
     }
 
@@ -1315,9 +1316,11 @@ class Postgres extends SQL
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $type = match ($type) {
-            Database::INDEX_KEY, Database::INDEX_ARRAY, Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_KEY,
+            Database::INDEX_ARRAY,
+            Database::INDEX_FULLTEXT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new Exception('Unknown Index Type:' . $type),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
         };
 
         return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON ' . $this->getSQLTable($collection) . ' ( ' . implode(', ', $attributes) . ' );';
@@ -1354,16 +1357,16 @@ class Postgres extends SQL
      * @param mixed $value
      *
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      */
-    protected function getPDOType($value): int
+    protected function getPDOType(mixed $value): int
     {
-        return match (gettype($value)) {
+        return match (\gettype($value)) {
             'string', 'double' => PDO::PARAM_STR,
             'boolean' => PDO::PARAM_BOOL,
             'integer' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,
-            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }
 

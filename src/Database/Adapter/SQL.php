@@ -8,6 +8,7 @@ use PDOException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -358,7 +359,7 @@ abstract class SQL extends Adapter
                     $total += 19; // 2022-06-26 14:46:24
                     break;
                 default:
-                    throw new Exception('Unknown Type');
+                    throw new DatabaseException('Unknown type: ' . $attribute['type']);
             }
         }
 
@@ -706,15 +707,15 @@ abstract class SQL extends Adapter
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
-            case Query::TYPE_NOTEQUAL:
+            case Query::TYPE_NOT_EQUAL:
                 return '!=';
             case Query::TYPE_LESSER:
                 return '<';
-            case Query::TYPE_LESSEREQUAL:
+            case Query::TYPE_LESSER_EQUAL:
                 return '<=';
             case Query::TYPE_GREATER:
                 return '>';
-            case Query::TYPE_GREATEREQUAL:
+            case Query::TYPE_GREATER_EQUAL:
                 return '>=';
             case Query::TYPE_IS_NULL:
                 return 'IS NULL';
@@ -724,7 +725,7 @@ abstract class SQL extends Adapter
             case Query::TYPE_ENDS_WITH:
                 return 'LIKE';
             default:
-                throw new Exception('Unknown method:' . $method);
+                throw new DatabaseException('Unknown method: ' . $method);
         }
     }
 
@@ -738,7 +739,7 @@ abstract class SQL extends Adapter
         $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
 
         if ($json === false) {
-            throw new Exception('Failed to encode query');
+            throw new DatabaseException('Failed to encode query');
         }
 
         return \md5($json);
@@ -782,7 +783,7 @@ abstract class SQL extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
@@ -297,7 +298,7 @@ class MariaDB extends SQL
             case Database::RELATION_MANY_TO_MANY:
                 return true;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         return $this->getPDO()
@@ -376,7 +377,7 @@ class MariaDB extends SQL
                 }
                 break;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         if (empty($sql)) {
@@ -442,7 +443,7 @@ class MariaDB extends SQL
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
             default:
-                throw new Exception('Invalid relationship type.');
+                throw new DatabaseException('Invalid relationship type');
         }
 
         if (empty($sql)) {
@@ -624,7 +625,7 @@ class MariaDB extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -810,7 +811,7 @@ class MariaDB extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -841,7 +842,7 @@ class MariaDB extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        $stmt->execute() || throw new Exception('Failed to update Attribute');
+        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
         return true;
     }
 
@@ -867,15 +868,15 @@ class MariaDB extends SQL
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new Exception('Failed to delete document');
-            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+            $stmt->execute() || throw new DatabaseException('Failed to delete document');
+            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
-            throw new Exception($th->getMessage());
+            throw new DatabaseException($th->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;
@@ -1024,7 +1025,7 @@ class MariaDB extends SQL
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
@@ -1306,7 +1307,7 @@ class MariaDB extends SQL
                 return 'DATETIME(3)';
 
             default:
-                throw new Exception('Unknown Type');
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP);
         }
     }
 
@@ -1323,10 +1324,11 @@ class MariaDB extends SQL
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $type = match ($type) {
-            Database::INDEX_KEY, Database::INDEX_ARRAY => 'INDEX',
+            Database::INDEX_KEY,
+            Database::INDEX_ARRAY => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
             Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-            default => throw new Exception('Unknown Index Type:' . $type),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
         };
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
@@ -1345,7 +1347,7 @@ class MariaDB extends SQL
             'double', 'string' => PDO::PARAM_STR,
             'integer', 'boolean' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,
-            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }
 

@@ -2,7 +2,7 @@
 
 namespace Utopia\Database;
 
-use Exception;
+use Utopia\Database\Exception as DatabaseException;
 
 class DateTime
 {
@@ -35,14 +35,14 @@ class DateTime
      * @param \DateTime $date
      * @param int $seconds
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public static function addSeconds(\DateTime $date, int $seconds): string
     {
         $interval  = \DateInterval::createFromDateString($seconds . ' seconds');
 
         if (!$interval) {
-            throw new Exception('Invalid interval');
+            throw new DatabaseException('Invalid interval');
         }
 
         $date->add($interval);
@@ -53,13 +53,17 @@ class DateTime
     /**
      * @param string $datetime
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public static function setTimezone(string $datetime): string
     {
-        $value = new \DateTime($datetime);
-        $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
-        return DateTime::format($value);
+        try {
+            $value = new \DateTime($datetime);
+            $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+            return DateTime::format($value);
+        } catch (\Exception $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     /**
@@ -75,7 +79,7 @@ class DateTime
         try {
             $value = new \DateTime($dbFormat);
             return $value->format(self::$formatTz);
-        } catch (\Throwable $th) {
+        } catch (\Throwable) {
             return $dbFormat;
         }
     }

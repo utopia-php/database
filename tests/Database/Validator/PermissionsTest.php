@@ -2,12 +2,13 @@
 
 namespace Utopia\Tests\Validator;
 
+use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Permissions;
-use PHPUnit\Framework\TestCase;
 use Utopia\Database\Validator\Roles;
 
 class PermissionsTest extends TestCase
@@ -21,7 +22,7 @@ class PermissionsTest extends TestCase
     }
 
     /**
-     * @throws \Exception
+     * @throws DatabaseException
      */
     public function testSingleMethodSingleValue(): void
     {
@@ -276,13 +277,13 @@ class PermissionsTest extends TestCase
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd/')))]));
-        $this->assertEquals('Dimension must not be empty.', $object->getDescription());
+        $this->assertEquals('Dimension must not be empty', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''), 'abcd'))]));
         $this->assertEquals('Role "team" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), '/efgh'))]));
-        $this->assertEquals('Only one dimension can be provided.', $object->getDescription());
+        $this->assertEquals('Only one dimension can be provided', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'e/fgh'))]));
-        $this->assertEquals('Only one dimension can be provided.', $object->getDescription());
+        $this->assertEquals('Only one dimension can be provided', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('ab&cd3'), 'efgh'))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'ef*gh'))]));

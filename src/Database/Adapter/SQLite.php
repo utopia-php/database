@@ -3,11 +3,12 @@
 namespace Utopia\Database\Adapter;
 
 use PDO;
-use Exception;
 use PDOException;
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 
 /**
@@ -219,7 +220,7 @@ class SQLite extends MariaDB
         $collection = $this->getDocument(Database::METADATA, $name);
 
         if ($collection->isEmpty()) {
-            throw new Exception('Collection not found');
+            throw new DatabaseException('Collection not found');
         }
 
         $indexes = \json_decode($collection->getAttribute('indexes', []), true);
@@ -410,7 +411,7 @@ class SQLite extends MariaDB
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -593,7 +594,7 @@ class SQLite extends MariaDB
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -662,7 +663,7 @@ class SQLite extends MariaDB
                 return 'UNIQUE INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
@@ -693,7 +694,7 @@ class SQLite extends MariaDB
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {

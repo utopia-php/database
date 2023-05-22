@@ -155,7 +155,7 @@ class Postgres extends SQL
      * 
      */
 
-     public function getCollectionSize(string $name): int
+     public function getCollectionSize(string $name): string
      {
     // Does not work in tests but works in Postgres
 
@@ -174,7 +174,7 @@ class Postgres extends SQL
     //         throw new Exception( $e->getMessage());
     //     }
     //      return (int) $size;
-      return 0;
+      return strval(0);
      }
     
  

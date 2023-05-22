@@ -149,7 +149,7 @@ class MariaDB extends SQL
      * 
      */
 
-     public function getCollectionSize(string $name): int 
+     public function getCollectionSize(string $name): string 
      {
          $database = $this->getDefaultDatabase();
          $name = $this->filter($name);
@@ -174,7 +174,7 @@ class MariaDB extends SQL
             throw new Exception("Invalid table name");
         }
      
-         return (int) $size;
+         return strval($size);
      }
 
 

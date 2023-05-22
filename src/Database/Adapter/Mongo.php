@@ -258,7 +258,7 @@ class Mongo extends Adapter
      * @throws Exception
      */
      
-     public function getCollectionSize(string $name): int
+     public function getCollectionSize(string $name): string
      {
          $namespace = $this->getNamespace();
          $parts = explode('.', $namespace);
@@ -272,7 +272,7 @@ class Mongo extends Adapter
      
          $result = $this->getClient()->query($command, $database);
      
-         return $result->size;
+         return strval($result->size);
          
      }
  

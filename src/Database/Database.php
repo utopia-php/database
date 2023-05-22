@@ -763,7 +763,7 @@ class Database
      * @return int
      */
 
-     public function getCollectionSize(string $name): int 
+     public function getCollectionSize(string $name): string 
      {
          return $this->adapter->getCollectionSize($name);
      }

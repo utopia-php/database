@@ -193,7 +193,7 @@ abstract class Adapter
      * @throws Exception
      */
      
-     abstract public function getCollectionSize(string $name): int; 
+     abstract public function getCollectionSize(string $name): string; 
 
     /**
      * Delete Collection

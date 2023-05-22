@@ -113,7 +113,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
         $this->assertCount(2, static::getDatabase()->listCollections());
 
-        $this->assertIsInt(static::getDatabase()->getCollectionSize("actors"));
+        $this->assertIsString(static::getDatabase()->getCollectionSize("actors"));
 
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));

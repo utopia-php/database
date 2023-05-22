@@ -166,7 +166,7 @@ class SQLite extends MariaDB
      */
 
 
-     public function getCollectionSize(string $name): int
+     public function getCollectionSize(string $name): string
 {
     $name = $this->filter($name);
 
@@ -179,7 +179,7 @@ class SQLite extends MariaDB
 
     try {
         $size = $query->fetchColumn();
-        return (int) $size;
+        return strval($size);
     } catch (PDOException $e) {
         throw new Exception("Invalid table name");
     }

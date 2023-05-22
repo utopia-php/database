@@ -187,6 +187,16 @@ abstract class Adapter
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
+     * Get Collection Size
+     * Returns
+     * @param string $name
+     * @return int
+     * @throws Exception
+     */
+     
+     abstract public function getCollectionSize(string $name): string; 
+
+    /**
      * Delete Collection
      *
      * @param string $name

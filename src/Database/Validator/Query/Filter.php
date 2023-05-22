@@ -9,7 +9,7 @@ use Utopia\Database\Query;
 class Filter extends Base
 {
     /**
-     * @var array<array<mixed>>
+     * @var array<int|string, mixed>
      */
     protected array $schema = [];
 

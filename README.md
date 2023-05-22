@@ -58,19 +58,22 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
 
-$dbHost = 'mariadb';
-$dbPort = '3306';
-$dbUser = 'root';
+$dbHost = 'host';
+$dbPort = 'portNumber';
+$dbUser = 'username';
 $dbPass = 'password';
-
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, [
+$pdoConfig = [
     PDO::ATTR_TIMEOUT => 3, // Seconds
     PDO::ATTR_PERSISTENT => true,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_EMULATE_PREPARES => true,
     PDO::ATTR_STRINGIFY_FETCHES => true,
-]);
+];
+
+$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig); // To work with MySQL / MariaDB
+$pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};options='--client_encoding=UTF8'", $dbUser, $dbPass, $pdoConfig); // To work with  PostgreSQL
+$pdo = new PDO('sqlite:/path/to/database.db'); // Works with SQLite 
 
 $cache = new Cache(new NoCache()); // or use any cache adapter you wish
 

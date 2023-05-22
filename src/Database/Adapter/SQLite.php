@@ -157,6 +157,34 @@ class SQLite extends MariaDB
         return true;
     }
 
+      /**
+     * Get Collection Size
+     * @param string $name
+     * @return int
+     * @throws Exception
+     * 
+     */
+
+
+     public function getCollectionSize(string $name): int
+{
+    $name = $this->filter($name);
+
+    $query = $this->getPDO()->prepare("
+        SELECT sum(LENGTH(name) + LENGTH(sql)) AS total_size
+        FROM sqlite_master
+        WHERE type = 'table' AND name = '{$name}'
+    ");
+    $query->execute();
+
+    try {
+        $size = $query->fetchColumn();
+        return (int) $size;
+    } catch (PDOException $e) {
+        throw new Exception("Invalid table name");
+    }
+}
+
     /**
      * Delete Collection
      * @param string $id

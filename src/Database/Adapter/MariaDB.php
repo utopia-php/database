@@ -149,7 +149,7 @@ class MariaDB extends SQL
      * 
      */
 
-     public function getCollectionSize(string $name): int
+     public function getCollectionSize(string $name): int 
      {
          $database = $this->getDefaultDatabase();
          $name = $this->filter($name);

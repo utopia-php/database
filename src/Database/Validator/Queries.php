@@ -56,7 +56,7 @@ class Queries extends Validator
                 try {
                     $query = Query::parse($query);
                 } catch (\Throwable $e) {
-                    $this->message = $e->getMessage();
+                    $this->message = 'Invalid query: ' . $e->getMessage();
                     return false;
                 }
             }

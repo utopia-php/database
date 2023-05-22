@@ -6,12 +6,13 @@ use Closure;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
-use Utopia\Database\Validator\Datetime as DatetimeValidator;
 
 class Structure extends Validator
 {
@@ -154,13 +155,13 @@ class Structure extends Validator
     {
         if (isset(self::$formats[$name])) {
             if (self::$formats[$name]['type'] !== $type) {
-                throw new Exception('Format ("'.$name.'") not available for this attribute type ("'.$type.'")');
+                throw new DatabaseException('Format "'.$name.'" not available for attribute type "'.$type.'"');
             }
 
             return self::$formats[$name];
         }
 
-        throw new Exception('Unknown format validator: "'.$name.'"');
+        throw new DatabaseException('Unknown format validator "'.$name.'"');
     }
 
     /**

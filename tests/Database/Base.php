@@ -4155,6 +4155,7 @@ abstract class Base extends TestCase
         $library = $person->getAttribute('newLibrary', '');
         $this->assertEquals(null, $library);
     }
+
     /**
      * @throws AuthorizationException
      * @throws LimitException

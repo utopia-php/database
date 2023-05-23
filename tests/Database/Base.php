@@ -3783,7 +3783,7 @@ abstract class Base extends TestCase
 
         foreach ($attributes as $attribute) {
             if ($attribute['key'] === 'son1') {
-                $this->assertEquals('twoWayKey', $attribute['options']['twoWayKey']);
+                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
                 var_dump($attribute);
             }
 
@@ -3793,8 +3793,6 @@ abstract class Base extends TestCase
         }
 
         var_dump($collection->getAttribute('attributes')[0]->getId());
-
-        die;
 
         //todo make some tests
         $docs = static::getDatabase()->find('parent', []);

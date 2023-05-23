@@ -1474,6 +1474,11 @@ class Database
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
+
+            if($attribute->getAttribute('type') === self::VAR_RELATIONSHIP &&
+                \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)){
+                throw new DuplicateException('TwoWayKey already exists');
+            }
         }
 
         if (

@@ -3738,6 +3738,100 @@ abstract class Base extends TestCase
     }
 
     // Relationships
+
+    // Relationships
+    public function testDoubleOneToOneOneWayRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('parent');
+        static::getDatabase()->createCollection('son');
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'son',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'son1'
+        );
+
+        try {
+            static::getDatabase()->createRelationship(
+                collection: 'parent',
+                relatedCollection: 'son',
+                type: Database::RELATION_ONE_TO_MANY,
+                id: 'sons',
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('TwoWayKey already exists', $e->getMessage());
+        }
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'son',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'sons',
+            twoWayKey: 'parent_id'
+        );
+
+        $collection = static::getDatabase()->getCollection('parent');
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'son1') {
+                $this->assertEquals('twoWayKey', $attribute['options']['twoWayKey']);
+                var_dump($attribute);
+            }
+
+            if ($attribute['key'] === 'sons') {
+                $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
+            }
+        }
+
+        var_dump($collection->getAttribute('attributes')[0]->getId());
+
+        die;
+
+        //todo make some tests
+        $docs = static::getDatabase()->find('parent', []);
+        var_dump($docs);
+
+        $document = static::getDatabase()->createDocument('parent', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'son1' => [
+                '$id' => 'foo',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ],
+            'sons' => [
+                [
+                    '$id' => 'bar',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                ],
+            ],
+        ]));
+
+        $docs = static::getDatabase()->find('parent', []);
+
+
+
+    }
+
     public function testOneToOneOneWayRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

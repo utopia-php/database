@@ -141,6 +141,14 @@ abstract class Adapter
     abstract public function ping(): bool;
 
     /**
+     * Run the given callable in a transaction.
+     *
+     * @param callable $action
+     * @return bool
+     */
+    abstract public function transaction(callable $action): bool;
+
+    /**
      * Create Database
      *
      * @param string $name
@@ -194,6 +202,14 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteCollection(string $name): bool;
+
+    /**
+     * Delete Collection Documents
+     *
+     * @param string $name
+     * @return bool
+     */
+    abstract public function deleteCollectionDocuments(string $name): bool;
 
     /**
      * Create Attribute

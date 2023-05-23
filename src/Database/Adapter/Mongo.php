@@ -68,6 +68,12 @@ class Mongo extends Adapter
         return $this->getClient()->query(['ping' => 1])->ok ?? false;
     }
 
+    public function transaction(callable $action): bool
+    {
+        // TODO: Implement transaction() method.
+        return false;
+    }
+
     /**
      * Create Database
      *
@@ -256,15 +262,21 @@ class Mongo extends Adapter
     /**
      * Delete Collection
      *
-     * @param string $id
+     * @param string $name
      * @return bool
      * @throws Exception
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $name): bool
     {
-        $id = $this->getNamespace() . '_' . $this->filter($id);
+        $name = $this->getNamespace() . '_' . $this->filter($name);
 
-        return (!!$this->getClient()->dropCollection($id));
+        return (!!$this->getClient()->dropCollection($name));
+    }
+
+    public function deleteCollectionDocuments(string $name): bool
+    {
+        // TODO: Implement deleteCollectionDocuments() method.
+        return false;
     }
 
     /**

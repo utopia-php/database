@@ -102,6 +102,8 @@ class Database
     public const EVENT_COLLECTION_READ = 'collection_read';
     public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
+    public const EVENT_COLLECTION_CLEAR = 'collection_clear';
+
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
     public const EVENT_DOCUMENT_READ = 'document_read';
@@ -783,6 +785,81 @@ class Database
         $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
 
         return $deleted;
+    }
+
+    /**
+     * Delete all documents in a collection
+     *
+     * @param string $id
+     * @return bool
+     * @throws \Utopia\Database\Exception
+     */
+    public function deleteCollectionDocuments(string $id): bool
+    {
+        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes'),
+            fn ($attribute) => $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
+        );
+
+        if (!empty($relationships)) {
+            $documents = $this->find($id, [Query::limit(PHP_INT_MAX)]);
+
+            $this->adapter->transaction(function () use ($documents, $relationships) {
+                foreach ($documents as $document) {
+                    foreach ($relationships as $relationship) {
+                        $values = $document->getAttribute($relationship->getId());
+
+                        if ($relationship['options']['side'] === Database::RELATION_SIDE_CHILD
+                            || ($relationship['options']['side'] === Database::RELATION_SIDE_PARENT
+                                && $relationship['options']['relationType'] === Database::RELATION_MANY_TO_ONE)) {
+                            continue;
+                        }
+
+                        switch ($relationship['options']['onDelete']) {
+                            case Database::RELATION_MUTATE_RESTRICT:
+                                if (!empty($values)) {
+                                    throw new DatabaseException('Cannot delete collection documents. Restrict relationship violated.');
+                                }
+                                break;
+                            case Database::RELATION_MUTATE_SET_NULL:
+                                if (!empty($values)) {
+                                    if (\is_array($values)) {
+                                        foreach ($values as $id) {
+                                            $relatedDocument = $this->getDocument($relationship['options']['relatedCollection'], $id);
+                                            $relatedDocument->setAttribute($relationship['options']['twoWayKey'], null);
+                                            $this->updateDocument($relationship['options']['relatedCollection'], $relatedDocument->getId(), $relatedDocument);
+                                        }
+                                    } else {
+                                        $relatedDocument = $this->getDocument($relationship['options']['relatedCollection'], $values);
+                                        $relatedDocument->setAttribute($relationship['options']['twoWayKey'], null);
+                                        $this->updateDocument($relationship['options']['relatedCollection'], $relatedDocument->getId(), $relatedDocument);
+                                    }
+                                }
+                                break;
+                            case Database::RELATION_MUTATE_CASCADE:
+                                if (!empty($values)) {
+                                    if (\is_array($values)) {
+                                        foreach ($values as $id) {
+                                            $this->deleteDocument($relationship['options']['relatedCollection'], $id);
+                                        }
+                                    } else {
+                                        $this->deleteDocument($relationship['options']['relatedCollection'], $values);
+                                    }
+                                }
+                                break;
+                        }
+                    }
+                }
+            });
+        }
+
+        $this->adapter->deleteCollectionDocuments($collection->getId());
+
+        $this->trigger(self::EVENT_COLLECTION_CLEAR, $collection);
+
+        return true;
     }
 
     /**

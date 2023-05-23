@@ -144,17 +144,17 @@ class MariaDB extends SQL
 
     /**
      * Delete Collection
-     * @param string $id
+     * @param string $name
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteCollection(string $id): bool
+    public function deleteCollection(string $name): bool
     {
-        $id = $this->filter($id);
+        $name = $this->filter($name);
 
         return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+            ->prepare("DROP TABLE {$this->getSQLTable($name)}, {$this->getSQLTable($name . '_perms')};")
             ->execute();
     }
 

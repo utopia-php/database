@@ -42,6 +42,34 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Run the given callable in a transaction.
+     *
+     * For MySQL and MariaDB, all DDL statements (CREATE, ALTER, DROP) force implicit commits, and any changes made after them cannot be rolled back.
+     *
+     * For PostgreSQL, all DDL statements except ADD/DROP on a database or tablespace can be rolled back.
+     *
+     * @throws DatabaseException
+     * @throws Exception
+     */
+    public function transaction(callable $action): bool
+    {
+        $this->getPDO()->beginTransaction();
+
+        try {
+            $action();
+            $this->getPDO()->commit();
+        } catch (DatabaseException $e) {
+            $this->getPDO()->rollback();
+            throw $e;
+        } catch (Exception $e) {
+            $this->getPDO()->rollback();
+            throw new DatabaseException('Failed transaction: ' . $e->getMessage());
+        }
+
+        return true;
+    }
+
+    /**
      * Check if Database exists
      * Optionally check if collection exists in Database
      *
@@ -95,6 +123,22 @@ abstract class SQL extends Adapter
     public function list(): array
     {
         return [];
+    }
+
+    /**
+     * Delete Collection Documents
+     *
+     * @param string $name
+     * @return bool
+     * @throws Exception
+     */
+    public function deleteCollectionDocuments(string $name): bool
+    {
+        $name = $this->filter($name);
+
+        return $this->getPDO()
+            ->prepare("TRUNCATE TABLE {$this->getSQLTable($name)};")
+            ->execute();
     }
 
     /**

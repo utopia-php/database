@@ -10261,7 +10261,7 @@ abstract class Base extends TestCase
             static::getDatabase()->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
-            $this->assertEquals('Attribute already exists', $e->getMessage());
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
     }
 

@@ -11,6 +11,7 @@ Although this library is part of the [Utopia Framework](https://github.com/utopi
 ## Getting Started
 
 Install using composer:
+
 ```bash
 composer require utopia-php/database
 ```
@@ -47,7 +48,6 @@ The database document interface only supports primitives types (`strings`, `inte
 
 ### Setting up different database adapters
 
-
 **MariaDB:**
 
 ```php
@@ -56,10 +56,10 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Database\Adapter\MariaDB;
 
-$dbHost = 'mariadbHost ';
+$dbHost = 'mariadb';
 $dbPort = '3306';
 $dbUser = 'root';
 $dbPass = 'password';
@@ -72,14 +72,14 @@ $pdoConfig = [
     PDO::ATTR_STRINGIFY_FETCHES => true,
 ];
 
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig );
+$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig);
 
-$cache = new Cache(new NoCache()); // or use any cache adapter you wish
+$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
 
 $database = new Database(new MariaDB($pdo), $cache);
 ```
 
-**MySql:**
+**MySQL:**
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -87,10 +87,10 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Database\Adapter\MySQL;
 
-$dbHost = 'MySqlHost ';
+$dbHost = 'mysql';
 $dbPort = '3306';
 $dbUser = 'root';
 $dbPass = 'password';
@@ -103,13 +103,12 @@ $pdoConfig = [
     PDO::ATTR_STRINGIFY_FETCHES => true,
 ];
 
-$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig );
+$pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig);
 
-$cache = new Cache(new NoCache()); // or use any cache adapter you wish
+$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
 
 $database = new Database(new MySql($pdo), $cache);
 ```
-
 
 **Postgres:**
 
@@ -119,11 +118,11 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Database\Adapter\Postgres;
 
-$dbHost = 'PostgresHost ';
-$dbPort = '3306';
+$dbHost = 'postgres';
+$dbPort = '5432';
 $dbUser = 'root';
 $dbPass = 'password';
 $pdoConfig = [
@@ -135,41 +134,65 @@ $pdoConfig = [
     PDO::ATTR_STRINGIFY_FETCHES => true,
 ];
 
-$pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, $pdoConfig );
+$pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig);
 
-$cache = new Cache(new NoCache()); // or use any cache adapter you wish
+$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
 
 $database = new Database(new Postgres($pdo), $cache);
 ```
 
+**SQLite:**
+
+```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PDO;
+use Utopia\Database\Database;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Database\Adapter\SQLite;
+
+$dbPath = '/path/to/database.sqlite';
+$pdoConfig = [
+    PDO::ATTR_TIMEOUT => 3, // Seconds
+    PDO::ATTR_PERSISTENT => true,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_EMULATE_PREPARES => true,
+    PDO::ATTR_STRINGIFY_FETCHES => true,
+];
+
+$pdo = new PDO("{$dbPath}", $pdoConfig);
+
+$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
+
+$database = new Database(new SQLite($pdo), $cache);
+```
+
 **MongoDB:**
-
-> This requires [utopia-php/mongo](https://packagist.org/packages/utopia-php/mongo)
-
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
 
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Mongo\Client; // from utopia-php/mongo
 
-$dbHost = 'MySqlHost ';
-$dbPort = 3306; // this should be a integer
+$dbHost = 'mongo';
+$dbPort = 27017; // this should be a integer
 $dbUser = 'root';
 $dbPass = 'password';
 $dbName = 'dbName';
-$useCoroutine = true; // set to false if you don't want to use Swoole\Coroutine(set true for concurrent requests and better performance)
 
+$mongoClient = new Client($dbName, $dbHost, $dbPort, $dbUser, $dbPass, true);
 
-$mongoClient = new Client($dbName, $dbHost, $dbPort, $dbUser, $dbPass, $useCoroutine);
+$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
 
-$cache = new Cache(new NoCache()); // or use any cache adapter you wish
-
-$database = new Database(new Mongo($client), new Cache(new NoCache()));
+$database = new Database(new Mongo($client), $cache);
 ```
+
 <br>
 
 > ## Below methods are available for all database adapters.
@@ -181,25 +204,96 @@ $database = new Database(new Mongo($client), new Cache(new NoCache()));
 ```php
 $nameOfTheDatabaseOrSchema = 'mydb';
 $database->setNamespace($nameOfTheDatabaseOrSchema);
-$database->create(); // Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. named 'mydb'
+// Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. named 'mydb'
+$database->create($nameOfTheDatabaseOrSchema);
+
+//delete database
+$database->delete($nameOfTheDatabaseOrSchema);
 ```
 
-**Creating a collection:**
+**Collection Methods:**
 
 ```php
-$database->createCollection('movies');
+$collectionName = 'movies';
 
-// Add attributes
-$database->createAttribute('movies', 'name', Database::VAR_STRING, 128, true);
-$database->createAttribute('movies', 'director', Database::VAR_STRING, 128, true);
-$database->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true);
-$database->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true);
-$database->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true);
-$database->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, true, true);
+$database->createCollection($collectionName);
+// creates two new table/collection named 'namespace_movies' with column names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
+// The second table is named 'namespace_movies_perms' with column names '_id', '_type', '_permission', '_document'
 
-// Create an Index
-$database->createIndex('movies', 'index1', Database::INDEX_KEY, ['year'], [128], [Database::ORDER_ASC]);
+$database->deleteCollection($collectionName);
+// deletes the two tables/collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
+
+$database->getSizeOfCollection($collectionName);
+// returns the size of the collection in bytes where database is $this->getDefaultDatabase()
+
+
 ```
+
+**Attribute Methods:**
+
+```php
+$collectionName = 'movies'; //required
+$attributeId = 'name';      //required
+$attributeType =            //required
+[Database::VAR_STRING,      // use Utopia\Database\Database for these constants
+ Database::VAR_INTEGER,
+ Database::VAR_FLOAT,
+ Database::VAR_BOOLEAN,
+ Database::VAR_DATETIME,
+ Database::VAR_RELATIONSHIP];
+$attributeSize = 128;       //required
+$attributeRequired = true;  //required
+
+$database->createAttribute($collectionName,$attributeId, $attributeType[0], $attributeSize, $attributeRequired);
+// creates a new column named '$attributeName' in the 'namespace_collectionname' table.
+
+$newAttributeId = 'genres'; 
+$defaultValue = null;       //optional
+$isSigned = true;           //optional
+$isAnArray = false;         //optional
+$format = null;             //optional
+$formatOptions = [];        //optional
+$filters = [];              //optional
+
+$database->createAttribute($collectionName, $newAttributeId,$attributeType[0] , $attributeSize, $attributeRequired,$defaultValue, $isSigned, $isAnArray, $format, $formatOptions, $filters);
+
+$database-> updateAttribute($collectionName, $attributeId, $newAttributeId, $attributeType[0], $attributeSize, $attributeRequired, $defaultValue, $isSigned, $isAnArray, $format, $formatOptions, $filters);
+
+$database->deleteAttribute($collectionName, $attributeId);
+
+$currentAttributeId = 'genres';
+$newAttributeId = 'genres2';
+
+$database->renameAttribute($collectionName, $currentAttributeId, $newAttributeId);
+
+
+```
+
+**Index Methods:**
+
+```php
+$collectionName = 'movies';             //required
+$indexId = 'index1';                    //required
+$indexType =                            //required
+[Database::INDEX_KEY,                   // use Utopia\Database\Database for these constants
+ Database::INDEX_FULLTEXT,
+ Database::INDEX_UNIQUE,
+ Database::INDEX_SPATIAL,
+ Database::INDEX_ARRAY];
+$attributesToIndex = ['name', 'genres'];//required
+$indexSizes = [128,128];                //required
+$insertionOrder = [Database::ORDER_ASC,
+Database::ORDER_DESC];                  //required
+
+$database->createIndex($collectionName, $indexId, $indexType[0], $attributeToIndex, $indexSizes, [$insertionOrder[0], $insertionOrder[1]]);
+
+$currentIndexId = 'index1';
+$newIndexId = 'index2';
+
+$database->renameIndex($collectionName, $currentIndexId, $newIndexId);
+
+$database->deleteIndex($collectionName, $indexId);
+``` 
 
 **Create a document:**
 
@@ -218,7 +312,7 @@ static::getDatabase()->createDocument('movies', new Document([
         Permission::delete(Role::any()),
         Permission::delete(Role::user(ID::custom('1x'))),
         Permission::delete(Role::user(ID::custom('2x'))),
-    ],   
+    ],
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',
     'year' => 2019,
@@ -252,13 +346,13 @@ $documents = static::getDatabase()->find('movies', [
 
 Below is a list of supported adapters, and their compatibly tested versions alongside a list of supported features and relevant limits.
 
-| Adapter | Status | Version |
-|---------|---------|---|
-| MariaDB | ✅ | 10.5 |
-| MySQL | ✅ | 8.0 |
-| Postgres | 🛠 | 13.0 |
-| MongoDB | ✅ | 5.0 |
-| SQLlite | ✅ | 3.38 |
+| Adapter  | Status | Version |
+| -------- | ------ | ------- |
+| MariaDB  | ✅     | 10.5    |
+| MySQL    | ✅     | 8.0     |
+| Postgres | 🛠      | 13.0    |
+| MongoDB  | ✅     | 5.0     |
+| SQLlite  | ✅     | 3.38    |
 
 ` ✅  - supported, 🛠  - work in progress`
 
@@ -300,6 +394,7 @@ To run static code analysis, use the following Psalm command:
 ```bash
 docker compose exec tests vendor/bin/psalm --show-info=true
 ```
+
 ### Load testing
 
 Three commands have been added to `bin/` to fill, index, and query the DB to test changes:

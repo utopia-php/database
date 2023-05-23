@@ -1670,7 +1670,7 @@ class Database
                 !\is_null($newTwoWayKey)
                 && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
             ) {
-                throw new DuplicateException('Attribute already exists');
+                throw new DuplicateException('Related attribute already exists');
             }
 
             $type = $attribute['options']['relationType'];

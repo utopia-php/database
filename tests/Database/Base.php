@@ -4806,6 +4806,28 @@ abstract class Base extends TestCase
         $this->assertEquals('foo', $document->getAttribute('child1')->getId());
         $this->assertArrayHasKey('children', $document);
         $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newKey: 'child1'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Attribute already exists', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newTwoWayKey: 'parent'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
     }
 
     public function testOneToManyOneWayRelationship(): void

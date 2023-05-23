@@ -4733,7 +4733,7 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $country);
     }
 
-    public function testIdenticaltwoWayKeyRelationship(): void
+    public function testIdenticalTwoWayKeyRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();

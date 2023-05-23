@@ -27,9 +27,14 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
-        return $this->getPDO()
-            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;");
+        try{
+            return $query->execute();
+        }    
+        catch (Exception $e) {
+            throw new DatabaseException('Failed to create database: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -44,9 +49,14 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
-        return $this->getPDO()
-            ->prepare("DROP DATABASE `{$name}`;")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("DROP DATABASE `{$name}`;");
+        try{
+            return $query->execute();
+        }    
+        catch (Exception $e) {
+            throw new DatabaseException('Failed to delete database: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -185,10 +195,14 @@ class MariaDB extends SQL
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);
-
-        return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-            ->execute();
+        $query = $this->getPDO()
+                 ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};");
+        try{
+           return $query->execute();
+        }
+        catch(Exception $e){
+            throw new DatabaseException('Failed to delete collection: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -214,9 +228,14 @@ class MariaDB extends SQL
             $type = 'LONGTEXT';
         }
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};");
+        try{
+            return $query->execute();
+        }
+        catch(Exception $e){
+            throw new DatabaseException('Failed to create attribute: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -242,9 +261,14 @@ class MariaDB extends SQL
             $type = 'LONGTEXT';
         }
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};");
+        try{
+            return $query->execute();
+        }
+        catch(Exception $e){
+            throw new DatabaseException('Failed to update attribute: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -262,9 +286,14 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;");
+        try{
+            return $query->execute();
+        }
+        catch(Exception $e){
+            throw new DatabaseException('Failed to delete attribute: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -283,9 +312,14 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;");
+        try{
+            return $query->execute();
+        }
+        catch(Exception $e){
+            throw new DatabaseException('Failed to rename attribute: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -503,9 +537,15 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
-            ->execute();
+        $query = $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;");
+        
+        try{
+            return $query->execute();
+        }
+        catch(Exception $e){
+            throw new DatabaseException("Failed to rename Index" . $e->getMessage());
+        }
     }
 
     /**

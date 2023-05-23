@@ -1479,7 +1479,7 @@ class Database
                 && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {
-                throw new DuplicateException('TwoWayKey already exists');
+                throw new DuplicateException('Related attribute already exists');
             }
         }
 

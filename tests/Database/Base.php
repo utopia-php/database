@@ -4741,43 +4741,43 @@ abstract class Base extends TestCase
         }
 
         static::getDatabase()->createCollection('parent');
-        static::getDatabase()->createCollection('son');
+        static::getDatabase()->createCollection('child');
 
         static::getDatabase()->createRelationship(
             collection: 'parent',
-            relatedCollection: 'son',
+            relatedCollection: 'child',
             type: Database::RELATION_ONE_TO_ONE,
-            id: 'son1'
+            id: 'child1'
         );
 
         try {
             static::getDatabase()->createRelationship(
                 collection: 'parent',
-                relatedCollection: 'son',
+                relatedCollection: 'child',
                 type: Database::RELATION_ONE_TO_MANY,
-                id: 'sons',
+                id: 'children',
             );
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
-            $this->assertEquals('TwoWayKey already exists', $e->getMessage());
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
 
         static::getDatabase()->createRelationship(
             collection: 'parent',
-            relatedCollection: 'son',
+            relatedCollection: 'child',
             type: Database::RELATION_ONE_TO_MANY,
-            id: 'sons',
+            id: 'children',
             twoWayKey: 'parent_id'
         );
 
         $collection = static::getDatabase()->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'son1') {
+            if ($attribute['key'] === 'child1') {
                 $this->assertEquals('parent', $attribute['options']['twoWayKey']);
             }
 
-            if ($attribute['key'] === 'sons') {
+            if ($attribute['key'] === 'children') {
                 $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
             }
         }
@@ -4788,11 +4788,11 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'son1' => [
+            'child1' => [
                 '$id' => 'foo',
                 '$permissions' => [Permission::read(Role::any())],
             ],
-            'sons' => [
+            'children' => [
                 [
                     '$id' => 'bar',
                     '$permissions' => [Permission::read(Role::any())],
@@ -4802,10 +4802,10 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->find('parent', []);
         $document  = array_pop($documents);
-        $this->assertArrayHasKey('son1', $document);
-        $this->assertEquals('foo', $document->getAttribute('son1')->getId());
-        $this->assertArrayHasKey('sons', $document);
-        $this->assertEquals('bar', $document->getAttribute('sons')[0]->getId());
+        $this->assertArrayHasKey('child1', $document);
+        $this->assertEquals('foo', $document->getAttribute('child1')->getId());
+        $this->assertArrayHasKey('children', $document);
+        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
     }
 
     public function testOneToManyOneWayRelationship(): void

@@ -4790,12 +4790,12 @@ abstract class Base extends TestCase
             ],
             'son1' => [
                 '$id' => 'foo',
-                '$permissions' => [],
+                '$permissions' => [Permission::read(Role::any())],
             ],
             'sons' => [
                 [
                     '$id' => 'bar',
-                    '$permissions' => [],
+                    '$permissions' => [Permission::read(Role::any())],
                 ],
             ],
         ]));

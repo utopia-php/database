@@ -1475,8 +1475,10 @@ class Database
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if($attribute->getAttribute('type') === self::VAR_RELATIONSHIP &&
-                \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)){
+            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
+                && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
+            ) {
                 throw new DuplicateException('TwoWayKey already exists');
             }
         }

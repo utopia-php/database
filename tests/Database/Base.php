@@ -3738,7 +3738,6 @@ abstract class Base extends TestCase
     }
 
     // Relationships
-
     public function testOneToOneOneWayRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

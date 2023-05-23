@@ -150,34 +150,30 @@ class Postgres extends SQL
 
      /**
      * Get Collection Size
-     * @param string $name
+     * @param string $collection
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      * 
      */
-
-     public function getCollectionSize(string $name): string
-     {
-    // Does not work in tests but works in Postgres
-
-    //      $database = $this->getDefaultDatabase();
-    //      $name = $this->filter($name);
+     public function getSizeOfCollection(string $collection): int
+    {
+    // Does not work in tests.
+         $database = $this->getDefaultDatabase();
+         $name = $this->filter($collection);
      
-    //      $query = $this->getPDO()->prepare("
-    //      SELECT pg_size_pretty(pg_total_relation_size(
-    //          '{$database}.{$name}'
-    //      )) AS total_size;
-    //  ");
-    //      try {
-    //         $query->execute();
-    //         $size = $query->fetchColumn();
-    //     } catch (PDOException $e) {
-    //         throw new Exception( $e->getMessage());
-    //     }
-    //      return (int) $size;
-      return strval(0);
-     }
-    
+         $query = $this->getPDO()->prepare("
+         SELECT pg_total_relation_size(
+            '{$database}.{$name}'
+        ) AS total_size;
+     ");
+         try {
+            $query->execute();
+            $size = $query->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+         return  $size;
+    }    
  
     /**
      * Delete Collection

@@ -758,15 +758,14 @@ class Database
     /**
      * Get Collection Size
      *
-     * @param string $name
+     * @param string $collection
      *
      * @return int
      */
-
-     public function getCollectionSize(string $name): string 
-     {
-         return $this->adapter->getCollectionSize($name);
-     }
+     public function getSizeOfCollection(string $collection): int 
+    {
+         return $this->adapter->getSizeOfCollection($collection);
+    }
 
     /**
      * Delete Collection

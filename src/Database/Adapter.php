@@ -187,16 +187,6 @@ abstract class Adapter
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
 
     /**
-     * Get Collection Size
-     * Returns
-     * @param string $name
-     * @return int
-     * @throws Exception
-     */
-     
-     abstract public function getCollectionSize(string $name): string; 
-
-    /**
      * Delete Collection
      *
      * @param string $name
@@ -407,6 +397,15 @@ abstract class Adapter
      * @return int
      */
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
+
+   /**
+     * Get Collection Size
+     * Returns
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */  
+     abstract public function getSizeOfCollection(string $collection): int; 
 
     /**
      * Get max STRING limit

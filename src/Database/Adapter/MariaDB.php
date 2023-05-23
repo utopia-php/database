@@ -144,20 +144,19 @@ class MariaDB extends SQL
 
     /**
      * Get Collection Size
-     * @param string $name
+     * @param string $collection
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      * 
      */
-
-     public function getCollectionSize(string $name): string 
-     {
+     public function getSizeOfCollection(string $collection): int 
+    {
          $database = $this->getDefaultDatabase();
-         $name = $this->filter($name);
+         $name = $this->filter($collection);
      
          $query = $this->getPDO()->prepare("
              SELECT 
-              data_length + index_length + data_free
+              data_length + index_length 
              FROM 
                  information_schema.TABLES 
              WHERE 
@@ -167,17 +166,14 @@ class MariaDB extends SQL
          ");
          $query->bindParam(':database', $database);
          $query->bindParam(':name', $name);
-         $query->execute();
          try {
             $query->execute();
             $size = $query->fetchColumn();
         } catch (PDOException $e) {
-            throw new Exception($e->getMessage());
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
-     
-         return strval($size);
-     }
-
+         return $size;
+    }
 
     /**
      * Delete Collection

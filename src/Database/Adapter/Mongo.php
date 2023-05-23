@@ -255,29 +255,28 @@ class Mongo extends Adapter
 
      /**
      * Get Collection Size
-     * @param string $name
+     * @param string $collection
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      */
-     
-     public function getCollectionSize(string $name): string
-     {
+     public function getSizeOfCollection(string $collection): int
+    {
          $namespace = $this->getNamespace();
          $parts = explode('.', $namespace);
          $database = $parts[0];
-         $collection = $this->filter($name);
- 
+         $filteredCollectionName = $this->filter($collection);
          $command = [
-             'collStats' => $collection,
+             'collStats' => $filteredCollectionName,
              'scale' => 1 
          ];
-     
-         $result = $this->getClient()->query($command, $database);
-     
-         return strval($result->size);
-         
-     }
- 
+        try{
+            $result = $this->getClient()->query($command, $database);
+        }
+        catch(Exception $e){
+            throw new DatabaseException("Failed to get collection size" . $e->getMessage());
+        } 
+         return $result->size;
+    }
 
     /**
      * Delete Collection

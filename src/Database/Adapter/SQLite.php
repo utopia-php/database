@@ -160,31 +160,27 @@ class SQLite extends MariaDB
 
       /**
      * Get Collection Size
-     * @param string $name
+     * @param string $collection
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      * 
      */
-
-
-     public function getCollectionSize(string $name): string
-{
-    $name = $this->filter($name);
+     public function getSizeOfCollection(string $collection): int
+    {
+    $name = $this->filter($collection);
 
     $query = $this->getPDO()->prepare("
-        SELECT sum(LENGTH(name) + LENGTH(sql)) AS total_size
-        FROM sqlite_master
-        WHERE type = 'table' AND name = '{$name}'
+    SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name='{$name}';
     ");
-    $query->execute();
 
     try {
+        $query->execute();
         $size = $query->fetchColumn();
-        return strval($size);
     } catch (PDOException $e) {
-        throw new Exception($e->getMessage());
+        throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
     }
-}
+    return $size;
+    }
 
     /**
      * Delete Collection

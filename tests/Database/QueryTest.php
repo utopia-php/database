@@ -455,11 +455,11 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('select'));
 
         $this->assertTrue(Query::isMethod(Query::TYPE_EQUAL));
-        $this->assertTrue(Query::isMethod(Query::TYPE_NOTEQUAL));
+        $this->assertTrue(Query::isMethod(Query::TYPE_NOT_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_LESSER));
-        $this->assertTrue(Query::isMethod(Query::TYPE_LESSEREQUAL));
+        $this->assertTrue(Query::isMethod(Query::TYPE_LESSER_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER));
-        $this->assertTrue(Query::isMethod(Query::TYPE_GREATEREQUAL));
+        $this->assertTrue(Query::isMethod(Query::TYPE_GREATER_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_CONTAINS));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SEARCH));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDERASC));

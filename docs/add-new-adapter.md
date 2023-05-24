@@ -31,7 +31,7 @@ Create your `NewDB.php` file in `src/Database/Adapter/` and extend the parent cl
 
 namespace Utopia\Database\Adapter;
 
-use Exception;
+use Utopia\Database\Exception;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;

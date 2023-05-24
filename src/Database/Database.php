@@ -4,8 +4,8 @@ namespace Utopia\Database;
 
 use Exception;
 use InvalidArgumentException;
-use Throwable;
 use Utopia\Cache\Cache;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -484,7 +484,7 @@ class Database
      *
      * @return string
      *
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function getNamespace(): string
     {
@@ -637,7 +637,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
-            throw new DuplicateException('Collection ' . $id . ' Exists!');
+            throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
         $collection = new Document([
@@ -725,7 +725,7 @@ class Database
      * @param string $id
      *
      * @return Document
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function getCollection(string $id): Document
     {
@@ -808,17 +808,18 @@ class Database
      *
      * @return bool
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
-     * @throws Throwable
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new Exception('Collection not found');
+            throw new DatabaseException('Collection not found');
         }
 
         // attribute IDs are case insensitive
@@ -833,7 +834,7 @@ class Database
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
         if (!empty(array_diff($requiredFilters, $filters))) {
-            throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+            throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
         if (
@@ -845,7 +846,7 @@ class Database
 
         if ($format) {
             if (!Structure::hasFormat($format, $type)) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
             }
         }
 
@@ -875,14 +876,14 @@ class Database
         switch ($type) {
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
-                    throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                    throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
 
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
-                    throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                    throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
                 }
                 break;
             case self::VAR_FLOAT:
@@ -891,13 +892,13 @@ class Database
             case self::VAR_RELATIONSHIP:
                 break;
             default:
-                throw new Exception('Unknown attribute type: ' . $type);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
         }
 
         // only execute when $default is given
         if (!\is_null($default)) {
             if ($required === true) {
-                throw new Exception('Cannot set a default value on a required attribute');
+                throw new DatabaseException('Cannot set a default value on a required attribute');
             }
 
             $this->validateDefaultTypes($type, $default);
@@ -906,7 +907,7 @@ class Database
         $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
         if (!$created) {
-            throw new Exception('Failed to create attribute');
+            throw new DatabaseException('Failed to create attribute');
         }
 
         if ($collection->getId() !== self::METADATA) {
@@ -964,16 +965,16 @@ class Database
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
                 if ($type !== $defaultType) {
-                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
             case self::VAR_DATETIME:
                 if ($defaultType !== self::VAR_STRING) {
-                    throw new Exception('Default value ' . $default . ' does not match given type ' . $type);
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
             default:
-                throw new Exception('Unknown attribute type: ' . $type);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
         }
     }
 
@@ -985,28 +986,28 @@ class Database
      * @param callable $updateCallback method that receives document, and returns it with changes applied
      *
      * @return Document
-     * @throws Exception
-     * @throws Throwable
+     * @throws ConflictException
+     * @throws DatabaseException
      */
     private function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() === self::METADATA) {
-            throw new Exception('Can not update metadata attributes');
+            throw new DatabaseException('Cannot update metadata attributes');
         }
 
         $indexes = $collection->getAttribute('indexes', []);
         $index = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new Exception('Index not found');
+            throw new DatabaseException('Index not found');
         }
 
         // Execute update from callback
         $updateCallback($indexes[$index], $collection, $index);
 
         // Save
-        $collection->setAttribute('indexes', $indexes, Document::SET_TYPE_ASSIGN);
+        $collection->setAttribute('indexes', $indexes);
 
         $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
@@ -1023,21 +1024,21 @@ class Database
      * @param callable $updateCallback method that receives document, and returns it with changes applied
      *
      * @return Document
-     * @throws Exception
-     * @throws Throwable
+     * @throws ConflictException
+     * @throws DatabaseException
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() === self::METADATA) {
-            throw new Exception('Can not update metadata attributes');
+            throw new DatabaseException('Cannot update metadata attributes');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
         $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($index === false) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         // Execute update from callback
@@ -1084,7 +1085,7 @@ class Database
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             if (!Structure::hasFormat($format, $attribute->getAttribute('type'))) {
-                throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $attribute->getAttribute('type') . '")');
+                throw new DatabaseException('Format "' . $format . '" not available for attribute type "' . $attribute->getAttribute('type') . '"');
             }
 
             $attribute->setAttribute('format', $format);
@@ -1139,7 +1140,7 @@ class Database
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($default) {
             if ($attribute->getAttribute('required') === true) {
-                throw new Exception('Cannot set a default value on a required attribute');
+                throw new DatabaseException('Cannot set a default value on a required attribute');
             }
 
             $this->validateDefaultTypes($attribute->getAttribute('type'), $default);
@@ -1189,46 +1190,46 @@ class Database
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {
-                        throw new Exception('Size length is required');
+                        throw new DatabaseException('Size length is required');
                     }
 
                     if ($size > $this->adapter->getLimitForString()) {
-                        throw new Exception('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
+                        throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                     }
                     break;
 
                 case self::VAR_INTEGER:
                     $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                     if ($size > $limit) {
-                        throw new Exception('Max size allowed for int is: ' . number_format($limit));
+                        throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
                     }
                     break;
                 case self::VAR_FLOAT:
                 case self::VAR_BOOLEAN:
                 case self::VAR_DATETIME:
                     if (!empty($size)) {
-                        throw new Exception('Size must be empty');
+                        throw new DatabaseException('Size must be empty');
                     }
                     break;
                 default:
-                    throw new Exception('Unknown attribute type: ' . $type);
+                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
             }
 
             /** Ensure required filters for the attribute are passed */
             $requiredFilters = $this->getRequiredFilters($type);
             if (!empty(array_diff($requiredFilters, $filters))) {
-                throw new Exception("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
+                throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
             }
 
             if ($format) {
                 if (!Structure::hasFormat($format, $type)) {
-                    throw new Exception('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
+                    throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
                 }
             }
 
             if (!\is_null($default)) {
                 if ($required) {
-                    throw new Exception('Cannot set a default value on a required attribute');
+                    throw new DatabaseException('Cannot set a default value on a required attribute');
                 }
 
                 $this->validateDefaultTypes($type, $default);
@@ -1260,7 +1261,7 @@ class Database
                 $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
 
                 if (!$updated) {
-                    throw new Exception('Failed to update attribute');
+                    throw new DatabaseException('Failed to update attribute');
                 }
 
                 $this->deleteCachedCollection($collection);
@@ -1311,8 +1312,8 @@ class Database
      * @param string $id
      *
      * @return bool
-     * @throws Exception
-     * @throws Throwable
+     * @throws ConflictException
+     * @throws DatabaseException
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
@@ -1331,11 +1332,11 @@ class Database
         }
 
         if (\is_null($attribute)) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         if ($attribute['type'] === self::VAR_RELATIONSHIP) {
-            throw new Exception('Cannot delete relationship as an attribute, use deleteRelationship instead');
+            throw new DatabaseException('Cannot delete relationship as an attribute');
         }
 
         foreach ($indexes as $indexKey => $index) {
@@ -1353,7 +1354,7 @@ class Database
         $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
 
         if (!$deleted) {
-            throw new Exception('Failed to delete attribute');
+            throw new DatabaseException('Failed to delete attribute');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -1376,9 +1377,10 @@ class Database
      * @param string $new
      * @return bool
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws DuplicateException
      * @throws StructureException
-     * @throws Throwable
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
@@ -1389,7 +1391,7 @@ class Database
         $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attribute === false) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
@@ -1441,10 +1443,11 @@ class Database
      * @param string $onDelete
      * @return bool
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
-     * @throws Throwable
      */
     public function createRelationship(
         string $collection,
@@ -1458,13 +1461,13 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new Exception('Collection not found');
+            throw new DatabaseException('Collection not found');
         }
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
 
         if ($relatedCollection->isEmpty()) {
-            throw new Exception('Related collection not found');
+            throw new DatabaseException('Related collection not found');
         }
 
         $id ??= $relatedCollection->getId();
@@ -1578,7 +1581,7 @@ class Database
         );
 
         if (!$created) {
-            throw new Exception('Failed to create attribute');
+            throw new DatabaseException('Failed to create relationship');
         }
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
@@ -1605,7 +1608,7 @@ class Database
                     // Indexes created on junction collection creation
                     break;
                 default:
-                    throw new Exception('Invalid relationship type.');
+                    throw new DatabaseException('Invalid relationship type.');
             }
         });
 
@@ -1624,7 +1627,8 @@ class Database
      * @param bool|null $twoWay
      * @param string|null $onDelete
      * @return bool
-     * @throws Throwable
+     * @throws ConflictException
+     * @throws DatabaseException
      */
     public function updateRelationship(
         string  $collection,
@@ -1728,7 +1732,7 @@ class Database
                 );
 
                 if (!$updated) {
-                    throw new Exception('Failed to update relationship');
+                    throw new DatabaseException('Failed to update relationship');
                 }
             }
 
@@ -1778,7 +1782,7 @@ class Database
                     }
                     break;
                 default:
-                    throw new Exception('Invalid relationship type.');
+                    throw new DatabaseException('Invalid relationship type.');
             }
         });
 
@@ -1793,8 +1797,9 @@ class Database
      *
      * @return bool
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws StructureException
-     * @throws Throwable
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
@@ -1811,7 +1816,7 @@ class Database
         }
 
         if (\is_null($relationship)) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -1872,7 +1877,7 @@ class Database
                     $this->deleteDocument(self::METADATA, $junction);
                     break;
                 default:
-                    throw new Exception('Invalid relationship type.');
+                    throw new DatabaseException('Invalid relationship type.');
             }
         });
 
@@ -1887,7 +1892,7 @@ class Database
         );
 
         if (!$deleted) {
-            throw new Exception('Failed to delete relationship');
+            throw new DatabaseException('Failed to delete relationship');
         }
 
         $this->deleteCachedCollection($collection->getId());
@@ -1907,9 +1912,10 @@ class Database
      *
      * @return bool
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws DuplicateException
      * @throws StructureException
-     * @throws Throwable
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
@@ -1920,7 +1926,7 @@ class Database
         $index = \in_array($old, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new Exception('Index not found');
+            throw new DatabaseException('Index not found');
         }
 
         $indexNew = \in_array($new, \array_map(fn ($index) => $index['$id'], $indexes));
@@ -1963,18 +1969,24 @@ class Database
      *
      * @return bool
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
-     * @throws Throwable
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
         if (empty($attributes)) {
-            throw new Exception('Missing attributes');
+            throw new DatabaseException('Missing attributes');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $validator = new IndexValidator($collection);
+        if (!$validator->isValid(['type' => $type, 'attributes' => $attributes])) {
+            throw new DatabaseException($validator->getDescription());
+        }
 
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
@@ -1993,24 +2005,24 @@ class Database
         switch ($type) {
             case self::INDEX_KEY:
                 if (!$this->adapter->getSupportForIndex()) {
-                    throw new Exception('Key index is not supported');
+                    throw new DatabaseException('Key index is not supported');
                 }
                 break;
 
             case self::INDEX_UNIQUE:
                 if (!$this->adapter->getSupportForUniqueIndex()) {
-                    throw new Exception('Unique index is not supported');
+                    throw new DatabaseException('Unique index is not supported');
                 }
                 break;
 
             case self::INDEX_FULLTEXT:
                 if (!$this->adapter->getSupportForFulltextIndex()) {
-                    throw new Exception('Fulltext index is not supported');
+                    throw new DatabaseException('Fulltext index is not supported');
                 }
                 break;
 
             default:
-                throw new Exception('Unknown index type: ' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
         $collection->setAttribute('indexes', new Document([
@@ -2045,6 +2057,10 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws StructureException
      */
     public function deleteIndex(string $collection, string $id): bool
     {
@@ -2081,7 +2097,7 @@ class Database
      * @param Query[] $queries
      *
      * @return Document
-     * @throws Exception|Throwable
+     * @throws DatabaseException
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
@@ -2090,7 +2106,7 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new Exception('Collection not found');
+            throw new DatabaseException('Collection not found');
         }
 
         if (empty($id)) {
@@ -2242,7 +2258,7 @@ class Database
      * @param Document $document
      * @param array<Query> $queries
      * @return Document
-     * @throws Throwable
+     * @throws DatabaseException
      */
     private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
     {
@@ -2479,8 +2495,8 @@ class Database
      * @return Document
      *
      * @throws AuthorizationException
+     * @throws DatabaseException
      * @throws StructureException
-     * @throws Exception|Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -2534,8 +2550,7 @@ class Database
      * @param Document $collection
      * @param Document $document
      * @return Document
-     * @throws Exception
-     * @throws Throwable
+     * @throws DatabaseException
      */
     private function createDocumentRelationships(Document $collection, Document $document): Document
     {
@@ -2574,7 +2589,7 @@ class Database
                             switch (\gettype($related)) {
                                 case 'object':
                                     if (!$related instanceof Document) {
-                                        throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                                        throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                                     }
                                     $this->relateDocuments(
                                         $collection,
@@ -2602,14 +2617,14 @@ class Database
                                     );
                                     break;
                                 default:
-                                    throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                                    throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                             }
                         }
                         $document->removeAttribute($key);
                         break;
                     case 'object':
                         if (!$value instanceof Document) {
-                            throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                            throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
                         $relatedId = $this->relateDocuments(
                             $collection,
@@ -2644,7 +2659,7 @@ class Database
                         // No related document
                         break;
                     default:
-                        throw new Exception('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                        throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                 }
             } finally {
                 \array_pop($this->relationshipWriteStack);
@@ -2655,11 +2670,21 @@ class Database
     }
 
     /**
+     * @param Document $collection
+     * @param Document $relatedCollection
+     * @param string $key
+     * @param Document $document
+     * @param Document $relation
+     * @param string $relationType
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @param string $side
      * @return string related document ID
      *
      * @throws AuthorizationException
-     * @throws Throwable
+     * @throws ConflictException
      * @throws StructureException
+     * @throws Exception
      */
     private function relateDocuments(
         Document $collection,
@@ -2726,6 +2751,22 @@ class Database
         return $related->getId();
     }
 
+    /**
+     * @param Document $collection
+     * @param Document $relatedCollection
+     * @param string $key
+     * @param string $documentId
+     * @param string $relationId
+     * @param string $relationType
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @param string $side
+     * @return void
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws StructureException
+     * @throws Exception
+     */
     private function relateDocumentsById(
         Document $collection,
         Document $relatedCollection,
@@ -2790,13 +2831,14 @@ class Database
      * @return Document
      *
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
      * @throws StructureException
-     * @throws Throwable
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         if (!$document->getId() || !$id) {
-            throw new Exception('Must define $id attribute');
+            throw new DatabaseException('Must define $id attribute');
         }
 
         $time = DateTime::now();
@@ -2859,8 +2901,10 @@ class Database
      *
      * @return Document
      * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DuplicateException
      * @throws StructureException
-     * @throws Throwable
      */
     private function updateDocumentRelationships(Document $collection, Document $old, Document $document): Document
     {
@@ -2986,7 +3030,7 @@ class Database
                                 }
                                 break;
                             default:
-                                throw new Exception('Invalid type for relationship. Must be either a document, document ID or null.');
+                                throw new DatabaseException('Invalid type for relationship. Must be either a document, document ID or null.');
                         }
                         break;
                     case Database::RELATION_ONE_TO_MANY:
@@ -3000,7 +3044,7 @@ class Database
                             }
 
                             if (!\is_array($value)) {
-                                throw new Exception('Invalid value for relationship');
+                                throw new DatabaseException('Invalid value for relationship');
                             }
 
                             $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
@@ -3011,7 +3055,7 @@ class Database
                                 } elseif ($item instanceof Document) {
                                     return $item->getId();
                                 } else {
-                                    throw new Exception('Invalid value for relationship');
+                                    throw new DatabaseException('Invalid value for relationship');
                                 }
                             }, $value);
 
@@ -3061,7 +3105,7 @@ class Database
                                         );
                                     }
                                 } else {
-                                    throw new Exception('Invalid value for relationship');
+                                    throw new DatabaseException('Invalid value for relationship');
                                 }
                             }
 
@@ -3095,7 +3139,7 @@ class Database
                         } elseif (\is_null($value)) {
                             break;
                         } else {
-                            throw new Exception('Invalid value for relationship');
+                            throw new DatabaseException('Invalid value for relationship');
                         }
 
                         break;
@@ -3104,7 +3148,7 @@ class Database
                             break;
                         }
                         if (!\is_array($value)) {
-                            throw new Exception('Invalid value for relationship');
+                            throw new DatabaseException('Invalid value for relationship');
                         }
 
                         $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
@@ -3115,7 +3159,7 @@ class Database
                             } elseif ($item instanceof Document) {
                                 return $item->getId();
                             } else {
-                                throw new Exception('Invalid value for relationship');
+                                throw new DatabaseException('Invalid value for relationship');
                             }
                         }, $value);
 
@@ -3165,7 +3209,7 @@ class Database
 
                                 $relation = $related->getId();
                             } else {
-                                throw new Exception('Invalid value for relationship');
+                                throw new DatabaseException('Invalid value for relationship');
                             }
 
                             $this->skipRelationships(fn () => $this->createDocument(
@@ -3211,13 +3255,12 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
-     * @throws Exception
-     * @throws Throwable
+     * @throws DatabaseException
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
         if ($value <= 0) { // Can be a float
-            throw new Exception('Value must be numeric and greater than 0');
+            throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -3241,7 +3284,7 @@ class Database
         });
 
         if (empty($attr)) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
@@ -3251,11 +3294,11 @@ class Database
          */
         $attr = end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new Exception('Attribute type must be one of: ' . implode(',', $whiteList));
+            throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
         if ($max && ($document->getAttribute($attribute) + $value > $max)) {
-            throw new Exception('Attribute value exceeds maximum limit: ' . $max);
+            throw new DatabaseException('Attribute value exceeds maximum limit: ' . $max);
         }
 
         $max = $max ? $max - $value : null;
@@ -3279,12 +3322,12 @@ class Database
      * @return bool
      *
      * @throws AuthorizationException
-     * @throws Exception|Throwable
+     * @throws DatabaseException
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
     {
         if ($value <= 0) { // Can be a float
-            throw new Exception('Value must be numeric and greater than 0');
+            throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -3308,7 +3351,7 @@ class Database
         });
 
         if (empty($attr)) {
-            throw new Exception('Attribute not found');
+            throw new DatabaseException('Attribute not found');
         }
 
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
@@ -3318,11 +3361,11 @@ class Database
          */
         $attr = end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new Exception('Attribute type must be one of: ' . implode(',', $whiteList));
+            throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
         if ($min && ($document->getAttribute($attribute) - $value < $min)) {
-            throw new Exception('Attribute value Exceeds minimum limit ' . $min);
+            throw new DatabaseException('Attribute value Exceeds minimum limit ' . $min);
         }
 
         $min = $min ? $min + $value : null;
@@ -3343,8 +3386,9 @@ class Database
      *
      * @throws AuthorizationException
      * @throws ConflictException
-     * @throws Exception
-     * @throws Throwable
+     * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws StructureException
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -3364,7 +3408,12 @@ class Database
         }
 
         // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        try {
+            $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        } catch (Exception $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
+
         if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
             throw new ConflictException('Document was updated after the request timestamp');
         }
@@ -3384,8 +3433,14 @@ class Database
     }
 
     /**
-     * @throws Exception
-     * @throws Throwable
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws StructureException
      */
     private function deleteDocumentRelationships(Document $collection, Document $document): Document
     {
@@ -3469,8 +3524,18 @@ class Database
     }
 
     /**
-     * @throws Exception
-     * @throws Throwable
+     * @param Document $relatedCollection
+     * @param Document $document
+     * @param mixed $value
+     * @param string $relationType
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @param string $side
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws StructureException
      */
     private function deleteRestrict(
         Document $relatedCollection,
@@ -3530,16 +3595,24 @@ class Database
         }
     }
 
-    private function deleteSetNull(
-        Document $collection,
-        Document $relatedCollection,
-        Document $document,
-        mixed $value,
-        string $relationType,
-        bool $twoWay,
-        string $twoWayKey,
-        string $side
-    ): void {
+    /**
+     * @param Document $collection
+     * @param Document $relatedCollection
+     * @param Document $document
+     * @param mixed $value
+     * @param string $relationType
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @param string $side
+     * @return void
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws StructureException
+     */
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
+    {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if (!$twoWay && $side === Database::RELATION_SIDE_PARENT) {
@@ -3627,21 +3700,24 @@ class Database
     }
 
     /**
+     * @param Document $collection
+     * @param Document $relatedCollection
+     * @param Document $document
+     * @param string $key
+     * @param mixed $value
+     * @param string $relationType
+     * @param string $twoWayKey
+     * @param string $side
+     * @param Document $relationship
+     * @return void
      * @throws AuthorizationException
      * @throws ConflictException
-     * @throws Throwable
+     * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws StructureException
      */
-    private function deleteCascade(
-        Document $collection,
-        Document $relatedCollection,
-        Document $document,
-        string $key,
-        mixed $value,
-        string $relationType,
-        string $twoWayKey,
-        string $side,
-        Document $relationship
-    ): void {
+    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, string $relationType, string $twoWayKey, string $side, Document $relationship): void
+    {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($value !== null) {
@@ -3728,7 +3804,7 @@ class Database
      * @param string $collection
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function deleteCachedCollection(string $collection): bool
     {
@@ -3742,6 +3818,7 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws DatabaseException
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
@@ -3756,13 +3833,12 @@ class Database
      * @param int|null $timeout
      *
      * @return array<Document>
-     * @throws Exception
-     * @throws Throwable
+     * @throws DatabaseException
      */
     public function find(string $collection, array $queries = [], ?int $timeout = null): array
     {
         if (!\is_null($timeout) && $timeout <= 0) {
-            throw new Exception('Timeout must be greater than 0');
+            throw new DatabaseException('Timeout must be greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -3786,7 +3862,7 @@ class Database
         $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new Exception("cursor Document must be from the same Collection.");
+            throw new DatabaseException("cursor Document must be from the same Collection.");
         }
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
@@ -3879,7 +3955,6 @@ class Database
         return $results;
     }
 
-
     /**
      * @param array<Document> $results
      * @param array<Query> $queries
@@ -3936,19 +4011,19 @@ class Database
                                 }
                             }
                             break;
-                        case Query::TYPE_NOTEQUAL:
+                        case Query::TYPE_NOT_EQUAL:
                             $matched = $value !== $query->getValue();
                             break;
                         case Query::TYPE_GREATER:
                             $matched = $value > $query->getValue();
                             break;
-                        case Query::TYPE_GREATEREQUAL:
+                        case Query::TYPE_GREATER_EQUAL:
                             $matched = $value >= $query->getValue();
                             break;
                         case Query::TYPE_LESSER:
                             $matched = $value < $query->getValue();
                             break;
-                        case Query::TYPE_LESSEREQUAL:
+                        case Query::TYPE_LESSER_EQUAL:
                             $matched = $value <= $query->getValue();
                             break;
                         case Query::TYPE_CONTAINS:
@@ -3990,7 +4065,7 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @return bool|Document
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
@@ -4005,21 +4080,21 @@ class Database
     /**
      * Count Documents
      *
-     * Count the number of documents. Pass $max=0 for unlimited count
+     * Count the number of documents.
      *
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+            throw new DatabaseException("Collection not found");
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4049,14 +4124,14 @@ class Database
      * @param int|null $max
      *
      * @return int|float
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new Exception("Collection not found");
+            throw new DatabaseException("Collection not found");
         }
 
         $queries = self::convertQueries($collection, $queries);
@@ -4086,7 +4161,7 @@ class Database
 
     /**
      * @return array<Document>
-     * @throws Exception
+     * @throws DatabaseException
      */
     public static function getInternalAttributes(): array
     {
@@ -4104,7 +4179,7 @@ class Database
      * @param Document $document
      *
      * @return Document
-     * @throws Exception|Throwable
+     * @throws DatabaseException
      */
     public function encode(Document $collection, Document $document): Document
     {
@@ -4154,9 +4229,9 @@ class Database
      *
      * @param Document $collection
      * @param Document $document
-     * @param string[] $selections
+     * @param array<string> $selections
      * @return Document
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
@@ -4285,12 +4360,12 @@ class Database
      * @param Document $document
      *
      * @return mixed
-     * @throws Throwable
+     * @throws DatabaseException
      */
     protected function encodeAttribute(string $name, $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception("Filter: {$name} not found");
+            throw new DatabaseException("Filter: {$name} not found");
         }
 
         try {
@@ -4300,7 +4375,7 @@ class Database
                 $value = self::$filters[$name]['encode']($value, $document, $this);
             }
         } catch (\Throwable $th) {
-            throw $th;
+            throw new DatabaseException($th->getMessage(), $th->getCode(), $th);
         }
 
         return $value;
@@ -4317,12 +4392,12 @@ class Database
      * @param Document $document
      *
      * @return mixed
-     * @throws Exception
+     * @throws DatabaseException
      */
     protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new Exception('Filter not found');
+            throw new DatabaseException('Filter not found');
         }
 
         if (array_key_exists($name, $this->instanceFilters)) {
@@ -4340,7 +4415,7 @@ class Database
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<string>
-     * @throws Exception
+     * @throws DatabaseException
      */
     private function validateSelections(Document $collection, array $queries): array
     {
@@ -4372,7 +4447,7 @@ class Database
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new \Exception('Can not select attributes: ' . \implode(', ', $invalid));
+            throw new DatabaseException('Cannot select attributes: ' . \implode(', ', $invalid));
         }
 
         $selections = \array_merge($selections, $relationshipSelections);
@@ -4393,7 +4468,7 @@ class Database
      *
      * @return int
      */
-    public function getLimitForAttributes()
+    public function getLimitForAttributes(): int
     {
         // If negative, return 0
         // -1 ==> virtual columns count as total, so treat as buffer
@@ -4405,7 +4480,7 @@ class Database
      *
      * @return int
      */
-    public function getLimitForIndexes()
+    public function getLimitForIndexes(): int
     {
         return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
     }
@@ -4434,27 +4509,24 @@ class Database
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
-     * @throws Exception
+     * @throws DatabaseException
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        foreach ($attributes as $v) {
-            /* @var $v Document */
-            switch ($v->getAttribute('type')) {
-                case Database::VAR_DATETIME:
-                    foreach ($queries as $qk => $q) {
-                        if ($q->getAttribute() === $v->getId()) {
-                            $arr = $q->getValues();
-                            foreach ($arr as $vk => $vv) {
-                                $arr[$vk] = DateTime::setTimezone($vv);
-                            }
-                            $q->setValues($arr);
-                            $queries[$qk] = $q;
+        foreach ($attributes as $attribute) {
+            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+                foreach ($queries as $index => $query) {
+                    if ($query->getAttribute() === $attribute->getId()) {
+                        $values = $query->getValues();
+                        foreach ($values as $valueIndex => $value) {
+                            $values[$valueIndex] = DateTime::setTimezone($value);
                         }
+                        $query->setValues($values);
+                        $queries[$index] = $query;
                     }
-                    break;
+                }
             }
         }
         return $queries;
@@ -4464,7 +4536,7 @@ class Database
      * @param Document $collection
      * @param string $id
      * @return void
-     * @throws Exception
+     * @throws DatabaseException
      */
     private function purgeRelatedDocuments(Document $collection, string $id): void
     {

@@ -3910,7 +3910,7 @@ abstract class Base extends TestCase
             static::getDatabase()->deleteAttribute('person', 'library');
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
-            $this->assertEquals('Cannot delete relationship as an attribute, use deleteRelationship instead', $e->getMessage());
+            $this->assertEquals('Cannot delete relationship as an attribute', $e->getMessage());
         }
 
         // Create document with relationship with nested data

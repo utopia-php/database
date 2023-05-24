@@ -2,17 +2,17 @@
 
 namespace Utopia\Database;
 
-use Exception;
+use Utopia\Database\Exception as DatabaseException;
 
 class Query
 {
     // Filter methods
     public const TYPE_EQUAL = 'equal';
-    public const TYPE_NOTEQUAL = 'notEqual';
+    public const TYPE_NOT_EQUAL = 'notEqual';
     public const TYPE_LESSER = 'lessThan';
-    public const TYPE_LESSEREQUAL = 'lessThanEqual';
+    public const TYPE_LESSER_EQUAL = 'lessThanEqual';
     public const TYPE_GREATER = 'greaterThan';
-    public const TYPE_GREATEREQUAL = 'greaterThanEqual';
+    public const TYPE_GREATER_EQUAL = 'greaterThanEqual';
     public const TYPE_CONTAINS = 'contains';
     public const TYPE_SEARCH = 'search';
     public const TYPE_IS_NULL = 'isNull';
@@ -160,11 +160,11 @@ class Query
     {
         return match (static::getMethodFromAlias($value)) {
             self::TYPE_EQUAL,
-            self::TYPE_NOTEQUAL,
+            self::TYPE_NOT_EQUAL,
             self::TYPE_LESSER,
-            self::TYPE_LESSEREQUAL,
+            self::TYPE_LESSER_EQUAL,
             self::TYPE_GREATER,
-            self::TYPE_GREATEREQUAL,
+            self::TYPE_GREATER_EQUAL,
             self::TYPE_CONTAINS,
             self::TYPE_SEARCH,
             self::TYPE_ORDERASC,
@@ -200,7 +200,7 @@ class Query
         $paramsStart = mb_strpos($filter, static::CHAR_PARENTHESES_START);
 
         if ($paramsStart === false) {
-            throw new Exception("Invalid query");
+            throw new DatabaseException("Invalid query");
         }
 
         $method = mb_substr($filter, 0, $paramsStart);
@@ -211,7 +211,7 @@ class Query
 
         // Check for deprecated query syntax
         if (\str_contains($method, '.')) {
-            throw new Exception("Invalid query method");
+            throw new DatabaseException("Invalid query method");
         }
 
         $currentParam = ""; // We build param here before pushing when it's ended
@@ -329,11 +329,11 @@ class Query
         $method = static::getMethodFromAlias($method);
         switch ($method) {
             case self::TYPE_EQUAL:
-            case self::TYPE_NOTEQUAL:
+            case self::TYPE_NOT_EQUAL:
             case self::TYPE_LESSER:
-            case self::TYPE_LESSEREQUAL:
+            case self::TYPE_LESSER_EQUAL:
             case self::TYPE_GREATER:
-            case self::TYPE_GREATEREQUAL:
+            case self::TYPE_GREATER_EQUAL:
             case self::TYPE_CONTAINS:
             case self::TYPE_SEARCH:
             case self::TYPE_IS_NULL:
@@ -497,7 +497,7 @@ class Query
      */
     public static function notEqual(string $attribute, mixed $value): self
     {
-        return new self(self::TYPE_NOTEQUAL, $attribute, [$value]);
+        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value]);
     }
 
     /**
@@ -521,7 +521,7 @@ class Query
      */
     public static function lessThanEqual(string $attribute, mixed $value): self
     {
-        return new self(self::TYPE_LESSEREQUAL, $attribute, [$value]);
+        return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value]);
     }
 
     /**
@@ -545,7 +545,7 @@ class Query
      */
     public static function greaterThanEqual(string $attribute, mixed$value): self
     {
-        return new self(self::TYPE_GREATEREQUAL, $attribute, [$value]);
+        return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value]);
     }
 
     /**
@@ -823,7 +823,7 @@ class Query
             try {
                 $parsed[] = Query::parse($query);
             } catch (\Throwable $th) {
-                throw new Exception("Invalid query: ${query}", previous: $th);
+                throw new DatabaseException("Invalid query: ${query}", previous: $th);
             }
         }
 

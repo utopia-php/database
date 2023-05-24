@@ -1974,6 +1974,7 @@ class Database
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
+     * @throws Exception
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -1983,8 +1984,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = new IndexValidator($collection);
-        if (!$validator->isValid(['type' => $type, 'attributes' => $attributes])) {
+        $validator = new IndexValidator($this->adapter->maxIndexLength);
+        if (!$validator->isValid($collection)) {
             throw new DatabaseException($validator->getDescription());
         }
 
@@ -2036,7 +2037,7 @@ class Database
 
         $validator = new IndexValidator($this->adapter->maxIndexLength);
         if (!$validator->isValid($collection)) {
-            throw new Exception($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);

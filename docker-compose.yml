@@ -47,6 +47,17 @@ services:
     environment:
       - MYSQL_ROOT_PASSWORD=password
   
+  ferretdb:
+    image: ghcr.io/ferretdb/ferretdb
+    container_name: utopia-ferretdb
+    restart: on-failure
+    networks:
+      - database
+    ports:
+      - "8799:27017"
+    environment:
+      - FERRETDB_POSTGRESQL_URL=postgres://root:password@postgres:5432/admin
+
   mongo:
     image: mongo:5.0
     container_name: utopia-mongo

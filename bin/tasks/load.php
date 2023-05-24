@@ -21,6 +21,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Ferret;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 
@@ -177,6 +178,46 @@ $cli
                     );
 
                     $database = new Database(new Mongo($client), $cache);
+                    $database->setDefaultDatabase($name);
+                    $database->setNamespace($namespace);
+
+                    // Outline collection schema
+                    createSchema($database);
+
+                    // Fill DB
+                    $faker = Factory::create();
+
+                    $start = microtime(true);
+
+                    for ($i=0; $i < $limit/1000; $i++) {
+                        go(function () use ($client, $faker, $name, $namespace, $cache) {
+                            $database = new Database(new Mongo($client), $cache);
+                            $database->setDefaultDatabase($name);
+                            $database->setNamespace($namespace);
+
+                            // Each coroutine loads 1000 documents
+                            for ($i=0; $i < 1000; $i++) {
+                                addArticle($database, $faker);
+                            }
+
+                            $database = null;
+                        });
+                    }
+                });
+                break;
+
+            case 'ferretdb':
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
+                    $client = new Client(
+                        $name,
+                        'mongo',
+                        27017,
+                        '',
+                        '',
+                        false
+                    );
+
+                    $database = new Database(new Ferret($client), $cache);
                     $database->setDefaultDatabase($name);
                     $database->setNamespace($namespace);
 

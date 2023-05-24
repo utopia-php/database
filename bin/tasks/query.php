@@ -15,6 +15,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Query;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Ferret;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
@@ -45,6 +46,21 @@ $cli
                 );
 
                 $database = new Database(new Mongo($client), $cache);
+                $database->setDefaultDatabase($name);
+                $database->setNamespace($namespace);
+                break;
+
+            case 'ferretdb':
+                $client = new Client(
+                    $name,
+                    'ferret',
+                    27017,
+                    '',
+                    '',
+                    false
+                );
+
+                $database = new Database(new Ferret($client), $cache);
                 $database->setDefaultDatabase($name);
                 $database->setNamespace($namespace);
                 break;

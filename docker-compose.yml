@@ -56,7 +56,7 @@ services:
     ports:
       - "8799:27017"
     environment:
-      - FERRETDB_POSTGRESQL_URL=postgres://root:password@postgres:5432/admin
+      - FERRETDB_POSTGRESQL_URL=postgres://root:password@postgres:5432/postgres
 
   mongo:
     image: mongo:5.0

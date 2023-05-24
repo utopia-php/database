@@ -6,10 +6,10 @@ use Exception;
 use Redis;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
-use Utopia\Database\Database;
-use Utopia\Tests\Base;
 use Utopia\Database\Adapter\Ferret;
+use Utopia\Database\Database;
 use Utopia\Mongo\Client;
+use Utopia\Tests\Base;
 
 class FerretDBTest extends Base
 {
@@ -41,24 +41,22 @@ class FerretDBTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $schema = "utopiaTests";
-
+        $schema = 'utopiaTests'; // same as $this->testDatabase
         $client = new Client(
-          $schema,
-          'ferretdb',
-          27017,
-          '',
-          ''
+            $schema,
+            'ferretdb',
+            27017,
+            '',
+            '',
+            false
         );
 
-        $adapter = new Ferret($client);
-        
-        $database = new Database($adapter, $cache);
+        $database = new Database(new Ferret($client), $cache);
         $database->setDefaultDatabase($schema);
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setNamespace('myapp_' . uniqid());
 
-        if ($database->exists($schema)) {
-            $database->delete($schema);
+        if ($database->exists('utopiaTests')) {
+            $database->delete('utopiaTests');
         }
 
         $database->create();

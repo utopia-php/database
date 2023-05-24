@@ -14,6 +14,7 @@ use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Ferret;
 use Utopia\Validator\Text;
 
 /**
@@ -42,6 +43,19 @@ $cli
                 );
 
                 $database = new Database(new Mongo($client), $cache);
+                break;
+
+            case 'ferretdb':
+                $client = new Client(
+                    $name,
+                    'ferretdb',
+                    27017,
+                    '',
+                    '',
+                    false
+                );
+
+                $database = new Database(new Ferret($client), $cache);
                 break;
 
             case 'mariadb':

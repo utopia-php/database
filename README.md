@@ -225,8 +225,6 @@ $database->deleteCollection($collectionName);
 
 $database->getSizeOfCollection($collectionName);
 // returns the size of the collection in bytes where database is $this->getDefaultDatabase()
-
-
 ```
 
 **Attribute Methods:**
@@ -235,12 +233,14 @@ $database->getSizeOfCollection($collectionName);
 $collectionName = 'movies'; //required
 $attributeId = 'name';      //required
 $attributeType =            //required
-[Database::VAR_STRING,      // use Utopia\Database\Database for these constants
- Database::VAR_INTEGER,
- Database::VAR_FLOAT,
- Database::VAR_BOOLEAN,
- Database::VAR_DATETIME,
- Database::VAR_RELATIONSHIP];
+[
+    Database::VAR_STRING,      // use Utopia\Database\Database for these constants
+    Database::VAR_INTEGER,
+    Database::VAR_FLOAT,
+    Database::VAR_BOOLEAN,
+    Database::VAR_DATETIME,
+    Database::VAR_RELATIONSHIP
+];
 $attributeSize = 128;       //required
 $attributeRequired = true;  //required
 
@@ -265,8 +265,6 @@ $currentAttributeId = 'genres';
 $newAttributeId = 'genres2';
 
 $database->renameAttribute($collectionName, $currentAttributeId, $newAttributeId);
-
-
 ```
 
 **Index Methods:**
@@ -275,11 +273,13 @@ $database->renameAttribute($collectionName, $currentAttributeId, $newAttributeId
 $collectionName = 'movies';             //required
 $indexId = 'index1';                    //required
 $indexType =                            //required
-[Database::INDEX_KEY,                   // use Utopia\Database\Database for these constants
- Database::INDEX_FULLTEXT,
- Database::INDEX_UNIQUE,
- Database::INDEX_SPATIAL,
- Database::INDEX_ARRAY];
+[
+    Database::INDEX_KEY,                   // use Utopia\Database\Database for these constants
+    Database::INDEX_FULLTEXT,
+    Database::INDEX_UNIQUE,
+    Database::INDEX_SPATIAL,
+    Database::INDEX_ARRAY
+];
 $attributesToIndex = ['name', 'genres'];//required
 $indexSizes = [128,128];                //required
 $insertionOrder = [Database::ORDER_ASC,
@@ -295,10 +295,42 @@ $database->renameIndex($collectionName, $currentIndexId, $newIndexId);
 $database->deleteIndex($collectionName, $indexId);
 ``` 
 
-**Create a document:**
+**Relationship Methods:**
 
 ```php
-static::getDatabase()->createDocument('movies', new Document([
+$collectionName = "movies1";              //required
+$relatedCollectionName = "movies2";       //required
+$typeOfRelation =                         //required
+[ 
+    Database::RELATION_ONE_TO_ONE,
+    Database::RELATION_ONE_TO_MANY,
+    Database::RELATION_MANY_TO_ONE,
+    Database::RELATION_MANY_TO_MANY
+];
+$isTwoWay = false;                         //required
+
+$database->createRelationship($collectionName, $relatedCollectionName, $typeOfRelation[3], $isTwoWay);
+
+$newColumnName = "director";              //required if two way
+$newRelatedColumnName = "director_names"; //required if two way
+$isTwoWay = true;                         //required if two way
+
+$database->createRelationship($collectionName, $relatedCollectionName, $typeOfRelation[3], $isTwoWay, $newColumnName, $newRelatedColumnName); //creates a relationship between the two collections with the $newColumnName and $newRelatedColumnName as the reference columns
+
+
+$database->updateRelationship($collectionName, $relatedCollectionName, $newColumnName, $newRelatedColumnName, $isTwoWay); 
+
+$relatedAttributeName = "director";       //required 
+
+$database->deleteRelationship($collectionName,  $relatedAttributeName);
+```
+
+**Document Methods:**
+
+```php
+use Utopia\Database\Document;
+
+$database->createDocument('movies', new Document([
     '$permissions' => [
         Permission::read(Role::any()),
         Permission::read(Role::user(ID::custom('1'))),
@@ -320,25 +352,49 @@ static::getDatabase()->createDocument('movies', new Document([
     'active' => true,
     'genres' => ['science fiction', 'action', 'comics'],
 ]));
-```
 
-**Get Document**:
-
-```php
 // Get document with all attributes
-$document = static::getDatabase()->getDocument('movies', '1');
+$document = $database->getDocument($collectionName, $documentId);
 
 // Get document with a sub-set of attributes
-$document = static::getDatabase()->getDocument('movies', '1', [
-    Query::select(['name', 'director', 'year']),
+$attributes = ['name', 'director', 'year'];
+$document = $database->getDocument($collectionName, $documentId, [
+    Query::select($attributes),
 ]);
 ```
 
 **Find:**
 
 ```php
+$attribute = 'year';
+$multipleAttributes = ['year', 'name'];
+$multipleValues = [2019, 2020];
+$value = 2021;
+$possibleQueries = 
+[
+   Query::equal($attribute, $multipleValues),
+   Query::notEqual($attribute, $value),
+   Query::lessThan($attribute, $value),
+   Query::lessThanEqual($attribute, $value),
+   Query::greaterThan($attribute, $value),
+   Query::greaterThanEqual($attribute, $value),  
+   Query::contains($attribute, $multipleValues),
+   Query::between($attribute, $startValue, $endValue),
+   Query::search($attribute, $value),
+   Query::select($multipleAttributes),
+   Query::orderDesc($attribute),
+   Query::orderAsc($attribute),
+   Query::isNull($attribute),
+   Query::isNotNull($attribute),
+   Query::startsWith($attribute, $value),
+   Query::endsWith($attribute, $value),
+   Query::limit($value),
+   Query::offset($value),
+];
+
 $documents = static::getDatabase()->find('movies', [
-    Query::equal('year', [2019]),
+    $possibleQueries[0],
+    $possibleQueries[1],
 ]);
 ```
 

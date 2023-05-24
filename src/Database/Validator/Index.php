@@ -2,8 +2,8 @@
 
 namespace Utopia\Database\Validator;
 
-use Exception;
 use Utopia\Database\Database;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Validator;
 use Utopia\Database\Document;
 
@@ -37,7 +37,6 @@ class Index extends Validator
     /**
      * @param Document $collection
      * @return bool
-     * @throws Exception
      */
     public function checkEmptyIndexAttributes(Document $collection): bool
     {
@@ -54,7 +53,7 @@ class Index extends Validator
     /**
      * @param Document $collection
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function checkFulltextIndexNonString(Document $collection): bool
     {
@@ -130,7 +129,7 @@ class Index extends Validator
      * Returns true index if valid.
      * @param Document $value
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function isValid($value): bool
     {
@@ -156,6 +155,7 @@ class Index extends Validator
 
         return true;
     }
+
     /**
      * Is array
      *

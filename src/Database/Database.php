@@ -620,8 +620,7 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws DuplicateException
-     * @throws Exception|Throwable
+     * @throws DatabaseException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
@@ -651,7 +650,7 @@ class Database
 
         $validator = new IndexValidator($this->adapter->maxIndexLength);
         if (!$validator->isValid($collection)) {
-            throw new Exception($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);

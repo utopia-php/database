@@ -199,7 +199,7 @@ $database = new Database(new Mongo($client), $cache);
 
 <br>
 
-**Creating Schema/Database:**
+**Database Methods:**
 
 ```php
 $nameOfTheDatabaseOrSchema = 'mydb';
@@ -209,6 +209,13 @@ $database->create($nameOfTheDatabaseOrSchema);
 
 //delete database
 $database->delete($nameOfTheDatabaseOrSchema);
+
+//ping database it returns true if the database is alive
+$database->ping();
+
+//check if database and collection exist it returns true if the database or collection exists
+$database->exists($nameOfTheDatabaseOrSchema); // for database
+$database->exists($nameOfTheDatabaseOrSchema, $collectionName); // for collection
 ```
 
 **Collection Methods:**
@@ -281,7 +288,7 @@ $indexType =                            //required
     Database::INDEX_ARRAY
 ];
 $attributesToIndex = ['name', 'genres'];//required
-$indexSizes = [128,128];                //required
+$indexSize = [128];                //required
 $insertionOrder = [Database::ORDER_ASC,
 Database::ORDER_DESC];                  //required
 
@@ -328,22 +335,39 @@ $database->deleteRelationship($collectionName,  $relatedAttributeName);
 **Document Methods:**
 
 ```php
-use Utopia\Database\Document;
+use Utopia\Database\Document;            // remember to use these classes
+use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
-$database->createDocument('movies', new Document([
+    // Id helpers
+    ID::unique($lengthOfId), // if parameter is not passed it defaults to 7
+    ID::custom($customId)    // a parameter must be passed 
+
+    // Role helpers
+    Role::any(),
+    Role::user($customId)    // creates a role with $customId as the identifier
+
+    // Permission helpers
+    Permission::read($roleType),
+    Permission::create($roleType),
+    Permission::update($roleType),
+    Permission::delete($roleType)
+
+$document = $database->createDocument('movies', new Document([
     '$permissions' => [
         Permission::read(Role::any()),
         Permission::read(Role::user(ID::custom('1'))),
-        Permission::read(Role::user(ID::custom('2'))),
+        Permission::read(Role::user(ID::unique(12))),
         Permission::create(Role::any()),
         Permission::create(Role::user(ID::custom('1x'))),
-        Permission::create(Role::user(ID::custom('2x'))),
+        Permission::create(Role::user(ID::unique(12))),
         Permission::update(Role::any()),
         Permission::update(Role::user(ID::custom('1x'))),
-        Permission::update(Role::user(ID::custom('2x'))),
+        Permission::update(Role::user(ID::unique(12))),
         Permission::delete(Role::any()),
         Permission::delete(Role::user(ID::custom('1x'))),
-        Permission::delete(Role::user(ID::custom('2x'))),
+        Permission::delete(Role::user(ID::unique(12))),
     ],
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',
@@ -353,19 +377,63 @@ $database->createDocument('movies', new Document([
     'genres' => ['science fiction', 'action', 'comics'],
 ]));
 
+// To get which collection a document belongs to
+$document->getCollection();
+
+// To get document id
+$document = $database->createDocument('movies', new Document([
+    '$permissions' => [...],
+    'name' => 'Captain Marvel',
+     ....   =>  ....
+]));
+$documentId = $document->getId();
+
+// To check whether document in empty
+$document->isEmpty();
+
+// increase an attribute in a document 
+$database->increaseDocumentAttribute($collection, $documentId,$attributeName, $value, $maxValue));
+
+// decrease an attribute in a document
+$database->decreaseDocumentAttribute($collection, $documentId,$attributeName, $value, $minValue));
+
+// Update the value of an attribute in a document
+$setTypes =
+[
+     Document::SET_TYPE_ASSIGN,
+     Document::SET_TYPE_APPEND,
+     Document::SET_TYPE_PREPEND
+];
+$document->setAttribute($attributeName, $value)
+         ->setAttribute($attributeName, $value, $setTypes[0]);
+
+$database->updateDocument($collectionName, $documentId, $document);         
+
+// Update the permissions of a document
+$document->setAttribute('$permissions', Permission::read(Role::any()), Document::SET_TYPE_APPEND)
+         ->setAttribute('$permissions', Permission::create(Role::any()), Document::SET_TYPE_APPEND)
+         ->setAttribute('$permissions', Permission::update(Role::any()), Document::SET_TYPE_APPEND)
+         ->setAttribute('$permissions', Permission::delete(Role::any()), Document::SET_TYPE_APPEND)
+
+$database->updateDocument($collectionName, $documentId, $document);
+
+// Info regarding who has permission to read, create, update and delete a document
+$document->getRead(); // returns an array of roles that have permission to read the document
+$document->getCreate(); // returns an array of roles that have permission to create the document
+$document->getUpdate(); // returns an array of roles that have permission to update the document
+$document->getDelete(); // returns an array of roles that have permission to delete the document
+
 // Get document with all attributes
-$document = $database->getDocument($collectionName, $documentId);
+$database->getDocument($collectionName, $documentId); 
 
 // Get document with a sub-set of attributes
 $attributes = ['name', 'director', 'year'];
-$document = $database->getDocument($collectionName, $documentId, [
+$database->getDocument($collectionName, $documentId, [
     Query::select($attributes),
 ]);
-```
 
-**Find:**
+// Find a document with a query
 
-```php
 $attribute = 'year';
 $multipleAttributes = ['year', 'name'];
 $multipleValues = [2019, 2020];
@@ -392,10 +460,13 @@ $possibleQueries =
    Query::offset($value),
 ];
 
-$documents = static::getDatabase()->find('movies', [
+$database->find('movies', [
     $possibleQueries[0],
     $possibleQueries[1],
 ]);
+
+// Delete a document
+$database->deleteDocument($collectionName, $documentId);
 ```
 
 ### Adapters

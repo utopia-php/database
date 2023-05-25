@@ -113,12 +113,73 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
         $this->assertCount(2, static::getDatabase()->listCollections());
 
-        $this->assertIsInt(static::getDatabase()->getSizeOfCollection("actors"));
-
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
+    }
+  
+    public function testSizeCollection(): void
+    {
+
+            static::getDatabase()->createCollection('size_testing');
+
+            $valueBeforeAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
+            static::getDatabase()->createAttribute('size_testing', 'string1', Database::VAR_STRING, 128, true);
+            static::getDatabase()->createAttribute('size_testing', 'string2', Database::VAR_STRING, 2147483646 + 1, true);
+            static::getDatabase()->createAttribute('size_testing', 'string3', Database::VAR_STRING, 2147483646 + 1, true);
+            static::getDatabase()->createAttribute('size_testing', 'string4', Database::VAR_STRING, 2147483646 + 1, true);
+            static::getDatabase()->createAttribute('size_testing', 'integer', Database::VAR_INTEGER, 0, true);
+            static::getDatabase()->createAttribute('size_testing', 'bigint', Database::VAR_INTEGER, 8, true);
+            static::getDatabase()->createAttribute('size_testing', 'float', Database::VAR_FLOAT, 0, true);
+            static::getDatabase()->createAttribute('size_testing', 'boolean', Database::VAR_BOOLEAN, 0, true);
+            static::getDatabase()->createAttribute('size_testing', 'string1new', Database::VAR_STRING, 128, false);
+            static::getDatabase()->createAttribute('size_testing', 'string2new', Database::VAR_STRING, 2147483646 + 1, false);
+            static::getDatabase()->createAttribute('size_testing', 'string3new', Database::VAR_STRING, 2147483646 + 1, false);
+            static::getDatabase()->createAttribute('size_testing', 'string4new', Database::VAR_STRING, 2147483646 + 1, false);
+            static::getDatabase()->createAttribute('size_testing', 'integernew', Database::VAR_INTEGER, 0, false);
+            static::getDatabase()->createAttribute('size_testing', 'bigintnew', Database::VAR_INTEGER, 8, false);
+            static::getDatabase()->createAttribute('size_testing', 'floatnew', Database::VAR_FLOAT, 0, false);
+            static::getDatabase()->createAttribute('size_testing', 'booleannew', Database::VAR_BOOLEAN, 0, false);
+            static::getDatabase()->createIndex('size_testing', 'string1_index', Database::INDEX_KEY, ['string1']);
+            static::getDatabase()->createIndex('size_testing', 'string2_index', Database::INDEX_KEY, ['string2'], [255]);
+            static::getDatabase()->createIndex('size_testing', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+        
+            for ($i = 0; $i < 100; $i++) {
+                static::getDatabase()->createDocument('size_testing', new Document([
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::read(Role::user(ID::custom('1'))),
+                        Permission::read(Role::user(ID::custom('2'))),
+                        Permission::create(Role::any()),
+                        Permission::create(Role::user(ID::custom('1x'))),
+                        Permission::create(Role::user(ID::custom('2x'))),
+                        Permission::update(Role::any()),
+                        Permission::update(Role::user(ID::custom('1x'))),
+                        Permission::update(Role::user(ID::custom('2x'))),
+                        Permission::delete(Role::any()),
+                        Permission::delete(Role::user(ID::custom('1x'))),
+                        Permission::delete(Role::user(ID::custom('2x'))),
+                    ],
+                    'string1' => 'text📝sdgsdgasdgsdsdgsdgsdgsdsdgsdsdg',
+                    'string2' => 'sdagfhsagkdhgkjsadsdgsdgsdgsdgsdgsdsdg',
+                    'string3' => 'sdghsdgjkdshgksdsdgdsgsdgsdgsdgdsgdsdg', // 2^33
+                    'string4' => "sgjkshdgdhsagdsjdsgdgsdgsdgsdgsdgdsgdd",
+                    'integer' => 35635353,
+                    'bigint' => 3535353,
+                    'float' => 353.3535,
+                    'boolean' => true,
+                ]));
+                  }    
+              $valueAfterAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
+     
+            if(static::getAdapterName() === 'mysql'){
+                $this->assertGreaterThan(65535,$valueAfterAddingData);
+            }
+            else{
+                $this->assertGreaterThan($valueBeforeAddingData,$valueAfterAddingData);
+            }
+
     }
 
     public function testCreateDeleteAttribute(): void

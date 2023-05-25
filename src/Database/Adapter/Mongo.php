@@ -262,15 +262,12 @@ class Mongo extends Adapter
      public function getSizeOfCollection(string $collection): int
     {
          $namespace = $this->getNamespace();
-         $parts = explode('.', $namespace);
-         $database = $parts[0];
-         $filteredCollectionName = $this->filter($collection);
          $command = [
-             'collStats' => $filteredCollectionName,
+             'collStats' => $namespace . '_' . $this->filter($collection),
              'scale' => 1 
          ];
         try{
-            $result = $this->getClient()->query($command, $database);
+            $result = $this->getClient()->query($command);
         }
         catch(Exception $e){
             throw new DatabaseException("Failed to get collection size" . $e->getMessage());

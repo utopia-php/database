@@ -168,9 +168,9 @@ class SQLite extends MariaDB
      public function getSizeOfCollection(string $collection): int
     {
     $name = $this->filter($collection);
-
+    $namespace = $this->getNamespace();
     $query = $this->getPDO()->prepare("
-    SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name='{$name}';
+    SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name='{$namespace}_{$name}';
     ");
 
     try {

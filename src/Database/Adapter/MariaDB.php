@@ -161,9 +161,10 @@ class MariaDB extends SQL
      */
      public function getSizeOfCollection(string $collection): int 
     {
-         $database = $this->getDefaultDatabase();
          $name = $this->filter($collection);
-     
+         $tableName = $this->getSQLTable($name);
+         $database = str_replace('`', '', explode('.', $tableName)[0]);
+         $collectionName = str_replace('`', '', explode('.', $tableName)[1]);
          $query = $this->getPDO()->prepare("
              SELECT 
               data_length + index_length 
@@ -175,7 +176,7 @@ class MariaDB extends SQL
                  table_name = :name
          ");
          $query->bindParam(':database', $database);
-         $query->bindParam(':name', $name);
+         $query->bindParam(':name', $collectionName);
          try {
             $query->execute();
             $size = $query->fetchColumn();

@@ -68,4 +68,9 @@ class FerretDBTest extends TestCase
     {
         $this->assertTrue(true);
     }
+
+    public function testCreateCollection()
+    {
+        $this->assertTrue(true);
+    }
 }

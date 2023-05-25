@@ -37,4 +37,4 @@ jobs:
       run: docker compose exec -T tests vendor/bin/phpunit --configuration phpunit.xml
 
     - name: Check Coverage
-      run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 90
+      run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 80

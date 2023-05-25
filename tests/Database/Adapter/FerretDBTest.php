@@ -4,13 +4,14 @@ namespace Utopia\Tests\Adapter;
 
 use Exception;
 use Redis;
+use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\Ferret;
 use Utopia\Database\Database;
 use Utopia\Mongo\Client;
 
-class FerretDBTest
+class FerretDBTest extends TestCase
 {
     public static ?Database $database = null;
 
@@ -61,5 +62,10 @@ class FerretDBTest
         $database->create();
 
         return self::$database = $database;
+    }
+
+    public function testTrue(): void
+    {
+        $this->assertTrue(true);
     }
 }

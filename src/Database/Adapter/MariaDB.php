@@ -188,8 +188,8 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         return $this->getPDO()
-        ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-        ->execute();
+            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+            ->execute();
     }
 
     /**
@@ -244,8 +244,8 @@ class MariaDB extends SQL
         }
 
         return $this->getPDO()
-        ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
-        ->execute();
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
+            ->execute();
     }
 
     /**
@@ -285,8 +285,8 @@ class MariaDB extends SQL
         $new = $this->filter($new);
 
         return $this->getPDO()
-        ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
-        ->execute();
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->execute();
     }
 
     /**

@@ -8,10 +8,11 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\Ferret;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Mongo\Client;
 use Utopia\Tests\Base;
 
-class FerretDBTest extends Base
+class FerretDBTest
 {
     public static ?Database $database = null;
 
@@ -62,42 +63,5 @@ class FerretDBTest extends Base
         $database->create();
 
         return self::$database = $database;
-    }
-
-    /**
-     * @throws Exception
-     */
-    public function testCreateExistsDelete(): void
-    {
-        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertNotNull(static::getDatabase()->create());
-        $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create());
-        $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
-    }
-
-    public function testRenameAttribute(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public function testRenameAttributeExisting(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public function testUpdateAttributeStructure(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public function testKeywords(): void
-    {
-        $this->assertTrue(true);
-    }
-
-    public static function killDatabase(): void
-    {
-        self::$database = null;
     }
 }

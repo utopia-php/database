@@ -3,12 +3,12 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Database;
-use Utopia\Database\Adapter\Mongo;
 
-class Ferret extends Mongo {
-      /**
+class Ferret extends Mongo
+{
+    /**
      * Create Collection
-     * 
+     *
      * @param string $name
      * @param Document[] $attributes (optional)
      * @param Document[] $indexes (optional)
@@ -95,6 +95,4 @@ class Ferret extends Mongo {
 
         return true;
     }
-
-
 }

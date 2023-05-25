@@ -8,9 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\Ferret;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
 use Utopia\Mongo\Client;
-use Utopia\Tests\Base;
 
 class FerretDBTest
 {

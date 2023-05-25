@@ -125,6 +125,7 @@ abstract class Base extends TestCase
             static::getDatabase()->createCollection('size_testing');
 
             $valueBeforeAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
+
             static::getDatabase()->createAttribute('size_testing', 'string1', Database::VAR_STRING, 128, true);
             static::getDatabase()->createAttribute('size_testing', 'string2', Database::VAR_STRING, 2147483646 + 1, true);
             static::getDatabase()->createAttribute('size_testing', 'string3', Database::VAR_STRING, 2147483646 + 1, true);
@@ -161,16 +162,17 @@ abstract class Base extends TestCase
                         Permission::delete(Role::user(ID::custom('1x'))),
                         Permission::delete(Role::user(ID::custom('2x'))),
                     ],
-                    'string1' => 'text📝sdgsdgasdgsdsdgsdgsdgsdsdgsdsdg',
-                    'string2' => 'sdagfhsagkdhgkjsadsdgsdgsdgsdgsdgsdsdg',
-                    'string3' => 'sdghsdgjkdshgksdsdgdsgsdgsdgsdgdsgdsdg', // 2^33
-                    'string4' => "sgjkshdgdhsagdsjdsgdgsdgsdgsdgsdgdsgdd",
+                    'string1' => 'string1',
+                    'string2' => 'string2',
+                    'string3' => 'string3', // 2^33
+                    'string4' => "string4",
                     'integer' => 35635353,
                     'bigint' => 3535353,
                     'float' => 353.3535,
                     'boolean' => true,
                 ]));
                   }    
+
               $valueAfterAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
      
             if(static::getAdapterName() === 'mysql'){
@@ -179,7 +181,6 @@ abstract class Base extends TestCase
             else{
                 $this->assertGreaterThan($valueBeforeAddingData,$valueAfterAddingData);
             }
-
     }
 
     public function testCreateDeleteAttribute(): void

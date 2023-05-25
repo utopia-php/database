@@ -286,12 +286,7 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($id);
 
-        try{
-            return (!!$this->getClient()->dropCollection($id));
-        }
-        catch(Exception $e){
-            throw new DatabaseException("Failed to delete collection" . $e->getMessage());
-        }
+        return (!!$this->getClient()->dropCollection($id));
     }
 
     /**
@@ -305,7 +300,6 @@ class Mongo extends Adapter
      * @param bool $array
      *
      * @return bool
-     * 
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {

@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 
 class Ferret extends Mongo
 {
@@ -48,8 +49,9 @@ class Ferret extends Mongo
         if (!empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
-             * @var array
+             * @var array<Document>
              */
+
             $newIndexes = [];
 
             // using $i and $j as counters to distinguish from $key
@@ -82,7 +84,8 @@ class Ferret extends Mongo
                             return false;
                     }
 
-                    $key[$attribute] = $order;
+                    if(isset($order))
+                      $key[$attribute] = $order;
                 }
 
                 $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];

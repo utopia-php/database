@@ -84,8 +84,9 @@ class Ferret extends Mongo
                             return false;
                     }
 
-                    if(isset($order))
-                      $key[$attribute] = $order;
+                    if (isset($order)) {
+                        $key[$attribute] = $order;
+                    }
                 }
 
                 $newIndexes[$i] = ['key' => $key, 'name' => $name, 'unique' => $unique];

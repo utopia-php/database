@@ -4733,6 +4733,103 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $country);
     }
 
+    public function testIdenticalTwoWayKeyRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('parent');
+        static::getDatabase()->createCollection('child');
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'child1'
+        );
+
+        try {
+            static::getDatabase()->createRelationship(
+                collection: 'parent',
+                relatedCollection: 'child',
+                type: Database::RELATION_ONE_TO_MANY,
+                id: 'children',
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+            twoWayKey: 'parent_id'
+        );
+
+        $collection = static::getDatabase()->getCollection('parent');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'child1') {
+                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+            }
+
+            if ($attribute['key'] === 'children') {
+                $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
+            }
+        }
+
+        static::getDatabase()->createDocument('parent', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'child1' => [
+                '$id' => 'foo',
+                '$permissions' => [Permission::read(Role::any())],
+            ],
+            'children' => [
+                [
+                    '$id' => 'bar',
+                    '$permissions' => [Permission::read(Role::any())],
+                ],
+            ],
+        ]));
+
+        $documents = static::getDatabase()->find('parent', []);
+        $document  = array_pop($documents);
+        $this->assertArrayHasKey('child1', $document);
+        $this->assertEquals('foo', $document->getAttribute('child1')->getId());
+        $this->assertArrayHasKey('children', $document);
+        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newKey: 'child1'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Attribute already exists', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newTwoWayKey: 'parent'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
+    }
+
     public function testOneToManyOneWayRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -10164,7 +10261,7 @@ abstract class Base extends TestCase
             static::getDatabase()->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
-            $this->assertEquals('Attribute already exists', $e->getMessage());
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
     }
 

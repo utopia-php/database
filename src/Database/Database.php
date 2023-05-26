@@ -762,18 +762,18 @@ class Database
      *
      * @return int
      */
-     public function getSizeOfCollection(string $collection): int 
-    {
+     public function getSizeOfCollection(string $collection): int
+     {
          return $this->adapter->getSizeOfCollection($collection);
-    }
+     }
 
     /**
-     * Delete Collection
-     *
-     * @param string $id
-     *
-     * @return bool
-     */
+      * Delete Collection
+      *
+      * @param string $id
+      *
+      * @return bool
+      */
     public function deleteCollection(string $id): bool
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));

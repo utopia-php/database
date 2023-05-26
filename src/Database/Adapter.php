@@ -398,14 +398,14 @@ abstract class Adapter
      */
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
-   /**
-     * Get Collection Size
-     * Returns
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     */  
-     abstract public function getSizeOfCollection(string $collection): int; 
+    /**
+      * Get Collection Size
+      * Returns
+      * @param string $collection
+      * @return int
+      * @throws DatabaseException
+      */
+    abstract public function getSizeOfCollection(string $collection): int;
 
     /**
      * Get max STRING limit

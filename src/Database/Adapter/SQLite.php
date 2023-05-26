@@ -163,32 +163,32 @@ class SQLite extends MariaDB
      * @param string $collection
      * @return int
      * @throws DatabaseException
-     * 
+     *
      */
      public function getSizeOfCollection(string $collection): int
-    {
-    $name = $this->filter($collection);
-    $namespace = $this->getNamespace();
-    $query = $this->getPDO()->prepare("
+     {
+         $name = $this->filter($collection);
+         $namespace = $this->getNamespace();
+         $query = $this->getPDO()->prepare("
     SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name='{$namespace}_{$name}';
     ");
 
-    try {
-        $query->execute();
-        $size = $query->fetchColumn();
-    } catch (PDOException $e) {
-        throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-    }
-    return $size;
-    }
+         try {
+             $query->execute();
+             $size = $query->fetchColumn();
+         } catch (PDOException $e) {
+             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+         }
+         return $size;
+     }
 
     /**
-     * Delete Collection
-     * @param string $id
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
+      * Delete Collection
+      * @param string $id
+      * @return bool
+      * @throws Exception
+      * @throws PDOException
+      */
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);

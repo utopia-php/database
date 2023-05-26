@@ -147,42 +147,37 @@ class MariaDB extends SQL
      * @param string $collection
      * @return int
      * @throws DatabaseException
-     * 
      */
-     public function getSizeOfCollection(string $collection): int 
-    {
+     public function getSizeOfCollection(string $collection): int
+     {
          $name = $this->filter($collection);
          $tableName = $this->getSQLTable($name);
          $database = str_replace('`', '', explode('.', $tableName)[0]);
          $collectionName = str_replace('`', '', explode('.', $tableName)[1]);
          $query = $this->getPDO()->prepare("
-             SELECT 
-              data_length + index_length 
-             FROM 
-                 information_schema.TABLES 
-             WHERE 
-                 table_schema = :database
-             AND 
-                 table_name = :name
+         SELECT data_length + index_length 
+         FROM information_schema.TABLES 
+         WHERE table_schema = :database
+         AND table_name = :name
          ");
          $query->bindParam(':database', $database);
          $query->bindParam(':name', $collectionName);
          try {
-            $query->execute();
-            $size = $query->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-        }
-         return $size;
-    }
+             $query->execute();
+             $size = $query->fetchColumn();
+         } catch (PDOException $e) {
+             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+         }
+          return $size;
+     }
 
     /**
-     * Delete Collection
-     * @param string $id
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
+      * Delete Collection
+      * @param string $id
+      * @return bool
+      * @throws Exception
+      * @throws PDOException
+      */
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);

@@ -118,70 +118,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
-  
-    public function testSizeCollection(): void
-    {
-
-            static::getDatabase()->createCollection('size_testing');
-
-            $valueBeforeAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
-
-            static::getDatabase()->createAttribute('size_testing', 'string1', Database::VAR_STRING, 128, true);
-            static::getDatabase()->createAttribute('size_testing', 'string2', Database::VAR_STRING, 2147483646 + 1, true);
-            static::getDatabase()->createAttribute('size_testing', 'string3', Database::VAR_STRING, 2147483646 + 1, true);
-            static::getDatabase()->createAttribute('size_testing', 'string4', Database::VAR_STRING, 2147483646 + 1, true);
-            static::getDatabase()->createAttribute('size_testing', 'integer', Database::VAR_INTEGER, 0, true);
-            static::getDatabase()->createAttribute('size_testing', 'bigint', Database::VAR_INTEGER, 8, true);
-            static::getDatabase()->createAttribute('size_testing', 'float', Database::VAR_FLOAT, 0, true);
-            static::getDatabase()->createAttribute('size_testing', 'boolean', Database::VAR_BOOLEAN, 0, true);
-            static::getDatabase()->createAttribute('size_testing', 'string1new', Database::VAR_STRING, 128, false);
-            static::getDatabase()->createAttribute('size_testing', 'string2new', Database::VAR_STRING, 2147483646 + 1, false);
-            static::getDatabase()->createAttribute('size_testing', 'string3new', Database::VAR_STRING, 2147483646 + 1, false);
-            static::getDatabase()->createAttribute('size_testing', 'string4new', Database::VAR_STRING, 2147483646 + 1, false);
-            static::getDatabase()->createAttribute('size_testing', 'integernew', Database::VAR_INTEGER, 0, false);
-            static::getDatabase()->createAttribute('size_testing', 'bigintnew', Database::VAR_INTEGER, 8, false);
-            static::getDatabase()->createAttribute('size_testing', 'floatnew', Database::VAR_FLOAT, 0, false);
-            static::getDatabase()->createAttribute('size_testing', 'booleannew', Database::VAR_BOOLEAN, 0, false);
-            static::getDatabase()->createIndex('size_testing', 'string1_index', Database::INDEX_KEY, ['string1']);
-            static::getDatabase()->createIndex('size_testing', 'string2_index', Database::INDEX_KEY, ['string2'], [255]);
-            static::getDatabase()->createIndex('size_testing', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
-        
-            for ($i = 0; $i < 100; $i++) {
-                static::getDatabase()->createDocument('size_testing', new Document([
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::read(Role::user(ID::custom('1'))),
-                        Permission::read(Role::user(ID::custom('2'))),
-                        Permission::create(Role::any()),
-                        Permission::create(Role::user(ID::custom('1x'))),
-                        Permission::create(Role::user(ID::custom('2x'))),
-                        Permission::update(Role::any()),
-                        Permission::update(Role::user(ID::custom('1x'))),
-                        Permission::update(Role::user(ID::custom('2x'))),
-                        Permission::delete(Role::any()),
-                        Permission::delete(Role::user(ID::custom('1x'))),
-                        Permission::delete(Role::user(ID::custom('2x'))),
-                    ],
-                    'string1' => 'string1',
-                    'string2' => 'string2',
-                    'string3' => 'string3', // 2^33
-                    'string4' => "string4",
-                    'integer' => 35635353,
-                    'bigint' => 3535353,
-                    'float' => 353.3535,
-                    'boolean' => true,
-                ]));
-                  }    
-
-              $valueAfterAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
-     
-            if(static::getAdapterName() === 'mysql'){
-                $this->assertGreaterThan(65535,$valueAfterAddingData);
-            }
-            else{
-                $this->assertGreaterThan($valueBeforeAddingData,$valueAfterAddingData);
-            }
-    }
 
     public function testCreateDeleteAttribute(): void
     {
@@ -4795,6 +4731,103 @@ abstract class Base extends TestCase
         $city = static::getDatabase()->getDocument('city', 'city7');
         $country = $city->getAttribute('newCountry');
         $this->assertEquals(null, $country);
+    }
+
+    public function testIdenticalTwoWayKeyRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('parent');
+        static::getDatabase()->createCollection('child');
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'child1'
+        );
+
+        try {
+            static::getDatabase()->createRelationship(
+                collection: 'parent',
+                relatedCollection: 'child',
+                type: Database::RELATION_ONE_TO_MANY,
+                id: 'children',
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+            twoWayKey: 'parent_id'
+        );
+
+        $collection = static::getDatabase()->getCollection('parent');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'child1') {
+                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+            }
+
+            if ($attribute['key'] === 'children') {
+                $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
+            }
+        }
+
+        static::getDatabase()->createDocument('parent', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'child1' => [
+                '$id' => 'foo',
+                '$permissions' => [Permission::read(Role::any())],
+            ],
+            'children' => [
+                [
+                    '$id' => 'bar',
+                    '$permissions' => [Permission::read(Role::any())],
+                ],
+            ],
+        ]));
+
+        $documents = static::getDatabase()->find('parent', []);
+        $document  = array_pop($documents);
+        $this->assertArrayHasKey('child1', $document);
+        $this->assertEquals('foo', $document->getAttribute('child1')->getId());
+        $this->assertArrayHasKey('children', $document);
+        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newKey: 'child1'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Attribute already exists', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newTwoWayKey: 'parent'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
     }
 
     public function testOneToManyOneWayRelationship(): void
@@ -10228,7 +10261,7 @@ abstract class Base extends TestCase
             static::getDatabase()->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
-            $this->assertEquals('Attribute already exists', $e->getMessage());
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
     }
 

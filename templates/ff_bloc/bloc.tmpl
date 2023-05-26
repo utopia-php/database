@@ -1,0 +1,16 @@
+import 'package:ff_bloc/ff_bloc.dart';
+
+import 'package:${appName}${relative}/index.dart';
+
+class ${upperName}Bloc extends FFBloc<${upperName}Event, ${upperName}State> {
+  ${upperName}Bloc({    
+    required this.provider,
+    super.initialState = const ${upperName}State(),
+  });
+
+  final ${upperName}Provider provider;
+
+  @override
+  ${upperName}State onErrorState(Object error) => state.copy(error: error, isLoading: false);
+
+}

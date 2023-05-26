@@ -1,0 +1,82 @@
+{
+  "name": "base",
+  "configs": [
+    {
+      "name": "bloc",
+      "commands": [
+        {
+          "name": "[FF] New Big Pack Bloc",
+          "templates": ["*"],
+          "key": "bigpack",
+          "files": [
+            "bloc",
+            "event",
+            "index",
+            "model",
+            "page",
+            "provider",
+            "repository",
+            "screen",
+            "state"
+          ]
+        },
+        {
+          "name": "[FF] New Small Pack Bloc",
+          "templates": ["*"],
+          "key": "smallpack",
+          "files": ["bloc", "event", "index", "page", "screen", "state"]
+        },
+        {
+          "name": "[FF] New Bloc",
+          "templates": ["*"],
+          "files": ["bloc"]
+        },
+        {
+          "name": "[FF] New Event",
+          "templates": ["*"],
+          "files": ["event"]
+        },
+        {
+          "name": "[FF] New Model",
+          "templates": ["*"],
+          "files": ["model"]
+        },
+        {
+          "name": "[FF] New Page",
+          "templates": ["*"],
+          "files": ["page"]
+        },
+        {
+          "name": "[FF] New Provider",
+          "templates": ["*"],
+          "files": ["provider"]
+        },
+        {
+          "name": "[FF] New Repository",
+          "templates": ["*"],
+          "files": ["repository"]
+        },
+        {
+          "name": "[FF] New Screen",
+          "templates": ["*"],
+          "files": ["screen"]
+        },
+        {
+          "name": "[FF] New State",
+          "templates": ["*"],
+          "files": ["state"]
+        },
+        {
+          "name": "[FF] New Index",
+          "templates": ["*"],
+          "files": ["index"]
+        },
+        {
+          "name": "[FF] New Navigate(Navme)",
+          "templates": ["navigate"],
+          "files": ["navigate"]
+        }
+      ]
+    }
+  ]
+}

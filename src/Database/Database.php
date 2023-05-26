@@ -756,18 +756,6 @@ class Database
     }
 
     /**
-     * Get Collection Size
-     *
-     * @param string $collection
-     *
-     * @return int
-     */
-     public function getSizeOfCollection(string $collection): int 
-    {
-         return $this->adapter->getSizeOfCollection($collection);
-    }
-
-    /**
      * Delete Collection
      *
      * @param string $id
@@ -1486,6 +1474,13 @@ class Database
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
+
+            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
+                && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
+            ) {
+                throw new DuplicateException('Related attribute already exists');
+            }
         }
 
         if (
@@ -1675,7 +1670,7 @@ class Database
                 !\is_null($newTwoWayKey)
                 && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
             ) {
-                throw new DuplicateException('Attribute already exists');
+                throw new DuplicateException('Related attribute already exists');
             }
 
             $type = $attribute['options']['relationType'];

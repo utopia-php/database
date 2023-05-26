@@ -1,0 +1,37 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
+import 'package:bloc/bloc.dart';
+import 'package:${appName}${relative}/index.dart';
+
+class ${upperName}Bloc extends Bloc<${upperName}Event, ${upperName}State> {
+  // todo: check singleton for logic in project
+  // use GetIt for DI in projct
+  static final ${upperName}Bloc _${privateName}BlocSingleton = ${upperName}Bloc._internal();
+  factory ${upperName}Bloc() {
+    return _${privateName}BlocSingleton;
+  }
+  
+  ${upperName}Bloc._internal(): super(Un${upperName}State(0)){
+    on<${upperName}Event>((event, emit) {
+      return emit.forEach<${upperName}State>(
+        event.applyAsync(currentState: state, bloc: this),
+        onData: (state) => state,
+        onError: (error, stackTrace) {
+          developer.log('$error', name: '${upperName}Bloc', error: error, stackTrace: stackTrace);
+          return Error${upperName}State(0, error.toString());
+        },
+      );
+    });
+  }
+  
+  @override
+  Future<void> close() async{
+    // dispose objects
+    await super.close();
+  }
+
+  @override
+  ${upperName}State get initialState => Un${upperName}State(0);
+
+}

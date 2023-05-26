@@ -1,0 +1,74 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+import 'package:ff_bloc/ff_bloc.dart';
+
+import 'package:${appName}${relative}/index.dart';
+
+@immutable
+abstract class ${upperName}Event implements FFBlocEvent<${upperName}State, ${upperName}Bloc> {}
+
+class Load${upperName}Event extends ${upperName}Event {
+  Load${upperName}Event({required this.id});
+  final String? id;
+  
+  static const String _name = 'Load${upperName}Event';
+
+  @override
+  String toString() => _name;
+
+  @override
+  Stream<${upperName}State> applyAsync({required ${upperName}Bloc bloc}) async* {
+    yield bloc.state.copyWithoutError(isLoading: true);
+    final result = await bloc.provider.fetchAsync(id);
+    yield bloc.state.copyWithoutError(
+      isLoading: false,
+      data: ${upperName}ViewModel(items: result),
+    );
+  }
+}
+
+
+class Add${upperName}Event extends ${upperName}Event {
+  static const String _name = 'Add${upperName}Event';
+
+  @override
+  String toString() => _name;
+
+  @override
+  Stream<${upperName}State> applyAsync({required ${upperName}Bloc bloc}) async* {
+    yield bloc.state.copyWithoutError(isLoading: true);
+    final result = await bloc.provider.addMore(bloc.state.data?.items);
+    yield bloc.state.copyWithoutError(
+      isLoading: false,
+      data: ${upperName}ViewModel(items: result),
+    );
+  }
+}
+
+class ErrorYouAwesomeEvent extends YouAwesomeEvent {
+  static const String _name = 'ErrorYouAwesomeEvent';
+
+  @override
+  String toString() => _name;
+
+  @override
+  Stream<YouAwesomeState> applyAsync({required YouAwesomeBloc bloc}) async* {
+    throw Exception('Test error');
+  }
+}
+
+class Clear${upperName}Event extends ${upperName}Event {
+  static const String _name = 'Clear${upperName}Event';
+
+  @override
+  String toString() => _name;
+
+  @override
+  Stream<${upperName}State> applyAsync({required ${upperName}Bloc bloc}) async* {
+    yield bloc.state.copyWithoutError(isLoading: true);
+    yield bloc.state.copyWithoutData(
+      isLoading: false,
+    );
+  }
+}

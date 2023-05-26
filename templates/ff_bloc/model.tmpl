@@ -1,0 +1,51 @@
+// ignore: depend_on_referenced_packages
+import 'package:equatable/equatable.dart';
+
+class ${upperName}Model extends Equatable {
+  const ${upperName}Model({
+    required this.name,
+  });
+  final String name;
+
+  @override
+  List<Object> get props => [ name];
+
+  Map<dynamic, dynamic> toMap() {
+    return {
+      'name': name,
+    };
+  }
+
+  static ${upperName}Model? fromMap(Map<dynamic, dynamic>? map) {
+    if (map == null) {
+      return null;
+    }
+
+    return ${upperName}Model(
+      name: map['name']!.toString(),
+    );
+  }
+
+}
+
+class ${upperName}ViewModel extends Equatable {
+  const ${upperName}ViewModel({
+    // TODO(all): add all required constructor parameters
+    required this.items,
+  });
+
+  // TODO(all): declare your fields here
+  final List<${upperName}Model>? items;
+
+  @override
+  List<Object?> get props => [items /*TODO(all): List all fields here*/];
+
+  // TODO(all): implement copyWith
+  ${upperName}ViewModel copyWith({
+    List<${upperName}Model>? items,
+  }) {
+    return  ${upperName}ViewModel(
+        items: items ?? this.items,
+      );
+  }
+}

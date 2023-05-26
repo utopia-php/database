@@ -1,0 +1,21 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
+import 'package:bloc/bloc.dart';
+import 'package:${appName}${relative}/index.dart';
+
+class ${upperName}Bloc extends Bloc<${upperName}Event, ${upperName}State> {
+
+  ${upperName}Bloc(${upperName}State initialState) : super(initialState){
+   on<${upperName}Event>((event, emit) {
+      return emit.forEach<${upperName}State>(
+        event.applyAsync(currentState: state, bloc: this),
+        onData: (state) => state,
+        onError: (error, stackTrace) {
+          developer.log('$error', name: '${upperName}Bloc', error: error, stackTrace: stackTrace);
+          return Error${upperName}State(error.toString());
+        },
+      );
+    });
+  }
+}

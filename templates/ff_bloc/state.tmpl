@@ -1,0 +1,15 @@
+import 'package:ff_bloc/ff_bloc.dart';
+
+import 'package:${appName}${relative}/index.dart';
+
+class ${upperName}State extends FFState<${upperName}State, ${upperName}ViewModel> {
+  const ${upperName}State({
+    super.version = 0,
+    super.isLoading = false,
+    super.data,
+    super.error,
+  });
+
+  @override
+  StateCopyFactory<${upperName}State, ${upperName}ViewModel> getCopyFactory() => ${upperName}State.new;
+}

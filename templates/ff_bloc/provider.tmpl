@@ -1,0 +1,24 @@
+
+import 'dart:async';
+import 'package:${appName}${relative}/index.dart';
+
+class ${upperName}Provider {
+
+  Future<List<${upperName}Model>?> fetchAsync(String? id) async {
+    if (id == null) {
+      return null;
+    }
+    return [${upperName}Model(name: id)];
+  }
+
+
+  Future<List<${upperName}Model>?> addMore(List<${upperName}Model>? now) async {
+    final result = [
+      ...(now ?? <${upperName}Model>[]),
+      ${upperName}Model(name: now?.length.toString() ?? '0')
+    ];
+    return result;
+  }
+
+}
+

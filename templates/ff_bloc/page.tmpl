@@ -1,0 +1,50 @@
+import 'package:flutter/material.dart';
+import 'package:${appName}${relative}/index.dart';
+
+
+class ${upperName}Page extends StatefulWidget {
+  const ${upperName}Page({
+    required this.bloc,
+    super.key
+    });
+  static const String routeName = '/${privateName}';
+  
+  final ${upperName}Bloc bloc;
+
+  @override
+  State<${upperName}Page> createState() => _${upperName}PageState();
+}
+
+class _${upperName}PageState extends State<${upperName}Page> {
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('${upperName}'),
+         actions: [
+          IconButton(
+            icon: const Icon(Icons.error),
+            onPressed: () {
+              widget.bloc.add(ErrorYouAwesomeEvent());
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () {
+              widget.bloc.add(Add${upperName}Event());
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.clear),
+            onPressed: () {
+              widget.bloc.add(Clear${upperName}Event());
+            },
+          ),
+        ],
+      ),
+      body: ${upperName}Screen(bloc: widget.bloc),
+    );
+  }
+}

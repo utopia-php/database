@@ -224,8 +224,8 @@ $database->exists($nameOfTheDatabaseOrSchema, $collectionName); // for collectio
 $collectionName = 'movies';
 
 $database->createCollection($collectionName);
-// creates two new table/collection named 'namespace_movies' with column names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
-// The second table is named 'namespace_movies_perms' with column names '_id', '_type', '_permission', '_document'
+// creates two new table/collection named '$namespace_$collectionName' with column names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
+// The second table is named '$namespace_$collectionName_perms' with column names '_id', '_type', '_permission', '_document'
 
 $database->deleteCollection($collectionName);
 // deletes the two tables/collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
@@ -252,7 +252,7 @@ $attributeSize = 128;       //required
 $attributeRequired = true;  //required
 
 $database->createAttribute($collectionName,$attributeId, $attributeType[0], $attributeSize, $attributeRequired);
-// creates a new column named '$attributeName' in the 'namespace_collectionname' table.
+// creates a new column named '$attributeName' in the '$namespace_$collectionName' table.
 
 $newAttributeId = 'genres'; 
 $defaultValue = null;       //optional
@@ -277,20 +277,23 @@ $database->renameAttribute($collectionName, $currentAttributeId, $newAttributeId
 **Index Methods:**
 
 ```php
-$collectionName = 'movies';             //required
-$indexId = 'index1';                    //required
-$indexType =                            //required
+$collectionName = 'movies';              //required
+$indexId = 'index1';                     //required
+$indexType =                             //required
 [
-    Database::INDEX_KEY,                   // use Utopia\Database\Database for these constants
+    Database::INDEX_KEY,                 // use Utopia\Database\Database for these constants
     Database::INDEX_FULLTEXT,
     Database::INDEX_UNIQUE,
     Database::INDEX_SPATIAL,
     Database::INDEX_ARRAY
 ];
-$attributesToIndex = ['name', 'genres'];//required
-$indexSize = [128];                //required
-$insertionOrder = [Database::ORDER_ASC,
-Database::ORDER_DESC];                  //required
+$attributesToIndex = ['name', 'genres']; //required
+$indexSize = [128];                      //required
+$insertionOrder =                        //required
+[                                 
+    Database::ORDER_ASC,   
+    Database::ORDER_DESC
+];                   
 
 $database->createIndex($collectionName, $indexId, $indexType[0], $attributeToIndex, $indexSizes, [$insertionOrder[0], $insertionOrder[1]]);
 
@@ -335,7 +338,7 @@ $database->deleteRelationship($collectionName,  $relatedAttributeName);
 **Document Methods:**
 
 ```php
-use Utopia\Database\Document;            // remember to use these classes
+use Utopia\Database\Document;             // remember to use these classes
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -357,17 +360,9 @@ use Utopia\Database\Helpers\Role;
 $document = $database->createDocument('movies', new Document([
     '$permissions' => [
         Permission::read(Role::any()),
-        Permission::read(Role::user(ID::custom('1'))),
-        Permission::read(Role::user(ID::unique(12))),
-        Permission::create(Role::any()),
         Permission::create(Role::user(ID::custom('1x'))),
-        Permission::create(Role::user(ID::unique(12))),
-        Permission::update(Role::any()),
-        Permission::update(Role::user(ID::custom('1x'))),
         Permission::update(Role::user(ID::unique(12))),
-        Permission::delete(Role::any()),
-        Permission::delete(Role::user(ID::custom('1x'))),
-        Permission::delete(Role::user(ID::unique(12))),
+        Permission::delete(Role::user($customId)),
     ],
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',
@@ -384,7 +379,6 @@ $document->getCollection();
 $document = $database->createDocument('movies', new Document([
     '$permissions' => [...],
     'name' => 'Captain Marvel',
-     ....   =>  ....
 ]));
 $documentId = $document->getId();
 

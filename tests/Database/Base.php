@@ -189,7 +189,7 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index';
+        $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals($errorMessage, $validator->getDescription());
 

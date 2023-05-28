@@ -78,12 +78,4 @@ class MySQL extends MariaDB
 
         throw $e;
     }
-
-    /**
-     * @return int
-     */
-    protected function getMaxVarcharLength(): int
-    {
-        return 16382;
-    }
 }

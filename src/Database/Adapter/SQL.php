@@ -314,7 +314,7 @@ abstract class SQL extends Adapter
                             $total += 11;
                             break;
 
-                        case ($attribute['size'] > 16381):
+                        case ($attribute['size'] > $this->getMaxVarcharLength()):
                             // 8 bytes length + 2 bytes for TEXT
                             $total += 10;
                             break;
@@ -864,5 +864,13 @@ abstract class SQL extends Adapter
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
+    }
+
+    /**
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
     }
 }

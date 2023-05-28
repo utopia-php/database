@@ -15,8 +15,6 @@ use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
 {
-    protected int $maxVarcharLength = 16382;
-
     /**
      * Create Database
      *
@@ -1405,13 +1403,5 @@ class MariaDB extends SQL
         }
 
         throw $e;
-    }
-
-    /**
-     * @return int
-     */
-    protected function getMaxVarcharLength(): int
-    {
-        return 16382;
     }
 }

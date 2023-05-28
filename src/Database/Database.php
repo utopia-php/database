@@ -618,9 +618,11 @@ class Database
      * @param array<Document> $indexes
      * @param array<string> $permissions
      * @param bool $documentSecurity
-     *
      * @return Document
      * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws InvalidArgumentException
+     * @throws LimitException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
@@ -648,7 +650,7 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-        $validator = new IndexValidator($this->adapter->maxIndexLength);
+        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
         if (!$validator->isValid($collection)) {
             throw new DatabaseException($validator->getDescription());
         }
@@ -696,7 +698,10 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws DuplicateException
+     * @throws InvalidArgumentException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws InvalidArgumentException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
@@ -1990,7 +1995,7 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = new IndexValidator($this->adapter->maxIndexLength);
+        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
         if (!$validator->isValid($collection)) {
             throw new DatabaseException($validator->getDescription());
         }
@@ -2041,7 +2046,7 @@ class Database
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
 
-        $validator = new IndexValidator($this->adapter->maxIndexLength);
+        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
         if (!$validator->isValid($collection)) {
             throw new DatabaseException($validator->getDescription());
         }

@@ -23,11 +23,6 @@ abstract class Adapter
     protected array $debug = [];
 
     /**
-     * @var int
-     */
-    public int $maxIndexLength = 768;
-
-    /**
      * @param string $key
      * @param mixed $value
      *
@@ -641,4 +636,12 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool;
+
+    /**
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return 768;
+    }
 }

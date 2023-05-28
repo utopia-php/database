@@ -159,7 +159,7 @@ class Filter extends Base
                 $values = $value->getValues();
 
                 if ($this->isEmpty($values)) {
-                    $this->message = \ucfirst($method) . ' can take only one value.';
+                   $this->message = \ucfirst($method) . ' queries require exactly one value.';
                     return false;
                 }
 

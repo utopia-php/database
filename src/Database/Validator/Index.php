@@ -107,7 +107,7 @@ class Index extends Validator
                 }
 
                 if ($indexLength > $attributeSize) {
-                    $this->message = 'Index length("'.$indexLength.'") is longer than the key part for "'.$attributeName.'("'.$attributeSize.'")"';
+                    $this->message = 'Index length '.$indexLength.' is larger than the size for '.$attributeName.': '.$attributeSize.'"';
                     return false;
                 }
 

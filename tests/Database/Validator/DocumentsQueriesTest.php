@@ -155,10 +155,9 @@ class DocumentsQueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
 
-
         $queries = ['equal("not_found", 4)'];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
+        $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
 
         $queries = ['search("description", "iron")'];
         $this->assertEquals(false, $validator->isValid($queries));
@@ -166,14 +165,14 @@ class DocumentsQueriesTest extends TestCase
 
         $queries = ['equal("not_found", 4)'];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Attribute not found in schema: not_found', $validator->getDescription());
+        $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
 
         $queries = ['limit(-1)'];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Invalid limit: Value must be a valid range between 1 and 9,223,372,036,854,775,808', $validator->getDescription());
+        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and 9,223,372,036,854,775,808', $validator->getDescription());
 
         $queries = ['equal("title", [])']; // empty array
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Query not valid: Equal queries require at least one value.', $validator->getDescription());
+        $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
     }
 }

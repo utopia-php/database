@@ -138,14 +138,12 @@ class Filter extends Base
         switch ($method) {
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
-                $values = $value->getValues();
-
-                if ($this->isEmpty($values)) {
+                if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $values);
+                return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
@@ -155,15 +153,20 @@ class Filter extends Base
             case Query::TYPE_SEARCH:
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
-            case Query::TYPE_BETWEEN:
-                $values = $value->getValues();
-
-                if ($this->isEmpty($values)) {
+                if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' can take only one value.';
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $values);
+                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+
+            case Query::TYPE_BETWEEN:
+                if (count($value->getValues()) != 2) {
+                    $this->message = \ucfirst($method) . ' can take only two value.';
+                    return false;
+                }
+
+                return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:

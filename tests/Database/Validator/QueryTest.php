@@ -140,7 +140,7 @@ class QueryTest extends TestCase
         $validator = new Documents($this->attributes, []);
 
         $this->assertEquals(false, $validator->isValid([Query::parse('eqqual("title", "Iron Man")')]));
-        $this->assertEquals('Query method not valid: eqqual', $validator->getDescription());
+        $this->assertEquals('Invalid query method: eqqual', $validator->getDescription());
     }
 
     /**

@@ -11099,7 +11099,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: NotEqual can take only one value.', $e->getMessage());
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {
@@ -11109,7 +11109,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: LessThan can take only one value.', $e->getMessage());
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {
@@ -11119,7 +11119,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: LessThanEqual can take only one value.', $e->getMessage());
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {
@@ -11129,7 +11129,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: GreaterThan can take only one value.', $e->getMessage());
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {
@@ -11139,7 +11139,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: GreaterThanEqual can take only one value.', $e->getMessage());
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {

@@ -70,7 +70,7 @@ class FilterTest extends TestCase
     public function testEmptyValues(): void
     {
         $this->assertFalse($this->validator->isValid(Query::parse('notEqual("attr", [])')));
-        $this->assertEquals('NotEqual can take only one value.', $this->validator->getDescription());
+        $this->assertEquals('NotEqual queries require exactly one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('contains("attr", [])')));
         $this->assertEquals('Contains queries require at least one value.', $this->validator->getDescription());
@@ -79,18 +79,18 @@ class FilterTest extends TestCase
         $this->assertEquals('Equal queries require at least one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('lessThan("attr", [])')));
-        $this->assertEquals('LessThan can take only one value.', $this->validator->getDescription());
+        $this->assertEquals('LessThan queries require exactly one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('lessThanEqual("attr", [])')));
-        $this->assertEquals('LessThanEqual can take only one value.', $this->validator->getDescription());
+        $this->assertEquals('LessThanEqual queries require exactly one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('search("attr", [])')));
-        $this->assertEquals('Search can take only one value.', $this->validator->getDescription());
+        $this->assertEquals('Search queries require exactly one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('greaterThanEqual("attr", [])')));
-        $this->assertEquals('GreaterThanEqual can take only one value.', $this->validator->getDescription());
+        $this->assertEquals('GreaterThanEqual queries require exactly one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('greaterThan("attr", [])')));
-        $this->assertEquals('GreaterThan can take only one value.', $this->validator->getDescription());
+        $this->assertEquals('GreaterThan queries require exactly one value.', $this->validator->getDescription());
     }
 }

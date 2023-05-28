@@ -112,9 +112,9 @@ class QueryTest extends TestCase
 
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", ["Iron Man", "Ant Man"])')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", "Iron Man")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('equal("description", "Best movie ever")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('greaterThan("rating", 4)')]));
+        $this->assertEquals(true, $validator->isValid([Query::parse('notEqual("title", ["Iron Man"])')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('lessThan("price", 6.50)')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('lessThanEqual("price", 6)')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('contains("tags", ["action1", "action2"])')]));
@@ -141,6 +141,9 @@ class QueryTest extends TestCase
 
         $this->assertEquals(false, $validator->isValid([Query::parse('eqqual("title", "Iron Man")')]));
         $this->assertEquals('Invalid query method: eqqual', $validator->getDescription());
+
+        $this->assertEquals(false, $validator->isValid([Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')]));
+        $this->assertEquals(false, $validator->isValid([Query::parse('notEqual("title", [""])')]));
     }
 
     /**
@@ -153,12 +156,12 @@ class QueryTest extends TestCase
         $response = $validator->isValid([Query::parse('equal("name", "Iron Man")')]);
 
         $this->assertEquals(false, $response);
-        $this->assertEquals('Query not valid: Attribute not found in schema: name', $validator->getDescription());
+        $this->assertEquals('Invalid query: Attribute not found in schema: name', $validator->getDescription());
 
         $response = $validator->isValid([Query::parse('orderAsc("name")')]);
 
         $this->assertEquals(false, $response);
-        $this->assertEquals('Query not valid: Attribute not found in schema: name', $validator->getDescription());
+        $this->assertEquals('Invalid query: Attribute not found in schema: name', $validator->getDescription());
     }
 
     /**
@@ -171,7 +174,7 @@ class QueryTest extends TestCase
         $response = $validator->isValid([Query::parse('equal("title", 1776)')]);
 
         $this->assertEquals(false, $response);
-        $this->assertEquals('Query not valid: Query type does not match expected: string', $validator->getDescription());
+        $this->assertEquals('Invalid query: Query type does not match expected: string', $validator->getDescription());
     }
 
     /**

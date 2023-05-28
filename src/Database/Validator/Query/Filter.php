@@ -153,7 +153,7 @@ class Filter extends Base
             case Query::TYPE_SEARCH:
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
-                if ($this->isEmpty($value->getValues())) {
+                if (count($value->getValues()) != 1) {
                     $this->message = \ucfirst($method) . ' queries require exactly one value.';
                     return false;
                 }

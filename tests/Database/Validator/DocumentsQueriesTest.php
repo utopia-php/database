@@ -116,7 +116,6 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents($this->collection['attributes'], $this->collection['indexes']);
 
         $queries = [
-            'notEqual("title", ["Iron Man", "Ant Man"])',
             'equal("description", "Best movie ever")',
             'equal("description", [""])',
             'lessThanEqual("price", 6.50)',
@@ -150,6 +149,9 @@ class DocumentsQueriesTest extends TestCase
     public function testInvalidQueries(): void
     {
         $validator = new Documents($this->collection['attributes'], $this->collection['indexes']);
+
+        $this->assertEquals(false, $validator->isValid(['notEqual("title", ["Iron Man", "Ant Man"])',]));
+        $this->assertEquals('Invalid query: NotEqual queries require exactly one value.', $validator->getDescription());
 
         $queries = ['search("description", "iron")'];
         $this->assertEquals(false, $validator->isValid($queries));

@@ -100,7 +100,7 @@ class Queries extends Validator
             }
 
             if (!$methodIsValid) {
-                $this->message = 'Query method not valid: ' . $method;
+                $this->message = 'Invalid query method: ' . $method;
                 return false;
             }
         }

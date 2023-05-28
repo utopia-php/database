@@ -154,7 +154,7 @@ class Filter extends Base
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
                 if ($this->isEmpty($value->getValues())) {
-                    $this->message = \ucfirst($method) . ' can take only one value.';
+                    $this->message = \ucfirst($method) . ' queries require exactly one value.';
                     return false;
                 }
 

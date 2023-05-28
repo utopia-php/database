@@ -1279,7 +1279,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > $this->maxVarcharLength) {
+                if ($size > $this->getMaxVarcharLength()) {
                     return 'TEXT';
                 }
 
@@ -1405,5 +1405,13 @@ class MariaDB extends SQL
         }
 
         throw $e;
+    }
+
+    /**
+     * @return int
+     */
+    protected function getMaxVarcharLength(): int
+    {
+        return 16382;
     }
 }

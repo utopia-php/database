@@ -9,8 +9,6 @@ use Utopia\Database\Exception\Timeout;
 
 class MySQL extends MariaDB
 {
-    protected int $maxVarcharLength = 16381;
-
     /**
      * Get SQL Index
      *
@@ -79,5 +77,13 @@ class MySQL extends MariaDB
         }
 
         throw $e;
+    }
+
+    /**
+     * @return int
+     */
+    protected function getMaxVarcharLength(): int
+    {
+        return 16382;
     }
 }

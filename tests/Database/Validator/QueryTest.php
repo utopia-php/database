@@ -130,6 +130,7 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid([Query::parse('startsWith("title", "Fro")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('endsWith("title", "Zen")')]));
         $this->assertEquals(true, $validator->isValid([Query::parse('select(["title", "description"])')]));
+        $this->assertEquals(true, $validator->isValid([Query::parse('notEqual("title", [""])')]));
     }
 
     /**
@@ -143,7 +144,6 @@ class QueryTest extends TestCase
         $this->assertEquals('Invalid query method: eqqual', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid([Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')]));
-        $this->assertEquals(false, $validator->isValid([Query::parse('notEqual("title", [""])')]));
     }
 
     /**

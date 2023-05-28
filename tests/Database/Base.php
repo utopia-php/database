@@ -126,7 +126,7 @@ abstract class Base extends TestCase
 
         $validator = new Index();
 
-        $errorMessage = 'Index length("301") is longer than the key part for "title1("300")"';
+        $errorMessage = 'Index length 301 is larger than the size for title1: 300"';
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
@@ -149,7 +149,7 @@ abstract class Base extends TestCase
 
         $collection->setAttribute('indexes', $indexes);
 
-        $errorMessage = 'Index Length is longer than max (768))';
+        $errorMessage = 'Index length is longer than the maximum: 768';
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
@@ -971,7 +971,7 @@ abstract class Base extends TestCase
         if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
             $this->expectExceptionMessage('Fulltext index is not supported');
         } else {
-            $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
+            $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index, must be of type string');
         }
 
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);

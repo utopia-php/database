@@ -65,7 +65,7 @@ class IndexTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Attribute "date" cannot be part of a FULLTEXT index', $validator->getDescription());
+        $this->assertEquals('Attribute "date" cannot be part of a FULLTEXT index, must be of type string', $validator->getDescription());
     }
 
     /**
@@ -103,7 +103,7 @@ class IndexTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Index Length is longer than max (768))', $validator->getDescription());
+        $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
     /**

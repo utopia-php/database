@@ -143,4 +143,42 @@ class IndexTest extends TestCase
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals('No attributes provided for index', $validator->getDescription());
     }
+
+    /**
+     * @throws Exception
+     */
+    public function testDuplicatedAttributes(): void
+    {
+        $validator = new Index(768);
+
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ])
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('index1'),
+                    'type' => Database::INDEX_FULLTEXT,
+                    'attributes' => ['title', 'title'],
+                    'lengths' => [],
+                    'orders' => [],
+                ]),
+            ],
+        ]);
+
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals('Duplicated attributes provided', $validator->getDescription());
+    }
 }

@@ -53,6 +53,23 @@ class Index extends Validator
     /**
      * @param Document $collection
      * @return bool
+     */
+    public function checkDuplicatedAttributes(Document $collection): bool
+    {
+        foreach ($collection->getAttribute('indexes', []) as $index) {
+            $attributes = $index->getAttribute('attributes', []);
+            if(count($attributes) !== count(array_unique($attributes))){
+                $this->message = 'Duplicated attributes provided';
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $collection
+     * @return bool
      * @throws DatabaseException
      */
     public function checkFulltextIndexNonString(Document $collection): bool
@@ -142,6 +159,10 @@ class Index extends Validator
         }
 
         if (!$this->checkEmptyIndexAttributes($value)) {
+            return false;
+        }
+
+        if (!$this->checkDuplicatedAttributes($value)) {
             return false;
         }
 

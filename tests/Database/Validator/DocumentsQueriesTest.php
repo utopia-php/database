@@ -171,7 +171,7 @@ class DocumentsQueriesTest extends TestCase
 
         $queries = ['limit(-1)'];
         $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and 9,223,372,036,854,775,808', $validator->getDescription());
+        $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
 
         $queries = ['equal("title", [])']; // empty array
         $this->assertEquals(false, $validator->isValid($queries));

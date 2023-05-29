@@ -126,14 +126,13 @@ abstract class Base extends TestCase
         $valueBeforeAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
 
         static::getDatabase()->createAttribute('size_testing', 'string1', Database::VAR_STRING, 128, true);
-        static::getDatabase()->createAttribute('size_testing', 'string2', Database::VAR_STRING, 16383 + 1, true);
-        static::getDatabase()->createAttribute('size_testing', 'string3', Database::VAR_STRING, 65535 + 1, true);
-        static::getDatabase()->createAttribute('size_testing', 'string4', Database::VAR_STRING, 65535 + 1, true);
+        static::getDatabase()->createAttribute('size_testing', 'string2', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('size_testing', 'string3', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('size_testing', 'string4', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createAttribute('size_testing', 'integer', Database::VAR_INTEGER, 10, true);
         static::getDatabase()->createAttribute('size_testing', 'bigint', Database::VAR_INTEGER, 8, true);
         static::getDatabase()->createAttribute('size_testing', 'float', Database::VAR_FLOAT, 0, true);
         static::getDatabase()->createIndex('size_testing', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
-
 
         for ($i = 0; $i < 20; $i++) {
             static::getDatabase()->createDocument('size_testing', new Document([

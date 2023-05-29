@@ -762,10 +762,10 @@ class Database
      *
      * @return int
      */
-     public function getSizeOfCollection(string $collection): int
-     {
-         return $this->adapter->getSizeOfCollection($collection);
-     }
+    public function getSizeOfCollection(string $collection): int
+    {
+        return $this->adapter->getSizeOfCollection($collection);
+    }
 
     /**
       * Delete Collection

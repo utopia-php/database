@@ -148,28 +148,32 @@ class MariaDB extends SQL
      * @return int
      * @throws DatabaseException
      */
-     public function getSizeOfCollection(string $collection): int
-     {
+    public function getSizeOfCollection(string $collection): int
+    {
          $name = $this->filter($collection);
-         $tableName = $this->getSQLTable($name);
-         $database = str_replace('`', '', explode('.', $tableName)[0]);
-         $collectionName = str_replace('`', '', explode('.', $tableName)[1]);
+         $collectionName = "{$this->getNamespace()}_{$name}";
+         $database = $this->getDefaultDatabase();
+
          $query = $this->getPDO()->prepare("
-         SELECT data_length + index_length 
-         FROM information_schema.TABLES 
-         WHERE table_schema = :database
-         AND table_name = :name
+             SELECT SUM(data_length + index_length) AS total_size 
+             FROM information_schema.TABLES 
+             WHERE table_schema = :database
+             AND table_name = :name
          ");
+
          $query->bindParam(':database', $database);
          $query->bindParam(':name', $collectionName);
+
          try {
              $query->execute();
              $size = $query->fetchColumn();
-         } catch (PDOException $e) {
+         }
+          catch (PDOException $e) {
              throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
          }
+
           return $size;
-     }
+    }
 
     /**
       * Delete Collection

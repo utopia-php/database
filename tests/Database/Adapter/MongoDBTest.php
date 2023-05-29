@@ -55,6 +55,11 @@ class MongoDBTest extends Base
         $database->setDefaultDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
 
+        if ($database->exists('utopiaTests')) {
+            $database->delete('utopiaTests');
+        }
+
+        $database->create();
 
         return self::$database = $database;
     }
@@ -89,5 +94,10 @@ class MongoDBTest extends Base
     public function testKeywords(): void
     {
         $this->assertTrue(true);
+    }
+
+    public static function killDatabase(): void
+    {
+        self::$database = null;
     }
 }

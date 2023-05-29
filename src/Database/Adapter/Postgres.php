@@ -8,6 +8,7 @@ use PDOException;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
@@ -86,8 +87,8 @@ class Postgres extends SQL
         /**
          * @var array<string> $attributes
          */
-        $stmt = $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+        $stmt = $this->getPDO()->prepare("
+            CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
@@ -95,12 +96,15 @@ class Postgres extends SQL
                 \"_permissions\" TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
                 PRIMARY KEY (\"_id\")
-                );
-                CREATE INDEX \"index_{$namespace}_{$id}_createdAt\" ON {$this->getSQLTable($id)} USING btree (\"_createdAt\");
-                CREATE INDEX \"index_{$namespace}_{$id}_updatedAt\" ON {$this->getSQLTable($id)} USING btree (\"_updatedAt\");
-                ");
+            );
+        ");
 
-        $stmtIndex = $this->getPDO()->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(_uid));");
+        $stmtIndex = $this->getPDO()->prepare("
+            CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" on {$this->getSQLTable($id)} (LOWER(\"_uid\"));
+            CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
+            CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+        ");
+
         try {
             $stmt->execute();
             $stmtIndex->execute();
@@ -118,23 +122,31 @@ class Postgres extends SQL
                     ")
                 ->execute();
 
-            foreach ($indexes as &$index) {
+            foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
+                $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes');
+                $indexOrders = $index->getAttribute('orders', []);
 
-                $this->createIndex($id, $indexId, $index->getAttribute('type'), $indexAttributes, [], $index->getAttribute("orders"));
+                $this->createIndex(
+                    $id,
+                    $indexId,
+                    $indexType,
+                    $indexAttributes,
+                    [],
+                    $indexOrders
+                );
             }
         } catch (Exception $e) {
             $this->getPDO()->rollBack();
-            throw new Exception('Failed to create collection: ' . $e->getMessage());
+            throw new DatabaseException('Failed to create collection: ' . $e->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         // Update $this->getIndexCount when adding another default index
-        // return $this->createIndex($id, "_index2_{$namespace}_{$id}", Database::INDEX_FULLTEXT, ['_read'], [], []);
 
         return true;
     }
@@ -259,6 +271,199 @@ class Postgres extends SQL
     }
 
     /**
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param string $relatedCollection
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayKey = ''
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $id = $this->filter($id);
+        $twoWayKey = $this->filter($twoWayKey);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN \"{$id}\" {$sqlType} DEFAULT NULL;";
+
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN \"{$twoWayKey}\" {$sqlType} DEFAULT NULL;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN \"{$twoWayKey}\" {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN \"{$id}\" {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                return true;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        if (!\is_null($newKey)) {
+            $newKey = $this->filter($newKey);
+        }
+        if (!\is_null($newTwoWayKey)) {
+            $newTwoWayKey = $this->filter($newTwoWayKey);
+        }
+
+        $sql = '';
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$junction} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$junction} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        if (empty($sql)) {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                } else {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                } else {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId())
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId());
+
+                $perms = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId() . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId() . '_perms');
+
+                $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
      * Create Index
      *
      * @param string $collection
@@ -293,7 +498,7 @@ class Postgres extends SQL
             }
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attribute = "lower(\"{$attribute}\"::text) {$order}";
+                $attribute = "LOWER(\"{$attribute}\"::text) {$order}";
             } else {
                 $attribute = "\"{$attribute}\" {$order}";
             }
@@ -311,6 +516,7 @@ class Postgres extends SQL
      * @param string $id
      *
      * @return bool
+     * @throws Exception
      */
     public function deleteIndex(string $collection, string $id): bool
     {
@@ -394,7 +600,7 @@ class Postgres extends SQL
 
             $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
+            $value = (is_bool($value)) ? ($value ? "true" : "false") : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -434,7 +640,7 @@ class Postgres extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -617,7 +823,7 @@ class Postgres extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -648,7 +854,7 @@ class Postgres extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        $stmt->execute() || throw new Exception('Failed to update Attribute');
+        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
         return true;
     }
 
@@ -675,15 +881,15 @@ class Postgres extends SQL
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new Exception('Failed to delete document');
-            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+            $stmt->execute() || throw new DatabaseException('Failed to delete document');
+            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
-            throw new Exception($th->getMessage());
+            throw new DatabaseException($th->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;
@@ -696,8 +902,8 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $limit
-     * @param int $offset
+     * @param int|null $limit
+     * @param int|null $offset
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
@@ -709,7 +915,7 @@ class Postgres extends SQL
      * @throws PDOException
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -790,22 +996,23 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        $order = 'ORDER BY ' . implode(', ', $orders);
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
+        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
+        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
-            {$order}
-            LIMIT :limit OFFSET :offset;
+            {$sqlOrder}
+            {$sqlLimit};
         ";
 
         if ($timeout) {
@@ -828,13 +1035,18 @@ class Postgres extends SQL
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        if (!\is_null($limit)) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        }
+        if (!\is_null($offset)) {
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
+
         try {
             $stmt->execute();
         } catch (PDOException $e) {
@@ -873,16 +1085,16 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
+        $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -907,7 +1119,7 @@ class Postgres extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($max !== 0) {
+        if (!\is_null($max)) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
@@ -926,16 +1138,16 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int|float
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
+        $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
@@ -959,7 +1171,7 @@ class Postgres extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($max !== 0) {
+        if (!\is_null($max)) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
@@ -979,7 +1191,7 @@ class Postgres extends SQL
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): string
     {
-        if (empty($selections)) {
+        if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {
                 return "\"{$prefix}\".*";
             }
@@ -1081,14 +1293,14 @@ class Postgres extends SQL
             case Database::VAR_BOOLEAN:
                 return 'BOOLEAN';
 
-            case Database::VAR_DOCUMENT:
-                return 'VARCHAR';
+            case Database::VAR_RELATIONSHIP:
+                return 'VARCHAR(255)';
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
             default:
-                throw new Exception('Unknown Type: ' . $type);
+                throw new DatabaseException('Unknown Type: ' . $type);
         }
     }
 
@@ -1106,9 +1318,11 @@ class Postgres extends SQL
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $type = match ($type) {
-            Database::INDEX_KEY, Database::INDEX_ARRAY, Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_KEY,
+            Database::INDEX_ARRAY,
+            Database::INDEX_FULLTEXT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new Exception('Unknown Index Type:' . $type),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
         };
 
         return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON ' . $this->getSQLTable($collection) . ' ( ' . implode(', ', $attributes) . ' );';
@@ -1145,16 +1359,16 @@ class Postgres extends SQL
      * @param mixed $value
      *
      * @return int
-     * @throws Exception
+     * @throws DatabaseException
      */
-    protected function getPDOType($value): int
+    protected function getPDOType(mixed $value): int
     {
-        return match (gettype($value)) {
+        return match (\gettype($value)) {
             'string', 'double' => PDO::PARAM_STR,
             'boolean' => PDO::PARAM_BOOL,
             'integer' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,
-            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }
 

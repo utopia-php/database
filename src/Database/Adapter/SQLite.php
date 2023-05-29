@@ -3,11 +3,12 @@
 namespace Utopia\Database\Adapter;
 
 use PDO;
-use Exception;
 use PDOException;
+use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 
 /**
@@ -202,6 +203,45 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        $collection = $this->getDocument(Database::METADATA, $name);
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $indexes = \json_decode($collection->getAttribute('indexes', []), true);
+
+        foreach ($indexes as $index) {
+            $attributes = $index['attributes'];
+            if ($attributes === [$id]) {
+                $this->deleteIndex($name, $index['$id']);
+            } elseif (\in_array($id, $attributes)) {
+                $this->deleteIndex($name, $index['$id']);
+                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders']);
+            }
+        }
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
+                DROP COLUMN `{$id}`;")
+            ->execute();
+    }
+
+    /**
      * Rename Index
      *
      * @param string $collection
@@ -217,17 +257,18 @@ class SQLite extends MariaDB
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexs = json_decode($collectionDocument['indexes'], true);
+        $indexes = json_decode($collectionDocument['indexes'], true);
         $index = null;
 
-        foreach ($indexs as $node) {
+        foreach ($indexes as $node) {
             if ($node['key'] === $old) {
                 $index = $node;
                 break;
             }
         }
 
-        if ($index && $this->deleteIndex($collection, $old)
+        if ($index
+            && $this->deleteIndex($collection, $old)
             && $this->createIndex(
                 $collection,
                 $new,
@@ -370,7 +411,7 @@ class SQLite extends MariaDB
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -553,7 +594,7 @@ class SQLite extends MariaDB
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -599,6 +640,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
     /**
      * Get SQL Index Type
      *
@@ -617,7 +663,7 @@ class SQLite extends MariaDB
                 return 'UNIQUE INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
@@ -648,7 +694,7 @@ class SQLite extends MariaDB
                 break;
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {

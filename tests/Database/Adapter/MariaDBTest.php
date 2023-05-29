@@ -50,6 +50,17 @@ class MariaDBTest extends Base
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
+        if ($database->exists('utopiaTests')) {
+            $database->delete('utopiaTests');
+        }
+
+        $database->create();
+
         return self::$database = $database;
+    }
+
+    public static function killDatabase(): void
+    {
+        self::$database = null;
     }
 }

@@ -2,19 +2,26 @@
 
 namespace Utopia\Database\Helpers;
 
+use Utopia\Database\Exception as DatabaseException;
+
 class ID
 {
     /**
      * Create a new unique ID
      *
-     * @throws \Exception
+     * @throws DatabaseException
      */
     public static function unique(int $padding = 7): string
     {
         $uniqid = \uniqid();
 
         if ($padding > 0) {
-            $bytes = \random_bytes(\max(1, (int)\ceil(($padding / 2)))); // one byte expands to two chars
+            try {
+                $bytes = \random_bytes(\max(1, (int)\ceil(($padding / 2)))); // one byte expands to two chars
+            } catch (\Exception $e) {
+                throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+            }
+
             $uniqid .= \substr(\bin2hex($bytes), 0, $padding);
         }
 

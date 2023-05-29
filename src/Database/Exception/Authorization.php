@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Exception;
 
-class Authorization extends \Exception
+use Utopia\Database\Exception;
+
+class Authorization extends Exception
 {
 }

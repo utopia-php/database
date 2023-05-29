@@ -78,14 +78,14 @@ class Role
         if (!$hasIdentifier) {
             $dimensionParts = \explode('/', $role);
             if (\count($dimensionParts) !== 2) {
-                throw new \Exception('Only one dimension can be provided.');
+                throw new \Exception('Only one dimension can be provided');
             }
 
             $role = $dimensionParts[0];
             $dimension = $dimensionParts[1];
 
             if (empty($dimension)) {
-                throw new \Exception('Dimension must not be empty.');
+                throw new \Exception('Dimension must not be empty');
             }
             return new self($role, '', $dimension);
         }
@@ -93,14 +93,14 @@ class Role
         // Has both identifier and dimension
         $dimensionParts = \explode('/', $roleParts[1]);
         if (\count($dimensionParts) !== 2) {
-            throw new \Exception('Only one dimension can be provided.');
+            throw new \Exception('Only one dimension can be provided');
         }
 
         $identifier = $dimensionParts[0];
         $dimension = $dimensionParts[1];
 
         if (empty($dimension)) {
-            throw new \Exception('Dimension must not be empty.');
+            throw new \Exception('Dimension must not be empty');
         }
         return new self($role, $identifier, $dimension);
     }

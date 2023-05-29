@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate;
@@ -181,29 +182,7 @@ class MariaDB extends SQL
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                ADD COLUMN `{$id}` {$type};")
-            ->execute();
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};")
             ->execute();
     }
 
@@ -231,29 +210,7 @@ class MariaDB extends SQL
         }
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                MODIFY `{$id}` {$type};")
-            ->execute();
-    }
-
-    /**
-     * Rename Index
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
             ->execute();
     }
 
@@ -273,8 +230,248 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP COLUMN `{$id}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;")
+            ->execute();
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param string $relatedCollection
+     * @param bool $twoWay
+     * @param string $twoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function createRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay = false,
+        string $id = '',
+        string $twoWayKey = ''
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $id = $this->filter($id);
+        $twoWayKey = $this->filter($twoWayKey);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
+
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                $sql = "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                return true;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null,
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        if (!\is_null($newKey)) {
+            $newKey = $this->filter($newKey);
+        }
+        if (!\is_null($newTwoWayKey)) {
+            $newTwoWayKey = $this->filter($newTwoWayKey);
+        }
+
+        $sql = '';
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
+                if (!\is_null($newKey)) {
+                    $sql = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $sql .= "ALTER TABLE {$junction} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        if (empty($sql)) {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $name = $this->filter($collection);
+        $relatedName = $this->filter($relatedCollection);
+        $table = $this->getSQLTable($name);
+        $relatedTable = $this->getSQLTable($relatedName);
+        $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        $sql = '';
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                if ($twoWay) {
+                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                } elseif ($twoWay) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                } else {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId())
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId());
+
+                $perms = $side === Database::RELATION_SIDE_PARENT
+                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId() . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId() . '_perms');
+
+                $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        if (empty($sql)) {
+            return true;
+        }
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
+     * Rename Index
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $this->getPDO()
+            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
             ->execute();
     }
 
@@ -336,8 +533,7 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP INDEX `{$id}`;")
+            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;")
             ->execute();
     }
 
@@ -429,7 +625,7 @@ class MariaDB extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -615,7 +811,7 @@ class MariaDB extends SQL
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -646,7 +842,7 @@ class MariaDB extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        $stmt->execute() || throw new Exception('Failed to update Attribute');
+        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
         return true;
     }
 
@@ -672,15 +868,15 @@ class MariaDB extends SQL
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new Exception('Failed to delete document');
-            $stmtPermissions->execute() || throw new Exception('Failed to clean permissions');
+            $stmt->execute() || throw new DatabaseException('Failed to delete document');
+            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
-            throw new Exception($th->getMessage());
+            throw new DatabaseException($th->getMessage());
         }
 
         if (!$this->getPDO()->commit()) {
-            throw new Exception('Failed to commit transaction');
+            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;
@@ -691,8 +887,8 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $limit
-     * @param int $offset
+     * @param int|null $limit
+     * @param int|null $offset
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
@@ -702,7 +898,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -789,13 +985,15 @@ class MariaDB extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        $order = 'ORDER BY ' . implode(', ', $orders);
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
+        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
 
         $selections = $this->getAttributeSelections($queries);
 
@@ -803,8 +1001,8 @@ class MariaDB extends SQL
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} as table_main
             {$sqlWhere}
-            {$order}
-            LIMIT :offset, :limit;
+            {$sqlOrder}
+            {$sqlLimit};
         ";
 
         if ($timeout) {
@@ -827,13 +1025,17 @@ class MariaDB extends SQL
             };
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        if (!\is_null($limit)) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        }
+        if (!\is_null($offset)) {
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
 
         try {
             $stmt->execute();
@@ -871,17 +1073,17 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      * @return int
      * @throws Exception
      * @throws PDOException
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
+        $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -906,7 +1108,7 @@ class MariaDB extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($max !== 0) {
+        if (!\is_null($max)) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
@@ -923,17 +1125,17 @@ class MariaDB extends SQL
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      * @return int|float
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = ($max === 0) ? '' : 'LIMIT :max';
+        $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -959,7 +1161,7 @@ class MariaDB extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($max !== 0) {
+        if (!\is_null($max)) {
             $stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
@@ -979,7 +1181,7 @@ class MariaDB extends SQL
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
-        if (empty($selections)) {
+        if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {
                 return "`{$prefix}`.*";
             }
@@ -1097,14 +1299,14 @@ class MariaDB extends SQL
             case Database::VAR_BOOLEAN:
                 return 'TINYINT(1)';
 
-            case Database::VAR_DOCUMENT:
-                return 'CHAR(255)';
+            case Database::VAR_RELATIONSHIP:
+                return 'VARCHAR(255)';
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
 
             default:
-                throw new Exception('Unknown Type');
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP);
         }
     }
 
@@ -1121,10 +1323,11 @@ class MariaDB extends SQL
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
         $type = match ($type) {
-            Database::INDEX_KEY, Database::INDEX_ARRAY => 'INDEX',
+            Database::INDEX_KEY,
+            Database::INDEX_ARRAY => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
             Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-            default => throw new Exception('Unknown Index Type:' . $type),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
         };
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
@@ -1143,7 +1346,7 @@ class MariaDB extends SQL
             'double', 'string' => PDO::PARAM_STR,
             'integer', 'boolean' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,
-            default => throw new Exception('Unknown PDO Type for ' . gettype($value)),
+            default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }
 

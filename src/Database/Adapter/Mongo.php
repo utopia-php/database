@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -12,6 +13,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 use Utopia\Mongo\Exception as MongoException;
@@ -161,7 +163,7 @@ class Mongo extends Adapter
         try {
             $this->getClient()->createCollection($id);
         } catch (MongoException $e) {
-            throw $e;
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
         $indexesCreated = $this->client->createIndexes($id, [
@@ -292,6 +294,15 @@ class Mongo extends Adapter
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $this->getClient()->update(
+            $collection,
+            [],
+            ['$unset' => [$id => '']],
+            multi: true
+        );
+
         return true;
     }
 
@@ -305,6 +316,162 @@ class Mongo extends Adapter
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $this->getClient()->update(
+            $collection,
+            [],
+            ['$rename' => [$id => $name]],
+            multi: true
+        );
+
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayKey
+     * @return bool
+     */
+    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
+    {
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null
+    ): bool {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+
+        $renameKey = [
+            '$rename' => [
+                $key => $newKey,
+            ]
+        ];
+
+        $renameTwoWayKey = [
+            '$rename' => [
+                $twoWayKey => $newTwoWayKey,
+            ]
+        ];
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($junction, updates: $renameKey, multi: true);
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                if ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $this->getClient()->dropCollection($junction);
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
         return true;
     }
 
@@ -360,6 +527,48 @@ class Mongo extends Adapter
     }
 
     /**
+     * Rename Index.
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     *
+     * @return bool
+     * @throws Exception
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $indexes = json_decode($collectionDocument['indexes'], true);
+        $index = null;
+
+        foreach ($indexes as $node) {
+            if ($node['key'] === $old) {
+                $index = $node;
+                break;
+            }
+        }
+
+        if ($index
+            && $this->deleteIndex($collection, $old)
+            && $this->createIndex(
+                $collection,
+                $new,
+                $index['type'],
+                $index['attributes'],
+                $index['lengths'] ?? [],
+                $index['orders'] ?? [],
+            )) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Delete Index
      *
      * @param string $collection
@@ -396,7 +605,7 @@ class Mongo extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        if (!empty($selections)) {
+        if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -540,20 +749,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * Rename Index.
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     *
-     * @return bool
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        return true;
-    }
-
-    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id
@@ -576,8 +771,8 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $limit
-     * @param int $offset
+     * @param int|null $limit
+     * @param int|null $offset
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
@@ -588,7 +783,7 @@ class Mongo extends Adapter
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -600,10 +795,13 @@ class Mongo extends Adapter
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        $options = [
-            'limit' => $limit,
-            'skip' => $offset
-        ];
+        $options = [];
+        if (!\is_null($limit)) {
+            $options['limit'] = $limit;
+        }
+        if (!\is_null($offset)) {
+            $options['skip'] = $offset;
+        }
 
         if ($timeout) {
             $options['maxTimeMS'] = $timeout;
@@ -611,7 +809,7 @@ class Mongo extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        if (!empty($selections)) {
+        if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
@@ -664,7 +862,7 @@ class Mongo extends Adapter
             $attribute = $orderAttributes[0];
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
 
             $orderOperatorInternalId = Query::TYPE_GREATER;
@@ -837,12 +1035,12 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -872,12 +1070,12 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int $max
+     * @param int|null $max
      *
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
@@ -1070,35 +1268,22 @@ class Mongo extends Adapter
      */
     protected function getQueryOperator(string $operator): string
     {
-        switch ($operator) {
-            case Query::TYPE_EQUAL:
-                return '$eq';
-            case Query::TYPE_NOTEQUAL:
-                return '$ne';
-            case Query::TYPE_LESSER:
-                return '$lt';
-            case Query::TYPE_LESSEREQUAL:
-                return '$lte';
-            case Query::TYPE_GREATER:
-                return '$gt';
-            case Query::TYPE_GREATEREQUAL:
-                return '$gte';
-            case Query::TYPE_CONTAINS:
-                return '$in';
-            case Query::TYPE_SEARCH:
-                return '$search';
-            case Query::TYPE_BETWEEN:
-                return 'between'; // this is not an operator will be replaced with $gte/$lte
-            case Query::TYPE_IS_NULL:
-                return '$eq';
-            case Query::TYPE_IS_NOT_NULL:
-                return '$ne';
-            case Query::TYPE_STARTS_WITH:
-            case Query::TYPE_ENDS_WITH:
-                return '$regex';
-            default:
-                throw new Exception('Unknown Operator:' . $operator);
-        }
+        return match ($operator) {
+            Query::TYPE_EQUAL,
+            Query::TYPE_IS_NULL => '$eq',
+            Query::TYPE_NOT_EQUAL,
+            Query::TYPE_IS_NOT_NULL => '$ne',
+            Query::TYPE_LESSER => '$lt',
+            Query::TYPE_LESSER_EQUAL => '$lte',
+            Query::TYPE_GREATER => '$gt',
+            Query::TYPE_GREATER_EQUAL => '$gte',
+            Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_SEARCH => '$search',
+            Query::TYPE_BETWEEN => 'between',
+            Query::TYPE_STARTS_WITH,
+            Query::TYPE_ENDS_WITH => '$regex',
+            default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
+        };
     }
 
     protected function getQueryValue(string $method, mixed $value): mixed
@@ -1128,7 +1313,7 @@ class Mongo extends Adapter
         return match ($order) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
-            default => throw new Exception('Unknown sort order:' . $order),
+            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' .  Database::ORDER_DESC),
         };
     }
 
@@ -1267,6 +1452,11 @@ class Mongo extends Adapter
         return true;
     }
 
+    public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *
@@ -1352,12 +1542,12 @@ class Mongo extends Adapter
      * Return set namespace.
      *
      * @return string
-     * @throws \Exception
+     * @throws Exception
      */
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         return $this->namespace;
@@ -1369,12 +1559,12 @@ class Mongo extends Adapter
      * @param string $name
      * @param bool $reset
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new Exception('Missing database');
+            throw new DatabaseException('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -1387,12 +1577,12 @@ class Mongo extends Adapter
      *
      * @param string $namespace
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);

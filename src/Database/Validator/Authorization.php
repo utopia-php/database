@@ -153,20 +153,20 @@ class Authorization extends Validator
      *
      * Skips authorization for the code to be executed inside the callback
      *
-     * @param callable $callback
-     * @return mixed
+     * @template T
+     * @param callable(): T $callback
+     * @return T
      */
     public static function skip(callable $callback): mixed
     {
         $initialStatus = self::$status;
-
         self::disable();
 
-        $result = $callback();
-
-        self::$status = $initialStatus;
-
-        return $result;
+        try {
+            return $callback();
+        } finally {
+            self::$status = $initialStatus;
+        }
     }
 
     /**

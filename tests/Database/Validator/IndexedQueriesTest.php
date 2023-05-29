@@ -133,4 +133,44 @@ class IndexedQueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid(['orderAsc("dne")']), $validator->getDescription());
         $this->assertEquals(false, $validator->isValid(['search("name", "value")']), $validator->getDescription());
     }
+
+    public function testTwoAttributesFulltext(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'ft1',
+                'key' => 'ft1',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'ft2',
+                'key' => 'ft2',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                'type' => Database::INDEX_FULLTEXT,
+                'attributes' => ['ft1','ft2'],
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            $indexes,
+            [
+                new Cursor(),
+                new Filter($attributes),
+                new Limit(),
+                new Offset(),
+                new Order($attributes)
+            ]
+        );
+
+        $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
+    }
+
 }

@@ -56,7 +56,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\Memory;
 use Utopia\Database\Adapter\MariaDB;
 
 $dbHost = 'mariadb';
@@ -74,7 +74,7 @@ $pdoConfig = [
 
 $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig);
 
-$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
+$cache = new Cache(new Memory()); // or use any cache adapter you wish
 
 $database = new Database(new MariaDB($pdo), $cache);
 ```
@@ -87,7 +87,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\Memory;
 use Utopia\Database\Adapter\MySQL;
 
 $dbHost = 'mysql';
@@ -105,7 +105,7 @@ $pdoConfig = [
 
 $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig);
 
-$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
+$cache = new Cache(new Memory()); // or use any cache adapter you wish
 
 $database = new Database(new MySql($pdo), $cache);
 ```
@@ -118,7 +118,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\Memory;
 use Utopia\Database\Adapter\Postgres;
 
 $dbHost = 'postgres';
@@ -136,7 +136,7 @@ $pdoConfig = [
 
 $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, $pdoConfig);
 
-$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
+$cache = new Cache(new Memory()); // or use any cache adapter you wish
 
 $database = new Database(new Postgres($pdo), $cache);
 ```
@@ -149,7 +149,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PDO;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 
 $dbPath = '/path/to/database.sqlite';
@@ -164,7 +164,7 @@ $pdoConfig = [
 
 $pdo = new PDO("{$dbPath}", $pdoConfig);
 
-$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
+$cache = new Cache(new Memory()); // or use any cache adapter you wish
 
 $database = new Database(new SQLite($pdo), $cache);
 ```
@@ -176,19 +176,19 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Mongo\Client; // from utopia-php/mongo
 
 $dbHost = 'mongo';
-$dbPort = 27017; // this should be a integer
+$dbPort = 27017; 
 $dbUser = 'root';
 $dbPass = 'password';
 $dbName = 'dbName';
 
 $mongoClient = new Client($dbName, $dbHost, $dbPort, $dbUser, $dbPass, true);
 
-$cache = new Cache(new MemoryCache()); // or use any cache adapter you wish
+$cache = new Cache(new Memory()); // or use any cache adapter you wish
 
 $database = new Database(new Mongo($client), $cache);
 ```
@@ -202,44 +202,82 @@ $database = new Database(new Mongo($client), $cache);
 **Database Methods:**
 
 ```php
-$nameOfTheDatabaseOrSchema = 'mydb';
-$database->setNamespace($nameOfTheDatabaseOrSchema);
+
+// Sets namespace that prefixes all collection names
+$database->setNamespace(name: "namespace");
+
 // Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. named 'mydb'
-$database->create($nameOfTheDatabaseOrSchema);
+$database->create(name: "mydb");
 
-//delete database
-$database->delete($nameOfTheDatabaseOrSchema);
+// Delete database
+$database->delete(name: "mydb");
 
-//ping database it returns true if the database is alive
+// Ping database it returns true if the database is alive
 $database->ping();
 
-//check if database and collection exist it returns true if the database or collection exists
-$database->exists($nameOfTheDatabaseOrSchema); // for database
-$database->exists($nameOfTheDatabaseOrSchema, $collectionName); // for collection
+// Check if database and collection exist it returns true if the database or collection exists
+$database->exists(database: "mydb"); // for database
+$database->exists(database: "mydb", collection: "users"); // for collection
 ```
 
 **Collection Methods:**
 
 ```php
-$collectionName = 'movies';
+$attributes = [
+     new Document([
+         '$id' => ID::custom('attribute1'),
+         'type' => Database::VAR_STRING,
+         'size' => 2500, // longer than 768
+         'required' => false,
+         'signed' => true,
+         'array' => false,
+         'filters' => [],
+     ]),
+     new Document([
+         '$id' => ID::custom('attribute-2'),
+         'type' => Database::VAR_INTEGER,
+         'size' => 0,
+         'required' => false,
+         'signed' => true,
+         'array' => false,
+         'filters' => [],
+     ]),
+]
 
-$database->createCollection($collectionName);
-// creates two new table/collection named '$namespace_$collectionName' with column names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
-// The second table is named '$namespace_$collectionName_perms' with column names '_id', '_type', '_permission', '_document'
+$indexes = [
+     $indexes = [
+        new Document([
+            '$id' => ID::custom('index1'),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['attribute1'],
+            'lengths' => [256],
+            'orders' => ['ASC'],
+        ]),
+        new Document([
+            '$id' => ID::custom('index-2'),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['attribute-2'],
+            'lengths' => [],
+            'orders' => ['ASC'],
+        ])
+]
+];
+// attributes and indexes are optional
+// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
+// The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
+$database->createCollection(name: "users", attributes: $attributes, indexes: $indexes);
 
-$database->deleteCollection($collectionName);
-// deletes the two tables/collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
+// Deletes the two collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
+$database->deleteCollection(id: "users");
 
-$database->getSizeOfCollection($collectionName);
-// returns the size of the collection in bytes where database is $this->getDefaultDatabase()
+// Returns the size of the collection in bytes where database is the default database
+$database->getSizeOfCollection(collection: "users");
 ```
 
 **Attribute Methods:**
 
 ```php
-$collectionName = 'movies'; //required
-$attributeId = 'name';      //required
-$attributeType =            //required
+$attributeType =            
 [
     Database::VAR_STRING,      // use Utopia\Database\Database for these constants
     Database::VAR_INTEGER,
@@ -248,38 +286,28 @@ $attributeType =            //required
     Database::VAR_DATETIME,
     Database::VAR_RELATIONSHIP
 ];
-$attributeSize = 128;       //required
-$attributeRequired = true;  //required
 
-$database->createAttribute($collectionName,$attributeId, $attributeType[0], $attributeSize, $attributeRequired);
-// creates a new column named '$attributeName' in the '$namespace_$collectionName' table.
+// Creates a new attribute named '$attributeName' in the '$namespace_$collectionName' collection.
+$database->createAttribute(collection: "movies",id: "name",type:  $attributeType[0], size: 128, required: true);
 
-$newAttributeId = 'genres'; 
-$defaultValue = null;       //optional
-$isSigned = true;           //optional
-$isAnArray = false;         //optional
-$format = null;             //optional
-$formatOptions = [];        //optional
-$filters = [];              //optional
+// New attribute with optional parameters
+$database->createAttribute(collection: "movies", id: "genres",type: $attributeType[0] , size: 128, required: true, default: null, signed: true, array: false, format: null, formatOptions: [], filters: []);
 
-$database->createAttribute($collectionName, $newAttributeId,$attributeType[0] , $attributeSize, $attributeRequired,$defaultValue, $isSigned, $isAnArray, $format, $formatOptions, $filters);
+// Updates the attribute named '$attributeName' in the '$namespace_$collectionName' collection.
+$database-> updateAttribute(collection: "movies", id: "genres",type: $attributeType[1] , size: 128, required: true, default: null, signed: true, array: false, format: null, formatOptions: [], filters: []);
 
-$database-> updateAttribute($collectionName, $attributeId, $newAttributeId, $attributeType[0], $attributeSize, $attributeRequired, $defaultValue, $isSigned, $isAnArray, $format, $formatOptions, $filters);
 
-$database->deleteAttribute($collectionName, $attributeId);
+// Deletes the attribute in the '$namespace_$collectionName' collection.
+$database->deleteAttribute(collection: "movies", id: "genres");
 
-$currentAttributeId = 'genres';
-$newAttributeId = 'genres2';
-
-$database->renameAttribute($collectionName, $currentAttributeId, $newAttributeId);
+// Renames the attribute from old to new in the '$namespace_$collectionName' collection.
+$database->renameAttribute(collection: "movies",old: "genres", new: "genres2");
 ```
 
 **Index Methods:**
 
 ```php
-$collectionName = 'movies';              //required
-$indexId = 'index1';                     //required
-$indexType =                             //required
+$indexType =                             
 [
     Database::INDEX_KEY,                 // use Utopia\Database\Database for these constants
     Database::INDEX_FULLTEXT,
@@ -287,52 +315,56 @@ $indexType =                             //required
     Database::INDEX_SPATIAL,
     Database::INDEX_ARRAY
 ];
-$attributesToIndex = ['name', 'genres']; //required
-$indexSize = [128];                      //required
-$insertionOrder =                        //required
+
+$insertionOrder =                        
 [                                 
     Database::ORDER_ASC,   
     Database::ORDER_DESC
 ];                   
 
-$database->createIndex($collectionName, $indexId, $indexType[0], $attributeToIndex, $indexSizes, [$insertionOrder[0], $insertionOrder[1]]);
+// Creates a new index named '$indexName' in the '$namespace_$collectionName' collection.
+// Note: The size for the index will be taken from the size of the attribute
+$database->createIndex(collection: "movies", id: "index1", $indexType[0], attributes: ["name", "genres"], lengths: [128,128], orders: [$insertionOrder[0], $insertionOrder[1]]);
 
-$currentIndexId = 'index1';
-$newIndexId = 'index2';
+// Rename index from old to new in the '$namespace_$collectionName' collection.
+$database->renameIndex(collection: "movies", old: "index1", new: "index2");
 
-$database->renameIndex($collectionName, $currentIndexId, $newIndexId);
-
-$database->deleteIndex($collectionName, $indexId);
+// Deletes the index in the '$namespace_$collectionName' collection.
+$database->deleteIndex(collection: "movies", id: "index2");
 ``` 
 
 **Relationship Methods:**
 
 ```php
-$collectionName = "movies1";              //required
-$relatedCollectionName = "movies2";       //required
-$typeOfRelation =                         //required
+$typeOfRelation =                        
 [ 
     Database::RELATION_ONE_TO_ONE,
     Database::RELATION_ONE_TO_MANY,
     Database::RELATION_MANY_TO_ONE,
     Database::RELATION_MANY_TO_MANY
 ];
-$isTwoWay = false;                         //required
 
-$database->createRelationship($collectionName, $relatedCollectionName, $typeOfRelation[3], $isTwoWay);
-
-$newColumnName = "director";              //required if two way
-$newRelatedColumnName = "director_names"; //required if two way
-$isTwoWay = true;                         //required if two way
-
-$database->createRelationship($collectionName, $relatedCollectionName, $typeOfRelation[3], $isTwoWay, $newColumnName, $newRelatedColumnName); //creates a relationship between the two collections with the $newColumnName and $newRelatedColumnName as the reference columns
+// Creates a relationship between the two collections with the default reference attributes
+$database->createRelationship(collection: "movies", relatedCollection: "users", $typeOfRelation[0], twoWay: true);
 
 
-$database->updateRelationship($collectionName, $relatedCollectionName, $newColumnName, $newRelatedColumnName, $isTwoWay); 
+// Create a relationship with custom reference attributes
+$database->createRelationship(collection: "movies", relatedCollection: "users", $typeOfRelation[0], twoWay: true, id: "movies_id", twoWayKey: "users_id"); 
 
-$relatedAttributeName = "director";       //required 
+$onDeleteTypes = [
+    Database::RELATION_MUTATE_CASCADE, 
+    Database::RELATION_MUTATE_SET_NULL,
+    Database::RELATION_MUTATE_RESTRICT,
+];
 
-$database->deleteRelationship($collectionName,  $relatedAttributeName);
+// Update the relationship with the default reference attributes
+$database->updateRelationship(collection: "movies", id: "users", onDelete: $onDeleteTypes[0]); 
+
+// Update the relationship with custom reference attributes
+$database->updateRelationship(collection: "movies", id: "users", onDelete: $onDeleteTypes[0], newKey: "movies_id", newTwoWayKey: "users_id", twoWay: true);
+
+// Delete the relationship with the default or custom reference attributes
+$database->deleteRelationship(collection: "movies", id: "users");
 ```
 
 **Document Methods:**
@@ -344,20 +376,21 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
     // Id helpers
-    ID::unique($lengthOfId), // if parameter is not passed it defaults to 7
-    ID::custom($customId)    // a parameter must be passed 
+    ID::unique(padding: 12),        // Length of the ID: Default is 7
+    ID::custom(id: "my_user_3235")  // a parameter must be passed 
 
     // Role helpers
     Role::any(),
-    Role::user($customId)    // creates a role with $customId as the identifier
+    Role::user(ID::unique())    // creates a role with $customId as the identifier
 
     // Permission helpers
-    Permission::read($roleType),
-    Permission::create($roleType),
-    Permission::update($roleType),
-    Permission::delete($roleType)
+    Permission::read(Role::any()),
+    Permission::create(Role::user(ID::unique())),
+    Permission::update(Role::user(ID::unique(padding: 23))),
+    Permission::delete(Role::user(ID::custom(id: "my_user_3235"))
 
-$document = $database->createDocument('movies', new Document([
+// To create a document
+$document = new Document([
     '$permissions' => [
         Permission::read(Role::any()),
         Permission::create(Role::user(ID::custom('1x'))),
@@ -370,26 +403,23 @@ $document = $database->createDocument('movies', new Document([
     'price' => 25.99,
     'active' => true,
     'genres' => ['science fiction', 'action', 'comics'],
-]));
+]);
+$document = $database->createDocument(collection: 'movies', document: $document);
 
 // To get which collection a document belongs to
 $document->getCollection();
 
 // To get document id
-$document = $database->createDocument('movies', new Document([
-    '$permissions' => [...],
-    'name' => 'Captain Marvel',
-]));
-$documentId = $document->getId();
+$document->getId();
 
 // To check whether document in empty
 $document->isEmpty();
 
-// increase an attribute in a document 
-$database->increaseDocumentAttribute($collection, $documentId,$attributeName, $value, $maxValue));
+// Increase an attribute in a document 
+$database->increaseDocumentAttribute(collection: "movies", id: $document->getId(),attribute: "name", value: 24, max: 100));
 
-// decrease an attribute in a document
-$database->decreaseDocumentAttribute($collection, $documentId,$attributeName, $value, $minValue));
+// Decrease an attribute in a document
+$database->decreaseDocumentAttribute(collection: "movies", id: $document->getId(),attribute: "name", value: 24, min: 100));
 
 // Update the value of an attribute in a document
 $setTypes =
@@ -398,10 +428,10 @@ $setTypes =
      Document::SET_TYPE_APPEND,
      Document::SET_TYPE_PREPEND
 ];
-$document->setAttribute($attributeName, $value)
-         ->setAttribute($attributeName, $value, $setTypes[0]);
+$document->setAttribute(key: "name", "Chris Smoove")
+         ->setAttribute(key: "age", 33, $setTypes[0]);
 
-$database->updateDocument($collectionName, $documentId, $document);         
+$database->updateDocument(collection: "users", id: $document->getId(), document: $document);         
 
 // Update the permissions of a document
 $document->setAttribute('$permissions', Permission::read(Role::any()), Document::SET_TYPE_APPEND)
@@ -409,7 +439,7 @@ $document->setAttribute('$permissions', Permission::read(Role::any()), Document:
          ->setAttribute('$permissions', Permission::update(Role::any()), Document::SET_TYPE_APPEND)
          ->setAttribute('$permissions', Permission::delete(Role::any()), Document::SET_TYPE_APPEND)
 
-$database->updateDocument($collectionName, $documentId, $document);
+$database->updateDocument(collection: "users", id: $document->getId(), document: $document);
 
 // Info regarding who has permission to read, create, update and delete a document
 $document->getRead(); // returns an array of roles that have permission to read the document
@@ -418,49 +448,45 @@ $document->getUpdate(); // returns an array of roles that have permission to upd
 $document->getDelete(); // returns an array of roles that have permission to delete the document
 
 // Get document with all attributes
-$database->getDocument($collectionName, $documentId); 
+$database->getDocument(collection: "movies", id: $document->getId()); 
 
 // Get document with a sub-set of attributes
 $attributes = ['name', 'director', 'year'];
-$database->getDocument($collectionName, $documentId, [
+$database->getDocument(collection: "movies", id: $document->getId(), [
     Query::select($attributes),
 ]);
 
 // Find a document with a query
-
-$attribute = 'year';
-$multipleAttributes = ['year', 'name'];
-$multipleValues = [2019, 2020];
-$value = 2021;
 $possibleQueries = 
 [
-   Query::equal($attribute, $multipleValues),
-   Query::notEqual($attribute, $value),
-   Query::lessThan($attribute, $value),
-   Query::lessThanEqual($attribute, $value),
-   Query::greaterThan($attribute, $value),
-   Query::greaterThanEqual($attribute, $value),  
-   Query::contains($attribute, $multipleValues),
-   Query::between($attribute, $startValue, $endValue),
-   Query::search($attribute, $value),
-   Query::select($multipleAttributes),
-   Query::orderDesc($attribute),
-   Query::orderAsc($attribute),
-   Query::isNull($attribute),
-   Query::isNotNull($attribute),
-   Query::startsWith($attribute, $value),
-   Query::endsWith($attribute, $value),
-   Query::limit($value),
-   Query::offset($value),
+   Query::equal(attribute: "location", values: ["Bangalore", "California"]),
+   Query::notEqual(attribute: "location", value: "New York"),
+   Query::lessThan(attribute: "users", value: 3000),
+   Query::lessThanEqual(attribute: "users", value: 10000),
+   Query::greaterThan(attribute: "users", value: 200),
+   Query::greaterThanEqual(attribute: "users", value: 250),  
+   Query::contains(attribute: "users", values: ["Jhon", "Smith"]),
+   Query::between(attribute: "price", start: 100, end: 1000),
+   Query::search(attribute: "users", value: "Jake"),
+   Query::select(attributes: ["location", "users"]),
+   Query::orderDesc(attribute: "users"),
+   Query::orderAsc(attribute: "users"),
+   Query::isNull(attribute: "users"),
+   Query::isNotNull(attribute: "users"),
+   Query::startsWith(attribute: "name", value: "Jhon"),
+   Query::endsWith(attribute: "name", value: "Smith"),
+   Query::limit(value: 35),
+   Query::offset(value: 0),
 ];
 
-$database->find('movies', [
+
+$database->find(collection: 'movies', queries:  [
     $possibleQueries[0],
     $possibleQueries[1],
-]);
+], timeout: 1);  //timeout is optional
 
 // Delete a document
-$database->deleteDocument($collectionName, $documentId);
+$database->deleteDocument(collection: "movies", id: $document->getId());
 ```
 
 ### Adapters
@@ -471,7 +497,7 @@ Below is a list of supported adapters, and their compatibly tested versions alon
 | -------- | ------ | ------- |
 | MariaDB  | ✅     | 10.5    |
 | MySQL    | ✅     | 8.0     |
-| Postgres | 🛠      | 13.0    |
+| Postgres | 🛠     | 13.0    |
 | MongoDB  | ✅     | 5.0     |
 | SQLlite  | ✅     | 3.38    |
 

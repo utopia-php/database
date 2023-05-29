@@ -857,7 +857,7 @@ class MariaDB extends Adapter
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
+        if (!$hasIdAttribute && (empty($orderAttributes) || empty($orderTypes))) {
             if (empty($orderAttributes) && !empty($orderTypes)) {
                 $order = $orderTypes[0] ?? Database::ORDER_ASC;
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -927,9 +927,6 @@ class MariaDB extends Adapter
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
-
-
-
 
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);

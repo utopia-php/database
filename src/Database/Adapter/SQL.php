@@ -745,6 +745,33 @@ abstract class SQL extends Adapter
         return \md5($json);
     }
 
+    public function escapeWildcards(string $value): string
+    {
+        $wildcards = [
+            '%',
+            '_',
+            '[',
+            ']',
+            '^',
+            '-',
+            '.',
+            '*',
+            '+',
+            '?',
+            '(',
+            ')',
+            '{',
+            '}',
+            '|'
+        ];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
+        }
+
+        return $value;
+    }
+
     protected function getSQLValue(string $method, mixed $value): mixed
     {
         switch ($method) {

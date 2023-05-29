@@ -768,12 +768,12 @@ class Database
     }
 
     /**
-      * Delete Collection
-      *
-      * @param string $id
-      *
-      * @return bool
-      */
+     * Delete Collection
+     *
+     * @param string $id
+     *
+     * @return bool
+     */
     public function deleteCollection(string $id): bool
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));

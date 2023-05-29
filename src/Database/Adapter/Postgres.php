@@ -175,11 +175,11 @@ class Postgres extends SQL
     }
 
     /**
-      * Delete Collection
-      *
-      * @param string $id
-      * @return bool
-      */
+     * Delete Collection
+     *
+     * @param string $id
+     * @return bool
+     */
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);

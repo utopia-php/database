@@ -186,12 +186,12 @@ class SQLite extends MariaDB
     }
 
     /**
-      * Delete Collection
-      * @param string $id
-      * @return bool
-      * @throws Exception
-      * @throws PDOException
-      */
+     * Delete Collection
+     * @param string $id
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
     public function deleteCollection(string $id): bool
     {
         $id = $this->filter($id);

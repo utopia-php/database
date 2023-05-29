@@ -278,12 +278,12 @@ class Mongo extends Adapter
     }
 
     /**
-      * Delete Collection
-      *
-      * @param string $id
-      * @return bool
-      * @throws Exception
-      */
+     * Delete Collection
+     *
+     * @param string $id
+     * @return bool
+     * @throws Exception
+     */
     public function deleteCollection(string $id): bool
     {
         $id = $this->getNamespace() . '_' . $this->filter($id);

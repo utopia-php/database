@@ -162,7 +162,7 @@ class Filter extends Base
 
             case Query::TYPE_BETWEEN:
                 if (count($value->getValues()) != 2) {
-                    $this->message = \ucfirst($method) . ' can take only two value.';
+                    $this->message = \ucfirst($method) . ' queries require exactly two values.';
                     return false;
                 }
 

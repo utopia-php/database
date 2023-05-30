@@ -157,21 +157,21 @@ class Postgres extends SQL
      */
     public function getSizeOfCollection(string $collection): int
     {
-         $name = $this->filter($collection);
+        $name = $this->filter($collection);
 
-         $query = $this->getPDO()->prepare("
+        $query = $this->getPDO()->prepare("
              SELECT pg_total_relation_size('{$this->getSQLTable($name)}');
-         ");
+        ");
 
-         try {
+        try {
              $query->execute();
              $size = $query->fetchColumn();
-         }
-          catch (PDOException $e) {
+        }
+        catch (PDOException $e) {
              throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-         }
+        }
 
-          return  $size;
+        return  $size;
     }
 
     /**

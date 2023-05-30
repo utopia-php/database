@@ -172,5 +172,4 @@ class IndexedQueriesTest extends TestCase
 
         $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
     }
-
 }

@@ -1228,15 +1228,7 @@ class MariaDB extends SQL
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = $this->getSQLValue($query->getMethod(), $value);
-                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+                return "MATCH({$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
                 return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";

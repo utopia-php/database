@@ -204,110 +204,158 @@ $database = new Database(new Mongo($client), $cache);
 ```php
 
 // Sets namespace that prefixes all collection names
-$database->setNamespace(name: "namespace");
+$database->setNamespace(name: 'namespace');
 
 // Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. named 'mydb'
-$database->create(name: "mydb");
+$database->create(name: 'mydb');
 
 // Delete database
-$database->delete(name: "mydb");
+$database->delete(name: 'mydb');
 
 // Ping database it returns true if the database is alive
 $database->ping();
 
-// Check if database and collection exist it returns true if the database or collection exists
-$database->exists(database: "mydb"); // for database
-$database->exists(database: "mydb", collection: "users"); // for collection
+// Check if database exists
+$database->exists(database: 'mydb'); // for database
+
+// Check if collection exists
+$database->exists(
+    database: 'mydb',
+    collection: 'users'
+); 
 ```
 
 **Collection Methods:**
 
 ```php
+// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
+// The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
+$database->createCollection(name: 'users');
+
+// Create collection with attributes and indexes
 $attributes = [
      new Document([
-         '$id' => ID::custom('attribute1'),
-         'type' => Database::VAR_STRING,
-         'size' => 2500, // longer than 768
-         'required' => false,
-         'signed' => true,
-         'array' => false,
-         'filters' => [],
+         '$id' => ID::unique(),
+         '$permissions' => [
+          Permission::read(Role::any()),
+          Permission::update(Role::any()),
+          Permission::delete(Role::any())
+         ],
+         'name' => 'Jhon', 
+         'age'  =>  20
      ]),
      new Document([
-         '$id' => ID::custom('attribute-2'),
-         'type' => Database::VAR_INTEGER,
-         'size' => 0,
-         'required' => false,
-         'signed' => true,
-         'array' => false,
-         'filters' => [],
+         '$id' => ID::unique(),
+         '$permissions' => [
+          Permission::read(Role::any()),
+          Permission::update(Role::any()),
+          Permission::delete(Role::any())
+         ],
+         'name' => 'Doe', 
+         'age'  =>  34
      ]),
 ]
 
 $indexes = [
-     $indexes = [
-        new Document([
-            '$id' => ID::custom('index1'),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['attribute1'],
-            'lengths' => [256],
-            'orders' => ['ASC'],
+     new Document([
+         '$id' => ID::unique(),
+         'type' => Database::INDEX_KEY,
+         'attributes' => ['name'],
+         'lengths' => [256],
+         'orders' => ['ASC'],
         ]),
-        new Document([
-            '$id' => ID::custom('index-2'),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['attribute-2'],
-            'lengths' => [],
-            'orders' => ['ASC'],
+     new Document([
+         '$id' => ID::unique(),
+         'type' => Database::INDEX_KEY,
+         'attributes' => ['name', 'age'],
+         'lengths' => [128, 128],
+         'orders' => ['ASC'],
         ])
-]
 ];
-// attributes and indexes are optional
-// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
-// The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
-$database->createCollection(name: "users", attributes: $attributes, indexes: $indexes);
+
+$database->createCollection(
+    name: 'users', 
+    attributes: $attributes, 
+    indexes: $indexes
+);
 
 // Deletes the two collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
-$database->deleteCollection(id: "users");
+$database->deleteCollection(id: 'users');
 
 // Returns the size of the collection in bytes where database is the default database
-$database->getSizeOfCollection(collection: "users");
+$database->getSizeOfCollection(collection: 'users');
 ```
 
 **Attribute Methods:**
 
 ```php
-$attributeType =            
+$attributeTypes =            
 [
     Database::VAR_STRING,      // use Utopia\Database\Database for these constants
     Database::VAR_INTEGER,
     Database::VAR_FLOAT,
     Database::VAR_BOOLEAN,
     Database::VAR_DATETIME,
-    Database::VAR_RELATIONSHIP
 ];
 
 // Creates a new attribute named '$attributeName' in the '$namespace_$collectionName' collection.
-$database->createAttribute(collection: "movies",id: "name",type:  $attributeType[0], size: 128, required: true);
+$database->createAttribute(
+    collection: 'movies',
+    id: 'name',
+    type:  $attributeTypes[0],
+    size: 128, 
+    required: true
+);
 
 // New attribute with optional parameters
-$database->createAttribute(collection: "movies", id: "genres",type: $attributeType[0] , size: 128, required: true, default: null, signed: true, array: false, format: null, formatOptions: [], filters: []);
+$database->createAttribute(
+    collection: 'movies', 
+    id: 'genres',
+    type: $attributeTypes[0] , 
+    size: 128, 
+    required: true, 
+    default: null, 
+    signed: true, 
+    array: false, 
+    format: null, 
+    formatOptions: [], 
+    filters: []
+);
 
 // Updates the attribute named '$attributeName' in the '$namespace_$collectionName' collection.
-$database-> updateAttribute(collection: "movies", id: "genres",type: $attributeType[1] , size: 128, required: true, default: null, signed: true, array: false, format: null, formatOptions: [], filters: []);
+$database-> updateAttribute(
+    collection: 'movies', 
+    id: 'genres',
+    type: $attributeTypes[1] , 
+    size: 128, 
+    required: true, 
+    default: null, 
+    signed: true, 
+    array: false, 
+    format: null, 
+    formatOptions: [], 
+    filters: []
+);
 
 
 // Deletes the attribute in the '$namespace_$collectionName' collection.
-$database->deleteAttribute(collection: "movies", id: "genres");
+$database->deleteAttribute(
+    collection: 'movies', 
+    id: 'genres'
+);
 
 // Renames the attribute from old to new in the '$namespace_$collectionName' collection.
-$database->renameAttribute(collection: "movies",old: "genres", new: "genres2");
+$database->renameAttribute(
+    collection: 'movies',
+    old: 'genres', 
+    new: 'genres2'
+);
 ```
 
 **Index Methods:**
 
 ```php
-$indexType =                             
+$indexTypes =                             
 [
     Database::INDEX_KEY,                 // use Utopia\Database\Database for these constants
     Database::INDEX_FULLTEXT,
@@ -324,19 +372,32 @@ $insertionOrder =
 
 // Creates a new index named '$indexName' in the '$namespace_$collectionName' collection.
 // Note: The size for the index will be taken from the size of the attribute
-$database->createIndex(collection: "movies", id: "index1", $indexType[0], attributes: ["name", "genres"], lengths: [128,128], orders: [$insertionOrder[0], $insertionOrder[1]]);
+$database->createIndex(
+    collection: 'movies', 
+    id: 'index1', $indexTypes[0], 
+    attributes: ['name', 'genres'], 
+    lengths: [128,128], 
+    orders: [$insertionOrder[0], $insertionOrder[1]]
+);
 
 // Rename index from old to new in the '$namespace_$collectionName' collection.
-$database->renameIndex(collection: "movies", old: "index1", new: "index2");
+$database->renameIndex(
+    collection: 'movies', 
+    old: 'index1', 
+    new: 'index2'
+);
 
 // Deletes the index in the '$namespace_$collectionName' collection.
-$database->deleteIndex(collection: "movies", id: "index2");
+$database->deleteIndex(
+    collection: 'movies', 
+    id: 'index2'
+);
 ``` 
 
 **Relationship Methods:**
 
 ```php
-$typeOfRelation =                        
+$typesOfRelation =                        
 [ 
     Database::RELATION_ONE_TO_ONE,
     Database::RELATION_ONE_TO_MANY,
@@ -345,11 +406,23 @@ $typeOfRelation =
 ];
 
 // Creates a relationship between the two collections with the default reference attributes
-$database->createRelationship(collection: "movies", relatedCollection: "users", $typeOfRelation[0], twoWay: true);
+$database->createRelationship(
+    collection: 'movies', 
+    relatedCollection: 'users', 
+    $typesOfRelation[0], 
+    twoWay: true
+);
 
 
 // Create a relationship with custom reference attributes
-$database->createRelationship(collection: "movies", relatedCollection: "users", $typeOfRelation[0], twoWay: true, id: "movies_id", twoWayKey: "users_id"); 
+$database->createRelationship(
+    collection: 'movies', 
+    relatedCollection: 'users', 
+    $typesOfRelation[0], 
+    twoWay: true, 
+    id: 'movies_id', 
+    twoWayKey: 'users_id'
+); 
 
 $onDeleteTypes = [
     Database::RELATION_MUTATE_CASCADE, 
@@ -358,36 +431,50 @@ $onDeleteTypes = [
 ];
 
 // Update the relationship with the default reference attributes
-$database->updateRelationship(collection: "movies", id: "users", onDelete: $onDeleteTypes[0]); 
+$database->updateRelationship(
+    collection: 'movies', 
+    id: 'users', 
+    onDelete: $onDeleteTypes[0]
+); 
 
 // Update the relationship with custom reference attributes
-$database->updateRelationship(collection: "movies", id: "users", onDelete: $onDeleteTypes[0], newKey: "movies_id", newTwoWayKey: "users_id", twoWay: true);
+$database->updateRelationship(
+    collection: 'movies', 
+    id: 'users', 
+    onDelete: $onDeleteTypes[0], 
+    newKey: 'movies_id', 
+    newTwoWayKey: 'users_id', 
+    twoWay: true
+);
 
 // Delete the relationship with the default or custom reference attributes
-$database->deleteRelationship(collection: "movies", id: "users");
+$database->deleteRelationship(
+    collection: 'movies', 
+    id: 'users'
+);
 ```
 
 **Document Methods:**
 
 ```php
-use Utopia\Database\Document;             // remember to use these classes
+use Utopia\Database\Document;             
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
-    // Id helpers
-    ID::unique(padding: 12),        // Length of the ID: Default is 7
-    ID::custom(id: "my_user_3235")  // a parameter must be passed 
+// Id helpers
+ID::unique(padding: 12),        // Creates a id of length 7 + padding
+ID::custom(id: 'my_user_3235')  
 
-    // Role helpers
-    Role::any(),
-    Role::user(ID::unique())    // creates a role with $customId as the identifier
+// Role helpers
+Role::any(),
+Role::user(ID::unique())    
 
-    // Permission helpers
-    Permission::read(Role::any()),
-    Permission::create(Role::user(ID::unique())),
-    Permission::update(Role::user(ID::unique(padding: 23))),
-    Permission::delete(Role::user(ID::custom(id: "my_user_3235"))
+// Permission helpers
+Permission::read(Role::any()),
+Permission::create(Role::user(ID::unique())),
+Permission::update(Role::user(ID::unique(padding: 23))),
+Permission::delete(Role::user(ID::custom(id: 'my_user_3235'))
 
 // To create a document
 $document = new Document([
@@ -406,20 +493,32 @@ $document = new Document([
 ]);
 $document = $database->createDocument(collection: 'movies', document: $document);
 
-// To get which collection a document belongs to
+// Get which collection a document belongs to
 $document->getCollection();
 
-// To get document id
+// Get document id
 $document->getId();
 
-// To check whether document in empty
+// Check whether document in empty
 $document->isEmpty();
 
 // Increase an attribute in a document 
-$database->increaseDocumentAttribute(collection: "movies", id: $document->getId(),attribute: "name", value: 24, max: 100));
+$database->increaseDocumentAttribute(
+    collection: 'movies', 
+    id: $document->getId(),
+    attribute: 'name', 
+    value: 24,
+    max: 100
+);
 
 // Decrease an attribute in a document
-$database->decreaseDocumentAttribute(collection: "movies", id: $document->getId(),attribute: "name", value: 24, min: 100));
+$database->decreaseDocumentAttribute(
+    collection: 'movies', 
+    id: $document->getId(),
+    attribute: 'name', 
+    value: 24, 
+    min: 100
+);
 
 // Update the value of an attribute in a document
 $setTypes =
@@ -428,10 +527,14 @@ $setTypes =
      Document::SET_TYPE_APPEND,
      Document::SET_TYPE_PREPEND
 ];
-$document->setAttribute(key: "name", "Chris Smoove")
-         ->setAttribute(key: "age", 33, $setTypes[0]);
+$document->setAttribute(key: 'name', 'Chris Smoove')
+         ->setAttribute(key: 'age', 33, $setTypes[0]);
 
-$database->updateDocument(collection: "users", id: $document->getId(), document: $document);         
+$database->updateDocument(
+    collection: 'users', 
+    id: $document->getId(), 
+    document: $document
+);         
 
 // Update the permissions of a document
 $document->setAttribute('$permissions', Permission::read(Role::any()), Document::SET_TYPE_APPEND)
@@ -439,7 +542,11 @@ $document->setAttribute('$permissions', Permission::read(Role::any()), Document:
          ->setAttribute('$permissions', Permission::update(Role::any()), Document::SET_TYPE_APPEND)
          ->setAttribute('$permissions', Permission::delete(Role::any()), Document::SET_TYPE_APPEND)
 
-$database->updateDocument(collection: "users", id: $document->getId(), document: $document);
+$database->updateDocument(
+    collection: 'users', 
+    id: $document->getId(), 
+    document: $document
+);
 
 // Info regarding who has permission to read, create, update and delete a document
 $document->getRead(); // returns an array of roles that have permission to read the document
@@ -448,35 +555,39 @@ $document->getUpdate(); // returns an array of roles that have permission to upd
 $document->getDelete(); // returns an array of roles that have permission to delete the document
 
 // Get document with all attributes
-$database->getDocument(collection: "movies", id: $document->getId()); 
+$database->getDocument(
+    collection: 'movies', 
+    id: $document->getId()
+); 
 
 // Get document with a sub-set of attributes
-$attributes = ['name', 'director', 'year'];
-$database->getDocument(collection: "movies", id: $document->getId(), [
-    Query::select($attributes),
-]);
+$database->getDocument(
+    collection: 'movies', 
+    id: $document->getId(), 
+    [Query::select(['name', 'director', 'year'])]
+);
 
 // Find a document with a query
 $possibleQueries = 
 [
-   Query::equal(attribute: "location", values: ["Bangalore", "California"]),
-   Query::notEqual(attribute: "location", value: "New York"),
-   Query::lessThan(attribute: "users", value: 3000),
-   Query::lessThanEqual(attribute: "users", value: 10000),
-   Query::greaterThan(attribute: "users", value: 200),
-   Query::greaterThanEqual(attribute: "users", value: 250),  
-   Query::contains(attribute: "users", values: ["Jhon", "Smith"]),
-   Query::between(attribute: "price", start: 100, end: 1000),
-   Query::search(attribute: "users", value: "Jake"),
-   Query::select(attributes: ["location", "users"]),
-   Query::orderDesc(attribute: "users"),
-   Query::orderAsc(attribute: "users"),
-   Query::isNull(attribute: "users"),
-   Query::isNotNull(attribute: "users"),
-   Query::startsWith(attribute: "name", value: "Jhon"),
-   Query::endsWith(attribute: "name", value: "Smith"),
-   Query::limit(value: 35),
-   Query::offset(value: 0),
+   Query::equal('location',['Bangalore', 'California']),
+   Query::notEqual('location','New York'),
+   Query::lessThan('users',3000),
+   Query::lessThanEqual('users',10000),
+   Query::greaterThan('users',200),
+   Query::greaterThanEqual('users',250),  
+   Query::contains('users',['Jhon', 'Smith']),
+   Query::between('price', start: 100, end: 1000),
+   Query::search('users','Jake'),
+   Query::select(['location','users']),
+   Query::orderDesc('users'),
+   Query::orderAsc('users'),
+   Query::isNull('users'),
+   Query::isNotNull('users'),
+   Query::startsWith('name','Jhon'),
+   Query::endsWith('name','Smith'),
+   Query::limit(35),
+   Query::offset(0),
 ];
 
 
@@ -486,7 +597,7 @@ $database->find(collection: 'movies', queries:  [
 ], timeout: 1);  //timeout is optional
 
 // Delete a document
-$database->deleteDocument(collection: "movies", id: $document->getId());
+$database->deleteDocument(collection: 'movies', id: $document->getId());
 ```
 
 ### Adapters

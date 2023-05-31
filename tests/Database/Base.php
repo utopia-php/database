@@ -1434,11 +1434,16 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
-            'ft' => 'Alf: chapter_4'
+            'ft' => 'Alf: chapter_4@nasa.com'
         ]));
 
         $documents = static::getDatabase()->find($collection, [
             Query::search('ft', 'chapter_4'),
+        ]);
+        $this->assertEquals(1, count($documents));
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::search('ft', 'chapter_'),
         ]);
         $this->assertEquals(1, count($documents));
 
@@ -1458,26 +1463,31 @@ abstract class Base extends TestCase
         }
 
         static::getDatabase()->createDocument($collection, new Document([
+            '$id' => 'donald duck',
             '$permissions' => [Permission::read(Role::any())],
             'ft' => 'donald duck'
         ]));
 
         static::getDatabase()->createDocument($collection, new Document([
+            '$id' => 'donald trump',
             '$permissions' => [Permission::read(Role::any())],
             'ft' => 'donald trump'
         ]));
 
         $documents = static::getDatabase()->find($collection, [
             Query::search('ft', 'donald trump'),
+            Query::orderAsc('ft'),
         ]);
-
         $this->assertEquals(2, count($documents));
+        $this->assertEquals('donald duck', $documents[0]->getId());
+        $this->assertEquals('donald trump', $documents[1]->getId());
 
         $documents = static::getDatabase()->find($collection, [
             Query::search('ft', '"donald trump"'), // Exact match
         ]);
 
         $this->assertEquals(1, count($documents));
+        $this->assertEquals('donald trump', $documents[0]->getId());
     }
 
     public function testFindMultipleConditions(): void

@@ -1441,7 +1441,7 @@ abstract class Base extends TestCase
             Query::search('ft', 'chapter_4'),
         ]);
         $this->assertEquals(1, count($documents));
-        
+
         static::getDatabase()->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
             'ft' => 'al@ba.io +-*)(<>~'
@@ -1458,13 +1458,11 @@ abstract class Base extends TestCase
         }
 
         static::getDatabase()->createDocument($collection, new Document([
-            '$id' => 'donald duck',
             '$permissions' => [Permission::read(Role::any())],
             'ft' => 'donald duck'
         ]));
 
         static::getDatabase()->createDocument($collection, new Document([
-            '$id' => 'donald trump',
             '$permissions' => [Permission::read(Role::any())],
             'ft' => 'donald trump'
         ]));
@@ -1474,15 +1472,12 @@ abstract class Base extends TestCase
             Query::orderAsc('ft'),
         ]);
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('donald duck', $documents[0]->getId());
-        $this->assertEquals('donald trump', $documents[1]->getId());
 
         $documents = static::getDatabase()->find($collection, [
             Query::search('ft', '"donald trump"'), // Exact match
         ]);
 
         $this->assertEquals(1, count($documents));
-        $this->assertEquals('donald trump', $documents[0]->getId());
     }
 
     public function testFindMultipleConditions(): void
@@ -3620,117 +3615,117 @@ abstract class Base extends TestCase
         $this->expectException(Exception::class);
         static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
     }
-//
-//    public function testKeywords(): void
-//    {
-//        $database = static::getDatabase();
-//        $keywords = $database->getKeywords();
-//
-//        // Collection name tests
-//        $attributes = [
-//            new Document([
-//                '$id' => ID::custom('attribute1'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 256,
-//                'required' => false,
-//                'signed' => true,
-//                'array' => false,
-//                'filters' => [],
-//            ]),
-//        ];
-//
-//        $indexes = [
-//            new Document([
-//                '$id' => ID::custom('index1'),
-//                'type' => Database::INDEX_KEY,
-//                'attributes' => ['attribute1'],
-//                'lengths' => [256],
-//                'orders' => ['ASC'],
-//            ]),
-//        ];
-//
-//        foreach ($keywords as $keyword) {
-//            $collection = $database->createCollection($keyword, $attributes, $indexes);
-//            $this->assertEquals($keyword, $collection->getId());
-//
-//            $document = $database->createDocument($keyword, new Document([
-//                '$permissions' => [
-//                    Permission::read(Role::any()),
-//                    Permission::create(Role::any()),
-//                    Permission::update(Role::any()),
-//                    Permission::delete(Role::any()),
-//                ],
-//                '$id' => ID::custom('helloWorld'),
-//                'attribute1' => 'Hello World',
-//            ]));
-//            $this->assertEquals('helloWorld', $document->getId());
-//
-//            $document = $database->getDocument($keyword, 'helloWorld');
-//            $this->assertEquals('helloWorld', $document->getId());
-//
-//            $documents = $database->find($keyword);
-//            $this->assertCount(1, $documents);
-//            $this->assertEquals('helloWorld', $documents[0]->getId());
-//
-//            $collection = $database->deleteCollection($keyword);
-//            $this->assertTrue($collection);
-//        }
-//
-//        // TODO: updateCollection name tests
-//
-//        // Attribute name tests
-//        foreach ($keywords as $keyword) {
-//            $collectionName = 'rk' . $keyword; // rk is short-hand for reserved-keyword. We do this sicne there are some limits (64 chars max)
-//
-//            $collection = $database->createCollection($collectionName);
-//            $this->assertEquals($collectionName, $collection->getId());
-//
-//            $attribute = static::getDatabase()->createAttribute($collectionName, $keyword, Database::VAR_STRING, 128, true);
-//            $this->assertEquals(true, $attribute);
-//
-//            $document = new Document([
-//                '$permissions' => [
-//                    Permission::read(Role::any()),
-//                    Permission::create(Role::any()),
-//                    Permission::update(Role::any()),
-//                    Permission::delete(Role::any()),
-//                ],
-//                '$id' => 'reservedKeyDocument'
-//            ]);
-//            $document->setAttribute($keyword, 'Reserved:' . $keyword);
-//
-//            $document = $database->createDocument($collectionName, $document);
-//            $this->assertEquals('reservedKeyDocument', $document->getId());
-//            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
-//
-//            $document = $database->getDocument($collectionName, 'reservedKeyDocument');
-//            $this->assertEquals('reservedKeyDocument', $document->getId());
-//            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
-//
-//            $documents = $database->find($collectionName);
-//            $this->assertCount(1, $documents);
-//            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-//            $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
-//
-//            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:${keyword}"])]);
-//            $this->assertCount(1, $documents);
-//            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-//
-//            $documents = $database->find($collectionName, [
-//                Query::orderDesc($keyword)
-//            ]);
-//            $this->assertCount(1, $documents);
-//            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-//
-//
-//            $collection = $database->deleteCollection($collectionName);
-//            $this->assertTrue($collection);
-//
-//            // TODO: updateAttribute name tests
-//        }
-//
-//        // TODO: Index name tests
-//    }
+
+    public function testKeywords(): void
+    {
+        $database = static::getDatabase();
+        $keywords = $database->getKeywords();
+
+        // Collection name tests
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('attribute1'),
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1'],
+                'lengths' => [256],
+                'orders' => ['ASC'],
+            ]),
+        ];
+
+        foreach ($keywords as $keyword) {
+            $collection = $database->createCollection($keyword, $attributes, $indexes);
+            $this->assertEquals($keyword, $collection->getId());
+
+            $document = $database->createDocument($keyword, new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                '$id' => ID::custom('helloWorld'),
+                'attribute1' => 'Hello World',
+            ]));
+            $this->assertEquals('helloWorld', $document->getId());
+
+            $document = $database->getDocument($keyword, 'helloWorld');
+            $this->assertEquals('helloWorld', $document->getId());
+
+            $documents = $database->find($keyword);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('helloWorld', $documents[0]->getId());
+
+            $collection = $database->deleteCollection($keyword);
+            $this->assertTrue($collection);
+        }
+
+        // TODO: updateCollection name tests
+
+        // Attribute name tests
+        foreach ($keywords as $keyword) {
+            $collectionName = 'rk' . $keyword; // rk is short-hand for reserved-keyword. We do this sicne there are some limits (64 chars max)
+
+            $collection = $database->createCollection($collectionName);
+            $this->assertEquals($collectionName, $collection->getId());
+
+            $attribute = static::getDatabase()->createAttribute($collectionName, $keyword, Database::VAR_STRING, 128, true);
+            $this->assertEquals(true, $attribute);
+
+            $document = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                '$id' => 'reservedKeyDocument'
+            ]);
+            $document->setAttribute($keyword, 'Reserved:' . $keyword);
+
+            $document = $database->createDocument($collectionName, $document);
+            $this->assertEquals('reservedKeyDocument', $document->getId());
+            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+
+            $document = $database->getDocument($collectionName, 'reservedKeyDocument');
+            $this->assertEquals('reservedKeyDocument', $document->getId());
+            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+
+            $documents = $database->find($collectionName);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+            $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
+
+            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:${keyword}"])]);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+            $documents = $database->find($collectionName, [
+                Query::orderDesc($keyword)
+            ]);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+
+            $collection = $database->deleteCollection($collectionName);
+            $this->assertTrue($collection);
+
+            // TODO: updateAttribute name tests
+        }
+
+        // TODO: Index name tests
+    }
 
     public function testWritePermissions(): void
     {

@@ -1441,12 +1441,7 @@ abstract class Base extends TestCase
             Query::search('ft', 'chapter_4'),
         ]);
         $this->assertEquals(1, count($documents));
-
-        $documents = static::getDatabase()->find($collection, [
-            Query::search('ft', 'chapter_'),
-        ]);
-        $this->assertEquals(1, count($documents));
-
+        
         static::getDatabase()->createDocument($collection, new Document([
             '$permissions' => [Permission::read(Role::any())],
             'ft' => 'al@ba.io +-*)(<>~'

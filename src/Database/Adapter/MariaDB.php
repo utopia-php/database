@@ -1228,7 +1228,7 @@ class MariaDB extends SQL
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
-                return "MATCH({$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+                return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
                 return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";

@@ -708,13 +708,22 @@ abstract class SQL extends Adapter
      */
     protected function getFulltextValue(string $value): string
     {
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+
         /** Replace reserved chars with space. */
-        $value = str_replace(explode(',', '@,+,-,*,),(,<,>,@,~'), ' ', $value);
+        $specialChars = '@,+,-,*,),(,<,>,~,"';
+        $value = str_replace(explode(',', $specialChars), ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value);
 
-        /** Prepend wildcard by default on the back. */
-        $value .= '*';
+        if ($exact) {
+            $value = '"' . $value . '"';
+        } else {
+            /** Prepend wildcard by default on the back. */
+            $value .= '*';
+        }
 
-        return trim($value);
+        return $value;
     }
 
     /**

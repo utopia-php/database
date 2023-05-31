@@ -1236,7 +1236,7 @@ class Postgres extends SQL
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
-                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ to_tsquery(trim(REGEXP_REPLACE(:{$placeholder}_0, '\|+','|','g'),'|'))";
+                return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
 
             case Query::TYPE_BETWEEN:
                 return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
@@ -1261,8 +1261,16 @@ class Postgres extends SQL
      */
     protected function getFulltextValue(string $value): string
     {
-        $value = str_replace(['@', '+', '-', '*', '.'], '|', $value);
-        return trim($value);
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value);
+
+        if (!$exact) {
+            $value = str_replace(' ', ' or ', $value);
+        }
+
+        return "'" . $value . "'";
     }
 
     /**

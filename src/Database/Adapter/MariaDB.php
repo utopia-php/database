@@ -1211,6 +1211,7 @@ class MariaDB extends SQL
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed
+     * @throws Exception
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
@@ -1229,11 +1230,11 @@ class MariaDB extends SQL
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {
-                $selection = "`{$prefix}`.`{$selection}`";
+                $selection = "`{$prefix}`.`{$this->filter($selection)}`";
             }
         } else {
             foreach ($selections as &$selection) {
-                $selection = "`{$selection}`";
+                $selection = "`{$this->filter($selection)}`";
             }
         }
 

@@ -21,6 +21,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -310,6 +311,66 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('attributesWithKeys', $document->getId());
 
         $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
+    }
+
+    public function testAttributeNamesWithDots(): void
+    {
+        static::getDatabase()->createCollection('dots.parent');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'dots.parent',
+            id: 'dots.name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $document = static::getDatabase()->find('dots.parent', [
+            Query::select(['dots.name']),
+        ]);
+        $this->assertEmpty($document);
+
+        static::getDatabase()->createCollection('dots');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'dots',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        static::getDatabase()->createRelationship(
+            collection: 'dots.parent',
+            relatedCollection: 'dots',
+            type: Database::RELATION_ONE_TO_ONE
+        );
+
+        static::getDatabase()->createDocument('dots.parent', new Document([
+            '$id' => ID::custom('father'),
+            'dots.name' => 'Bill clinton',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'dots' => [
+                '$id' => ID::custom('child'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]
+        ]));
+
+        $documents = static::getDatabase()->find('dots.parent', [
+            Query::select(['*']),
+        ]);
+
+        $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
     }
 
     /**
@@ -876,7 +937,6 @@ abstract class Base extends TestCase
         return $document;
     }
 
-
     /**
      * @depends testCreateDocument
      */
@@ -886,7 +946,6 @@ abstract class Base extends TestCase
         $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
     }
-
 
     /**
      * @depends testCreateDocument
@@ -1401,27 +1460,25 @@ abstract class Base extends TestCase
 
     public function testFindContains(): void
     {
-        /**
-         * Array contains condition
-         */
-        if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
-            $documents = static::getDatabase()->find('movies', [
-                Query::contains('generes', ['comics'])
-            ]);
-
-            $this->assertEquals(2, count($documents));
-
-            /**
-             * Array contains OR condition
-             */
-            $documents = static::getDatabase()->find('movies', [
-                Query::contains('generes', ['comics', 'kids']),
-            ]);
-
-            $this->assertEquals(4, count($documents));
+        if (!$this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        $this->assertEquals(true, true); // Test must do an assertion
+        $documents = static::getDatabase()->find('movies', [
+            Query::contains('generes', ['comics'])
+        ]);
+
+        $this->assertEquals(2, count($documents));
+
+        /**
+         * Array contains OR condition
+         */
+        $documents = static::getDatabase()->find('movies', [
+            Query::contains('generes', ['comics', 'kids']),
+        ]);
+
+        $this->assertEquals(4, count($documents));
     }
 
     public function testFindFulltext(): void
@@ -3911,19 +3968,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('library', 'library2');
         $this->assertArrayNotHasKey('person', $library);
 
-        // Query related document
-        $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['Library 2'])
-        ]);
-
-        $this->assertEquals(1, \count($people));
-        $this->assertEquals(
-            'Library 2',
-            $people[0]
-            ->getAttribute('library')
-            ->getAttribute('name')
-        );
-
         $people = static::getDatabase()->find('person', [
             Query::select(['name'])
         ]);
@@ -4075,13 +4119,6 @@ abstract class Base extends TestCase
             $person1->getId(),
             $person1->setAttribute('library', $library4)
         );
-
-        // Query new related document
-        $people = static::getDatabase()->find('person', [
-            Query::equal('library.name', ['Library 4'])
-        ]);
-
-        $this->assertEquals(1, \count($people));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -4405,19 +4442,6 @@ abstract class Base extends TestCase
         $this->assertEquals('city4', $city['$id']);
         $this->assertArrayNotHasKey('country', $city);
 
-        // Query related document
-        $countries = static::getDatabase()->find('country', [
-            Query::equal('city.name', ['Paris'])
-        ]);
-
-        $this->assertEquals(1, \count($countries));
-        $this->assertEquals(
-            'Paris',
-            $countries[0]
-            ->getAttribute('city')
-            ->getAttribute('name')
-        );
-
         $countries = static::getDatabase()->find('country');
 
         $this->assertEquals(4, \count($countries));
@@ -4610,13 +4634,6 @@ abstract class Base extends TestCase
             $country1->setAttribute('city', $city7)
         );
 
-        // Query new relationship
-        $countries = static::getDatabase()->find('country', [
-            Query::equal('city.name', ['Copenhagen'])
-        ]);
-
-        $this->assertEquals(1, \count($countries));
-
         // Create a new country with no relation
         static::getDatabase()->createDocument('country', new Document([
             '$id' => 'country7',
@@ -4634,13 +4651,6 @@ abstract class Base extends TestCase
             $city1->getId(),
             $city1->setAttribute('country', 'country7')
         );
-
-        // Query inverse related document again
-        $people = static::getDatabase()->find('city', [
-            Query::equal('country.name', ['Denmark'])
-        ]);
-
-        $this->assertEquals(1, \count($people));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -4775,6 +4785,103 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $country);
     }
 
+    public function testIdenticalTwoWayKeyRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('parent');
+        static::getDatabase()->createCollection('child');
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'child1'
+        );
+
+        try {
+            static::getDatabase()->createRelationship(
+                collection: 'parent',
+                relatedCollection: 'child',
+                type: Database::RELATION_ONE_TO_MANY,
+                id: 'children',
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
+
+        static::getDatabase()->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+            twoWayKey: 'parent_id'
+        );
+
+        $collection = static::getDatabase()->getCollection('parent');
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            if ($attribute['key'] === 'child1') {
+                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+            }
+
+            if ($attribute['key'] === 'children') {
+                $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
+            }
+        }
+
+        static::getDatabase()->createDocument('parent', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'child1' => [
+                '$id' => 'foo',
+                '$permissions' => [Permission::read(Role::any())],
+            ],
+            'children' => [
+                [
+                    '$id' => 'bar',
+                    '$permissions' => [Permission::read(Role::any())],
+                ],
+            ],
+        ]));
+
+        $documents = static::getDatabase()->find('parent', []);
+        $document  = array_pop($documents);
+        $this->assertArrayHasKey('child1', $document);
+        $this->assertEquals('foo', $document->getAttribute('child1')->getId());
+        $this->assertArrayHasKey('children', $document);
+        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newKey: 'child1'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Attribute already exists', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateRelationship(
+                collection: 'parent',
+                id: 'children',
+                newTwoWayKey: 'parent'
+            );
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
+        }
+    }
+
     public function testOneToManyOneWayRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -4893,21 +5000,6 @@ abstract class Base extends TestCase
         $album = static::getDatabase()->getDocument('album', 'album2');
         $this->assertArrayNotHasKey('artist', $album);
 
-        // Query related document
-        $artists = static::getDatabase()->find('artist', [
-            Query::equal('albums.name', ['Album 2'])
-        ]);
-
-        $this->assertCount(1, $artists);
-        $this->assertCount(2, $artists[0]['albums']);
-
-        $this->assertEquals(
-            'Album 2',
-            $artists[0]
-            ->getAttribute('albums')[0]
-            ->getAttribute('name')
-        );
-
         $artists = static::getDatabase()->find('artist');
 
         $this->assertEquals(2, \count($artists));
@@ -5006,28 +5098,12 @@ abstract class Base extends TestCase
             $artist1->setAttribute('albums', ['album2'])
         );
 
-        // Query related document again
-        $artists = static::getDatabase()->find('artist', [
-            Query::equal('albums.name', ['Album 2'])
-        ]);
-
-        $this->assertEquals(1, \count($artists));
-        $this->assertEquals(1, \count($artists[0]['albums']));
-
         // Update document with new related documents, will remove existing relations
         static::getDatabase()->updateDocument(
             'artist',
             $artist1->getId(),
             $artist1->setAttribute('albums', ['album1', 'album2'])
         );
-
-        // Query related document again
-        $artists = static::getDatabase()->find('artist', [
-            Query::equal('albums.name', ['Album 2'])
-        ]);
-
-        $this->assertEquals(1, \count($artists));
-        $this->assertEquals(2, \count($artists[0]['albums']));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -5350,20 +5426,6 @@ abstract class Base extends TestCase
         $this->assertEquals('customer4', $customer['$id']);
         $this->assertArrayNotHasKey('accounts', $customer);
 
-        // Query related document
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-
-        $this->assertEquals(
-            'Account 2',
-            $customers[0]
-            ->getAttribute('accounts')[0]
-            ->getAttribute('name')
-        );
-
         $customers = static::getDatabase()->find('customer');
 
         $this->assertEquals(4, \count($customers));
@@ -5510,14 +5572,6 @@ abstract class Base extends TestCase
             $customer1->setAttribute('accounts', ['account2'])
         );
 
-        // Query related document again
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-        $this->assertEquals(1, \count($customers[0]['accounts']));
-
         // Update document with new related document
         static::getDatabase()->updateDocument(
             'customer',
@@ -5525,35 +5579,12 @@ abstract class Base extends TestCase
             $customer1->setAttribute('accounts', ['account1', 'account2'])
         );
 
-        // Query related document again
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-        $this->assertEquals(2, \count($customers[0]['accounts']));
-
         // Update inverse document
         static::getDatabase()->updateDocument(
             'account',
             $account2->getId(),
             $account2->setAttribute('customer', 'customer2')
         );
-
-        // Query related document again
-        $customers = static::getDatabase()->find('customer', [
-            Query::equal('accounts.name', ['Account 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
-        $this->assertEquals(1, \count($customers[0]['accounts']));
-
-        // Query inverse document again
-        $customers = static::getDatabase()->find('account', [
-            Query::equal('customer.name', ['Customer 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -5798,20 +5829,6 @@ abstract class Base extends TestCase
         $movie = static::getDatabase()->getDocument('movie', 'movie2');
         $this->assertArrayNotHasKey('reviews', $movie);
 
-        // Query related document
-        $reviews = static::getDatabase()->find('review', [
-            Query::equal('movie.name', ['Movie 2'])
-        ]);
-
-        $this->assertEquals(1, \count($reviews));
-
-        $this->assertEquals(
-            'Movie 2',
-            $reviews[0]
-            ->getAttribute('movie')
-            ->getAttribute('name')
-        );
-
         $reviews = static::getDatabase()->find('review');
 
         $this->assertEquals(3, \count($reviews));
@@ -5897,13 +5914,6 @@ abstract class Base extends TestCase
             $review1->getId(),
             $review1->setAttribute('movie', 'movie2')
         );
-
-        // Query related document again
-        $reviews = static::getDatabase()->find('review', [
-            Query::equal('movie.name', ['Movie 2'])
-        ]);
-
-        $this->assertEquals(2, \count($reviews));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -6187,20 +6197,6 @@ abstract class Base extends TestCase
         $this->assertEquals('product4', $products[0]['$id']);
         $this->assertArrayNotHasKey('store', $products[0]);
 
-        // Query related document
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(1, \count($products));
-
-        $this->assertEquals(
-            'Store 2',
-            $products[0]
-            ->getAttribute('store')
-            ->getAttribute('name')
-        );
-
         $products = static::getDatabase()->find('product');
 
         $this->assertEquals(4, \count($products));
@@ -6344,13 +6340,6 @@ abstract class Base extends TestCase
             $product1->setAttribute('store', 'store2')
         );
 
-        // Query related document again
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(2, \count($products));
-
         $store1 = static::getDatabase()->getDocument('store', 'store1');
 
         // Update inverse document
@@ -6360,21 +6349,6 @@ abstract class Base extends TestCase
             $store1->setAttribute('products', ['product1'])
         );
 
-        // Query related document again
-        $stores = static::getDatabase()->find('store', [
-            Query::equal('products.name', ['Product 1 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($stores));
-        $this->assertEquals(1, \count($stores[0]['products']));
-
-        // Query inverse document again
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(1, \count($products));
-
         $store2 = static::getDatabase()->getDocument('store', 'store2');
 
         // Update inverse document
@@ -6383,21 +6357,6 @@ abstract class Base extends TestCase
             $store2->getId(),
             $store2->setAttribute('products', ['product1', 'product2'])
         );
-
-        // Query related document again
-        $stores = static::getDatabase()->find('store', [
-            Query::equal('products.name', ['Product 1 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($stores));
-        $this->assertEquals(2, \count($stores[0]['products']));
-
-        // Query inverse document again
-        $products = static::getDatabase()->find('product', [
-            Query::equal('store.name', ['Store 2'])
-        ]);
-
-        $this->assertEquals(2, \count($products));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -6613,20 +6572,6 @@ abstract class Base extends TestCase
         $library = static::getDatabase()->getDocument('song', 'song2');
         $this->assertArrayNotHasKey('songs', $library);
 
-        // Query related document
-        $playlists = static::getDatabase()->find('playlist', [
-            Query::equal('songs.name', ['Song 2'])
-        ]);
-
-        $this->assertEquals(1, \count($playlists));
-
-        $this->assertEquals(
-            'Song 2',
-            $playlists[0]
-            ->getAttribute('songs')[0]
-            ->getAttribute('name')
-        );
-
         $playlists = static::getDatabase()->find('playlist');
 
         $this->assertEquals(2, \count($playlists));
@@ -6728,14 +6673,6 @@ abstract class Base extends TestCase
             $playlist1->getId(),
             $playlist1->setAttribute('songs', ['song2'])
         );
-
-        // Query related document again
-        $playlists = static::getDatabase()->find('playlist', [
-            Query::equal('songs.name', ['Song 2'])
-        ]);
-
-        $this->assertEquals(3, \count($playlists));
-        $this->assertEquals(1, \count($playlists[0]['songs']));
 
         // Rename relationship key
         static::getDatabase()->updateRelationship(
@@ -7014,24 +6951,6 @@ abstract class Base extends TestCase
         $this->assertEquals('student4', $student[0]['$id']);
         $this->assertArrayNotHasKey('classes', $student[0]);
 
-        // Query related document
-        $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2'])
-        ]);
-
-        $this->assertEquals(1, \count($students));
-
-        $this->assertEquals(
-            'Class 2',
-            $students[0]
-            ->getAttribute('classes')[0]
-            ->getAttribute('name')
-        );
-
-        $students = static::getDatabase()->find('students');
-
-        $this->assertEquals(4, \count($students));
-
         // Select related document attributes
         $student = static::getDatabase()->findOne('students', [
             Query::select(['*', 'classes.name'])
@@ -7171,15 +7090,6 @@ abstract class Base extends TestCase
             $student1->setAttribute('classes', ['class2'])
         );
 
-        // Query related document again
-        $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2 Updated'])
-        ]);
-
-        $this->assertEquals(2, \count($students));
-        $this->assertEquals(1, \count($students[0]['classes']));
-        $this->assertEquals(1, \count($students[1]['classes']));
-
         $class1 = static::getDatabase()->getDocument('classes', 'class1');
 
         // Update inverse document
@@ -7188,22 +7098,6 @@ abstract class Base extends TestCase
             $class1->getId(),
             $class1->setAttribute('students', ['student1'])
         );
-
-        // Query related document again
-        $students = static::getDatabase()->find('students', [
-            Query::equal('classes.name', ['Class 2 Updated'])
-        ]);
-
-        $this->assertEquals(2, \count($students));
-        $this->assertEquals(2, \count($students[0]['classes']));
-        $this->assertEquals(1, \count($students[1]['classes']));
-
-        // Query inverse document again
-        $customers = static::getDatabase()->find('classes', [
-            Query::equal('students.name', ['Student 2 Updated'])
-        ]);
-
-        $this->assertEquals(1, \count($customers));
 
         // Rename relationship keys on both sides
         static::getDatabase()->updateRelationship(
@@ -10206,7 +10100,7 @@ abstract class Base extends TestCase
             static::getDatabase()->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
-            $this->assertEquals('Attribute already exists', $e->getMessage());
+            $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
     }
 
@@ -11216,6 +11110,89 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
+    }
+
+    public function testEmptyOperatorValues(): void
+    {
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::equal('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::notEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThan('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThanEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThan('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThanEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::contains('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
+        }
     }
 
     public function testLast(): void

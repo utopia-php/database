@@ -16,6 +16,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
@@ -1486,6 +1487,13 @@ class Database
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
+
+            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
+                && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
+            ) {
+                throw new DuplicateException('Related attribute already exists');
+            }
         }
 
         if (
@@ -1675,7 +1683,7 @@ class Database
                 !\is_null($newTwoWayKey)
                 && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
             ) {
-                throw new DuplicateException('Attribute already exists');
+                throw new DuplicateException('Related attribute already exists');
             }
 
             $type = $attribute['options']['relationType'];
@@ -3843,6 +3851,13 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new Documents($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new Exception($validator->getDescription());
+        }
 
         $authorization = new Authorization(self::PERMISSION_READ);
         $skipAuth = $authorization->isValid($collection->getRead());

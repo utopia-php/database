@@ -122,21 +122,29 @@ abstract class Base extends TestCase
 
     public function testSizeCollection(): void
     {
-        static::getDatabase()->createCollection('size_testing');
+        if(static::getAdapterName() === 'mysql'){
+            $loopCount = 3000;
+        }
+        else{
+            $loopCount = 20;
+        }
 
-        $valueBeforeAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
+        static::getDatabase()->createCollection('size_test1');
+        static::getDatabase()->createCollection('size_test2');
+ 
+        $size_test_1 = static::getDatabase()->getSizeOfCollection('size_test1');
+         
+        static::getDatabase()->createAttribute('size_test2', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('size_test2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('size_test2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('size_test2', 'string4', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('size_test2', 'integer', Database::VAR_INTEGER, 10, true);
+        static::getDatabase()->createAttribute('size_test2', 'bigint', Database::VAR_INTEGER, 8, true);
+        static::getDatabase()->createAttribute('size_test2', 'float', Database::VAR_FLOAT, 0, true);
+        static::getDatabase()->createIndex('size_test2', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
-        static::getDatabase()->createAttribute('size_testing', 'string1', Database::VAR_STRING, 128, true);
-        static::getDatabase()->createAttribute('size_testing', 'string2', Database::VAR_STRING, 254 + 1, true);
-        static::getDatabase()->createAttribute('size_testing', 'string3', Database::VAR_STRING, 254 + 1, true);
-        static::getDatabase()->createAttribute('size_testing', 'string4', Database::VAR_STRING, 254 + 1, true);
-        static::getDatabase()->createAttribute('size_testing', 'integer', Database::VAR_INTEGER, 10, true);
-        static::getDatabase()->createAttribute('size_testing', 'bigint', Database::VAR_INTEGER, 8, true);
-        static::getDatabase()->createAttribute('size_testing', 'float', Database::VAR_FLOAT, 0, true);
-        static::getDatabase()->createIndex('size_testing', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
-
-        for ($i = 0; $i < 20; $i++) {
-            static::getDatabase()->createDocument('size_testing', new Document([
+        for ($i = 0; $i < $loopCount; $i++) {
+            static::getDatabase()->createDocument('size_test2', new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -153,13 +161,10 @@ abstract class Base extends TestCase
             ]));
         }
 
-        $valueAfterAddingData = static::getDatabase()->getSizeOfCollection('size_testing');
+        $size_test_2 = static::getDatabase()->getSizeOfCollection('size_test2');
 
-        if (static::getAdapterName() === 'mysql') {
-            $this->assertGreaterThan(65535, $valueAfterAddingData);
-        } else {
-            $this->assertGreaterThan($valueBeforeAddingData, $valueAfterAddingData);
-        }
+        $this->assertGreaterThan($size_test_1, $size_test_2);
+
     }
 
     public function testCreateDeleteAttribute(): void

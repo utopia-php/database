@@ -16,6 +16,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
@@ -3838,6 +3839,13 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new Documents($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new Exception($validator->getDescription());
+        }
 
         $authorization = new Authorization(self::PERMISSION_READ);
         $skipAuth = $authorization->isValid($collection->getRead());

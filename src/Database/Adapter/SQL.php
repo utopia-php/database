@@ -873,4 +873,12 @@ abstract class SQL extends Adapter
     {
         return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
     }
+
+    /**
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return 768;
+    }
 }

@@ -20,7 +20,7 @@ class Index extends Validator
     /**
      * @param int $maxLength
      */
-    public function __construct(int $maxLength = 768)
+    public function __construct(int $maxLength)
     {
         $this->maxLength = $maxLength;
     }
@@ -131,7 +131,7 @@ class Index extends Validator
                 $total += $indexLength;
             }
 
-            if ($total > $this->maxLength) {
+            if ($total > $this->maxLength && $this->maxLength > 0) {
                 $this->message = 'Index length is longer than the maximum: ' . $this->maxLength;
                 return false;
             }

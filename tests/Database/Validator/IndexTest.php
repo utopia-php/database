@@ -179,6 +179,6 @@ class IndexTest extends TestCase
         ]);
 
         $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals('Duplicated attributes provided', $validator->getDescription());
+        $this->assertEquals('Duplicate attributes provided', $validator->getDescription());
     }
 }

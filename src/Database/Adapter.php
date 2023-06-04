@@ -640,8 +640,5 @@ abstract class Adapter
     /**
      * @return int
      */
-    public function getMaxIndexLength(): int
-    {
-        return 768;
-    }
+    abstract public function getMaxIndexLength(): int;
 }

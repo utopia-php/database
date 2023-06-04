@@ -87,7 +87,7 @@ abstract class Base extends TestCase
                 '$id' => ID::custom('title1'),
                 'type' => Database::VAR_STRING,
                 'format' => '',
-                'size' => 300,
+                'size' => 700,
                 'signed' => true,
                 'required' => false,
                 'default' => null,
@@ -112,7 +112,7 @@ abstract class Base extends TestCase
                 '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['title1', 'title2'],
-                'lengths' => [301,100],
+                'lengths' => [701,50],
                 'orders' => [],
             ]),
         ];
@@ -124,9 +124,9 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index();
+        $validator = new Index(static::getDatabase()->getAdapter()->getMaxIndexLength());
 
-        $errorMessage = 'Index length 301 is larger than the size for title1: 300"';
+        $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
         $this->assertFalse($validator->isValid($collection));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
@@ -142,22 +142,24 @@ abstract class Base extends TestCase
                 '$id' => ID::custom('index1'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['title1', 'title2'],
-                'lengths' => [300],
+                'lengths' => [700], // 700, 500 (length(title2))
                 'orders' => [],
             ]),
         ];
 
         $collection->setAttribute('indexes', $indexes);
 
-        $errorMessage = 'Index length is longer than the maximum: 768';
-        $this->assertFalse($validator->isValid($collection));
-        $this->assertEquals($errorMessage, $validator->getDescription());
+        if(static::getDatabase()->getAdapter()->getMaxIndexLength() > 0){
+            $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
+            $this->assertFalse($validator->isValid($collection));
+            $this->assertEquals($errorMessage, $validator->getDescription());
 
-        try {
-            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals($errorMessage, $e->getMessage());
+            try {
+                static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals($errorMessage, $e->getMessage());
+            }
         }
 
         $attributes[] = new Document([

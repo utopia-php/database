@@ -59,7 +59,7 @@ class Index extends Validator
         foreach ($collection->getAttribute('indexes', []) as $index) {
             $attributes = $index->getAttribute('attributes', []);
             if (count($attributes) !== count(array_unique($attributes))) {
-                $this->message = 'Duplicated attributes provided';
+                $this->message = 'Duplicate attributes provided';
                 return false;
             }
         }

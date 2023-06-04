@@ -150,7 +150,7 @@ abstract class Base extends TestCase
 
         $collection->setAttribute('indexes', $indexes);
 
-        if(static::getDatabase()->getAdapter()->getMaxIndexLength() > 0){
+        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
             $this->assertFalse($validator->isValid($collection));
             $this->assertEquals($errorMessage, $validator->getDescription());

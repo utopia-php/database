@@ -230,7 +230,13 @@ function createSchema(Database $database): void
         $database->delete($database->getDefaultDatabase());
     }
     $database->create();
-    $database->createCollection('articles');
+
+    Authorization::setRole(Role::any()->toString());
+    $database->createCollection('articles', permissions: [
+        Permission::create(Role::any()),
+        Permission::read(Role::any()),
+    ]);
+
     $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, null, false, false, null, [], ['datetime']);
     $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
@@ -246,20 +252,20 @@ function addArticle($database, Generator $faker): void
         // Three random users out of 10,000 get mutate access
 
         '$permissions' => [
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::read(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::read(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::read(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::read(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::create(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::create(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::create(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::update(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::update(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::update(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::delete(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::delete(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
+            Permission::delete(Role::user('6477a84d4cf9a381' . $faker->randomNumber(4))),
         ],
         'author' => $faker->name(),
         'created' => \Utopia\Database\DateTime::format($faker->dateTime()),

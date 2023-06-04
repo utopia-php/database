@@ -1185,6 +1185,7 @@ class Postgres extends SQL
      * @param string[] $selections
      * @param string $prefix
      * @return string
+     * @throws Exception
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): string
     {
@@ -1203,11 +1204,11 @@ class Postgres extends SQL
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {
-                $selection = "\"{$prefix}\".\"{$selection}\"";
+                $selection = "\"{$prefix}\".\"{$this->filter($selection)}\"";
             }
         } else {
             foreach ($selections as &$selection) {
-                $selection = "\"{$selection}\"";
+                $selection = "\"{$this->filter($selection)}\"";
             }
         }
 

@@ -271,6 +271,9 @@ class PermissionTest extends TestCase
 
         $this->expectException(\Exception::class);
         Permission::parse('read("users/")');
+
+        $this->expectException(\Exception::class);
+        Permission::parse('read("label:alphanumeric-only")');
     }
 
     /**

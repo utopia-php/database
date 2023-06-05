@@ -73,4 +73,11 @@ class RolesTest extends TestCase
         $this->assertFalse($object->isValid([Role::any()->toString()]));
         $this->assertEquals('Role "any" is not allowed. Must be one of: users.', $object->getDescription());
     }
+
+    public function testLabels(): void
+    {
+        $object = new Roles();
+        $this->assertTrue($object->isValid(['label:123']));
+        $this->assertFalse($object->isValid(['label:not-alphanumeric']));
+    }
 }

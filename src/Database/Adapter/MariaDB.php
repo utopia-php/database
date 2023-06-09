@@ -1278,7 +1278,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > 16383) {
+                if ($size > $this->getMaxVarcharLength()) {
                     return 'TEXT';
                 }
 

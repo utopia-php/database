@@ -144,7 +144,7 @@ class Database
      * List of Internal Ids
      * @var array<array<string, mixed>>
      */
-    protected array $attributes = [
+    protected static array $attributes = [
         [
             '$id' => '$id',
             'type' => self::VAR_STRING,
@@ -619,9 +619,11 @@ class Database
      * @param array<Document> $indexes
      * @param array<string> $permissions
      * @param bool $documentSecurity
-     *
      * @return Document
+     * @throws DatabaseException
      * @throws DuplicateException
+     * @throws InvalidArgumentException
+     * @throws LimitException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
@@ -640,12 +642,6 @@ class Database
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
-
-        if ($id === self::METADATA) {
-            return new Document($this->collection);
-        }
-
         $collection = new Document([
             '$id' => ID::custom($id),
             '$permissions' => $permissions,
@@ -654,6 +650,17 @@ class Database
             'indexes' => $indexes,
             'documentSecurity' => $documentSecurity
         ]);
+
+        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
+        if (!$validator->isValid($collection)) {
+            throw new DatabaseException($validator->getDescription());
+        }
+
+        $this->adapter->createCollection($id, $attributes, $indexes);
+
+        if ($id === self::METADATA) {
+            return new Document($this->collection);
+        }
 
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
@@ -692,7 +699,10 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws DuplicateException
+     * @throws InvalidArgumentException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws InvalidArgumentException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
@@ -1976,6 +1986,7 @@ class Database
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
+     * @throws Exception
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
@@ -1985,8 +1996,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = new IndexValidator($collection);
-        if (!$validator->isValid(['type' => $type, 'attributes' => $attributes])) {
+        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
+        if (!$validator->isValid($collection)) {
             throw new DatabaseException($validator->getDescription());
         }
 
@@ -2018,7 +2029,7 @@ class Database
                 break;
 
             case self::INDEX_FULLTEXT:
-                if (!$this->adapter->getSupportForUniqueIndex()) {
+                if (!$this->adapter->getSupportForFulltextIndex()) {
                     throw new DatabaseException('Fulltext index is not supported');
                 }
                 break;
@@ -2026,8 +2037,6 @@ class Database
             default:
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
-
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
         $collection->setAttribute('indexes', new Document([
             '$id' => ID::custom($id),
@@ -2037,6 +2046,13 @@ class Database
             'lengths' => $lengths,
             'orders' => $orders,
         ]), Document::SET_TYPE_APPEND);
+
+        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
+        if (!$validator->isValid($collection)) {
+            throw new DatabaseException($validator->getDescription());
+        }
+
+        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -4167,10 +4183,10 @@ class Database
      * @return array<Document>
      * @throws DatabaseException
      */
-    public function getInternalAttributes(): array
+    public static function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach ($this->attributes as $internal) {
+        foreach (self::$attributes as $internal) {
             $attributes[] = new Document($internal);
         }
         return $attributes;

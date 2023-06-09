@@ -5,6 +5,7 @@ namespace Utopia\Tests;
 use Exception;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -21,6 +22,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
@@ -76,6 +78,132 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    /**
+     * @throws Exception|Throwable
+     */
+    public function testIndexValidation(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('title1'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('title2'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 500,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['title1', 'title2'],
+                'lengths' => [701,50],
+                'orders' => [],
+            ]),
+        ];
+
+        $collection = new Document([
+            '$id' => ID::custom('index_length'),
+            'name' => 'test',
+            'attributes' => $attributes,
+            'indexes' => $indexes
+        ]);
+
+        $validator = new Index(static::getDatabase()->getAdapter()->getMaxIndexLength());
+
+        $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        try {
+            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals($errorMessage, $e->getMessage());
+        }
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['title1', 'title2'],
+                'lengths' => [700], // 700, 500 (length(title2))
+                'orders' => [],
+            ]),
+        ];
+
+        $collection->setAttribute('indexes', $indexes);
+
+        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
+            $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
+            $this->assertFalse($validator->isValid($collection));
+            $this->assertEquals($errorMessage, $validator->getDescription());
+
+            try {
+                static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals($errorMessage, $e->getMessage());
+            }
+        }
+
+        $attributes[] = new Document([
+            '$id' => ID::custom('integer'),
+            'type' => Database::VAR_INTEGER,
+            'format' => '',
+            'size' => 10000,
+            'signed' => true,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_FULLTEXT,
+                'attributes' => ['title1', 'integer'],
+                'lengths' => [],
+                'orders' => [],
+            ]),
+        ];
+
+        $collection = new Document([
+            '$id' => ID::custom('index_length'),
+            'name' => 'test',
+            'attributes' => $attributes,
+            'indexes' => $indexes
+        ]);
+
+        $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        try {
+            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals($errorMessage, $e->getMessage());
+        }
+    }
+
     public function testCreatedAtUpdatedAt(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
@@ -125,7 +253,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('attributes');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16383 + 1, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string2', Database::VAR_STRING, 16382 + 1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
@@ -778,7 +906,7 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|\Throwable
+     * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|Throwable
      */
     public function testIncreaseDecrease(): Document
     {
@@ -901,7 +1029,13 @@ abstract class Base extends TestCase
     public function testFulltextIndexWithInteger(): void
     {
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index');
+
+        if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectExceptionMessage('Fulltext index is not supported');
+        } else {
+            $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index, must be of type string');
+        }
+
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
     }
 
@@ -4198,7 +4332,7 @@ abstract class Base extends TestCase
      * @throws LimitException
      * @throws DuplicateException
      * @throws StructureException
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function testOneToOneTwoWayRelationship(): void
     {

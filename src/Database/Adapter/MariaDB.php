@@ -154,6 +154,9 @@ class MariaDB extends SQL
         $collectionName = "{$this->getNamespace()}_{$name}";
         $database = $this->getDefaultDatabase();
 
+        $analyzeTable = $this->getPDO()->prepare("ANALYZE TABLE {$database}.{$collectionName}");
+        $analyzeTable->execute();
+
         $query = $this->getPDO()->prepare("
              SELECT SUM(data_length + index_length) AS total_size 
              FROM information_schema.TABLES 

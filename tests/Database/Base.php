@@ -122,13 +122,6 @@ abstract class Base extends TestCase
 
     public function testSizeCollection(): void
     {
-        if(static::getAdapterName() === 'mysql'){
-            $loopCount = 3000;
-        }
-        else{
-            $loopCount = 20;
-        }
-
         static::getDatabase()->createCollection('size_test1');
         static::getDatabase()->createCollection('size_test2');
  
@@ -137,11 +130,9 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('size_test2', 'string1', Database::VAR_STRING, 128, true);
         static::getDatabase()->createAttribute('size_test2', 'string2', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createAttribute('size_test2', 'string3', Database::VAR_STRING, 254 + 1, true);
-        static::getDatabase()->createAttribute('size_test2', 'string4', Database::VAR_STRING, 254 + 1, true);
-        static::getDatabase()->createAttribute('size_test2', 'integer', Database::VAR_INTEGER, 10, true);
-        static::getDatabase()->createAttribute('size_test2', 'bigint', Database::VAR_INTEGER, 8, true);
-        static::getDatabase()->createAttribute('size_test2', 'float', Database::VAR_FLOAT, 0, true);
         static::getDatabase()->createIndex('size_test2', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 25;
 
         for ($i = 0; $i < $loopCount; $i++) {
             static::getDatabase()->createDocument('size_test2', new Document([
@@ -154,10 +145,6 @@ abstract class Base extends TestCase
                 'string1' => 'string1' . $i,
                 'string2' => 'string2' . $i,
                 'string3' => 'string3' . $i,
-                'string4' => "string4" . $i,
-                'integer' => 35635353 + $i,
-                'bigint' => 3535353 + $i,
-                'float' => 353.3535 + $i,
             ]));
         }
 

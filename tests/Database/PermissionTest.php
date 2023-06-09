@@ -293,6 +293,7 @@ class PermissionTest extends TestCase
             'update("user:123")',
             'delete("user:123")'
         ];
+
         $parsed = Permission::aggregate($permissions, Database::PERMISSIONS);
         $this->assertEquals(['read("any")',
             'read("user:123")',

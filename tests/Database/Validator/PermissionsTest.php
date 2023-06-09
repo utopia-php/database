@@ -303,7 +303,7 @@ class PermissionsTest extends TestCase
       */
     public function testDuplicateMethods(): void
     {
-        $object = new Permissions();
+        $validator = new Permissions();
 
         $user = ID::unique();
 
@@ -328,13 +328,15 @@ class PermissionsTest extends TestCase
                 new Document(['name' => 'z']),
             ]
         ]);
-        $this->assertTrue($object->isValid($document->getPermissions()));
+        $this->assertTrue($validator->isValid($document->getPermissions()));
         $permissions = $document->getPermissions();
         $this->assertEquals(5, count($permissions));
-        $this->assertEquals('read("any")', $permissions[0]);
-        $this->assertEquals('read("user:' . $user . '")', $permissions[1]);
-        $this->assertEquals('write("user:' . $user . '")', $permissions[2]);
-        $this->assertEquals('update("user:' . $user . '")', $permissions[3]);
-        $this->assertEquals('delete("user:' . $user . '")', $permissions[4]);
+        $this->assertEquals([
+            'read("any")',
+            'read("user:' . $user . '")',
+            'write("user:' . $user . '")',
+            'update("user:' . $user . '")',
+            'delete("user:' . $user . '")',
+        ], $permissions);
     }
 }

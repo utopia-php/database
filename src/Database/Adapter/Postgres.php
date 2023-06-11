@@ -109,15 +109,18 @@ class Postgres extends SQL
             $stmt->execute();
             $stmtIndex->execute();
 
-            $this->getPDO()->prepare("
-                CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-                    \"_id\" SERIAL NOT NULL,
-                    \"_type\" VARCHAR(12) NOT NULL,
-                    \"_permission\" VARCHAR(255) NOT NULL,
-                    \"_document\" VARCHAR(255) NOT NULL,
-                    PRIMARY KEY (\"_id\")
-                );
-            ")->execute();
+            $this->getPDO()
+                ->prepare("CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
+                        \"_id\" SERIAL NOT NULL,
+                        \"_type\" VARCHAR(12) NOT NULL,
+                        \"_permission\" VARCHAR(255) NOT NULL,
+                        \"_document\" VARCHAR(255) NOT NULL,
+                        PRIMARY KEY (\"_id\")
+                    );
+                    CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_ukey\" ON {$this->getSQLTable($id. '_perms')} USING btree (\"_document\",\"_type\",\"_permission\");
+                    CREATE INDEX \"index_{$namespace}_{$id}_permission\" ON {$this->getSQLTable($id. '_perms')} USING btree (\"_permission\",\"_type\",\"_document\");
+                    ")
+                ->execute();
 
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
@@ -1287,7 +1290,7 @@ class Postgres extends SQL
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16383) {
+                if ($size > $this->getMaxVarcharLength()) {
                     return 'TEXT';
                 }
 

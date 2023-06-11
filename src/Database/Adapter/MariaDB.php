@@ -128,7 +128,7 @@ class MariaDB extends SQL
                         `_document` VARCHAR(255) NOT NULL,
                         PRIMARY KEY (`_id`),
                         UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`)
+                        INDEX `_permission` (`_permission`,`_type`,`_document`)
                     )")
                 ->execute();
         } catch (\Exception $th) {
@@ -1270,7 +1270,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > 16383) {
+                if ($size > $this->getMaxVarcharLength()) {
                     return 'TEXT';
                 }
 

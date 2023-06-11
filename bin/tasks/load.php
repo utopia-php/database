@@ -10,6 +10,7 @@ use Faker\Generator;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
@@ -253,20 +254,20 @@ function addArticle($database, Generator $faker): void
 
         '$permissions' => [
             Permission::read(Role::any()),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::user('abc123456789')), // Repeatable user
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
         ],
         'author' => $faker->name(),
         'created' => \Utopia\Database\DateTime::format($faker->dateTime()),

@@ -254,7 +254,6 @@ function addArticle($database, Generator $faker): void
 
         '$permissions' => [
             Permission::read(Role::any()),
-            Permission::read(Role::user('abc123456789')), // Repeatable user
             Permission::read(Role::user($faker->randomNumber(9))),
             Permission::read(Role::user($faker->randomNumber(9))),
             Permission::read(Role::user($faker->randomNumber(9))),

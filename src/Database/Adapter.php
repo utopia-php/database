@@ -400,7 +400,7 @@ abstract class Adapter
 
     /**
      * Get Collection Size
-     * Returns
+     * 
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -409,7 +409,7 @@ abstract class Adapter
 
     /**
      * Analyze Collection
-     * Returns
+     * 
      * @param string $collection
      * @return bool
      * @throws DatabaseException

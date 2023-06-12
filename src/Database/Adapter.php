@@ -408,6 +408,15 @@ abstract class Adapter
     abstract public function getSizeOfCollection(string $collection): int;
 
     /**
+     * Analyze Collection
+     * Returns
+     * @param string $collection
+     * @return bool
+     * @throws DatabaseException
+     */
+    abstract public function analyzeCollection(string $collection): bool;
+
+    /**
      * Get max STRING limit
      *
      * @return int

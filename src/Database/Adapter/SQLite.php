@@ -186,6 +186,32 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Analyze Collection
+     * @param string $collection
+     * @return bool
+     * @throws DatabaseException
+     *
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+        $namespace = $this->getNamespace();
+
+        $query = $this->getPDO()->prepare("
+             ANALYZE {$namespace}_{$name};
+        ");
+
+        try {
+             $query->execute();
+             return true;
+        }
+        catch (PDOException $e) {
+             throw new DatabaseException('Failed to analyze collection: ' . $e->getMessage());
+             return false;
+        }
+    }
+
+    /**
      * Delete Collection
      * @param string $id
      * @return bool

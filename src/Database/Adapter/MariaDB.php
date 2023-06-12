@@ -154,9 +154,6 @@ class MariaDB extends SQL
         $collectionName = "{$this->getNamespace()}_{$name}";
         $database = $this->getDefaultDatabase();
 
-        $analyzeTable = $this->getPDO()->prepare("ANALYZE TABLE {$database}.{$collectionName}");
-        $analyzeTable->execute();
-
         $query = $this->getPDO()->prepare("
              SELECT SUM(data_length + index_length) AS total_size 
              FROM information_schema.TABLES 
@@ -176,6 +173,28 @@ class MariaDB extends SQL
         }
 
         return $size;
+    }
+
+    /**
+     * Analyze Collection
+     * @param string $collection
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $query = $this->getPDO()->prepare("ANALYZE TABLE {$this->getSQLTable($name)}");
+        
+        try {
+             $query->execute();
+             return true;
+        }
+        catch (PDOException $e) {
+             throw new DatabaseException('Failed to analyze collection: ' . $e->getMessage());
+             return false;
+        }
     }
 
     /**

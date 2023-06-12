@@ -278,6 +278,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Analyze Collection
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return true;
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id

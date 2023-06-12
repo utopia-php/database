@@ -175,6 +175,7 @@ class SQLite extends MariaDB
         ");
 
         try {
+             $this->analyzeCollection($name);
              $query->execute();
              $size = $query->fetchColumn();
         }

@@ -165,6 +165,7 @@ class MariaDB extends SQL
         $query->bindParam(':name', $collectionName);
 
         try {
+             $this->analyzeCollection($name);
              $query->execute();
              $size = $query->fetchColumn();
         }

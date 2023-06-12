@@ -167,6 +167,7 @@ class Postgres extends SQL
         ");
 
         try {
+             $this->analyzeCollection($name);
              $query->execute();
              $size = $query->fetchColumn();
         }

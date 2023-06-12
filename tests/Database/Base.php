@@ -276,8 +276,6 @@ abstract class Base extends TestCase
             ]));
         }
 
-        static::getDatabase()->analyzeCollection('size_test2');
-
         $size_test_2 = static::getDatabase()->getSizeOfCollection('size_test2');
 
         $this->assertGreaterThan($size_test_1, $size_test_2);

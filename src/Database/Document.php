@@ -79,7 +79,7 @@ class Document extends ArrayObject
      */
     public function getPermissions(): array
     {
-        return \array_unique($this->getAttribute('$permissions', []));
+        return \array_values(\array_unique($this->getAttribute('$permissions', [])));
     }
 
     /**

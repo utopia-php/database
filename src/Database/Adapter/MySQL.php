@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Adapter;
 
-use Exception;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
@@ -19,9 +18,7 @@ class MySQL extends MariaDB
      * @param array<string> $attributes
      *
      * @return string
-     * @throws Exception
-     * @throws Exception
-     * @throws Exception
+     * @throws DatabaseException
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {

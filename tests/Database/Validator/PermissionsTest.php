@@ -297,4 +297,46 @@ class PermissionsTest extends TestCase
         $this->assertFalse($object->isValid($permissions));
         $this->assertEquals('You can only provide up to 100 permissions.', $object->getDescription());
     }
+
+    /*
+     *  Test for checking duplicate methods input. The getPermissions should return an a list array
+      */
+    public function testDuplicateMethods(): void
+    {
+        $validator = new Permissions();
+
+        $user = ID::unique();
+
+        $document = new Document([
+            '$id' => uniqid(),
+            '$collection' => uniqid(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user($user)),
+                Permission::read(Role::user($user)),
+                Permission::write(Role::user($user)),
+                Permission::update(Role::user($user)),
+                Permission::delete(Role::user($user)),
+            ],
+            'title' => 'This is a test.',
+            'list' => [
+                'one'
+            ],
+            'children' => [
+                new Document(['name' => 'x']),
+                new Document(['name' => 'y']),
+                new Document(['name' => 'z']),
+            ]
+        ]);
+        $this->assertTrue($validator->isValid($document->getPermissions()));
+        $permissions = $document->getPermissions();
+        $this->assertEquals(5, count($permissions));
+        $this->assertEquals([
+            'read("any")',
+            'read("user:' . $user . '")',
+            'write("user:' . $user . '")',
+            'update("user:' . $user . '")',
+            'delete("user:' . $user . '")',
+        ], $permissions);
+    }
 }

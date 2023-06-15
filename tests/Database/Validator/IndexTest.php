@@ -109,6 +109,61 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
+    public function testMultipleIndexLength(): void
+    {
+        $validator = new Index(768);
+
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 256,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('description'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 1024,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('index1'),
+                    'type' => Database::INDEX_FULLTEXT,
+                    'attributes' => ['title'],
+                ]),
+            ],
+        ]);
+
+        $this->assertTrue($validator->isValid($collection));
+
+        $collection->setAttribute('indexes', new Document([
+            '$id' => ID::custom('index2'),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['title', 'description'],
+        ]), Document::SET_TYPE_APPEND);
+
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
+    }
+
+    /**
+     * @throws Exception
+     */
     public function testEmptyAttributes(): void
     {
         $validator = new Index(768);

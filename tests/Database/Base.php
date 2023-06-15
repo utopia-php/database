@@ -399,6 +399,16 @@ abstract class Base extends TestCase
         $this->assertEquals('value', $document->getAttribute('key_with.sym$bols'));
     }
 
+    public function testCollectionNotFound(): void
+    {
+        try {
+            static::getDatabase()->find('not_exist', []);
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection "not_exist" not found', $e->getMessage());
+        }
+    }
+
     public function testAttributeNamesWithDots(): void
     {
         static::getDatabase()->createCollection('dots.parent');

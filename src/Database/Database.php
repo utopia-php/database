@@ -3854,7 +3854,13 @@ class Database
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
+        $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection "'. $originalName .'" not found');
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 

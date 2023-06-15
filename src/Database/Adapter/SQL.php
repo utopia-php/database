@@ -681,18 +681,49 @@ abstract class SQL extends Adapter
      * @param mixed $stmt
      * @param Query $query
      * @return void
+     * @throws Exception
      */
     protected function bindConditionValue(mixed $stmt, Query $query): void
     {
-        if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT])) {
+        if ($query->getMethod() == Query::TYPE_SELECT) {
             return;
         }
 
         foreach ($query->getValues() as $key => $value) {
+            $value = match ($query->getMethod()) {
+                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                default => $value
+            };
+
             $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-            $value = $this->getSQLValue($query->getMethod(), $value);
             $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
         }
+    }
+
+    /**
+     * @param string $value
+     * @return string
+     */
+    protected function getFulltextValue(string $value): string
+    {
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+
+        /** Replace reserved chars with space. */
+        $specialChars = '@,+,-,*,),(,<,>,~,"';
+        $value = str_replace(explode(',', $specialChars), ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value);
+
+        if ($exact) {
+            $value = '"' . $value . '"';
+        } else {
+            /** Prepend wildcard by default on the back. */
+            $value .= '*';
+        }
+
+        return $value;
     }
 
     /**
@@ -745,21 +776,15 @@ abstract class SQL extends Adapter
         return \md5($json);
     }
 
-    protected function getSQLValue(string $method, mixed $value): mixed
+    public function escapeWildcards(string $value): string
     {
-        switch ($method) {
-            case Query::TYPE_STARTS_WITH:
-                $value = $this->escapeWildcards($value);
-                return "$value%";
-            case Query::TYPE_ENDS_WITH:
-                $value = $this->escapeWildcards($value);
-                return "%$value";
-            case Query::TYPE_SEARCH:
-                $value = $this->escapeWildcards($value);
-                return "'$value*'";
-            default:
-                return $value;
+        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
         }
+
+        return $value;
     }
 
     /**

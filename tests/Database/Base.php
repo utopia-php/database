@@ -1617,6 +1617,70 @@ abstract class Base extends TestCase
         $this->assertEquals(true, true); // Test must do an assertion
     }
 
+    public function testFindFulltextSpecialChars(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'full_text';
+        static::getDatabase()->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ]);
+
+        $this->assertTrue(static::getDatabase()->createAttribute($collection, 'ft', Database::VAR_STRING, 128, true));
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'ft-index', Database::INDEX_FULLTEXT, ['ft']));
+
+        static::getDatabase()->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'ft' => 'Alf: chapter_4@nasa.com'
+        ]));
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::search('ft', 'chapter_4'),
+        ]);
+        $this->assertEquals(1, count($documents));
+
+        static::getDatabase()->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'ft' => 'al@ba.io +-*)(<>~'
+        ]));
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::search('ft', 'al@ba.io'), // === al ba io*
+        ]);
+
+        if (static::getDatabase()->getAdapter()->getSupportForFulltextWildcardIndex()) {
+            $this->assertEquals(0, count($documents));
+        } else {
+            $this->assertEquals(1, count($documents));
+        }
+
+        static::getDatabase()->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'ft' => 'donald duck'
+        ]));
+
+        static::getDatabase()->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'ft' => 'donald trump'
+        ]));
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::search('ft', 'donald trump'),
+            Query::orderAsc('ft'),
+        ]);
+        $this->assertEquals(2, count($documents));
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::search('ft', '"donald trump"'), // Exact match
+        ]);
+
+        $this->assertEquals(1, count($documents));
+    }
+
     public function testFindMultipleConditions(): void
     {
         /**

@@ -104,7 +104,7 @@ class Index extends Validator
     {
         foreach ($collection->getAttribute('indexes', []) as $index) {
             if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
-                return true;
+                continue;
             }
 
             $total = 0;

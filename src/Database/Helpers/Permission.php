@@ -170,7 +170,7 @@ class Permission
                 }
             }
         }
-        return $mutated;
+        return \array_values(\array_unique($mutated));
     }
 
     /**

@@ -128,7 +128,7 @@ class MariaDB extends SQL
                         `_document` VARCHAR(255) NOT NULL,
                         PRIMARY KEY (`_id`),
                         UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`)
+                        INDEX `_permission` (`_permission`,`_type`,`_document`)
                     )")
                 ->execute();
         } catch (\Exception $th) {
@@ -1229,15 +1229,7 @@ class MariaDB extends SQL
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = $this->getSQLValue($query->getMethod(), $value);
-                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+                return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
                 return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
@@ -1278,7 +1270,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > 16383) {
+                if ($size > $this->getMaxVarcharLength()) {
                     return 'TEXT';
                 }
 

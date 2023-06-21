@@ -261,7 +261,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
-        static::getDatabase()->createIndex('sizeTest2', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+        static::getDatabase()->createIndex('sizeTest2', 'multiIndex', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
         $loopCount = 30;
 

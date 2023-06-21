@@ -170,16 +170,11 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $namespace = $this->getNamespace();
         
-        $analyze = $this->getPDO()->prepare("
-             ANALYZE {$namespace}_{$name};
-        ");
-        
         $query = $this->getPDO()->prepare("
              SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name='{$namespace}_{$name}';
         ");
 
         try {
-             $analyze->execute();
              $query->execute();
              $size = $query->fetchColumn();
         }

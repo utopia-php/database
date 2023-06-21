@@ -167,7 +167,6 @@ class Postgres extends SQL
         ");
 
         try {
-             $this->analyzeCollection($name);
              $query->execute();
              $size = $query->fetchColumn();
         }
@@ -176,31 +175,6 @@ class Postgres extends SQL
         }
 
         return  $size;
-    }
-
-    /**
-     * Analyze Collection
-     * @param string $collection
-     * @return bool
-     * @throws DatabaseException
-     *
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        $name = $this->filter($collection);
-
-        $query = $this->getPDO()->prepare("
-             ANALYZE {$this->getSQLTable($name)};
-        ");
-
-        try {
-             $query->execute();
-             return true;
-        }
-        catch (PDOException $e) {
-             throw new DatabaseException('Failed to analyze collection: ' . $e->getMessage());
-             return false;
-        }
     }
 
     /**

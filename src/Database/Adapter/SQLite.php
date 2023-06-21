@@ -169,13 +169,17 @@ class SQLite extends MariaDB
     {
         $name = $this->filter($collection);
         $namespace = $this->getNamespace();
-
+        
+        $analyze = $this->getPDO()->prepare("
+             ANALYZE {$namespace}_{$name};
+        ");
+        
         $query = $this->getPDO()->prepare("
              SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name='{$namespace}_{$name}';
         ");
 
         try {
-             $this->analyzeCollection($name);
+             $analyze->execute();
              $query->execute();
              $size = $query->fetchColumn();
         }
@@ -184,32 +188,6 @@ class SQLite extends MariaDB
         }
 
         return $size;
-    }
-
-    /**
-     * Analyze Collection
-     * @param string $collection
-     * @return bool
-     * @throws DatabaseException
-     *
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        $name = $this->filter($collection);
-        $namespace = $this->getNamespace();
-
-        $query = $this->getPDO()->prepare("
-             ANALYZE {$namespace}_{$name};
-        ");
-
-        try {
-             $query->execute();
-             return true;
-        }
-        catch (PDOException $e) {
-             throw new DatabaseException('Failed to analyze collection: ' . $e->getMessage());
-             return false;
-        }
     }
 
     /**

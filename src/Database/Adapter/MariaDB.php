@@ -155,17 +155,15 @@ class MariaDB extends SQL
         $database = $this->getDefaultDatabase();
 
         $query = $this->getPDO()->prepare("
-             SELECT SUM(data_length + index_length) AS total_size 
-             FROM information_schema.TABLES 
-             WHERE table_schema = :database
-             AND table_name = :name
+             SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
+             FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
+             WHERE NAME = CONCAT(:database, '/', :name)
          ");
 
         $query->bindParam(':database', $database);
         $query->bindParam(':name', $collectionName);
 
         try {
-             $this->analyzeCollection($name);
              $query->execute();
              $size = $query->fetchColumn();
         }
@@ -174,28 +172,6 @@ class MariaDB extends SQL
         }
 
         return $size;
-    }
-
-    /**
-     * Analyze Collection
-     * @param string $collection
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        $name = $this->filter($collection);
-
-        $query = $this->getPDO()->prepare("ANALYZE TABLE {$this->getSQLTable($name)}");
-        
-        try {
-             $query->execute();
-             return true;
-        }
-        catch (PDOException $e) {
-             throw new DatabaseException('Failed to analyze collection: ' . $e->getMessage());
-             return false;
-        }
     }
 
     /**

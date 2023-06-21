@@ -779,18 +779,6 @@ class Database
     }
 
     /**
-     * Analyze Collection
-     *
-     * @param string $collection
-     *
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return $this->adapter->analyzeCollection($collection);
-    }
-
-    /**
      * Delete Collection
      *
      * @param string $id

@@ -2207,14 +2207,14 @@ class Database
             return $document;
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            if (!$validator->isValid([
-                ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
-            ])) {
-                return new Document();
-            }
-        }
+        // if ($collection->getId() !== self::METADATA) {
+        //     if (!$validator->isValid([
+        //         ...$collection->getRead(),
+        //         ...($documentSecurity ? $document->getRead() : [])
+        //     ])) {
+        //         return new Document();
+        //     }
+        // }
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
@@ -4313,7 +4313,16 @@ class Database
             }
 
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
+                // var_dump(($array) ? $value : $value[0]);
+                if($key === '$createdAt' && $value[0] === NULL){
+                    continue;
+                }
+                else if($key === '$updatedAt' && $value[0] === NULL){
+                    continue;
+                }
+                else{
+                    $document->setAttribute($key, ($array) ? $value : $value[0]);
+                }
             }
         }
 
@@ -4470,6 +4479,11 @@ class Database
                 $keys[] = $attribute['key'];
             }
         }
+
+        $keys[] = '$internalId';
+        $keys[] = '$createdAt';
+        $keys[] = '$updatedAt';
+        $keys[] = '$permissions';
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {

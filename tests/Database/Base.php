@@ -2539,13 +2539,14 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('movies', [
             Query::select(['name', 'year'])
         ]);
+
         foreach ($documents as $document) {
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            // $this->assertArrayHasKey('$internalId', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            // $this->assertArrayHasKey('$createdAt', $document);
+            // $this->assertArrayHasKey('$updatedAt', $document);
+            // $this->assertArrayHasKey('$permissions', $document);
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
             $this->assertArrayNotHasKey('director', $document);

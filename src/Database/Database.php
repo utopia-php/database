@@ -4313,7 +4313,6 @@ class Database
             }
 
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                // var_dump(($array) ? $value : $value[0]);
                 if($key === '$createdAt' && $value[0] === NULL){
                     continue;
                 }

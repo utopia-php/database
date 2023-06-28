@@ -2542,13 +2542,13 @@ abstract class Base extends TestCase
 
         foreach ($documents as $document) {
             $this->assertArrayHasKey('$id', $document);
-            // $this->assertArrayHasKey('$internalId', $document);
             $this->assertArrayHasKey('$collection', $document);
-            // $this->assertArrayHasKey('$createdAt', $document);
-            // $this->assertArrayHasKey('$updatedAt', $document);
-            // $this->assertArrayHasKey('$permissions', $document);
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);

@@ -24,6 +24,10 @@
             "Composer\\Config::disableProcessTimeout",
             "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
         ],
+        "mytest": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose exec tests vendor/bin/phpunit ./tests/Database/Adapter/MariaDBTest.php --verbose --stop-on-failure"
+        ],
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M",

@@ -87,24 +87,23 @@ class MySQL extends MariaDB
      */
     public function getSizeOfCollection(string $collection): int
     {
-        $name = $this->filter($collection);
-        $collectionName = "{$this->getNamespace()}_{$name}";
+        $collection = $this->filter($collection);
+        $collection = $this->getNamespace() . '_' . $collection;
         $database = $this->getDefaultDatabase();
+        $name = $database . '/' . $collection;
 
         $query = $this->getPDO()->prepare("
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
-             WHERE NAME = CONCAT(:database, '/', :name)
+             WHERE NAME = :name
          ");
 
-        $query->bindParam(':database', $database);
-        $query->bindParam(':name', $collectionName);
+        $query->bindParam(':name', $name);
 
         try {
              $query->execute();
              $size = $query->fetchColumn();
-        }
-        catch (PDOException $e) {
+        } catch (PDOException $e) {
              throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
 

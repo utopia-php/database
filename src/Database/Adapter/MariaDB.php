@@ -1224,6 +1224,7 @@ class MariaDB extends SQL
         }
 
         $selections[] = '_uid';
+        $selections[] = '_permissions';
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {

@@ -2207,14 +2207,14 @@ class Database
             return $document;
         }
 
-        // if ($collection->getId() !== self::METADATA) {
-        //     if (!$validator->isValid([
-        //         ...$collection->getRead(),
-        //         ...($documentSecurity ? $document->getRead() : [])
-        //     ])) {
-        //         return new Document();
-        //     }
-        // }
+        if ($collection->getId() !== self::METADATA) {
+            if (!$validator->isValid([
+                ...$collection->getRead(),
+                ...($documentSecurity ? $document->getRead() : [])
+            ])) {
+                return new Document();
+            }
+        }
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);

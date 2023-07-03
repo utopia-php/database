@@ -126,9 +126,12 @@ class MariaDB extends SQL
                         `_type` VARCHAR(12) NOT NULL,
                         `_permission` VARCHAR(255) NOT NULL,
                         `_document` VARCHAR(255) NOT NULL,
+                        `_documentId` int(11) unsigned NOT NULL,
                         PRIMARY KEY (`_id`),
                         UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`,`_type`,`_document`)
+                        INDEX `_permission` (`_permission`,`_type`,`_document`),
+                        INDEX `_permission2` (`_permission`,`_type`,`_documentId`),
+                        INDEX `_index2` (`_documentId`,`_type`,`_permission`)
                     )")
                 ->execute();
         } catch (\Exception $th) {
@@ -591,23 +594,23 @@ class MariaDB extends SQL
             $attributeIndex++;
         }
 
-        $permissions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
-            }
-        }
-
-        if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-        }
-
         try {
             $stmt->execute();
 
             $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+
+            $permissions = [];
+            foreach (Database::PERMISSIONS as $type) {
+                foreach ($document->getPermissionsByType($type) as $permission) {
+                    $permission = \str_replace('"', '', $permission);
+                    $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', {$document->getInternalId()})";
+                }
+            }
+
+            if (!empty($permissions)) {
+                $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _documentId) VALUES " . implode(', ', $permissions);
+                $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+            }
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
@@ -740,7 +743,7 @@ class MariaDB extends SQL
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                    $values[] = "(:_id, :_uid, '{$type}', :_add_{$type}_{$i} )";
                 }
             }
 
@@ -748,9 +751,10 @@ class MariaDB extends SQL
                 ->prepare(
                     "
                     INSERT INTO {$this->getSQLTable($name . '_perms')}
-                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
+                    (_documentId, _document, _type, _permission) VALUES " . \implode(', ', $values)
                 );
 
+            $stmtAddPermissions->bindValue(":_id", $document->getInternalId());
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {

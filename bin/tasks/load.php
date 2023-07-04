@@ -255,22 +255,13 @@ function addArticle($database, Generator $faker): void
         '$permissions' => [
             Permission::read(Role::any()),
             Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::create(Role::user($faker->randomNumber(9))),
-            Permission::create(Role::user($faker->randomNumber(9))),
             Permission::create(Role::user($faker->randomNumber(9))),
             Permission::update(Role::user($faker->randomNumber(9))),
-            Permission::update(Role::user($faker->randomNumber(9))),
-            Permission::update(Role::user($faker->randomNumber(9))),
-            Permission::delete(Role::user($faker->randomNumber(9))),
-            Permission::delete(Role::user($faker->randomNumber(9))),
             Permission::delete(Role::user($faker->randomNumber(9))),
         ],
         'author' => $faker->name(),
         'created' => \Utopia\Database\DateTime::format($faker->dateTime()),
-        'text' => $faker->realTextBetween(1000, 4000),
+        'text' => $faker->realTextBetween(100, 1000),
         'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
         'views' => $faker->randomNumber(6)
     ]));

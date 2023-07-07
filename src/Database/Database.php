@@ -1642,10 +1642,12 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key, null);
 
+            var_dump("Encoding attribute ", $key, $value, $filters);
+
             // continue on optional param with no default
-            if (is_null($value) && is_null($default)) {
-                continue;
-            }
+            // if (is_null($value) && is_null($default)) { // comment now to run migrations
+            //     continue;
+            // }
 
             // assign default only if no no value provided
             if (is_null($value) && !is_null($default)) {

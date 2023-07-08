@@ -2263,6 +2263,26 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
+        foreach ($queries as $query){
+            if($query->getMethod() == Query::TYPE_SELECT){
+                $queriedValues = $query->getValues();
+                $defaultKeys = ['$id', '$internalId', '$permissions', '$createdAt', '$updatedAt', '$collection'];
+                
+                foreach($queriedValues as $queriedValue){
+                    if(in_array($queriedValue, $defaultKeys)){
+                        $index = array_search($queriedValue, $defaultKeys);
+                        unset($defaultKeys[$index]);
+                    }
+                }
+
+                foreach($defaultKeys as $defaultKey){
+                    if($document->isSet($defaultKey)){
+                        $document->removeAttribute($defaultKey);
+                    }
+                }
+            }   
+        }
+
         return $document;
     }
 

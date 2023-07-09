@@ -22,7 +22,7 @@
         ],
         "test": [
             "Composer\\Config::disableProcessTimeout",
-            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
+            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml --stop-on-failure"
         ],
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",

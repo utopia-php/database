@@ -1016,7 +1016,9 @@ abstract class Base extends TestCase
      */
     public function testGetDocumentSelect(Document $document): Document
     {
-        $document = static::getDatabase()->getDocument('documents', $document->getId(), [
+        $documentId = $document->getId();
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select(['string', 'integer']),
         ]);
 
@@ -1029,12 +1031,22 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
-        $this->assertEmpty($document->getAttribute('$id'));
-        $this->assertEmpty($document->getAttribute('$internalId'));
-        $this->assertEmpty($document->getAttribute('$collection'));
-        $this->assertEmpty($document->getAttribute('$permissions'));
-        $this->assertEmpty($document->getAttribute('$createdAt'));
-        $this->assertEmpty($document->getAttribute('$updatedAt'));
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$id', '$internalId', '$permissions', '$createdAt', '$updatedAt']),
+        ]);
+
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$createdAt', $document);
+        $this->assertArrayHasKey('$updatedAt', $document);
 
         return $document;
     }

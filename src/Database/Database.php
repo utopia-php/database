@@ -4499,6 +4499,7 @@ class Database
             }
         }
 
+        $keys[] = '$id';
         $keys[] = '$internalId';
         $keys[] = '$createdAt';
         $keys[] = '$updatedAt';

@@ -1029,6 +1029,12 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
+        $this->assertEmpty($document->getAttribute('$id'));
+        $this->assertEmpty($document->getAttribute('$internalId'));
+        $this->assertEmpty($document->getAttribute('$collection'));
+        $this->assertEmpty($document->getAttribute('$permissions'));
+        $this->assertEmpty($document->getAttribute('$createdAt'));
+        $this->assertEmpty($document->getAttribute('$updatedAt'));
 
         return $document;
     }
@@ -2544,9 +2550,9 @@ abstract class Base extends TestCase
             $this->assertArrayHasKey('$id', $document);
             $this->assertArrayHasKey('$permissions', $document);
             $this->assertArrayHasKey('$collection', $document);
-            // $this->assertArrayHasKey('$internalId', $document);
-            // $this->assertArrayHasKey('$createdAt', $document);
-            // $this->assertArrayHasKey('$updatedAt', $document);
+            // $this->assertArrayNotHasKey('$internalId', $document);
+            // $this->assertArrayNotHasKey('$createdAt', $document);
+            // $this->assertArrayNotHasKey('$updatedAt', $document);
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
             $this->assertArrayNotHasKey('director', $document);
@@ -4157,7 +4163,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         $person = static::getDatabase()->getDocument('person', 'person1', [
-            Query::select(['*', 'library.name'])
+            Query::select(['*', 'library.name', '$id'])
         ]);
 
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));

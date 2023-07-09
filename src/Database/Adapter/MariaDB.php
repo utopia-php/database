@@ -1203,6 +1203,11 @@ class MariaDB extends SQL
             return '*';
         }
 
+        if (in_array('$id', $selections)) {
+            $index = array_search('$id', $selections);
+            $selections[$index] = '_uid';
+        }
+
         if (in_array('$internalId', $selections)) {
             $index = array_search('$internalId', $selections);
             $selections[$index] = '_id';

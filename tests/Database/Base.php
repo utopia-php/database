@@ -2547,17 +2547,17 @@ abstract class Base extends TestCase
         ]);
 
         foreach ($documents as $document) {
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$permissions', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            // $this->assertArrayNotHasKey('$internalId', $document);
-            // $this->assertArrayNotHasKey('$createdAt', $document);
-            // $this->assertArrayNotHasKey('$updatedAt', $document);
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
-            $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
         }
     }
 

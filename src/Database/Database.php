@@ -3998,6 +3998,21 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
+        // remove default keys $id and $permissions from the results
+
+        foreach ($queries as $query) {
+            if($query->getMethod() === Query::TYPE_SELECT){
+                foreach ($results as $result) {
+                    $result->removeAttribute('$id');
+                    $result->removeAttribute('$permissions');
+                    $result->removeAttribute('$collection');
+                    $result->removeAttribute('$createdAt');
+                    $result->removeAttribute('$updatedAt');
+                    $result->removeAttribute('$internalId');
+                }
+            }
+        }
+  
         return $results;
     }
 

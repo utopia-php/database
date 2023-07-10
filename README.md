@@ -478,7 +478,10 @@ $attribute = new Document([
     'filters' => [],
 ]);
 
-$database->checkAttribute($collection, $attribute);
+$database->checkAttribute(
+    collection: $collection,
+    attribute: $attribute
+);
 
 // Get Adapter attribute limit
 $database->getLimitForAttributes(); // if 0 then no limit
@@ -639,7 +642,11 @@ $document = new Document([
     'active' => true,
     'genres' => ['science fiction', 'action', 'comics'],
 ]);
-$document = $database->createDocument(collection: 'movies', document: $document);
+
+$document = $database->createDocument(
+    collection: 'movies', 
+    document: $document
+);
 
 // Get which collection a document belongs to
 $document->getCollection();
@@ -739,32 +746,42 @@ $possibleQueries =
 ];
 
 
-$database->find(collection: 'movies', queries:  [
-    $possibleQueries[0],
-    $possibleQueries[1],
-], timeout: 1);  //timeout is optional
+$database->find(
+    collection: 'movies', 
+    queries:  [
+        $possibleQueries[0],
+        $possibleQueries[1],
+    ], 
+    timeout: 1);  //timeout is optional
 
 // Find a document 
-$database->findOne(collection: 'movies', queries:  [
-    $possibleQueries[0],
-    $possibleQueries[1],
-]
+$database->findOne(
+    collection: 'movies', 
+    queries:  [
+        $possibleQueries[0],
+        $possibleQueries[1],
+    ]
 );  
 
 // Get count of documents 
-$database->count(collection: 'movies', queries:  [
-    $possibleQueries[0],
-    $possibleQueries[1],
-], 
-max: 1000); // max is optional
+$database->count(
+    collection: 'movies', 
+    queries:  [
+        $possibleQueries[0],
+        $possibleQueries[1],
+    ], 
+    max: 1000); // max is optional
 );
 
 // Get the sum of an attribute from all the documents
-$database->sum(collection: 'movies', attribute: 'price', queries:  [
-    $possibleQueries[0],
-    $possibleQueries[1],
-],
-max: 0 // max = 0 means no limit
+$database->sum(
+    collection: 'movies', 
+    attribute: 'price', 
+    queries:  [
+        $possibleQueries[0],
+        $possibleQueries[1],
+    ],
+    max: 0 // max = 0 means no limit
 ); 
 
 // Encode Document
@@ -775,10 +792,16 @@ $document = $database->getDocument(
     id: $document->getId()
 );
 
-$database->encode(collection: $collection, document: $document);
+$database->encode(
+    collection: $collection, 
+    document: $document
+);
 
 // Decode Document
-$database->decode(collection: $collection, document: $document);
+$database->decode(
+    collection: $collection, 
+    document: $document
+);
 
 // Delete a document
 $database->deleteDocument(

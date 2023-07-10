@@ -203,26 +203,90 @@ $database = new Database(new Mongo($client), $cache);
 
 ```php
 
-// Sets namespace that prefixes all collection names
-$database->setNamespace(name: 'namespace');
+// Get namespace
+$database->getNamespace();
 
-// Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. named 'mydb'
-$database->create(name: 'mydb');
+// Sets namespace that prefixes all collection names
+$database->setNamespace(
+    namespace: 'namespace'
+);
+
+// Get default database
+$database->getDefaultDatabase();
+
+// Sets default database
+$database->setDefaultDatabase(
+    name: 'dbName'
+);
+
+// Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. 
+// Uses default database as the name.
+$database->create();
+
+// Returns an array of all databases
+$database->list();
+
+
 
 // Delete database
-$database->delete(name: 'mydb');
+$database->delete(
+    name: 'mydb'
+);
 
 // Ping database it returns true if the database is alive
 $database->ping();
 
 // Check if database exists
-$database->exists(database: 'mydb'); // for database
+$database->exists(
+    database: 'mydb'
+); // for database
 
 // Check if collection exists
 $database->exists(
     database: 'mydb',
     collection: 'users'
 ); 
+
+// Listen to events
+$eventType = 
+[
+    Database::EVENT_ALL
+    Database::EVENT_DATABASE_CREATE,
+    Database::EVENT_DATABASE_LIST,
+    Database::EVENT_COLLECTION_CREATE,
+    Database::EVENT_COLLECTION_LIST,
+    Database::EVENT_COLLECTION_READ,
+    Database::EVENT_ATTRIBUTE_CREATE,
+    Database::EVENT_ATTRIBUTE_UPDATE,
+    Database::EVENT_INDEX_CREATE,
+    Database::EVENT_DOCUMENT_CREATE,
+    Database::EVENT_DOCUMENT_UPDATE,
+    Database::EVENT_DOCUMENT_READ,
+    Database::EVENT_DOCUMENT_FIND,
+    Database::EVENT_DOCUMENT_FIND,
+    Database::EVENT_DOCUMENT_COUNT,
+    Database::EVENT_DOCUMENT_SUM,
+    Database::EVENT_DOCUMENT_INCREASE,
+    Database::EVENT_DOCUMENT_DECREASE,
+    Database::EVENT_INDEX_DELETE,
+    Database::EVENT_DOCUMENT_DELETE,
+    Database::EVENT_ATTRIBUTE_DELETE,
+    Database::EVENT_COLLECTION_DELETE,
+    Database::EVENT_DATABASE_DELETE,
+];
+
+$database->on(
+    string: $eventType[0], 
+    callable: function($event, $data) {
+        // Do something
+    }
+);
+
+// Get Database Adapter
+$database->getAdapter();
+
+// Get List of keywords that cannot be used
+$database->getKeywords();
 ```
 
 **Collection Methods:**
@@ -230,7 +294,9 @@ $database->exists(
 ```php
 // Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
 // The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
-$database->createCollection(name: 'users');
+$database->createCollection(
+    name: 'users'
+);
 
 // Create collection with attributes and indexes
 $attributes = [
@@ -279,11 +345,37 @@ $database->createCollection(
     indexes: $indexes
 );
 
-// Deletes the two collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
-$database->deleteCollection(id: 'users');
+// Update Collection Permissions
+$database->updateCollection(
+    id: 'users',
+    permissions: [
+        Permission::read(Role::any()),
+        Permission::update(Role::any()),
+        Permission::delete(Role::any())
+    ],
+    documentSecurity: true
+);
 
-// Returns the size of the collection in bytes where database is the default database
-$database->getSizeOfCollection(collection: 'users');
+// Get Collection
+$database->getCollection(
+    id: 'users'
+);
+
+// List Collections
+$database->listCollections(
+    limit: 25, 
+    offset: 0
+);
+
+// Deletes the two collections named 'namespace_$collectionName' and 'namespace_$collectionName_perms'
+$database->deleteCollection(
+    id: 'users'
+);
+
+// Delete cached documents of a collection
+$database->deleteCachedCollection(
+    collection: 'users'
+);
 ```
 
 **Attribute Methods:**
@@ -337,18 +429,74 @@ $database-> updateAttribute(
     filters: []
 );
 
-
-// Deletes the attribute in the '$namespace_$collectionName' collection.
-$database->deleteAttribute(
+// Update the required status of an attribute
+$database->updateAttributeRequired(
     collection: 'movies', 
-    id: 'genres'
+    id: 'genres',
+    required: true
 );
+
+// Update the attribute format
+$database->updateAttributeFormat(
+    collection: 'movies', 
+    id: 'genres',
+    format: null,
+);
+
+// Update the attribute format options
+$database->updateAttributeFormatOptions(
+    collection: 'movies', 
+    id: 'genres',
+    formatOptions: []
+);
+
+// Update the attribute filters
+$database->updateAttributeFilters(
+    collection: 'movies', 
+    id: 'genres',
+    filters: []
+);
+
+// Update the default value of an attribute
+$database->updateAttributeDefault(
+    collection: 'movies', 
+    id: 'genres',
+    default: 'sci-fi'
+);
+
+// Check if attribute can be added to a collection
+$collection = $database->getCollection('movies');
+
+$attribute = new Document([
+    '$id' => ID::unique(),
+    'type' => Database::VAR_INTEGER,
+    'size' => 256,
+    'required' => true,
+    'default' => null,
+    'signed' => true,
+    'array' => false,
+    'filters' => [],
+]);
+
+$database->checkAttribute($collection, $attribute);
+
+// Get Adapter attribute limit
+$database->getLimitForAttributes(); // if 0 then no limit
+
+// Get Adapter index limit
+$database->getLimitForIndexes(); 
 
 // Renames the attribute from old to new in the '$namespace_$collectionName' collection.
 $database->renameAttribute(
     collection: 'movies',
     old: 'genres', 
     new: 'genres2'
+);
+
+// Deletes the attribute in the '$namespace_$collectionName' collection.
+$database->deleteAttribute(
+    collection: 'movies', 
+    id: 'genres'
 );
 ```
 
@@ -463,7 +611,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
 // Id helpers
-ID::unique(padding: 12),        // Creates a id of length 7 + padding
+ID::unique(padding: 12),        // Creates an id of length 7 + padding
 ID::custom(id: 'my_user_3235')  
 
 // Role helpers
@@ -567,7 +715,7 @@ $database->getDocument(
     [Query::select(['name', 'director', 'year'])]
 );
 
-// Find a document with a query
+// Find documents 
 $possibleQueries = 
 [
    Query::equal('location',['Bangalore', 'California']),
@@ -596,8 +744,54 @@ $database->find(collection: 'movies', queries:  [
     $possibleQueries[1],
 ], timeout: 1);  //timeout is optional
 
+// Find a document 
+$database->findOne(collection: 'movies', queries:  [
+    $possibleQueries[0],
+    $possibleQueries[1],
+]
+);  
+
+// Get count of documents 
+$database->count(collection: 'movies', queries:  [
+    $possibleQueries[0],
+    $possibleQueries[1],
+], 
+max: 1000); // max is optional
+);
+
+// Get the sum of an attribute from all the documents
+$database->sum(collection: 'movies', attribute: 'price', queries:  [
+    $possibleQueries[0],
+    $possibleQueries[1],
+],
+max: 0 // max = 0 means no limit
+); 
+
+// Encode Document
+$collection = $database->getCollection('movies');
+
+$document = $database->getDocument(
+    collection: 'movies', 
+    id: $document->getId()
+);
+
+$database->encode(collection: $collection, document: $document);
+
+// Decode Document
+$database->decode(collection: $collection, document: $document);
+
 // Delete a document
-$database->deleteDocument(collection: 'movies', id: $document->getId());
+$database->deleteDocument(
+    collection: 'movies', 
+    id: $document->getId()
+);
+
+// Delete a cached document
+$database->deleteCachedDocument(
+    collection: 'movies', 
+    id: $document->getId()
+);
+
 ```
 
 ### Adapters

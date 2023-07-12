@@ -1336,6 +1336,26 @@ class Mongo extends Adapter
         $projection['_updatedAt'] = 1;
         $projection['_permissions'] = 1;
 
+        if(isset($projection['$id'])){
+            unset($projection['$id']);
+        }
+
+        if(isset($projection['$internalId'])){
+            unset($projection['$internalId']);
+        }
+
+        if(isset($projection['$permissions'])){
+            unset($projection['$permissions']);
+        }
+
+        if(isset($projection['$createdAt'])){
+            unset($projection['$createdAt']);
+        }
+
+        if(isset($projection['$updatedAt'])){
+            unset($projection['$updatedAt']);
+        }
+
         return $projection;
     }
 

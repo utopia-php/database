@@ -1224,6 +1224,12 @@ class Postgres extends SQL
             }
         }
 
+        foreach ($selections as $key => $value) {
+            if ($value == "\"id\"" || $value == "\"internalId\"" || $value == "\"permissions\"" || $value == "\"createdAt\"" || $value == "\"updatedAt\"") {
+                unset($selections[$key]);
+            }
+        }
+
         return \implode(', ', $selections);
     }
 

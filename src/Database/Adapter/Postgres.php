@@ -1056,23 +1056,23 @@ class Postgres extends SQL
         $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
-            if(isset($value['_uid'])){
+            if (isset($value['_uid'])) {
                 $results[$key]['$id'] = $value['_uid'];
                 unset($results[$key]['_uid']);
             }
-            if(isset($value['_id'])){
+            if (isset($value['_id'])) {
                 $results[$key]['$internalId'] = $value['_id'];
                 unset($results[$key]['_id']);
             }
-            if(isset($value['_createdAt'])){
+            if (isset($value['_createdAt'])) {
                 $results[$key]['$createdAt'] = $value['_createdAt'];
                 unset($results[$key]['_createdAt']);
             }
-            if(isset($value['_updatedAt'])){
+            if (isset($value['_updatedAt'])) {
                 $results[$key]['$updatedAt'] = $value['_updatedAt'];
                 unset($results[$key]['_updatedAt']);
             }
-            if(isset($value['_permissions'])){
+            if (isset($value['_permissions'])) {
                 $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
                 unset($results[$key]['_permissions']);
             }

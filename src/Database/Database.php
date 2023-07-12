@@ -2263,24 +2263,24 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
-        foreach ($queries as $query){
-            if($query->getMethod() == Query::TYPE_SELECT){
+        foreach ($queries as $query) {
+            if ($query->getMethod() == Query::TYPE_SELECT) {
                 $queriedValues = $query->getValues();
                 $defaultKeys = ['$id', '$internalId', '$permissions', '$createdAt', '$updatedAt', '$collection'];
-                
-                foreach($queriedValues as $queriedValue){
-                    if(in_array($queriedValue, $defaultKeys)){
+
+                foreach ($queriedValues as $queriedValue) {
+                    if (in_array($queriedValue, $defaultKeys)) {
                         $index = array_search($queriedValue, $defaultKeys);
                         unset($defaultKeys[$index]);
                     }
                 }
 
-                foreach($defaultKeys as $defaultKey){
-                    if($document->isSet($defaultKey)){
+                foreach ($defaultKeys as $defaultKey) {
+                    if ($document->isSet($defaultKey)) {
                         $document->removeAttribute($defaultKey);
                     }
                 }
-            }   
+            }
         }
 
         return $document;
@@ -4001,7 +4001,7 @@ class Database
         // remove default keys $id and $permissions from the results
 
         foreach ($queries as $query) {
-            if($query->getMethod() === Query::TYPE_SELECT){
+            if ($query->getMethod() === Query::TYPE_SELECT) {
                 foreach ($results as $result) {
                     $result->removeAttribute('$id');
                     $result->removeAttribute('$permissions');
@@ -4012,7 +4012,7 @@ class Database
                 }
             }
         }
-  
+
         return $results;
     }
 
@@ -4348,11 +4348,11 @@ class Database
             }
 
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                if($key === '$createdAt' && $value[0] === NULL){
+                if ($key === '$createdAt' && $value[0] === null) {
                     continue;
-                } else if($key === '$updatedAt' && $value[0] === NULL){
+                } elseif ($key === '$updatedAt' && $value[0] === null) {
                     continue;
-                } else{
+                } else {
                     $document->setAttribute($key, ($array) ? $value : $value[0]);
                 }
             }

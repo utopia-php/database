@@ -1046,7 +1046,6 @@ class MariaDB extends SQL
         $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
-        
             if (isset($value['_uid'])) {
                 $results[$key]['$id'] = $value['_uid'];
                 unset($results[$key]['_uid']);

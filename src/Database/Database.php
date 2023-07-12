@@ -4350,11 +4350,9 @@ class Database
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
                 if($key === '$createdAt' && $value[0] === NULL){
                     continue;
-                }
-                else if($key === '$updatedAt' && $value[0] === NULL){
+                } else if($key === '$updatedAt' && $value[0] === NULL){
                     continue;
-                }
-                else{
+                } else{
                     $document->setAttribute($key, ($array) ? $value : $value[0]);
                 }
             }

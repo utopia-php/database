@@ -101,10 +101,10 @@ class MySQL extends MariaDB
         $query->bindParam(':name', $name);
 
         try {
-             $query->execute();
-             $size = $query->fetchColumn();
+            $query->execute();
+            $size = $query->fetchColumn();
         } catch (PDOException $e) {
-             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
 
         return $size;

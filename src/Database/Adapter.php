@@ -400,7 +400,7 @@ abstract class Adapter
 
     /**
      * Get Collection Size
-     * 
+     *
      * @param string $collection
      * @return int
      * @throws DatabaseException

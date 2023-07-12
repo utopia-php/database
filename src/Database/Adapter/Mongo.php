@@ -264,16 +264,16 @@ class Mongo extends Adapter
         $namespace = $this->getNamespace();
         $collection = $this->filter($collection);
         $collection = $namespace. '_' . $collection;
-        
+
         $command = [
              'collStats' => $collection,
              'scale' => 1
         ];
 
         try {
-             $result = $this->getClient()->query($command);
+            $result = $this->getClient()->query($command);
         } catch(Exception $e) {
-             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
 
         return $result->size;

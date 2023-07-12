@@ -216,7 +216,7 @@ class Document extends ArrayObject
      *
      * @return self
      */
-    public function setAttribute(string $key, $value, string $type = self::SET_TYPE_ASSIGN): self
+    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): self
     {
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
@@ -230,6 +230,21 @@ class Document extends ArrayObject
                 $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
                 \array_unshift($this[$key], $value);
                 break;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Set Attributes.
+     *
+     * @param array<string, mixed> $attributes
+     * @return self
+     */
+    public function setAttributes(array $attributes): self
+    {
+        foreach ($attributes as $key => $value) {
+            $this->setAttribute($key, $value);
         }
 
         return $this;

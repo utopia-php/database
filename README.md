@@ -381,20 +381,19 @@ $database->deleteCachedCollection(
 **Attribute Methods:**
 
 ```php
-$attributeTypes =            
-[
-    Database::VAR_STRING,      // use Utopia\Database\Database for these constants
-    Database::VAR_INTEGER,
-    Database::VAR_FLOAT,
-    Database::VAR_BOOLEAN,
-    Database::VAR_DATETIME,
-];
+// Data types
+Database::VAR_STRING      
+Database::VAR_INTEGER
+Database::VAR_FLOAT
+Database::VAR_BOOLEAN  
+Database::VAR_DATETIME
+
 
 // Creates a new attribute named '$attributeName' in the '$namespace_$collectionName' collection.
 $database->createAttribute(
     collection: 'movies',
     id: 'name',
-    type:  $attributeTypes[0],
+    type:  Database::VAR_STRING,
     size: 128, 
     required: true
 );
@@ -403,7 +402,7 @@ $database->createAttribute(
 $database->createAttribute(
     collection: 'movies', 
     id: 'genres',
-    type: $attributeTypes[0] , 
+    type: Database::VAR_STRING, 
     size: 128, 
     required: true, 
     default: null, 
@@ -418,7 +417,7 @@ $database->createAttribute(
 $database-> updateAttribute(
     collection: 'movies', 
     id: 'genres',
-    type: $attributeTypes[1] , 
+    type: Database::VAR_STRING, 
     size: 128, 
     required: true, 
     default: null, 
@@ -506,29 +505,26 @@ $database->deleteAttribute(
 **Index Methods:**
 
 ```php
-$indexTypes =                             
-[
-    Database::INDEX_KEY,                 // use Utopia\Database\Database for these constants
-    Database::INDEX_FULLTEXT,
-    Database::INDEX_UNIQUE,
-    Database::INDEX_SPATIAL,
-    Database::INDEX_ARRAY
-];
+// Index types
+Database::INDEX_KEY,                 
+Database::INDEX_FULLTEXT
+Database::INDEX_UNIQUE
+Database::INDEX_SPATIAL
+Database::INDEX_ARRAY
 
-$insertionOrder =                        
-[                                 
-    Database::ORDER_ASC,   
-    Database::ORDER_DESC
-];                   
+// Insertion Order                                 
+Database::ORDER_ASC
+Database::ORDER_DESC
+   
 
 // Creates a new index named '$indexName' in the '$namespace_$collectionName' collection.
 // Note: The size for the index will be taken from the size of the attribute
 $database->createIndex(
     collection: 'movies', 
-    id: 'index1', $indexTypes[0], 
+    id: 'index1', Database::INDEX_KEY, 
     attributes: ['name', 'genres'], 
     lengths: [128,128], 
-    orders: [$insertionOrder[0], $insertionOrder[1]]
+    orders: [Database::ORDER_ASC, Database::ORDER_DESC]
 );
 
 // Rename index from old to new in the '$namespace_$collectionName' collection.
@@ -548,19 +544,17 @@ $database->deleteIndex(
 **Relationship Methods:**
 
 ```php
-$typesOfRelation =                        
-[ 
-    Database::RELATION_ONE_TO_ONE,
-    Database::RELATION_ONE_TO_MANY,
-    Database::RELATION_MANY_TO_ONE,
-    Database::RELATION_MANY_TO_MANY
-];
+// Relationship types
+Database::RELATION_ONE_TO_ONE
+Database::RELATION_ONE_TO_MANY
+Database::RELATION_MANY_TO_ONE
+Database::RELATION_MANY_TO_MANY
 
 // Creates a relationship between the two collections with the default reference attributes
 $database->createRelationship(
     collection: 'movies', 
     relatedCollection: 'users', 
-    $typesOfRelation[0], 
+    Database::RELATION_ONE_TO_ONE,, 
     twoWay: true
 );
 
@@ -569,30 +563,29 @@ $database->createRelationship(
 $database->createRelationship(
     collection: 'movies', 
     relatedCollection: 'users', 
-    $typesOfRelation[0], 
+    Database::RELATION_ONE_TO_ONE, 
     twoWay: true, 
     id: 'movies_id', 
     twoWayKey: 'users_id'
 ); 
 
-$onDeleteTypes = [
-    Database::RELATION_MUTATE_CASCADE, 
-    Database::RELATION_MUTATE_SET_NULL,
-    Database::RELATION_MUTATE_RESTRICT,
-];
+// Relationship onDelete types
+Database::RELATION_MUTATE_CASCADE, 
+Database::RELATION_MUTATE_SET_NULL,
+Database::RELATION_MUTATE_RESTRICT,
 
 // Update the relationship with the default reference attributes
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: $onDeleteTypes[0]
+    onDelete: Database::RELATION_MUTATE_CASCADE
 ); 
 
 // Update the relationship with custom reference attributes
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: $onDeleteTypes[0], 
+    onDelete: Database::RELATION_MUTATE_CASCADE, 
     newKey: 'movies_id', 
     newTwoWayKey: 'users_id', 
     twoWay: true
@@ -676,14 +669,14 @@ $database->decreaseDocumentAttribute(
 );
 
 // Update the value of an attribute in a document
-$setTypes =
-[
-     Document::SET_TYPE_ASSIGN,
-     Document::SET_TYPE_APPEND,
-     Document::SET_TYPE_PREPEND
-];
+
+// Set types
+Document::SET_TYPE_ASSIGN,
+Document::SET_TYPE_APPEND,
+Document::SET_TYPE_PREPEND
+
 $document->setAttribute(key: 'name', 'Chris Smoove')
-         ->setAttribute(key: 'age', 33, $setTypes[0]);
+         ->setAttribute(key: 'age', 33, Document::SET_TYPE_ASSIGN);
 
 $database->updateDocument(
     collection: 'users', 
@@ -723,34 +716,32 @@ $database->getDocument(
 );
 
 // Find documents 
-$possibleQueries = 
-[
-   Query::equal('location',['Bangalore', 'California']),
-   Query::notEqual('location','New York'),
-   Query::lessThan('users',3000),
-   Query::lessThanEqual('users',10000),
-   Query::greaterThan('users',200),
-   Query::greaterThanEqual('users',250),  
-   Query::contains('users',['Jhon', 'Smith']),
-   Query::between('price', start: 100, end: 1000),
-   Query::search('users','Jake'),
-   Query::select(['location','users']),
-   Query::orderDesc('users'),
-   Query::orderAsc('users'),
-   Query::isNull('users'),
-   Query::isNotNull('users'),
-   Query::startsWith('name','Jhon'),
-   Query::endsWith('name','Smith'),
-   Query::limit(35),
-   Query::offset(0),
-];
 
+// Query Types
+Query::equal(attribute: "...", values: ["...", "..."]),
+Query::notEqual(attribute: "...", value: "..."),
+Query::lessThan(attribute: "...", value: 100),
+Query::lessThanEqual(attribute: "...", value: 1000),
+Query::greaterThan(attribute: "...", value: 1000),
+Query::greaterThanEqual(attribute: "...", value: ...),  
+Query::contains(attribute: "...", values: ["...", "..."]),
+Query::between(attribute: "...", start: 100, end: 1000),
+Query::search(attribute: "...", value: "..."),
+Query::select(attributes: ["...", "..."]),
+Query::orderDesc(attribute: "..."),
+Query::orderAsc(attribute: "..."),
+Query::isNull(attribute: "..."),
+Query::isNotNull(attribute: "..."),
+Query::startsWith(attribute: "...", value: "..."),
+Query::endsWith(attribute: "...", value: "..."),
+Query::limit(value: 35),
+Query::offset(value: 0),
 
 $database->find(
     collection: 'movies', 
     queries:  [
-        $possibleQueries[0],
-        $possibleQueries[1],
+        Query::equal(attribute: 'name', values: ['Captain Marvel']),
+        Query::notEqual(attribute: 'year', values: [2019])
     ], 
     timeout: 1);  //timeout is optional
 
@@ -758,8 +749,8 @@ $database->find(
 $database->findOne(
     collection: 'movies', 
     queries:  [
-        $possibleQueries[0],
-        $possibleQueries[1],
+        Query::equal(attribute: 'name', values: ['Captain Marvel']),
+        Query::lessThan(attribute: 'year', value: 2019)
     ]
 );  
 
@@ -767,8 +758,8 @@ $database->findOne(
 $database->count(
     collection: 'movies', 
     queries:  [
-        $possibleQueries[0],
-        $possibleQueries[1],
+        Query::equal(attribute: 'name', values: ['Captain Marvel']),
+        Query::greaterThan(attribute: 'year', value: 2019)
     ], 
     max: 1000); // max is optional
 );
@@ -778,8 +769,7 @@ $database->sum(
     collection: 'movies', 
     attribute: 'price', 
     queries:  [
-        $possibleQueries[0],
-        $possibleQueries[1],
+        Query::greaterThan(attribute: 'year', value: 2019)
     ],
     max: 0 // max = 0 means no limit
 ); 

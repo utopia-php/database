@@ -141,6 +141,17 @@ class Role
     }
 
     /**
+     * Create a label role from the given ID
+     *
+     * @param string $identifier
+     * @return Role
+     */
+    public static function label(string $identifier): self
+    {
+        return new self('label', $identifier, '');
+    }
+
+    /**
      * Create an any satisfy role
      *
      * @return Role

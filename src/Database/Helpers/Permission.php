@@ -89,6 +89,10 @@ class Permission
         }
 
         $permission = $permissionParts[0];
+        if(!in_array($permission, Database::PERMISSIONS)){
+            throw new DatabaseException('Invalid permission Value');
+        }
+
         $fullRole = \str_replace('")', '', $permissionParts[1]);
         $roleParts = \explode(':', $fullRole);
         $role = $roleParts[0];

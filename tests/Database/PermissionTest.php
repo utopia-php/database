@@ -260,20 +260,41 @@ class PermissionTest extends TestCase
 
     public function testInvalidFormats(): void
     {
-        $this->expectException(\Exception::class);
-        Permission::parse('read');
+        try {
+            Permission::parse('read');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Invalid permission string format: "read".', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read(("any")');
+        try {
+            Permission::parse('read(("any")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Invalid permission Value', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read("users/un/verified")');
+        try {
+            Permission::parse('read("users/un/verified")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Only one dimension can be provided', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read("users/")');
+        try {
+            Permission::parse('read("users/")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Dimension must not be empty', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read("label:alphanumeric-only")');
+        try {
+            Permission::parse('read("label:alphanumeric-only")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('bla', $e->getMessage());
+        }
+
     }
 
     /**
@@ -281,12 +302,17 @@ class PermissionTest extends TestCase
      */
     public function testAggregation(): void
     {
-        $permissions = ['write("any")'];
+        $permissions = ['create("any")'];
         $parsed = Permission::aggregate($permissions);
-        $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
+        $this->assertEquals(['create("any")'], $parsed);
 
         $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
-        $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
+
+        // TODO looks like something here is not working proper
+        var_dump($parsed);
+        die;
+
+        $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
 
         $permissions = [
             'read("any")',

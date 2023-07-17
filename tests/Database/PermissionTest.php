@@ -294,7 +294,6 @@ class PermissionTest extends TestCase
         } catch (\Exception $e) {
             $this->assertEquals('bla', $e->getMessage());
         }
-
     }
 
     /**

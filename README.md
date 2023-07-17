@@ -44,7 +44,7 @@ Attribute filters are functions that manipulate attributes before saving them to
 
 The database document interface only supports primitives types (`strings`, `integers`, `floats`, and `booleans`) translated to their native database types for each of the relevant database adapters. Complex types like arrays or objects will be encoded to JSON strings when stored and decoded back when fetched from their adapters.
 
-## Code Examples
+## Examples
 
 ### Setting up different database adapters
 
@@ -195,7 +195,7 @@ $database = new Database(new Mongo($client), $cache);
 
 <br>
 
-> ## Below methods are available for all database adapters.
+> Following methods are available for all database adapters.
 
 <br>
 
@@ -219,14 +219,12 @@ $database->setDefaultDatabase(
     name: 'dbName'
 );
 
-// Creates a new database for MySql, MariaDB, SQLite. For Postgres it creates a schema. 
+// Creates a new database. 
 // Uses default database as the name.
 $database->create();
 
 // Returns an array of all databases
 $database->list();
-
-
 
 // Delete database
 $database->delete(
@@ -239,7 +237,7 @@ $database->ping();
 // Check if database exists
 $database->exists(
     database: 'mydb'
-); // for database
+); 
 
 // Check if collection exists
 $database->exists(
@@ -248,35 +246,34 @@ $database->exists(
 ); 
 
 // Listen to events
-$eventType = 
-[
-    Database::EVENT_ALL
-    Database::EVENT_DATABASE_CREATE,
-    Database::EVENT_DATABASE_LIST,
-    Database::EVENT_COLLECTION_CREATE,
-    Database::EVENT_COLLECTION_LIST,
-    Database::EVENT_COLLECTION_READ,
-    Database::EVENT_ATTRIBUTE_CREATE,
-    Database::EVENT_ATTRIBUTE_UPDATE,
-    Database::EVENT_INDEX_CREATE,
-    Database::EVENT_DOCUMENT_CREATE,
-    Database::EVENT_DOCUMENT_UPDATE,
-    Database::EVENT_DOCUMENT_READ,
-    Database::EVENT_DOCUMENT_FIND,
-    Database::EVENT_DOCUMENT_FIND,
-    Database::EVENT_DOCUMENT_COUNT,
-    Database::EVENT_DOCUMENT_SUM,
-    Database::EVENT_DOCUMENT_INCREASE,
-    Database::EVENT_DOCUMENT_DECREASE,
-    Database::EVENT_INDEX_DELETE,
-    Database::EVENT_DOCUMENT_DELETE,
-    Database::EVENT_ATTRIBUTE_DELETE,
-    Database::EVENT_COLLECTION_DELETE,
-    Database::EVENT_DATABASE_DELETE,
-];
+
+// Event Types
+Database::EVENT_ALL
+Database::EVENT_DATABASE_CREATE,
+Database::EVENT_DATABASE_LIST,
+Database::EVENT_COLLECTION_CREATE,
+Database::EVENT_COLLECTION_LIST,
+Database::EVENT_COLLECTION_READ,
+Database::EVENT_ATTRIBUTE_CREATE,
+Database::EVENT_ATTRIBUTE_UPDATE,
+Database::EVENT_INDEX_CREATE,
+Database::EVENT_DOCUMENT_CREATE,
+Database::EVENT_DOCUMENT_UPDATE,
+Database::EVENT_DOCUMENT_READ,
+Database::EVENT_DOCUMENT_FIND,
+Database::EVENT_DOCUMENT_FIND,
+Database::EVENT_DOCUMENT_COUNT,
+Database::EVENT_DOCUMENT_SUM,
+Database::EVENT_DOCUMENT_INCREASE,
+Database::EVENT_DOCUMENT_DECREASE,
+Database::EVENT_INDEX_DELETE,
+Database::EVENT_DOCUMENT_DELETE,
+Database::EVENT_ATTRIBUTE_DELETE,
+Database::EVENT_COLLECTION_DELETE,
+Database::EVENT_DATABASE_DELETE,
 
 $database->on(
-    string: $eventType[0], 
+    string: Database::EVENT_ALL, 
     callable: function($event, $data) {
         // Do something
     }

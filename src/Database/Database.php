@@ -3086,16 +3086,16 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $relation = $this->skipRelationships(fn () => Authorization::skip(fn () => $this->getDocument(
+                                $relation = $this->skipRelationships(fn () => $this->getDocument(
                                     $relatedCollection->getId(),
                                     $relation
-                                )));
+                                ));
 
-                                $this->skipRelationships(fn () => Authorization::skip(fn () =>$this->updateDocument(
+                                $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation->getId(),
                                     $relation->setAttribute($twoWayKey, null)
-                                ))); //removing relationship from 10 id document in collection B by updating it.
+                                ));
                             }
 
                             foreach ($value as $relation) {

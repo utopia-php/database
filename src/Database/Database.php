@@ -2791,7 +2791,6 @@ class Database
         }
 
         $time = DateTime::now();
-        $document->setAttribute('$updatedAt', $time);
 
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -2801,13 +2800,25 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            if (!$validator->isValid([
+            $skipPermission = true;
+            foreach ($document as $key=>$value) {
+                if ($old->getAttribute($key) instanceof Document) {
+                    continue;
+                }
+                if ($old->getAttribute($key) !== $value) {
+                    $skipPermission = false;
+                    break;
+                }
+            }
+            if (!$skipPermission && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
             ])) {
                 throw new AuthorizationException($validator->getDescription());
             }
         }
+
+        $document->setAttribute('$updatedAt', $time);
 
         // Check if document was updated after the request timestamp
         $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
@@ -3010,16 +3021,16 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                $relation = $this->skipRelationships(fn () => Authorization::skip(fn () => $this->getDocument(
                                     $relatedCollection->getId(),
                                     $relation
-                                ));
+                                )));
 
-                                $this->skipRelationships(fn () => $this->updateDocument(
+                                $this->skipRelationships(fn () => Authorization::skip(fn () =>$this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation->getId(),
                                     $relation->setAttribute($twoWayKey, null)
-                                ));
+                                ))); //removing relationship from 10 id document in collection B by updating it.
                             }
 
                             foreach ($value as $relation) {

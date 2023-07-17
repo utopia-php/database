@@ -2729,7 +2729,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
+            'integer' => 6,
             'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
@@ -10597,7 +10597,6 @@ abstract class Base extends TestCase
     public function testCollectionPermissionsUpdateThrowsException(array $data): void
     {
         [$collection, $document] = $data;
-
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
 
@@ -10605,7 +10604,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
-            $document->setAttribute('test', 'ipsum')
+            $document->setAttribute('test', 'lorem')
         );
     }
 

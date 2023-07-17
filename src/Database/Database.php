@@ -1853,9 +1853,9 @@ class Database
             $value = $document->getAttribute($key, null);
 
             // continue on optional param with no default
-            if (is_null($value) && is_null($default)) {
-                continue;
-            }
+            // if (is_null($value) && is_null($default)) {
+            //     continue;
+            // }
 
             // assign default only if no no value provided
             if (is_null($value) && !is_null($default)) {
@@ -1865,10 +1865,8 @@ class Database
             }
 
             foreach ($value as &$node) {
-                if (($node !== null)) {
-                    foreach ($filters as $filter) {
-                        $node = $this->encodeAttribute($filter, $node, $document);
-                    }
+                foreach ($filters as $filter) {
+                    $node = $this->encodeAttribute($filter, $node, $document);
                 }
             }
 

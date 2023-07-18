@@ -14,7 +14,7 @@ use Utopia\CLI\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Validator\Text;
+use Utopia\Http\Validator\Text;
 
 /**
  * @Example

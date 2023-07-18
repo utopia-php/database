@@ -22,8 +22,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Validator\Numeric;
-use Utopia\Validator\Text;
+use Utopia\Http\Validator\Numeric;
+use Utopia\Http\Validator\Text;
 
 /**
  * @Example

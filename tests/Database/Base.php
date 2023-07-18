@@ -11195,6 +11195,32 @@ abstract class Base extends TestCase
         ));
     }
 
+    public function testLabels(): void
+    {
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection(
+            'labels_test',
+        ));
+        static::getDatabase()->createAttribute('labels_test', 'attr1', Database::VAR_STRING, 10, false);
+
+        static::getDatabase()->createDocument('labels_test', new Document([
+            '$id' => 'doc1',
+            'attr1' => 'value1',
+            '$permissions' => [
+                Permission::read(Role::label('reader')),
+            ],
+        ]));
+
+        $documents = static::getDatabase()->find('labels_test');
+
+        $this->assertEmpty($documents);
+
+        Authorization::setRole(Role::label('reader')->toString());
+
+        $documents = static::getDatabase()->find('labels_test');
+
+        $this->assertCount(1, $documents);
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

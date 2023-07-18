@@ -175,6 +175,30 @@ class DocumentTest extends TestCase
         $this->assertEquals(['one'], $this->document->getAttribute('list', []));
     }
 
+    public function testSetAttributes(): void
+    {
+        $document = new Document(['$id' => ID::custom(''), '$collection' => 'users']);
+
+        $otherDocument = new Document([
+            '$id' => ID::custom('new'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::user('new')),
+                Permission::delete(Role::user('new')),
+            ],
+            'email' => 'joe@example.com',
+            'prefs' => new \stdClass(),
+        ]);
+
+        $document->setAttributes($otherDocument->getArrayCopy());
+
+        $this->assertEquals($otherDocument->getId(), $document->getId());
+        $this->assertEquals('users', $document->getCollection());
+        $this->assertEquals($otherDocument->getPermissions(), $document->getPermissions());
+        $this->assertEquals($otherDocument->getAttribute('email'), $document->getAttribute('email'));
+        $this->assertEquals($otherDocument->getAttribute('prefs'), $document->getAttribute('prefs'));
+    }
+
     public function testRemoveAttribute(): void
     {
         $this->document->removeAttribute('list');

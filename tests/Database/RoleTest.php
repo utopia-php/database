@@ -49,6 +49,11 @@ class RoleTest extends TestCase
         $this->assertEquals('users', $role->getRole());
         $this->assertEmpty($role->getIdentifier());
         $this->assertEquals('verified', $role->getDimension());
+
+        $role = Role::parse('label:vip');
+        $this->assertEquals('label', $role->getRole());
+        $this->assertEquals('vip', $role->getIdentifier());
+        $this->assertEmpty($role->getDimension());
     }
 
     public function testInputFromParameters(): void
@@ -70,6 +75,9 @@ class RoleTest extends TestCase
 
         $role = new Role('team', '123', '456');
         $this->assertEquals('team:123/456', $role->toString());
+
+        $role = new Role('label', 'vip');
+        $this->assertEquals('label:vip', $role->toString());
     }
 
     public function testInputFromRoles(): void
@@ -91,6 +99,9 @@ class RoleTest extends TestCase
 
         $role = Role::team(ID::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
+
+        $role = Role::label('vip');
+        $this->assertEquals('label:vip', $role->toString());
     }
 
     public function testInputFromID(): void

@@ -91,6 +91,8 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::delete(Role::users('verified'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
+        $document['$permissions'] = [Permission::delete(Role::label('vip'))];
+        $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
     public function testMultipleMethodSingleValue(): void

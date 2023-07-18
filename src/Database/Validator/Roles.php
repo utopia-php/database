@@ -14,6 +14,7 @@ class Roles extends Validator
     public const ROLE_USER = 'user';
     public const ROLE_TEAM = 'team';
     public const ROLE_MEMBER = 'member';
+    public const ROLE_LABEL = 'label';
 
     public const ROLES = [
         self::ROLE_ANY,
@@ -22,6 +23,7 @@ class Roles extends Validator
         self::ROLE_USER,
         self::ROLE_TEAM,
         self::ROLE_MEMBER,
+        self::ROLE_LABEL,
     ];
 
     protected string $message = 'Roles Error';
@@ -87,6 +89,16 @@ class Roles extends Validator
             ],
         ],
         self::ROLE_MEMBER => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
+        self::ROLE_LABEL => [
             'identifier' => [
                 'allowed' => true,
                 'required' => true,
@@ -226,6 +238,7 @@ class Roles extends Validator
         string $dimension
     ): bool {
         $key = new Key();
+        $label = new Label();
 
         $config = self::CONFIG[$role] ?? null;
 
@@ -251,11 +264,14 @@ class Roles extends Validator
         }
 
         // Allowed and has an invalid identifier
-        if ($allowed
-            && !empty($identifier)
-            && !$key->isValid($identifier)) {
-            $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
-            return false;
+        if ($allowed && !empty($identifier)) {
+            if ($role === self::ROLE_LABEL && !$label->isValid($identifier)) {
+                $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $label->getDescription();
+                return false;
+            } elseif ($role !== self::ROLE_LABEL && !$key->isValid($identifier)) {
+                $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
+                return false;
+            }
         }
 
         // Process dimension configuration

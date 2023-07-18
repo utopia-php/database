@@ -2801,9 +2801,9 @@ class Database
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
             $skipPermission = true;
-            //compare if the document any changes
+            // Compare if the document has any changes
             foreach ($document as $key=>$value) {
-                //skip the nested documents as they will be checked later in recursions.
+                // Skip the nested documents as they will be checked later in recursions.
                 if ($old->getAttribute($key) instanceof Document) {
                     continue;
                 }

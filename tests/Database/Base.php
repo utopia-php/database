@@ -2758,7 +2758,7 @@ abstract class Base extends TestCase
             'colors' => ['pink', 'green', 'blue'],
         ]));
         Authorization::cleanRoles();
-        //no changes in document
+        // No changes in document
         $documentToUpdate = new Document([
             '$id' => ID::custom($document->getId()),
             'string' => 'text📝',

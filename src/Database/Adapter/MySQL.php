@@ -91,18 +91,28 @@ class MySQL extends MariaDB
         $collection = $this->getNamespace() . '_' . $collection;
         $database = $this->getDefaultDatabase();
         $name = $database . '/' . $collection;
+        $permissions = $database . '/' . $collection . '_perms';
 
-        $query = $this->getPDO()->prepare("
+        $collectionSize = $this->getPDO()->prepare("
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :name
          ");
 
-        $query->bindParam(':name', $name);
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
+             FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
+             WHERE NAME = :permissions
+            ");
+
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
 
         try {
-            $query->execute();
-            $size = $query->fetchColumn();
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }

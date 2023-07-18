@@ -162,16 +162,23 @@ class Postgres extends SQL
     {
         $collection = $this->filter($collection);
         $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection . '_perms');
 
-        $query = $this->getPDO()->prepare("
+        $collectionSize = $this->getPDO()->prepare("
              SELECT pg_total_relation_size(:name);
         ");
 
-        $query->bindParam(':name', $name);
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT pg_total_relation_size(:permissions);
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
 
         try {
-            $query->execute();
-            $size = $query->fetchColumn();
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }

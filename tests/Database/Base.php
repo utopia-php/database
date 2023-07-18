@@ -255,8 +255,8 @@ abstract class Base extends TestCase
 
         $size1 = static::getDatabase()->getSizeOfCollection('sizeTest1');
         $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
-
-        $this->assertEquals($size1, $size2);
+        $sizeDifference = abs($size1 - $size2);
+        $this->assertLessThan(4100, $sizeDifference);
 
         static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);

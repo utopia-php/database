@@ -2,7 +2,18 @@
 
 We would ❤️ for you to contribute to Utopia-php and help make it better! We want contributing to Utopia-php to be fun, enjoyable, and educational for anyone and everyone. All contributions are welcome, including issues, new docs as well as updates and tweaks, blog posts, workshops, and more.
 
-## How to Start?
+## Table of contents
+
+1. [How to Start](#how-to-start)
+1. [Code of Conduct](#code-of-conduct)
+1. [Submit a Pull Request](#submit-a-pull-request)
+1. [Introducing New Features](#introducing-new-features)
+1. [Adding A New Adapter](#adding-a-new-adapter)
+1. [Tests](#tests)
+1. [Other Ways to Help](#other-ways-to-help)
+ 
+
+## How to Start
 
 If you are worried or don’t know where to start, check out our next section explaining what kind of help we could use and where can you get involved. You can reach out with questions to [Eldad Fux (@eldadfux)](https://twitter.com/eldadfux) or anyone from the [Appwrite team on Discord](https://discord.gg/GSeTUeA). You can also submit an issue, and a maintainer can guide you!
 
@@ -10,7 +21,7 @@ If you are worried or don’t know where to start, check out our next section ex
 
 Help us keep the community open and inclusive. Please read and follow our [Code of Conduct](https://github.com/appwrite/appwrite/blob/master/CODE_OF_CONDUCT.md).
 
-## Submit a Pull Request 🚀
+## Submit a Pull Request
 
 Branch naming convention is as following 
 
@@ -68,6 +79,80 @@ This is also important for the Utopia-php lead developers to be able to give tec
 ## Adding A New Adapter
 
 You can follow our [Adding new Database Adapter](docs/add-new-adapter.md) tutorial to add new database support in this library.
+
+## Tests
+
+To run tests, you first need to bring up the example Docker stack with the following command:
+
+```bash
+docker compose up -d --build
+```
+
+To run all unit tests, use the following Docker command:
+
+```bash
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+```
+
+To run tests for a single file, use the following Docker command structure:
+
+```bash
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/[FILE_PATH]
+```
+
+To run static code analysis, use the following Psalm command:
+
+```bash
+docker compose exec tests vendor/bin/psalm --show-info=true
+```
+
+### Load testing
+
+Three commands have been added to `bin/` to fill, index, and query the DB to test changes:
+
+- `bin/load` invokes `bin/tasks/load.php`
+- `bin/index` invokes `bin/tasks/index.php`
+- `bin/query` invokes `bin/tasks/query.php`
+
+To test your DB changes under load:
+
+#### Load the database
+
+```bash
+docker compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[name]]
+
+# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [limit]: integer of total documents to generate
+# [name]: (optional) name for new database
+```
+
+#### Create indexes
+
+```bash
+docker compose exec tests bin/index --adapter=[adapter] --name=[name]
+
+# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [name]: name of filled database by bin/load
+```
+
+#### Run Query Suite
+
+```bash
+docker compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[name]
+
+# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [limit]: integer of query limit (default 25)
+# [name]: name of filled database by bin/load
+```
+
+#### Visualize Query Results
+
+```bash
+docker compose exec tests bin/compare
+```
+
+Navigate to `localhost:8708` to visualize query results.
+
 
 ## Other Ways to Help
 

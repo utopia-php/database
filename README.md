@@ -8,6 +8,27 @@ Utopia framework database library is simple and lite library for managing applic
 
 Although this library is part of the [Utopia Framework](https://github.com/utopia-php/framework) project it is dependency free, and can be used as standalone with any other PHP project or framework.
 
+## Table of contents
+
+1. [Getting Started](#getting-started)
+   1. [Concepts](#concepts)
+   1. [Filters](#filters)
+   1. [Reserved Attributes](#reserved-attributes)
+   1. [Attribute Types](#attribute-types)
+   1. [Supported Databases](#supported-databases)
+   1. [Limitations](#limitations)
+
+1. [Usage](#usage)
+   1. [Connecting to a database](#connecting-to-a-database)
+   1. [Database Methods](#database-methods)
+   1. [Collection Methods](#collection-methods)
+   1. [Attribute Methods](#attribute-methods)
+   1. [Index Methods](#index-methods)
+   1. [Relationship Methods](#relationship-methods)
+   1. [Document Methods](#document-methods)
+1. [System Requirements](#system-requirements)
+1. [Contributing](#contributing)
+
 ## Getting Started
 
 Install using composer:
@@ -21,7 +42,7 @@ composer require utopia-php/database
 A list of the utopia/php concepts and their relevant equivalent using the different adapters
 
 - **Database** - An instance of the utopia/database library that abstracts one of the supported adapters and provides a unified API for CRUD operation and queries on a specific schema or isolated scope inside the underlining database.
-- **Adapter** - An implementation of an underlying database engine that this library can support - below is a list of [supported adapters](#adapters) and supported capabilities for each Adapter.
+- **Adapter** - An implementation of an underlying database engine that this library can support - below is a list of [supported databases](#supported-databases) and supported capabilities for each Database.
 - **Collection** - A set of documents stored on the same adapter scope. For SQL-based adapters, this will be equivalent to a table. For a No-SQL adapter, this will equivalent to a native collection.
 - **Document** - A simple JSON object that will be stored in one of the utopia/database collections. For SQL-based adapters, this will be equivalent to a row. For a No-SQL adapter, this will equivalent to a native document.
 - **Attribute** - A simple document attribute. For SQL-based adapters, this will be equivalent to a column. For a No-SQL adapter, this will equivalent to a native document field.
@@ -44,9 +65,45 @@ Attribute filters are functions that manipulate attributes before saving them to
 
 The database document interface only supports primitives types (`strings`, `integers`, `floats`, and `booleans`) translated to their native database types for each of the relevant database adapters. Complex types like arrays or objects will be encoded to JSON strings when stored and decoded back when fetched from their adapters.
 
-## Examples
+### Limitations 
 
-### Setting up different database adapters
+#### MariaDB, MySQL, Postgres, SQLite
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
+- Document max size is 65535 bytes
+- Collection can have a max of 1017 attributes
+- Collection can have a max of 64 indexes
+- Index value max size is 768 bytes. Values over 768 bytes are truncated
+- String max size is 4294967295 characters
+- Integer max size is 4294967295 
+
+#### MongoDB
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
+- Document can have unrestricted size
+- Collection can have unrestricted amount of attributes 
+- Collection can have a max of 64 indexes
+- Index value can have unrestricted size
+- String max size is 2147483647 characters 
+- Integer max size is 4294967295 
+
+### Supported Databases
+
+Below is a list of supported databases, and their compatibly tested versions alongside a list of supported features and relevant limits.
+
+| Adapter  | Status | Version |
+| -------- | ------ | ------- |
+| MariaDB  | ✅     | 10.5    |
+| MySQL    | ✅     | 8.0     |
+| Postgres | 🛠     | 13.0    |
+| MongoDB  | ✅     | 5.0     |
+| SQLite   | ✅     | 3.38    |
+
+` ✅  - supported, 🛠  - work in progress`
+
+## Usage
+
+### Connecting to a database 
 
 **MariaDB:**
 
@@ -193,13 +250,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new Mongo($client), $cache);
 ```
 
-<br>
-
-> Following methods are available for all database adapters.
-
-<br>
-
-**Database Methods:**
+#### Database Methods
 
 ```php
 
@@ -286,7 +337,7 @@ $database->getAdapter();
 $database->getKeywords();
 ```
 
-**Collection Methods:**
+### Collection Methods
 
 ```php
 // Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
@@ -375,7 +426,7 @@ $database->deleteCachedCollection(
 );
 ```
 
-**Attribute Methods:**
+### Attribute Methods
 
 ```php
 // Data types
@@ -499,7 +550,7 @@ $database->deleteAttribute(
 );
 ```
 
-**Index Methods:**
+### Index Methods
 
 ```php
 // Index types
@@ -538,7 +589,7 @@ $database->deleteIndex(
 );
 ``` 
 
-**Relationship Methods:**
+### Relationship Methods
 
 ```php
 // Relationship types
@@ -595,7 +646,7 @@ $database->deleteRelationship(
 );
 ```
 
-**Document Methods:**
+### Document Methods
 
 ```php
 use Utopia\Database\Document;             
@@ -804,105 +855,14 @@ $database->deleteCachedDocument(
 
 ```
 
-### Adapters
-
-Below is a list of supported adapters, and their compatibly tested versions alongside a list of supported features and relevant limits.
-
-| Adapter  | Status | Version |
-| -------- | ------ | ------- |
-| MariaDB  | ✅     | 10.5    |
-| MySQL    | ✅     | 8.0     |
-| Postgres | 🛠     | 13.0    |
-| MongoDB  | ✅     | 5.0     |
-| SQLlite  | ✅     | 3.38    |
-
-` ✅  - supported, 🛠  - work in progress`
-
-## Limitations (to be completed per adapter)
-
-- ID max size can be 255 bytes
-- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
-- Document max size is x bytes
-- Collection can have a max of x attributes
-- Collection can have a max of x indexes
-- Index value max size is x bytes. Values over x bytes are truncated
-
 ## System Requirements
 
 Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP version whenever possible.
 
-## Tests
+## Contributing
 
-To run tests, you first need to bring up the example Docker stack with the following command:
-
-```bash
-docker compose up -d --build
-```
-
-To run all unit tests, use the following Docker command:
-
-```bash
-docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
-```
-
-To run tests for a single file, use the following Docker command structure:
-
-```bash
-docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/[FILE_PATH]
-```
-
-To run static code analysis, use the following Psalm command:
-
-```bash
-docker compose exec tests vendor/bin/psalm --show-info=true
-```
-
-### Load testing
-
-Three commands have been added to `bin/` to fill, index, and query the DB to test changes:
-
-- `bin/load` invokes `bin/tasks/load.php`
-- `bin/index` invokes `bin/tasks/index.php`
-- `bin/query` invokes `bin/tasks/query.php`
-
-To test your DB changes under load:
-
-#### Load the database
-
-```bash
-docker compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[name]]
-
-# [adapter]: either 'mongodb' or 'mariadb', no quotes
-# [limit]: integer of total documents to generate
-# [name]: (optional) name for new database
-```
-
-#### Create indexes
-
-```bash
-docker compose exec tests bin/index --adapter=[adapter] --name=[name]
-
-# [adapter]: either 'mongodb' or 'mariadb', no quotes
-# [name]: name of filled database by bin/load
-```
-
-#### Run Query Suite
-
-```bash
-docker compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[name]
-
-# [adapter]: either 'mongodb' or 'mariadb', no quotes
-# [limit]: integer of query limit (default 25)
-# [name]: name of filled database by bin/load
-```
-
-#### Visualize Query Results
-
-```bash
-docker compose exec tests bin/compare
-```
-
-Navigate to `localhost:8708` to visualize query results.
+Thank you for considering contributing to the Utopia Framework! 
+Checkout the [CONTRIBUTING.md](https://github.com/utopia-php/database/blob/main/CONTRIBUTING.md) file for more information.
 
 ## Copyright and license
 

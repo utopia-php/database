@@ -257,7 +257,7 @@ abstract class Base extends TestCase
         $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
         $sizeDifference = abs($size1 - $size2);
         // Size of an empty collection returns either 172032 or 167936 bytes randomly
-        // Therefore asserting with a tolerance of 5000 bytes 
+        // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
         $this->assertLessThan($byteDifference, $sizeDifference);
 

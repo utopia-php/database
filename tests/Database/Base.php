@@ -3004,6 +3004,47 @@ abstract class Base extends TestCase
         return $document;
     }
 
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
+    {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            'string' => 'text📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+        Authorization::cleanRoles();
+        //no changes in document
+        $documentToUpdate = new Document([
+            '$id' => ID::custom($document->getId()),
+            'string' => 'text📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+            '$collection' => 'documents',
+        ]);
+        $documentToUpdate->setAttribute('$createdAt', $document->getAttribute('$createdAt'));
+        $documentToUpdate->setAttribute('$updatedAt', $document->getAttribute('$updatedAt'));
+        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $documentToUpdate);
+
+
+        // Document should be updated without any problem and without any authorization exception as there is no change in document.
+        $this->assertEquals(true, $updatedDocument->getUpdatedAt() > $document->getUpdatedAt());
+
+        return $document;
+    }
+
     public function testExceptionAttributeLimit(): void
     {
         if ($this->getDatabase()->getLimitForAttributes() > 0) {

@@ -2855,8 +2855,8 @@ class Database
         }
 
         $time = DateTime::now();
-
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -2865,7 +2865,9 @@ class Database
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
             $skipPermission = true;
+            //compare if the document any changes
             foreach ($document as $key=>$value) {
+                //skip the nested documents as they will be checked later in recursions.
                 if ($old->getAttribute($key) instanceof Document) {
                     continue;
                 }

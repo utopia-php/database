@@ -22,6 +22,8 @@ abstract class Adapter
      */
     protected array $debug = [];
 
+    protected static ?int $timeout = null;
+
     /**
      * @param string $key
      * @param mixed $value
@@ -641,4 +643,39 @@ abstract class Adapter
      * @return int
      */
     abstract public function getMaxIndexLength(): int;
+
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library. Once this timeout is set, any database
+     * query that takes longer than the specified time will be automatically
+     * terminated by the library, and an appropriate error or exception will be
+     * raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @return void
+     *
+     * @throws \Exception The provided timeout value must be greater than or equal to 0.
+    */
+    public static function setTimeoutForQueries(int $milliseconds): void
+    {
+        if ($milliseconds < 0) {
+            throw new Exception('The provided timeout value must be greater than or equal to 0.');
+        }
+        self::$timeout = $milliseconds;
+    }
+
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @return void
+     *
+    */
+    public static function clearTimeoutForQueries(): void
+    {
+        self::$timeout = null;
+    }
 }

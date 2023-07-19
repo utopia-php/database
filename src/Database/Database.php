@@ -4168,6 +4168,15 @@ class Database
         return $sum;
     }
 
+    public function setTimeoutForQueries(int $milliseconds): void
+    {
+        $this->adapter->setTimeoutForQueries($milliseconds);
+    }
+
+    public function clearTimeoutForQueries(): void
+    {
+        $this->adapter->clearTimeoutForQueries();
+    }
     /**
      * Add Attribute Filter
      *

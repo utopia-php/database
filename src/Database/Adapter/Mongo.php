@@ -803,8 +803,8 @@ class Mongo extends Adapter
             $options['skip'] = $offset;
         }
 
-        if ($timeout) {
-            $options['maxTimeMS'] = $timeout;
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         $selections = $this->getAttributeSelections($queries);
@@ -1040,7 +1040,7 @@ class Mongo extends Adapter
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1050,6 +1050,10 @@ class Mongo extends Adapter
         // set max limit
         if ($max > 0) {
             $options['limit'] = $max;
+        }
+
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         // queries
@@ -1080,6 +1084,9 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
         // todo $collection is not used?
+
+        // todo add $timeout for aggregate in Mongo utopia client
+
         $filters = [];
 
         // queries

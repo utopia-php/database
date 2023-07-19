@@ -1015,8 +1015,8 @@ class Postgres extends SQL
             {$sqlLimit};
         ";
 
-        if ($timeout) {
-            $sql = $this->setTimeout($sql, $timeout);
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1089,7 +1089,7 @@ class Postgres extends SQL
      *
      * @return int
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1114,6 +1114,11 @@ class Postgres extends SQL
                     {$limit}
                 ) table_count
         ";
+
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1142,7 +1147,7 @@ class Postgres extends SQL
      *
      * @return int|float
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1159,13 +1164,19 @@ class Postgres extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum
-            FROM (
-                SELECT {$attribute}
-                FROM {$this->getSQLTable($name)} table_main
-                WHERE {$permissions} AND " . implode(' AND ', $where) . "
-                {$limit}
-            ) table_count");
+        $sql = "SELECT SUM({$attribute}) as sum
+        FROM (
+            SELECT {$attribute}
+            FROM {$this->getSQLTable($name)} table_main
+            WHERE {$permissions} AND " . implode(' AND ', $where) . "
+            {$limit}
+        ) table_count";
+
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+        }
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);

@@ -2820,7 +2820,7 @@ class Database
             }
         }
 
-        if(!$skipPermission){
+        if (!$skipPermission) {
             $document->setAttribute('$updatedAt', $time);
         }
 

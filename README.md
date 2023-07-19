@@ -44,28 +44,6 @@ Attribute filters are functions that manipulate attributes before saving them to
 
 The database document interface only supports primitives types (`strings`, `integers`, `floats`, and `booleans`) translated to their native database types for each of the relevant database adapters. Complex types like arrays or objects will be encoded to JSON strings when stored and decoded back when fetched from their adapters.
 
-### Limitations 
-
-#### MariaDB, MySQL, Postgres, SQLite
-- ID max size can be 255 bytes
-- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
-- Document max size is 65535 bytes
-- Collection can have a max of 1017 attributes
-- Collection can have a max of 64 indexes
-- Index value max size is 768 bytes. Values over 768 bytes are truncated
-- String max size is 4294967295 characters
-- Integer max size is 4294967295 
-
-#### MongoDB
-- ID max size can be 255 bytes
-- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
-- Document can have unrestricted size
-- Collection can have unrestricted amount of attributes 
-- Collection can have a max of 64 indexes
-- Index value can have unrestricted size
-- String max size is 2147483647 characters 
-- Integer max size is 4294967295 
-
 ### Supported Databases
 
 Below is a list of supported databases, and their compatibly tested versions alongside a list of supported features and relevant limits.
@@ -89,6 +67,28 @@ Below is a list of supported databases, and their compatibly tested versions alo
 **SQLite**
 * Status: ✅
 * Version: 3.38
+
+### Limitations 
+
+#### MariaDB, MySQL, Postgres, SQLite
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
+- Document max size is 65535 bytes
+- Collection can have a max of 1017 attributes
+- Collection can have a max of 64 indexes
+- Index value max size is 768 bytes. Values over 768 bytes are truncated
+- String max size is 4294967295 characters
+- Integer max size is 4294967295 
+
+#### MongoDB
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
+- Document can have unrestricted size
+- Collection can have unrestricted amount of attributes 
+- Collection can have a max of 64 indexes
+- Index value can have unrestricted size
+- String max size is 2147483647 characters 
+- Integer max size is 4294967295 
 
 ## Usage
 

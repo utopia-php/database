@@ -88,13 +88,13 @@ Below is a list of supported databases, and their compatibly tested versions alo
 
 **SQLite**
 * Status: ✅
-*Version: 3.38
+* Version: 3.38
 
 ## Usage
 
 ### Connecting to a Database 
 
-#### MariaDB:
+#### MariaDB
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -125,7 +125,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new MariaDB($pdo), $cache);
 ```
 
-#### MySQL:
+#### MySQL
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -156,7 +156,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new MySql($pdo), $cache);
 ```
 
-#### Postgres:
+#### Postgres
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -187,7 +187,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new Postgres($pdo), $cache);
 ```
 
-#### SQLite:
+#### SQLite
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -215,7 +215,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new SQLite($pdo), $cache);
 ```
 
-#### MongoDB:
+#### MongoDB
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';

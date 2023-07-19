@@ -2,18 +2,7 @@
 
 We would ❤️ for you to contribute to Utopia-php and help make it better! We want contributing to Utopia-php to be fun, enjoyable, and educational for anyone and everyone. All contributions are welcome, including issues, new docs as well as updates and tweaks, blog posts, workshops, and more.
 
-## Table of contents
-
-1. [How to Start](#how-to-start)
-1. [Code of Conduct](#code-of-conduct)
-1. [Submit a Pull Request](#submit-a-pull-request)
-1. [Introducing New Features](#introducing-new-features)
-1. [Adding A New Adapter](#adding-a-new-adapter)
-1. [Tests](#tests)
-1. [Other Ways to Help](#other-ways-to-help)
- 
-
-## How to Start
+## How to Start?
 
 If you are worried or don’t know where to start, check out our next section explaining what kind of help we could use and where can you get involved. You can reach out with questions to [Eldad Fux (@eldadfux)](https://twitter.com/eldadfux) or anyone from the [Appwrite team on Discord](https://discord.gg/GSeTUeA). You can also submit an issue, and a maintainer can guide you!
 
@@ -21,7 +10,7 @@ If you are worried or don’t know where to start, check out our next section ex
 
 Help us keep the community open and inclusive. Please read and follow our [Code of Conduct](https://github.com/appwrite/appwrite/blob/master/CODE_OF_CONDUCT.md).
 
-## Submit a Pull Request
+## Submit a Pull Request 🚀
 
 Branch naming convention is as following 
 

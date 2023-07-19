@@ -8,27 +8,6 @@ Utopia framework database library is simple and lite library for managing applic
 
 Although this library is part of the [Utopia Framework](https://github.com/utopia-php/framework) project it is dependency free, and can be used as standalone with any other PHP project or framework.
 
-## Table of contents
-
-1. [Getting Started](#getting-started)
-   1. [Concepts](#concepts)
-   1. [Filters](#filters)
-   1. [Reserved Attributes](#reserved-attributes)
-   1. [Attribute Types](#attribute-types)
-   1. [Supported Databases](#supported-databases)
-   1. [Limitations](#limitations)
-
-1. [Usage](#usage)
-   1. [Connecting to a database](#connecting-to-a-database)
-   1. [Database Methods](#database-methods)
-   1. [Collection Methods](#collection-methods)
-   1. [Attribute Methods](#attribute-methods)
-   1. [Index Methods](#index-methods)
-   1. [Relationship Methods](#relationship-methods)
-   1. [Document Methods](#document-methods)
-1. [System Requirements](#system-requirements)
-1. [Contributing](#contributing)
-
 ## Getting Started
 
 Install using composer:
@@ -91,21 +70,31 @@ The database document interface only supports primitives types (`strings`, `inte
 
 Below is a list of supported databases, and their compatibly tested versions alongside a list of supported features and relevant limits.
 
-| Adapter  | Status | Version |
-| -------- | ------ | ------- |
-| MariaDB  | ✅     | 10.5    |
-| MySQL    | ✅     | 8.0     |
-| Postgres | 🛠     | 13.0    |
-| MongoDB  | ✅     | 5.0     |
-| SQLite   | ✅     | 3.38    |
+**MariaDB**
+* Status: ✅
+* Version: 10.5
 
-` ✅  - supported, 🛠  - work in progress`
+**MySQL**
+* Status: ✅
+* Version: 8.0
+
+**Postgres**
+* Status: 🛠 (Work in progress)
+* Version: 13.0
+
+**MongoDB**
+* Status: ✅
+* Version: 5.0
+
+**SQLite**
+* Status: ✅
+*Version: 3.38
 
 ## Usage
 
-### Connecting to a database 
+### Connecting to a Database 
 
-**MariaDB:**
+#### MariaDB:
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -136,7 +125,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new MariaDB($pdo), $cache);
 ```
 
-**MySQL:**
+#### MySQL:
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -167,7 +156,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new MySql($pdo), $cache);
 ```
 
-**Postgres:**
+#### Postgres:
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -198,7 +187,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new Postgres($pdo), $cache);
 ```
 
-**SQLite:**
+#### SQLite:
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -226,7 +215,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new SQLite($pdo), $cache);
 ```
 
-**MongoDB:**
+#### MongoDB:
 
 ```php
 require_once __DIR__ . '/vendor/autoload.php';
@@ -250,7 +239,7 @@ $cache = new Cache(new Memory()); // or use any cache adapter you wish
 $database = new Database(new Mongo($client), $cache);
 ```
 
-#### Database Methods
+### Database Methods
 
 ```php
 
@@ -864,6 +853,6 @@ Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP ve
 Thank you for considering contributing to the Utopia Framework! 
 Checkout the [CONTRIBUTING.md](https://github.com/utopia-php/database/blob/main/CONTRIBUTING.md) file for more information.
 
-## Copyright and license
+## Copyright and License
 
 The MIT License (MIT) [http://www.opensource.org/licenses/mit-license.php](http://www.opensource.org/licenses/mit-license.php)

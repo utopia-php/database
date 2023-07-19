@@ -2796,11 +2796,11 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
+        $skipPermission = true;
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            $skipPermission = true;
             // Compare if the document has any changes
             foreach ($document as $key=>$value) {
                 // Skip the nested documents as they will be checked later in recursions.
@@ -2820,7 +2820,9 @@ class Database
             }
         }
 
-        $document->setAttribute('$updatedAt', $time);
+        if(!$skipPermission){
+            $document->setAttribute('$updatedAt', $time);
+        }
 
         // Check if document was updated after the request timestamp
         $oldUpdatedAt = new \DateTime($old->getUpdatedAt());

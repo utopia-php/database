@@ -1335,25 +1335,25 @@ class Mongo extends Adapter
         $projection['_createdAt'] = 1;
         $projection['_updatedAt'] = 1;
         $projection['_permissions'] = 1;
+        $projection['_collection'] = 1;
 
         if (isset($projection['$id'])) {
             unset($projection['$id']);
         }
-
         if (isset($projection['$internalId'])) {
             unset($projection['$internalId']);
         }
-
         if (isset($projection['$permissions'])) {
             unset($projection['$permissions']);
         }
-
         if (isset($projection['$createdAt'])) {
             unset($projection['$createdAt']);
         }
-
         if (isset($projection['$updatedAt'])) {
             unset($projection['$updatedAt']);
+        }
+        if (isset($projection['$collection'])) {
+            unset($projection['$collection']);
         }
 
         return $projection;

@@ -1039,7 +1039,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$updatedAt', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$id', '$internalId', '$permissions', '$createdAt', '$updatedAt']),
+            Query::select(['string', 'integer', '$id', '$internalId', '$permissions', '$createdAt', '$updatedAt', '$collection']),
         ]);
 
         $this->assertArrayHasKey('$id', $document);
@@ -1047,6 +1047,7 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('$permissions', $document);
         $this->assertArrayHasKey('$createdAt', $document);
         $this->assertArrayHasKey('$updatedAt', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         return $document;
     }
@@ -4178,10 +4179,9 @@ abstract class Base extends TestCase
             Query::select(['*', 'library.name', '$id'])
         ]);
 
+        $this->assertArrayHasKey('$id', $person);
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
-
-
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
             Query::select(['name']),

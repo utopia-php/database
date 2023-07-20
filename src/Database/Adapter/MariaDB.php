@@ -1046,27 +1046,23 @@ class MariaDB extends SQL
         $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
-            if (isset($value['_uid'])) {
+            if (array_key_exists('_uid', $value)) {
                 $results[$key]['$id'] = $value['_uid'];
                 unset($results[$key]['_uid']);
             }
-
-            if (isset($value['_id'])) {
+            if (array_key_exists('_id', $value)) {
                 $results[$key]['$internalId'] = $value['_id'];
                 unset($results[$key]['_id']);
             }
-
-            if (isset($value['_createdAt'])) {
+            if (array_key_exists('_createdAt', $value)) {
                 $results[$key]['$createdAt'] = $value['_createdAt'];
                 unset($results[$key]['_createdAt']);
             }
-
-            if (isset($value['_updatedAt'])) {
+            if (array_key_exists('_updatedAt', $value)) {
                 $results[$key]['$updatedAt'] = $value['_updatedAt'];
                 unset($results[$key]['_updatedAt']);
             }
-
-            if (isset($value['_permissions'])) {
+            if (array_key_exists('_permissions', $value)) {
                 $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
                 unset($results[$key]['_permissions']);
             }
@@ -1206,25 +1202,25 @@ class MariaDB extends SQL
             $index = array_search('$id', $selections);
             $selections[$index] = '_uid';
         }
-
         if (in_array('$internalId', $selections)) {
             $index = array_search('$internalId', $selections);
             $selections[$index] = '_id';
         }
-
         if (in_array('$createdAt', $selections)) {
             $index = array_search('$createdAt', $selections);
             $selections[$index] = '_createdAt';
         }
-
         if (in_array('$updatedAt', $selections)) {
             $index = array_search('$updatedAt', $selections);
             $selections[$index] = '_updatedAt';
         }
-
         if (in_array('$permissions', $selections)) {
             $index = array_search('$permissions', $selections);
             $selections[$index] = '_permissions';
+        }
+        if (in_array('$collection', $selections)) {
+            $index = array_search('$collection', $selections);
+            unset($selections[$index]);
         }
 
         $selections[] = '_uid';

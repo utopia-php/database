@@ -1056,23 +1056,23 @@ class Postgres extends SQL
         $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
-            if (isset($value['_uid'])) {
+            if (array_key_exists('_uid', $value)) {
                 $results[$key]['$id'] = $value['_uid'];
                 unset($results[$key]['_uid']);
             }
-            if (isset($value['_id'])) {
+            if (array_key_exists('_id', $value)) {
                 $results[$key]['$internalId'] = $value['_id'];
                 unset($results[$key]['_id']);
             }
-            if (isset($value['_createdAt'])) {
+            if (array_key_exists('_createdAt', $value)) {
                 $results[$key]['$createdAt'] = $value['_createdAt'];
                 unset($results[$key]['_createdAt']);
             }
-            if (isset($value['_updatedAt'])) {
+            if (array_key_exists('_updatedAt', $value)) {
                 $results[$key]['$updatedAt'] = $value['_updatedAt'];
                 unset($results[$key]['_updatedAt']);
             }
-            if (isset($value['_permissions'])) {
+            if (array_key_exists('_permissions', $value)) {
                 $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
                 unset($results[$key]['_permissions']);
             }
@@ -1224,8 +1224,10 @@ class Postgres extends SQL
             }
         }
 
+        $stringsToRemove = ["\"id\"", "\"internalId\"", "\"permissions\"", "\"createdAt\"", "\"updatedAt\"", "\"collection\""];
+
         foreach ($selections as $key => $value) {
-            if ($value == "\"id\"" || $value == "\"internalId\"" || $value == "\"permissions\"" || $value == "\"createdAt\"" || $value == "\"updatedAt\"") {
+            if (in_array($value, $stringsToRemove)) {
                 unset($selections[$key]);
             }
         }

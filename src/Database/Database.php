@@ -121,6 +121,16 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
+    // Internal Parameters
+    public const INTERNAL_PARAMETERS = [
+        '$id',
+        '$internalId',
+        '$createdAt',
+        '$updatedAt',
+        '$permissions',
+        '$collection'
+    ];
+
     protected Adapter $adapter;
 
     protected Cache $cache;
@@ -2266,7 +2276,7 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 $queriedValues = $query->getValues();
-                $defaultKeys = ['$id', '$internalId', '$permissions', '$createdAt', '$updatedAt', '$collection'];
+                $defaultKeys = Database::INTERNAL_PARAMETERS;
 
                 foreach ($queriedValues as $queriedValue) {
                     if (in_array($queriedValue, $defaultKeys)) {
@@ -4003,12 +4013,9 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 foreach ($results as $result) {
-                    $result->removeAttribute('$id');
-                    $result->removeAttribute('$permissions');
-                    $result->removeAttribute('$collection');
-                    $result->removeAttribute('$createdAt');
-                    $result->removeAttribute('$updatedAt');
-                    $result->removeAttribute('$internalId');
+                    foreach (Database::INTERNAL_PARAMETERS as $parameter) {
+                        $result->removeAttribute($parameter);
+                    }
                 }
             }
         }
@@ -4512,11 +4519,7 @@ class Database
             }
         }
 
-        $keys[] = '$id';
-        $keys[] = '$internalId';
-        $keys[] = '$createdAt';
-        $keys[] = '$updatedAt';
-        $keys[] = '$permissions';
+        $keys = \array_merge($keys, Database::INTERNAL_PARAMETERS);
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {

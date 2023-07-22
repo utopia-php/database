@@ -57,6 +57,7 @@ Below is a list of supported databases, and their compatibly tested versions alo
 | SQLlite | ✅ | 3.38 |
 
 ` ✅  - supported `
+
 ` 🛠  - work in progress`
 
 ### Limitations 

@@ -11251,7 +11251,7 @@ abstract class Base extends TestCase
                 Database::EVENT_DATABASE_DELETE,
             ];
 
-            $database->on(Database::EVENT_ALL, function ($event, $data) use (&$events) {
+            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
 
                 $this->assertEquals($shifted, $event);
@@ -11287,14 +11287,23 @@ abstract class Base extends TestCase
                 ],
             ]));
 
-            $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
-            $database->getDocument($collectionId, 'doc1');
-            $database->find($collectionId);
-            $database->findOne($collectionId);
-            $database->count($collectionId);
-            $database->sum($collectionId, 'attr1');
-            $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            $executed = false;
+            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
+                $executed = true;
+            });
+
+            $database->silent(function () use ($database, $collectionId, $document) {
+                $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
+                $database->getDocument($collectionId, 'doc1');
+                $database->find($collectionId);
+                $database->findOne($collectionId);
+                $database->count($collectionId);
+                $database->sum($collectionId, 'attr1');
+                $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+                $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            }, ['should-not-execute']);
+
+            $this->assertFalse($executed);
 
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');

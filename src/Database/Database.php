@@ -259,7 +259,14 @@ class Database
         '*' => [],
     ];
 
-    protected bool $silentEvents = false;
+    /**
+     * Array in which the keys are the names of databse listeners that
+     * should be skipped when dispatching events. null $silentListeners
+     * will skip all listeners.
+     *
+     * @var ?array<string, bool>
+     */
+    protected ?array $silentListeners = [];
 
     protected ?\DateTime $timestamp = null;
 
@@ -372,31 +379,41 @@ class Database
      * @param callable $callback
      * @return self
      */
-    public function on(string $event, callable $callback): self
+    public function on(string $event, string $name, callable $callback): self
     {
         if (!isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
         }
-        $this->listeners[$event][] = $callback;
+        $this->listeners[$event][$name] = $callback;
         return $this;
     }
 
     /**
-     * Silent event generation for all the calls inside the callback
+     * Silent event generation for calls inside the callback
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $listeners List of listeners to silence; if null, all listeners will be silenced
      * @return T
      */
-    public function silent(callable $callback): mixed
+    public function silent(callable $callback, array $listeners = null): mixed
     {
-        $previous = $this->silentEvents;
-        $this->silentEvents = true;
+        $previous = $this->silentListeners;
+
+        if (is_null($listeners)) {
+            $this->silentListeners = null;
+        } else {
+            $silentListeners = [];
+            foreach ($listeners as $listener) {
+                $silentListeners[$listener] = true;
+            }
+            $this->silentListeners = $silentListeners;
+        }
 
         try {
             return $callback();
         } finally {
-            $this->silentEvents = $previous;
+            $this->silentListeners = $previous;
         }
     }
 
@@ -428,14 +445,20 @@ class Database
      */
     protected function trigger(string $event, mixed $args = null): void
     {
-        if ($this->silentEvents) {
+        if (\is_null($this->silentListeners)) {
             return;
         }
-        foreach ($this->listeners[self::EVENT_ALL] as $callback) {
+        foreach ($this->listeners[self::EVENT_ALL] as $name => $callback) {
+            if (isset($this->silentListeners[$name])) {
+                continue;
+            }
             call_user_func($callback, $event, $args);
         }
 
-        foreach (($this->listeners[$event] ?? []) as $callback) {
+        foreach (($this->listeners[$event] ?? []) as $name => $callback) {
+            if (isset($this->silentListeners[$name])) {
+                continue;
+            }
             call_user_func($callback, $event, $args);
         }
     }

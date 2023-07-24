@@ -1224,10 +1224,13 @@ class Postgres extends SQL
             }
         }
 
-        $stringsToRemove = ["\"id\"", "\"internalId\"", "\"permissions\"", "\"createdAt\"", "\"updatedAt\"", "\"collection\""];
+        $parameterNames =  \array_map(function ($value) {
+            return \ltrim($value, '$');
+        }, Database::INTERNAL_PARAMETERS);
 
         foreach ($selections as $key => $value) {
-            if (in_array($value, $stringsToRemove)) {
+            $valueUnquoted = \trim(\stripslashes($value), "\"");
+            if (\in_array($valueUnquoted, $parameterNames)) {
                 unset($selections[$key]);
             }
         }

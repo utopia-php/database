@@ -4377,10 +4377,8 @@ class Database
                 }
             }
 
-            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                if ($key === '$createdAt' && $value[0] === null) {
-                    continue;
-                } elseif ($key === '$updatedAt' && $value[0] === null) {
+            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections) || \in_array($key, ['$createdAt', '$updatedAt'])) {
+                if (($key === '$createdAt' || $key === '$updatedAt') && $value[0] === null) {
                     continue;
                 } else {
                     $document->setAttribute($key, ($array) ? $value : $value[0]);

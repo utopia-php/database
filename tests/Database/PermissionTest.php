@@ -301,17 +301,12 @@ class PermissionTest extends TestCase
      */
     public function testAggregation(): void
     {
-        $permissions = ['create("any")'];
+        $permissions = ['write("any")'];
         $parsed = Permission::aggregate($permissions);
-        $this->assertEquals(['create("any")'], $parsed);
+        $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
 
         $parsed = Permission::aggregate($permissions, [Database::PERMISSION_UPDATE, Database::PERMISSION_DELETE]);
-
-        // TODO looks like something here is not working proper
-        var_dump($parsed);
-        die;
-
-        $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);
+        $this->assertEquals(['update("any")', 'delete("any")'], $parsed);
 
         $permissions = [
             'read("any")',

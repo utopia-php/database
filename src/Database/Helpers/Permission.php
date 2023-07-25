@@ -90,7 +90,7 @@ class Permission
 
         $permission = $permissionParts[0];
         if(!in_array($permission, Database::PERMISSIONS)){
-            throw new DatabaseException('Invalid permission Value');
+            throw new DatabaseException('Invalid permission type: "' . $permission . '".');
         }
 
         $fullRole = \str_replace('")', '', $permissionParts[1]);

@@ -275,7 +275,7 @@ class Mongo extends Adapter
             if (is_object($result) && property_exists($result, 'size')) {
                 return $result->size;
             } else {
-                throw new DatabaseException('Failed to get collection size');
+                throw new DatabaseException();
             }
         } catch(Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());

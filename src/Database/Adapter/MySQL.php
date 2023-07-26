@@ -97,13 +97,13 @@ class MySQL extends MariaDB
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :name
-         ");
+        ");
 
         $permissionsSize = $this->getPDO()->prepare("
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :permissions
-            ");
+        ");
 
 
         $collectionSize->bindParam(':name', $name);

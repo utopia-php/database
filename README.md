@@ -815,7 +815,7 @@ $database->count(
         Query::equal(attribute: 'name', values: ['Captain Marvel']),
         Query::greaterThan(attribute: 'year', value: 2019)
     ], 
-    max: 1000); // Max is optional
+    max: 1000 // Max is optional
 );
 
 // Get the sum of an attribute from all the documents

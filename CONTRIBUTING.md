@@ -89,10 +89,10 @@ To run tests for a single file, use the following Docker command structure:
 docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/[FILE_PATH]
 ```
 
-To run static code analysis, use the following Psalm command:
+To run static code analysis, use the following phpstan command:
 
 ```bash
-docker compose exec tests vendor/bin/psalm --show-info=true
+composer check
 ```
 
 ### Load testing

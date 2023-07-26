@@ -52,7 +52,7 @@ Below is a list of supported databases, and their compatibly tested versions alo
 |---------|---------|---|
 | MariaDB | ✅ | 10.5 |
 | MySQL | ✅ | 8.0 |
-| Postgres | 🛠 | 13.0 |
+| Postgres | ✅ | 13.0 |
 | MongoDB | ✅ | 5.0 |
 | SQLlite | ✅ | 3.38 |
 
@@ -305,8 +305,8 @@ Database::EVENT_COLLECTION_DELETE,
 Database::EVENT_DATABASE_DELETE,
 
 $database->on(
-    string: Database::EVENT_ALL, 
-    callable: function($event, $data) {
+    Database::EVENT_ALL, 
+    function($event, $data) {
         // Do something
     }
 );
@@ -332,9 +332,9 @@ $attributes = [
      new Document([
          '$id' => ID::unique(),
          '$permissions' => [
-          Permission::read(Role::any()),
-          Permission::update(Role::any()),
-          Permission::delete(Role::any())
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
          ],
          'name' => 'Jhon', 
          'age'  =>  20
@@ -342,9 +342,9 @@ $attributes = [
      new Document([
          '$id' => ID::unique(),
          '$permissions' => [
-          Permission::read(Role::any()),
-          Permission::update(Role::any()),
-          Permission::delete(Role::any())
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
          ],
          'name' => 'Doe', 
          'age'  =>  34
@@ -353,18 +353,18 @@ $attributes = [
 
 $indexes = [
      new Document([
-         '$id' => ID::unique(),
-         'type' => Database::INDEX_KEY,
-         'attributes' => ['name'],
-         'lengths' => [256],
-         'orders' => ['ASC'],
+            '$id' => ID::unique(),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['name'],
+            'lengths' => [256],
+            'orders' => ['ASC'],
         ]),
      new Document([
-         '$id' => ID::unique(),
-         'type' => Database::INDEX_KEY,
-         'attributes' => ['name', 'age'],
-         'lengths' => [128, 128],
-         'orders' => ['ASC'],
+            '$id' => ID::unique(),
+            'type' => Database::INDEX_KEY,
+            'attributes' => ['name', 'age'],
+            'lengths' => [128, 128],
+            'orders' => ['ASC'],
         ])
 ];
 
@@ -583,7 +583,7 @@ Database::RELATION_MANY_TO_MANY
 $database->createRelationship(
     collection: 'movies', 
     relatedCollection: 'users', 
-    Database::RELATION_ONE_TO_ONE,, 
+    type: Database::RELATION_ONE_TO_ONE,, 
     twoWay: true
 );
 
@@ -592,7 +592,7 @@ $database->createRelationship(
 $database->createRelationship(
     collection: 'movies', 
     relatedCollection: 'users', 
-    Database::RELATION_ONE_TO_ONE, 
+    type: Database::RELATION_ONE_TO_ONE, 
     twoWay: true, 
     id: 'movies_id', 
     twoWayKey: 'users_id'
@@ -636,12 +636,32 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
 // Id helpers
-ID::unique(padding: 12),        // Creates an id of length 7 + padding
+ID::unique(padding: 12)        // Creates an id of length 7 + padding
 ID::custom(id: 'my_user_3235')  
 
 // Role helpers
-Role::any(),
-Role::user(ID::unique())    
+Role::any()
+Role::guests()
+Role::user(
+    identifier: ID::unique()
+    status: 'active' //optional
+    )    
+Role::users()
+Role::team(
+    identifier: ID::unique()
+    )
+Role::team(
+    identifier: ID::unique()
+    dimension: '123'  //team:id/dimension
+    )
+Role::label(
+    identifier: 'admin'
+    )
+Role::members(
+    identifier: ID::unique()
+    )
+
+
 
 // Permission helpers
 Permission::read(Role::any()),
@@ -657,6 +677,7 @@ $document = new Document([
         Permission::update(Role::user(ID::unique(12))),
         Permission::delete(Role::user($customId)),
     ],
+    '$id' => ID::unique(),
     'name' => 'Captain Marvel',
     'director' => 'Anna Boden & Ryan Fleck',
     'year' => 2019,
@@ -700,9 +721,9 @@ $database->decreaseDocumentAttribute(
 // Update the value of an attribute in a document
 
 // Set types
-Document::SET_TYPE_ASSIGN,
-Document::SET_TYPE_APPEND,
-Document::SET_TYPE_PREPEND
+Document::SET_TYPE_ASSIGN, // Assign the new value directly
+Document::SET_TYPE_APPEND, // Append the new value to end of the array
+Document::SET_TYPE_PREPEND // Prepend the new value to start of the array
 
 $document->setAttribute(key: 'name', 'Chris Smoove')
          ->setAttribute(key: 'age', 33, Document::SET_TYPE_ASSIGN);
@@ -741,7 +762,9 @@ $database->getDocument(
 $database->getDocument(
     collection: 'movies', 
     id: $document->getId(), 
-    [Query::select(['name', 'director', 'year'])]
+    queries: [
+        Query::select(['name', 'director', 'year'])
+    ]
 );
 
 // Find documents 
@@ -772,7 +795,8 @@ $database->find(
         Query::equal(attribute: 'name', values: ['Captain Marvel']),
         Query::notEqual(attribute: 'year', values: [2019])
     ], 
-    timeout: 1);  //timeout is optional
+    timeout: 1 //timeout is optional
+);  
 
 // Find a document 
 $database->findOne(
@@ -790,7 +814,7 @@ $database->count(
         Query::equal(attribute: 'name', values: ['Captain Marvel']),
         Query::greaterThan(attribute: 'year', value: 2019)
     ], 
-    max: 1000); // max is optional
+    max: 1000); // Max is optional
 );
 
 // Get the sum of an attribute from all the documents
@@ -800,27 +824,8 @@ $database->sum(
     queries:  [
         Query::greaterThan(attribute: 'year', value: 2019)
     ],
-    max: 0 // max = 0 means no limit
+    max: null // max = null means no limit
 ); 
-
-// Encode Document
-$collection = $database->getCollection('movies');
-
-$document = $database->getDocument(
-    collection: 'movies', 
-    id: $document->getId()
-);
-
-$database->encode(
-    collection: $collection, 
-    document: $document
-);
-
-// Decode Document
-$database->decode(
-    collection: $collection, 
-    document: $document
-);
 
 // Delete a document
 $database->deleteDocument(
@@ -829,6 +834,7 @@ $database->deleteDocument(
 );
 
 // Delete a cached document
+Note: Cached Documents or Collections are automatically deleted when a document or collection is updated or deleted 
 $database->deleteCachedDocument(
     collection: 'movies', 
     id: $document->getId()

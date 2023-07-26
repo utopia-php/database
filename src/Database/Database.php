@@ -2796,7 +2796,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
-        $skipPermission = true;
+        $shouldUpdate = false;
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -2808,11 +2808,11 @@ class Database
                     continue;
                 }
                 if ($old->getAttribute($key) !== $value) {
-                    $skipPermission = false;
+                    $shouldUpdate = true;
                     break;
                 }
             }
-            if (!$skipPermission && !$validator->isValid([
+            if ($shouldUpdate && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
             ])) {
@@ -2820,7 +2820,7 @@ class Database
             }
         }
 
-        if (!$skipPermission) {
+        if ($shouldUpdate) {
             $document->setAttribute('$updatedAt', $time);
         }
 

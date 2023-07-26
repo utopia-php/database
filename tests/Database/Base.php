@@ -2746,9 +2746,7 @@ abstract class Base extends TestCase
      */
     public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
     {
-        Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
-
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             'string' => 'text📝',
@@ -2758,22 +2756,9 @@ abstract class Base extends TestCase
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
-        Authorization::cleanRoles();
-        // No changes in document
-        $documentToUpdate = new Document([
-            '$id' => ID::custom($document->getId()),
-            'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
-            'boolean' => true,
-            'colors' => ['pink', 'green', 'blue'],
-            '$collection' => 'documents',
-        ]);
-        $documentToUpdate->setAttribute('$createdAt', $document->getAttribute('$createdAt'));
-        $documentToUpdate->setAttribute('$updatedAt', $document->getAttribute('$updatedAt'));
-        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $documentToUpdate);
 
+        Authorization::cleanRoles();
+        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
 
         // Document should not be updated as there is no change. It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());

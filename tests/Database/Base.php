@@ -207,9 +207,10 @@ abstract class Base extends TestCase
     public function testCreatedAtUpdatedAt(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
-
+        static::getDatabase()->createAttribute('created_at', 'title', Database::VAR_STRING, 100, false);
         $document = static::getDatabase()->createDocument('created_at', new Document([
             '$id' => ID::custom('uid123'),
+
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -2994,12 +2995,38 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
+            'integer' => 6,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        return $document;
+    }
+
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
+
+        Authorization::cleanRoles();
+        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
+
+        // Document should not be updated as there is no change. It should also not throw any authorization exception without any permission because of no change.
+        $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         return $document;
     }
@@ -3750,6 +3777,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertEquals(true, !$document->isEmpty());
         sleep(1);
+        $document->setAttribute('title', 'new title');
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
 
@@ -10764,7 +10792,6 @@ abstract class Base extends TestCase
     public function testCollectionPermissionsUpdateThrowsException(array $data): void
     {
         [$collection, $document] = $data;
-
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
 
@@ -10772,7 +10799,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
-            $document->setAttribute('test', 'ipsum')
+            $document->setAttribute('test', 'lorem')
         );
     }
 

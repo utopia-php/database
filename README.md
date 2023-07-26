@@ -724,6 +724,7 @@ $database->decreaseDocumentAttribute(
 Document::SET_TYPE_ASSIGN, // Assign the new value directly
 Document::SET_TYPE_APPEND, // Append the new value to end of the array
 Document::SET_TYPE_PREPEND // Prepend the new value to start of the array
+Note: Using append/prepend with an attribute which is not an array, it will be set to an array containing the new value.
 
 $document->setAttribute(key: 'name', 'Chris Smoove')
          ->setAttribute(key: 'age', 33, Document::SET_TYPE_ASSIGN);

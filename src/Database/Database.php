@@ -2995,7 +2995,14 @@ class Database
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
-                            if ($value instanceof Document) {
+                            if (\is_string($value)) {
+                                $related = $this->getDocument($relatedCollection->getId(), $value);
+                                if ($related->isEmpty()) {
+                                    //If no such document exists in related collection
+                                    //For one-one we need to update the related key to old value, either null if no relation exists or old related document id
+                                    $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                }
+                            } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
                                     $collection,
                                     $relatedCollection,
@@ -3133,6 +3140,10 @@ class Database
                                         $this->getDocument($relatedCollection->getId(), $relation)
                                     );
 
+                                    if ($related->isEmpty()) {
+                                        continue;
+                                    }
+
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $related->getId(),
@@ -3233,7 +3244,7 @@ class Database
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds)) {
+                                if (\in_array($relation, $oldIds) || $this->getDocument($relatedCollection->getId(), $relation)->isEmpty()) {
                                     continue;
                                 }
                             } elseif ($relation instanceof Document) {

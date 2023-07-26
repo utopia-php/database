@@ -387,7 +387,7 @@ abstract class Adapter
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int;
 
     /**
      * Count Documents
@@ -398,7 +398,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int;
 
     /**
      * Get max STRING limit
@@ -661,12 +661,11 @@ abstract class Adapter
     */
     public static function setTimeoutForQueries(int $milliseconds): void
     {
-        if ($milliseconds < 0) {
-            throw new Exception('The provided timeout value must be greater than or equal to 0.');
+        if ($milliseconds <= 0) {
+            throw new Exception('Timeout must be greater than 0');
         }
         self::$timeout = $milliseconds;
     }
-
 
     /**
      * Clears a global timeout for database queries.

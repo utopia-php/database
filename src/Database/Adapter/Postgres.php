@@ -1165,12 +1165,13 @@ class Postgres extends SQL
         }
 
         $sql = "SELECT SUM({$attribute}) as sum
-        FROM (
-            SELECT {$attribute}
-            FROM {$this->getSQLTable($name)} table_main
-            WHERE {$permissions} AND " . implode(' AND ', $where) . "
-            {$limit}
-        ) table_count";
+                FROM (
+                        SELECT {$attribute}
+                        FROM {$this->getSQLTable($name)} table_main
+                        WHERE {$permissions} AND " . implode(' AND ', $where) . "
+                        {$limit}
+                     )  
+                table_count";
 
         if ($timeout || self::$timeout) {
             $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);

@@ -1079,7 +1079,7 @@ class Mongo extends Adapter
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);

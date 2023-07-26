@@ -2804,10 +2804,11 @@ class Database
             // Compare if the document has any changes
             foreach ($document as $key=>$value) {
                 // Skip the nested documents as they will be checked later in recursions.
-                if ($old->getAttribute($key) instanceof Document) {
+                $oldAttributeValue = $old->getAttribute($key);
+                if ($oldAttributeValue instanceof Document) {
                     continue;
                 }
-                if ($old->getAttribute($key) !== $value) {
+                if ($oldAttributeValue !== $value) {
                     $shouldUpdate = true;
                     break;
                 }

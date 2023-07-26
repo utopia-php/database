@@ -1224,13 +1224,10 @@ class Postgres extends SQL
             }
         }
 
-        $parameterNames =  \array_map(function ($value) {
-            return \ltrim($value, '$');
-        }, Database::INTERNAL_PARAMETERS);
-
         foreach ($selections as $key => $value) {
             $valueUnquoted = \trim(\stripslashes($value), "\"");
-            if (\in_array($valueUnquoted, $parameterNames)) {
+            $value = "$" . $valueUnquoted;
+            if (\in_array($value, Database::INTERNAL_ATTRIBUTES)) {
                 unset($selections[$key]);
             }
         }

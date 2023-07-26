@@ -122,7 +122,7 @@ class Database
     public const EVENT_INDEX_DELETE = 'index_delete';
 
     // Internal Parameters
-    public const INTERNAL_PARAMETERS = [
+    public const INTERNAL_ATTRIBUTES = [
         '$id',
         '$internalId',
         '$createdAt',
@@ -2294,12 +2294,10 @@ class Database
             $this->cache->save($cacheKey, $document->getArrayCopy());
         }
 
-        $this->trigger(self::EVENT_DOCUMENT_READ, $document);
-
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 $queriedValues = $query->getValues();
-                $defaultKeys = Database::INTERNAL_PARAMETERS;
+                $defaultKeys = Database::INTERNAL_ATTRIBUTES;
 
                 foreach ($queriedValues as $queriedValue) {
                     if (in_array($queriedValue, $defaultKeys)) {
@@ -2315,6 +2313,8 @@ class Database
                 }
             }
         }
+
+        $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
     }
@@ -4029,19 +4029,18 @@ class Database
 
         $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
 
-        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
-
         // remove default keys $id and $permissions from the results
-
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 foreach ($results as $result) {
-                    foreach (Database::INTERNAL_PARAMETERS as $parameter) {
+                    foreach (Database::INTERNAL_ATTRIBUTES as $parameter) {
                         $result->removeAttribute($parameter);
                     }
                 }
             }
         }
+
+        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;
     }
@@ -4377,8 +4376,13 @@ class Database
                 }
             }
 
-            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections) || \in_array($key, ['$createdAt', '$updatedAt'])) {
-                if (($key === '$createdAt' || $key === '$updatedAt') && $value[0] === null) {
+            if (
+                empty($selections)
+                || \in_array($key, $selections)
+                || \in_array('*', $selections)
+                || \in_array($key, ['$createdAt', '$updatedAt'])
+            ) {
+                if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
                     continue;
                 } else {
                     $document->setAttribute($key, ($array) ? $value : $value[0]);
@@ -4540,7 +4544,7 @@ class Database
             }
         }
 
-        $keys = \array_merge($keys, Database::INTERNAL_PARAMETERS);
+        $keys = \array_merge($keys, Database::INTERNAL_ATTRIBUTES);
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {

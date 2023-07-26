@@ -1200,7 +1200,7 @@ class MariaDB extends SQL
 
         if (in_array('$id', $selections)) {
             $index = array_search('$id', $selections);
-            $selections[$index] = '_uid';
+            unset($selections[$index]);
         }
         if (in_array('$internalId', $selections)) {
             $index = array_search('$internalId', $selections);
@@ -1216,7 +1216,7 @@ class MariaDB extends SQL
         }
         if (in_array('$permissions', $selections)) {
             $index = array_search('$permissions', $selections);
-            $selections[$index] = '_permissions';
+            unset($selections[$index]);
         }
         if (in_array('$collection', $selections)) {
             $index = array_search('$collection', $selections);

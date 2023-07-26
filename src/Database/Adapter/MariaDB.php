@@ -428,6 +428,86 @@ class MariaDB extends SQL
         return $document;
     }
 
+    public function createDocuments(string $collection, array $documents): array
+    {
+        // Start transaction
+        $this->getPDO()->beginTransaction();
+
+        try {
+            // Prepare SQL for multiple inserts
+            $sql = "INSERT INTO {$this->getSQLTable($collection)} ";
+
+            $insertQueryParts = [];
+            $insertValues = [];
+
+            foreach ($documents as $index => $document) {
+                $attributes = $document->getAttributes();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = json_encode($document->getPermissions());
+
+                // Parse statement
+                $columnNames = '';
+                $bindValues = '';
+                foreach ($attributes as $attribute => $value) {
+                    $column = $this->filter($attribute);
+                    $columnNames .= "`{$column}`, ";
+                    $bindValues .= $this->getPDO()->quote($value) . ", ";
+                }
+
+                $columnNames = rtrim($columnNames, ', ');
+                $bindValues = rtrim($bindValues, ', ');
+
+                $insertQueryParts[] = "({$bindValues})";
+                $insertValues[] = $bindValues;
+
+                $permissions = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $permission = \str_replace('"', '', $permission);
+                        $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+                    }
+                }
+
+                if (!empty($permissions)) {
+                    $queryPermissions = "INSERT INTO {$this->getSQLTable($collection . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+                    $this->getPDO()->exec($queryPermissions);
+                }
+            }
+
+            $sql .= "({$columnNames}) VALUES " . implode(", ", $insertQueryParts);
+
+            var_dump($sql);
+            exit();
+
+            // Execute SQL
+            $this->getPDO()->exec($sql);
+
+            // Commit the transaction
+            $this->getPDO()->commit();
+
+            // Update internal ID of documents
+            foreach ($documents as $document) {
+                $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+            }
+
+            return $documents;
+        } catch (PDOException $e) {
+            // Rollback the transaction on error
+            $this->getPDO()->rollBack();
+
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+
+                default:
+                    throw $e;
+            }
+        }
+    }
+
+
     /**
      * Update Document
      *
@@ -1003,10 +1083,10 @@ class MariaDB extends SQL
             default => $query->getAttribute()
         });
 
-        $attribute = "`{$query->getAttribute()}`" ;
+        $attribute = "`{$query->getAttribute()}`";
         $placeholder = $this->getSQLPlaceholder($query);
 
-        switch ($query->getMethod()){
+        switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
                 /**
                  * Replace reserved chars with space.
@@ -1016,7 +1096,7 @@ class MariaDB extends SQL
                  * Prepend wildcard by default on the back.
                  */
                 $value = $this->getSQLValue($query->getMethod(), $value);
-                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+                return 'MATCH(' . $attribute . ') AGAINST (' . $this->getPDO()->quote($value) . ' IN BOOLEAN MODE)';
 
             case Query::TYPE_BETWEEN:
                 return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
@@ -1028,7 +1108,7 @@ class MariaDB extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' '.':'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' ' . ':' . $placeholder . '_' . $key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

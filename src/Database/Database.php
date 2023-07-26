@@ -82,8 +82,10 @@ class Database
 
     const EVENT_DOCUMENT_FIND = 'document_find';
     const EVENT_DOCUMENT_CREATE = 'document_create';
+    const EVENT_DOCUMENTS_CREATE = 'documents_create';
     const EVENT_DOCUMENT_READ = 'document_read';
     const EVENT_DOCUMENT_UPDATE = 'document_update';
+    const EVENT_DOCUMENTS_UPDATE = 'documents_update';
     const EVENT_DOCUMENT_DELETE = 'document_delete';
     const EVENT_DOCUMENT_COUNT = 'document_count';
     const EVENT_DOCUMENT_SUM = 'document_sum';
@@ -1444,6 +1446,55 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
         return $document;
+    }
+
+    /**
+     * Create Document
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     *
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Exception|Throwable
+     */
+    public function createDocuments(string $collection, array $documents): array
+    {
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+
+        $time = DateTime::now();
+
+        $documents = array_map(function($document) use ($collection, $time){
+            $document
+                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$collection', $collection->getId())
+                ->setAttribute('$createdAt', $time)
+                ->setAttribute('$updatedAt', $time);
+
+            $document = $this->encode($collection, $document);
+
+            $validator = new Structure($collection);
+
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+
+            return $document;
+        }, $documents);
+
+        $documents = $this->adapter->createDocuments($collection->getId(), $documents);
+
+        $documents = array_map(function($document) use ($collection){
+            $document = $this->decode($collection, $document);
+
+            $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
+
+            return $document;
+        }, $documents);
+
+        return $documents;
     }
 
     /**

@@ -296,6 +296,16 @@ abstract class Adapter
     abstract public function createDocument(string $collection, Document $document): Document;
 
     /**
+     * Create Documents
+     *
+     * @param string $collection
+     * @param Document[] $documents
+     *
+     * @return Document[]
+     */
+    abstract public function createDocuments(string $collection, array $documents): array;
+
+    /**
      * Update Document
      *
      * @param string $collection

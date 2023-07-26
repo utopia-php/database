@@ -166,7 +166,7 @@ class MariaDB extends SQL
             SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
             FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
             WHERE NAME = :permissions
-         ");
+        ");
 
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':permissions', $permissions);

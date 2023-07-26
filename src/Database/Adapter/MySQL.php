@@ -105,7 +105,6 @@ class MySQL extends MariaDB
              WHERE NAME = :permissions
         ");
 
-
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':permissions', $permissions);
 

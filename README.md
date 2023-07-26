@@ -583,7 +583,7 @@ Database::RELATION_MANY_TO_MANY
 $database->createRelationship(
     collection: 'movies', 
     relatedCollection: 'users', 
-    type: Database::RELATION_ONE_TO_ONE,, 
+    type: Database::RELATION_ONE_TO_ONE,
     twoWay: true
 );
 

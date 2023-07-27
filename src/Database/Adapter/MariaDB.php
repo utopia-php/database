@@ -157,15 +157,15 @@ class MariaDB extends SQL
         $permissions = $database . '/' . $collection . '_perms';
 
         $collectionSize = $this->getPDO()->prepare("
-             SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
-             FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
-             WHERE NAME = :name
+                SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
+                FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
+                WHERE NAME = :name
          ");
 
         $permissionsSize = $this->getPDO()->prepare("
-            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
-            FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
-            WHERE NAME = :permissions
+                SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
+                FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
+                WHERE NAME = :permissions
         ");
 
         $collectionSize->bindParam(':name', $name);

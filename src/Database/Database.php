@@ -2908,22 +2908,38 @@ class Database
         }
 
         $time = DateTime::now();
-        $document->setAttribute('$updatedAt', $time);
-
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
+        $shouldUpdate = false;
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            if (!$validator->isValid([
+            // Compare if the document has any changes
+            foreach ($document as $key=>$value) {
+                // Skip the nested documents as they will be checked later in recursions.
+                $oldAttributeValue = $old->getAttribute($key);
+                if ($oldAttributeValue instanceof Document) {
+                    continue;
+                }
+                if ($oldAttributeValue !== $value) {
+                    $shouldUpdate = true;
+                    break;
+                }
+            }
+            if ($shouldUpdate && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
             ])) {
                 throw new AuthorizationException($validator->getDescription());
             }
+        }
+
+        if ($shouldUpdate) {
+            $document->setAttribute('$updatedAt', $time);
         }
 
         // Check if document was updated after the request timestamp

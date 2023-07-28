@@ -1150,15 +1150,15 @@ class MariaDB extends SQL
         }
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
-        $sql = "
-        SELECT SUM({$attribute}) as sum
-        FROM (
-            SELECT {$attribute}
-            FROM {$this->getSQLTable($name)} table_main
-             " . $sqlWhere . "
-            {$limit}
-        ) table_count
-    ";
+        $sql = "SELECT SUM({$attribute}) as sum
+            FROM 
+                (
+                    SELECT {$attribute}
+                    FROM {$this->getSQLTable($name)} table_main
+                    " . $sqlWhere . "
+                    {$limit}
+                ) table_count
+        ";
         if ($timeout || self::$timeout) {
             $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
         }

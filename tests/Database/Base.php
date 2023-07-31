@@ -207,9 +207,10 @@ abstract class Base extends TestCase
     public function testCreatedAtUpdatedAt(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('created_at'));
-
+        static::getDatabase()->createAttribute('created_at', 'title', Database::VAR_STRING, 100, false);
         $document = static::getDatabase()->createDocument('created_at', new Document([
             '$id' => ID::custom('uid123'),
+
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -222,13 +223,46 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
+    public function testQueryTimeoutUsingStaticTimeout(): void
+    {
+        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            static::getDatabase()->createCollection('global-timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for ($i = 0 ; $i <= 5 ; $i++) {
+                static::getDatabase()->createDocument('global-timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+            static::getDatabase()->setTimeoutForQueries(1);
+
+            try {
+                static::getDatabase()->find('global-timeouts', [
+                    Query::notEqual('longtext', 'appwrite'),
+                ]);
+            } catch(Timeout $ex) {
+                static::getDatabase()->clearTimeoutForQueries();
+                static::getDatabase()->deleteCollection('global-timeouts');
+                throw $ex;
+            }
+        }
+        $this->expectNotToPerformAssertions();
+    }
+
+
     /**
      * @depends testCreateExistsDelete
      */
     public function testCreateListExistsDeleteCollection(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
-
         $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
@@ -2994,12 +3028,38 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
+            'integer' => 6,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        return $document;
+    }
+
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
             'float' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
+
+        Authorization::cleanRoles();
+        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
+
+        // Document should not be updated as there is no change. It should also not throw any authorization exception without any permission because of no change.
+        $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         return $document;
     }
@@ -3750,6 +3810,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
         $this->assertEquals(true, !$document->isEmpty());
         sleep(1);
+        $document->setAttribute('title', 'new title');
         static::getDatabase()->updateDocument('created_at', 'uid123', $document);
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
 
@@ -10764,7 +10825,6 @@ abstract class Base extends TestCase
     public function testCollectionPermissionsUpdateThrowsException(array $data): void
     {
         [$collection, $document] = $data;
-
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
 
@@ -10772,7 +10832,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
-            $document->setAttribute('test', 'ipsum')
+            $document->setAttribute('test', 'lorem')
         );
     }
 
@@ -11251,7 +11311,7 @@ abstract class Base extends TestCase
                 Database::EVENT_DATABASE_DELETE,
             ];
 
-            $database->on(Database::EVENT_ALL, function ($event, $data) use (&$events) {
+            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
 
                 $this->assertEquals($shifted, $event);
@@ -11287,14 +11347,23 @@ abstract class Base extends TestCase
                 ],
             ]));
 
-            $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
-            $database->getDocument($collectionId, 'doc1');
-            $database->find($collectionId);
-            $database->findOne($collectionId);
-            $database->count($collectionId);
-            $database->sum($collectionId, 'attr1');
-            $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            $executed = false;
+            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
+                $executed = true;
+            });
+
+            $database->silent(function () use ($database, $collectionId, $document) {
+                $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
+                $database->getDocument($collectionId, 'doc1');
+                $database->find($collectionId);
+                $database->findOne($collectionId);
+                $database->count($collectionId);
+                $database->sum($collectionId, 'attr1');
+                $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+                $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            }, ['should-not-execute']);
+
+            $this->assertFalse($executed);
 
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');

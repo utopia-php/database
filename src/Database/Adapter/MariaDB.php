@@ -1005,8 +1005,8 @@ class MariaDB extends SQL
             {$sqlLimit};
         ";
 
-        if ($timeout) {
-            $sql = $this->setTimeout($sql, $timeout);
+        if ($timeout || static::$timeout) {
+            $sql = $this->setTimeout($sql, $timeout ? $timeout : static::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1078,7 +1078,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1103,6 +1103,10 @@ class MariaDB extends SQL
                     {$limit}
                 ) table_count
         ";
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1130,7 +1134,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1146,16 +1150,20 @@ class MariaDB extends SQL
         }
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sql = "SELECT SUM({$attribute}) as sum
+            FROM 
+                (
+                    SELECT {$attribute}
+                    FROM {$this->getSQLTable($name)} table_main
+                    " . $sqlWhere . "
+                    {$limit}
+                ) table_count
+        ";
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+        }
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT SUM({$attribute}) as sum
-            FROM (
-                SELECT {$attribute}
-                FROM {$this->getSQLTable($name)} table_main
-                 " . $sqlWhere . "
-                {$limit}
-            ) table_count
-        ");
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1224,7 +1232,7 @@ class MariaDB extends SQL
             default => $query->getAttribute()
         });
 
-        $attribute = "`{$query->getAttribute()}`" ;
+        $attribute = "`{$query->getAttribute()}`";
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()) {
@@ -1241,7 +1249,7 @@ class MariaDB extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

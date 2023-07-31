@@ -223,13 +223,46 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
+    public function testQueryTimeoutUsingStaticTimeout(): void
+    {
+        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            static::getDatabase()->createCollection('global-timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for ($i = 0 ; $i <= 5 ; $i++) {
+                static::getDatabase()->createDocument('global-timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+            static::getDatabase()->setTimeoutForQueries(1);
+
+            try {
+                static::getDatabase()->find('global-timeouts', [
+                    Query::notEqual('longtext', 'appwrite'),
+                ]);
+            } catch(Timeout $ex) {
+                static::getDatabase()->clearTimeoutForQueries();
+                static::getDatabase()->deleteCollection('global-timeouts');
+                throw $ex;
+            }
+        }
+        $this->expectNotToPerformAssertions();
+    }
+
+
     /**
      * @depends testCreateExistsDelete
      */
     public function testCreateListExistsDeleteCollection(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
-
         $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 

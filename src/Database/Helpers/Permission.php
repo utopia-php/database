@@ -89,7 +89,7 @@ class Permission
         }
 
         $permission = $permissionParts[0];
-        if(!in_array($permission, Database::PERMISSIONS)){
+        if(!in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))){
             throw new DatabaseException('Invalid permission type: "' . $permission . '".');
         }
 

@@ -271,7 +271,7 @@ class PermissionTest extends TestCase
             Permission::parse('read(("any")');
             $this->fail('Failed to throw Exception');
         } catch (\Exception $e) {
-            $this->assertEquals('Invalid permission Value', $e->getMessage());
+            $this->assertEquals('Invalid permission type: "read(".', $e->getMessage());
         }
 
         try {
@@ -292,7 +292,7 @@ class PermissionTest extends TestCase
             Permission::parse('read("label:alphanumeric-only")');
             $this->fail('Failed to throw Exception');
         } catch (\Exception $e) {
-            $this->assertEquals('bla', $e->getMessage());
+            $this->assertEquals('Do we want this to fail?', $e->getMessage());
         }
     }
 

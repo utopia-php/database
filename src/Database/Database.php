@@ -2911,7 +2911,7 @@ class Database
                     // Skip the nested documents as they will be checked later in recursions.
                     if ($oldAttributeValue instanceof Document) {
                         continue;
-                    } elseif (\is_array($oldAttributeValue) && \is_array($value) && !($value instanceof Document)) {
+                    } elseif (\is_array($oldAttributeValue) && \is_array($value)) {
                         if ($compareChanges($value, $oldAttributeValue)) {
                             $isDifferent = true;
                         }

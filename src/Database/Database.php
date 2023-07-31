@@ -1544,6 +1544,42 @@ class Database
         return $document;
     }
 
+    public function updateDocuments(string $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        foreach ($documents as $document) {
+            if (!$document->getId()) {
+                throw new Exception('Must define $id attribute for each document');
+            }
+        }
+
+        $time = DateTime::now();
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+
+        foreach ($documents as $document) {
+            $document->setAttribute('$updatedAt', $time);
+            $document = $this->encode($collection, $document);
+
+            $validator = new Structure($collection);
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+        }
+
+        $documents = $this->adapter->updateDocuments($collection->getId(), $documents);
+        
+        foreach ($documents as $document) {
+            $document = $this->decode($collection, $document);
+            $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
+        }
+
+        return $documents;
+}
+
+
     /**
      * Increase a document attribute by a value
      *

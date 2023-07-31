@@ -316,6 +316,16 @@ abstract class Adapter
     abstract public function updateDocument(string $collection, Document $document): Document;
 
     /**
+     * Update Documents
+     *
+     * @param string $collection
+     * @param Document[] $documents
+     *
+     * @return Document[]
+     */
+    abstract public function updateDocuments(string $collection, array $documents): array;
+
+    /**
      * Delete Document
      *
      * @param string $collection

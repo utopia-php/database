@@ -430,36 +430,52 @@ class MariaDB extends SQL
 
     public function createDocuments(string $collection, array $documents): array
     {
-        // Start transaction
+        if (empty($documents)) {
+            return $documents;
+        }
+    
         $this->getPDO()->beginTransaction();
-
+    
         try {
-            // Prepare SQL for multiple inserts
-            $sql = "INSERT INTO {$this->getSQLTable($collection)} ";
+            $name = $this->filter($collection);
 
-            $insertQueryParts = [];
-            $insertValues = [];
-
-            foreach ($documents as $index => $document) {
+            foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
                 $attributes['_createdAt'] = $document->getCreatedAt();
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                // Parse statement
+                $columns = '';
                 $columnNames = '';
-                $bindValues = '';
+                $bindIndex = 0;
+                $bindValues = [];
                 foreach ($attributes as $attribute => $value) {
                     $column = $this->filter($attribute);
-                    $columnNames .= "`{$column}`, ";
-                    $bindValues .= $this->getPDO()->quote($value) . ", ";
+                    $bindKey = 'key_' . $bindIndex;
+                    $columns .= "`{$column}`, ";
+    
+                    if (is_array($value)) { // arrays & objects should be saved as strings
+                        $value = json_encode($value);
+                    }
+                    $value = (is_bool($value)) ? (int)$value : $value;
+    
+                    $columnNames .= ':' . $bindKey . ', ';
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
+    
+                $columnNames .= ':_uid';
+                $bindValues['_uid'] = $document->getId();
+    
+                $stmt = $this->getPDO()
+                    ->prepare("INSERT INTO {$this->getSQLTable($name)} 
+                ({$columns}_uid) VALUES ({$columnNames})");
+
+                foreach ($bindValues as $key => $value) {
+                    $stmt->bindValue(':' . $key, $value, $this->getPDOType($value));
                 }
 
-                $columnNames = rtrim($columnNames, ', ');
-                $bindValues = rtrim($bindValues, ', ');
-
-                $insertQueryParts[] = "({$bindValues})";
-                $insertValues[] = $bindValues;
+                $stmt->execute();
 
                 $permissions = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -468,44 +484,34 @@ class MariaDB extends SQL
                         $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
                     }
                 }
-
+    
                 if (!empty($permissions)) {
-                    $queryPermissions = "INSERT INTO {$this->getSQLTable($collection . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-                    $this->getPDO()->exec($queryPermissions);
+                    $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+                    $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+                    $stmtPermissions->execute();
+                    $permissions = [];
                 }
             }
-
-            $sql .= "({$columnNames}) VALUES " . implode(", ", $insertQueryParts);
-
-            var_dump($sql);
-            exit();
-
-            // Execute SQL
-            $this->getPDO()->exec($sql);
-
-            // Commit the transaction
-            $this->getPDO()->commit();
-
-            // Update internal ID of documents
-            foreach ($documents as $document) {
-                $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+    
+            if (!$this->getPDO()->commit()) {
+                throw new Exception('Failed to commit transaction');
             }
 
             return $documents;
-        } catch (PDOException $e) {
-            // Rollback the transaction on error
-            $this->getPDO()->rollBack();
 
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-
+    
                 default:
                     throw $e;
             }
         }
     }
+    
 
 
     /**
@@ -695,6 +701,55 @@ class MariaDB extends SQL
 
         return $document;
     }
+
+
+    public function updateDocuments(string $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $ids = [];
+        $binds = [];
+        $sets = [];
+
+        foreach ($documents as $document) {
+            $attributes = $document->getAttributes();
+            $attributes['_createdAt'] = $document->getCreatedAt();
+            $attributes['_updatedAt'] = $document->getUpdatedAt();
+            $attributes['_permissions'] = json_encode($document->getPermissions());
+
+            $id = $document->getId();
+            $ids[] = $id;
+            
+            foreach ($attributes as $attribute => $value) {
+                $bindKey = ':' . $attribute . '_' . $id;
+                $binds[$bindKey] = $value;
+                $sets[$attribute][] = 'WHEN ' . $id . ' THEN ' . $bindKey;
+            }
+        }
+
+        $setClauses = [];
+        foreach ($sets as $attribute => $whenThens) {
+            $setClauses[] = '`' . $attribute . '` = CASE _uid ' . implode(' ', $whenThens) . ' END';
+        }
+
+        $sql = "UPDATE {$this->getSQLTable($collection)}
+                SET " . implode(', ', $setClauses) . "
+                WHERE _uid IN (" . implode(',', $ids) . ")";
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $bindKey => $value) {
+            $stmt->bindValue($bindKey, $value, $this->getPDOType($value));
+        }
+
+        $stmt->execute();
+
+        return $documents;
+    }
+
+
 
     /**
      * Increase or decrease an attribute value

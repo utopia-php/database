@@ -56,63 +56,189 @@ class MariaDBTest extends Base
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
+        $database->create();
+
         return self::$database = $database;
     }
 
     public function testCreateDocuments()
     {
-        static::getDatabase()->createCollection('documents');
+        $count = 100;
+        $collection = 'testCreateDocuments';
 
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'bigint', Database::VAR_INTEGER, 8, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
-        // $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        static::getDatabase()->createCollection($collection);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'colors', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'empty', Database::VAR_STRING, 32, false, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'with-dash', Database::VAR_STRING, 128, false, null));
 
 
-        // // Create an array of documents with random attributes. Dont use the createDocument function
-        // $documents = [];
+        // Create an array of documents with random attributes. Dont use the createDocument function
+        $documents = [];
 
-        // for ($i = 0; $i < 5; $i++) {
-        //     $documents[] = new Document([
-        //         '$permissions' => [
-        //             Permission::read(Role::any()),
-        //             Permission::create(Role::any()),
-        //             Permission::update(Role::any()),
-        //             Permission::delete(Role::any()),
-        //         ],
-        //         'string' => 'text📝',
-        //         'integer' => 5,
-        //         'bigint' => 8589934592, // 2^33
-        //         'float' => 5.55,
-        //         'boolean' => true,
-        //         'colors' => ['pink', 'green', 'blue'],
-        //         'empty' => [],
-        //         'with-dash' => 'Works',
-        //     ]);
-        // }
+        for ($i = 0; $i < $count; $i++) {
+            $documents[] = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => 8589934592, // 2^33
+                'float' => 5.55,
+                'boolean' => true,
+                'colors' => ['pink', 'green', 'blue'],
+                'empty' => [],
+                'with-dash' => 'Works',
+            ]);
+        }
+        $start = microtime(true);
+        $res = static::getDatabase()->createDocuments($collection, $documents);
+        $end = microtime(true);
+        var_dump('createDocuments: '.($end - $start).'s');
 
-        // static::getDatabase()->createDocuments('documents', $documents);
+        $this->assertEquals($count, count($res));
 
-        // $document = $documents[0];
-
-        // $this->assertNotEmpty(true, $document->getId());
-        // $this->assertIsString($document->getAttribute('string'));
-        // $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
-        // $this->assertIsInt($document->getAttribute('integer'));
-        // $this->assertEquals(5, $document->getAttribute('integer'));
-        // $this->assertIsInt($document->getAttribute('bigint'));
-        // $this->assertEquals(8589934592, $document->getAttribute('bigint'));
-        // $this->assertIsFloat($document->getAttribute('float'));
-        // $this->assertEquals(5.55, $document->getAttribute('float'));
-        // $this->assertIsBool($document->getAttribute('boolean'));
-        // $this->assertEquals(true, $document->getAttribute('boolean'));
-        // $this->assertIsArray($document->getAttribute('colors'));
-        // $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-        // $this->assertEquals([], $document->getAttribute('empty'));
-        // $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        foreach ($res as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
+            $this->assertIsFloat($document->getAttribute('float'));
+            $this->assertEquals(5.55, $document->getAttribute('float'));
+            $this->assertIsBool($document->getAttribute('boolean'));
+            $this->assertEquals(true, $document->getAttribute('boolean'));
+            $this->assertIsArray($document->getAttribute('colors'));
+            $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+            $this->assertEquals([], $document->getAttribute('empty'));
+            $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        }
     }
+
+    public function testCreateDocumentsSequential()
+    {
+        $count = 100;
+        $collection = 'testCreateDocumentsSequential';
+
+        static::getDatabase()->createCollection($collection);
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'colors', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'empty', Database::VAR_STRING, 32, false, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'with-dash', Database::VAR_STRING, 128, false, null));
+
+
+        $start = microtime(true);
+        $res = [];
+        for ($i = 0; $i < $count; $i++) {
+            $res[] = static::getDatabase()->createDocument($collection, new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => 8589934592, // 2^33
+                'float' => 5.55,
+                'boolean' => true,
+                'colors' => ['pink', 'green', 'blue'],
+                'empty' => [],
+                'with-dash' => 'Works',
+            ]));
+        }
+        $end = microtime(true);
+        var_dump('createDocumentsSequential: '.($end - $start).'s');
+
+        $this->assertEquals($count, count($res));
+        foreach ($res as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
+            $this->assertIsFloat($document->getAttribute('float'));
+            $this->assertEquals(5.55, $document->getAttribute('float'));
+            $this->assertIsBool($document->getAttribute('boolean'));
+            $this->assertEquals(true, $document->getAttribute('boolean'));
+            $this->assertIsArray($document->getAttribute('colors'));
+            $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+            $this->assertEquals([], $document->getAttribute('empty'));
+            $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        }
+    }
+
+    // public function testUpdateDocuments(Document $document)
+    // {
+    //     $document
+    //         ->setAttribute('string', 'text📝 updated')
+    //         ->setAttribute('integer', 6)
+    //         ->setAttribute('float', 5.56)
+    //         ->setAttribute('boolean', false)
+    //         ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+    //         ->setAttribute('with-dash', 'Works');
+
+    //     $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+
+    //     $this->assertNotEmpty(true, $new->getId());
+    //     $this->assertIsString($new->getAttribute('string'));
+    //     $this->assertEquals('text📝 updated', $new->getAttribute('string'));
+    //     $this->assertIsInt($new->getAttribute('integer'));
+    //     $this->assertEquals(6, $new->getAttribute('integer'));
+    //     $this->assertIsFloat($new->getAttribute('float'));
+    //     $this->assertEquals(5.56, $new->getAttribute('float'));
+    //     $this->assertIsBool($new->getAttribute('boolean'));
+    //     $this->assertEquals(false, $new->getAttribute('boolean'));
+    //     $this->assertIsArray($new->getAttribute('colors'));
+    //     $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+    //     $this->assertEquals('Works', $new->getAttribute('with-dash'));
+
+    //     $oldPermissions = $document->getPermissions();
+
+    //     $new
+    //         ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+    //         ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
+    //         ->setAttribute('$permissions', Permission::update(Role::guests()), Document::SET_TYPE_APPEND)
+    //         ->setAttribute('$permissions', Permission::delete(Role::guests()), Document::SET_TYPE_APPEND);
+
+    //     $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+    //     $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+    //     $this->assertContains('guests', $new->getRead());
+    //     $this->assertContains('guests', $new->getWrite());
+    //     $this->assertContains('guests', $new->getCreate());
+    //     $this->assertContains('guests', $new->getUpdate());
+    //     $this->assertContains('guests', $new->getDelete());
+
+    //     $new->setAttribute('$permissions', $oldPermissions);
+
+    //     $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+    //     $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+    //     $this->assertNotContains('guests', $new->getRead());
+    //     $this->assertNotContains('guests', $new->getWrite());
+    //     $this->assertNotContains('guests', $new->getCreate());
+    //     $this->assertNotContains('guests', $new->getUpdate());
+    //     $this->assertNotContains('guests', $new->getDelete());
+
+    //     return $document;
+    // }
 }

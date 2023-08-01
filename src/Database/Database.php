@@ -2906,11 +2906,8 @@ class Database
                 if (array_key_exists($key, $relationshipKeys)) {
                     continue;
                 }
-                // Skip the nested documents as they will be checked later in recursions.
+
                 $oldAttributeValue = $old->getAttribute($key);
-                if ($oldAttributeValue instanceof Document) {
-                    continue;
-                }
                 // If values are not equal we need to update document.
                 if ($oldAttributeValue !== $value) {
                     $shouldUpdate = true;

@@ -3064,6 +3064,65 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('a')->toString());
+
+        static::getDatabase()->createCollection('parentRelationTest', [], [], [
+            Permission::read(Role::user('a')),
+            Permission::create(Role::user('a')),
+        ]);
+        static::getDatabase()->createCollection('childRelationTest', [], [], [
+            Permission::read(Role::user('a')),
+            Permission::create(Role::user('a')),
+        ]);
+        static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
+        static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
+
+        static::getDatabase()->createRelationship(
+            collection: 'parentRelationTest',
+            relatedCollection: 'childRelationTest',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'childs'
+        );
+
+        // Create document with relationship with nested data
+        $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
+            '$id' => 'parent1',
+            'name' => 'Parent 1',
+            'childs' => [
+                [
+                    '$id' => 'child1',
+                    'name' => 'Child 1',
+                ],
+            ],
+        ]));
+        $this->assertEquals(1, \count($parent['childs']));
+        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', new Document([
+            '$id' => 'parent1',
+            'name'=>'Parent 1',
+            '$collection' => 'parentRelationTest',
+            'childs' => [
+                new Document([
+                    '$id' => 'child1',
+                    '$collection' => 'childRelationTest'
+                ]),
+            ]
+        ]));
+
+        $this->assertEquals($updatedParent->getUpdatedAt(), $parent->getUpdatedAt());
+        $this->assertEquals($updatedParent->getAttribute('childs')[0]->getUpdatedAt(), $parent->getAttribute('childs')[0]->getUpdatedAt());
+
+        static::getDatabase()->deleteCollection('parentRelationTest');
+        static::getDatabase()->deleteCollection('childRelationTest');
+    }
+
     public function testExceptionAttributeLimit(): void
     {
         if ($this->getDatabase()->getLimitForAttributes() > 0) {
@@ -11216,7 +11275,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
-            $document->setAttribute('test', 'ipsum')
+            $document->setAttribute('test', $document->getAttribute('test').'new_value')
         );
     }
 

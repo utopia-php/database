@@ -223,13 +223,46 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
+    public function testQueryTimeoutUsingStaticTimeout(): void
+    {
+        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            static::getDatabase()->createCollection('global-timeouts');
+            $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+            for ($i = 0 ; $i <= 5 ; $i++) {
+                static::getDatabase()->createDocument('global-timeouts', new Document([
+                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ]
+                ]));
+            }
+
+            $this->expectException(Timeout::class);
+            static::getDatabase()->setTimeoutForQueries(1);
+
+            try {
+                static::getDatabase()->find('global-timeouts', [
+                    Query::notEqual('longtext', 'appwrite'),
+                ]);
+            } catch(Timeout $ex) {
+                static::getDatabase()->clearTimeoutForQueries();
+                static::getDatabase()->deleteCollection('global-timeouts');
+                throw $ex;
+            }
+        }
+        $this->expectNotToPerformAssertions();
+    }
+
+
     /**
      * @depends testCreateExistsDelete
      */
     public function testCreateListExistsDeleteCollection(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
-
         $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
@@ -3029,6 +3062,65 @@ abstract class Base extends TestCase
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         return $document;
+    }
+
+    public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('a')->toString());
+
+        static::getDatabase()->createCollection('parentRelationTest', [], [], [
+            Permission::read(Role::user('a')),
+            Permission::create(Role::user('a')),
+        ]);
+        static::getDatabase()->createCollection('childRelationTest', [], [], [
+            Permission::read(Role::user('a')),
+            Permission::create(Role::user('a')),
+        ]);
+        static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
+        static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
+
+        static::getDatabase()->createRelationship(
+            collection: 'parentRelationTest',
+            relatedCollection: 'childRelationTest',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'childs'
+        );
+
+        // Create document with relationship with nested data
+        $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
+            '$id' => 'parent1',
+            'name' => 'Parent 1',
+            'childs' => [
+                [
+                    '$id' => 'child1',
+                    'name' => 'Child 1',
+                ],
+            ],
+        ]));
+        $this->assertEquals(1, \count($parent['childs']));
+        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', new Document([
+            '$id' => 'parent1',
+            'name'=>'Parent 1',
+            '$collection' => 'parentRelationTest',
+            'childs' => [
+                new Document([
+                    '$id' => 'child1',
+                    '$collection' => 'childRelationTest'
+                ]),
+            ]
+        ]));
+
+        $this->assertEquals($updatedParent->getUpdatedAt(), $parent->getUpdatedAt());
+        $this->assertEquals($updatedParent->getAttribute('childs')[0]->getUpdatedAt(), $parent->getAttribute('childs')[0]->getUpdatedAt());
+
+        static::getDatabase()->deleteCollection('parentRelationTest');
+        static::getDatabase()->deleteCollection('childRelationTest');
     }
 
     public function testExceptionAttributeLimit(): void
@@ -11315,7 +11407,7 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
-            $document->setAttribute('test', $document->getAttribute('test').'value')
+            $document->setAttribute('test', $document->getAttribute('test').'new_value')
         );
     }
 

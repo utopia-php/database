@@ -2881,6 +2881,9 @@ class Database
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
 
         $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
@@ -2892,38 +2895,28 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            $compareChanges = (function (array | Document $document, array | Document $old) use (&$compareChanges, &$relationships): bool {
-                $isDifferent = false;
-                // Compare if the document has any changes
-                foreach ($document as $key=>$value) {
-                    $isRelationKey = false;
-                    // Check if key is relationship key, no need to compare relationships
-                    foreach ($relationships as $relationship) {
-                        if ($key === $relationship->getAttribute('key')) {
-                            $isRelationKey = true;
-                            break;
-                        }
-                    }
-                    if ($isRelationKey) {
-                        continue;
-                    }
-                    $oldAttributeValue = ($old instanceof Document) ? $old->getAttribute($key) : $old[$key] ?? null;
-                    // Skip the nested documents as they will be checked later in recursions.
-                    if ($oldAttributeValue instanceof Document) {
-                        continue;
-                    } elseif (\is_array($oldAttributeValue) && \is_array($value)) {
-                        if ($compareChanges($value, $oldAttributeValue)) {
-                            $isDifferent = true;
-                        }
-                    } elseif ($oldAttributeValue !== $value) {
-                        $isDifferent = true;
-                    }
+            $relationshipKeys = [];
+            foreach ($relationships as $relationship) {
+                $relationshipKey = $relationship->getAttribute('key');
+                $relationshipKeys[$relationshipKey] =   $relationshipKey;
+            }
+            // Compare if the document has any changes
+            foreach ($document as $key=>$value) {
+                // Skip the nested documents as they will be checked later in recursions.
+                if (array_key_exists($key, $relationshipKeys)) {
+                    continue;
                 }
-                return $isDifferent;
-            });
-
-            $shouldUpdate = $compareChanges($document, $old);
-
+                // Skip the nested documents as they will be checked later in recursions.
+                $oldAttributeValue = $old->getAttribute($key);
+                if ($oldAttributeValue instanceof Document) {
+                    continue;
+                }
+                // If values are not equal we need to update document.
+                if ($oldAttributeValue !== $value) {
+                    $shouldUpdate = true;
+                    break;
+                }
+            }
             if ($shouldUpdate && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
@@ -2934,6 +2927,8 @@ class Database
 
         if ($shouldUpdate) {
             $document->setAttribute('$updatedAt', $time);
+        } else {
+            $document->setAttribute('$updatedAt', $old->getUpdatedAt());
         }
 
         // Check if document was updated after the request timestamp
@@ -4248,6 +4243,15 @@ class Database
         return $sum;
     }
 
+    public function setTimeoutForQueries(int $milliseconds): void
+    {
+        $this->adapter->setTimeoutForQueries($milliseconds);
+    }
+
+    public function clearTimeoutForQueries(): void
+    {
+        $this->adapter->clearTimeoutForQueries();
+    }
     /**
      * Add Attribute Filter
      *

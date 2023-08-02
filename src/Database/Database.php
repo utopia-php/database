@@ -2885,10 +2885,6 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
-
         $validator = new Authorization(self::PERMISSION_UPDATE);
         $shouldUpdate = false;
 

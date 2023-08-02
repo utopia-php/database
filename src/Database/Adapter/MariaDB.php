@@ -427,8 +427,8 @@ class MariaDB extends SQL
 
         return $document;
     }
-
-    public function createDocuments(string $collection, array $documents): array
+    
+    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
         if (empty($documents)) {
             return $documents;
@@ -438,104 +438,20 @@ class MariaDB extends SQL
     
         try {
             $name = $this->filter($collection);
-
-            foreach ($documents as $document) {
-                $attributes = $document->getAttributes();
-                $attributes['_createdAt'] = $document->getCreatedAt();
-                $attributes['_updatedAt'] = $document->getUpdatedAt();
-                $attributes['_permissions'] = json_encode($document->getPermissions());
-
-                $columns = '';
-                $columnNames = '';
-                $bindIndex = 0;
-                $bindValues = [];
-                foreach ($attributes as $attribute => $value) {
-                    $column = $this->filter($attribute);
-                    $bindKey = 'key_' . $bindIndex;
-                    $columns .= "`{$column}`, ";
-    
-                    if (is_array($value)) { // arrays & objects should be saved as strings
-                        $value = json_encode($value);
-                    }
-                    $value = (is_bool($value)) ? (int)$value : $value;
-    
-                    $columnNames .= ':' . $bindKey . ', ';
-                    $bindValues[$bindKey] = $value;
-                    $bindIndex++;
-                }
-    
-                $columnNames .= ':_uid';
-                $bindValues['_uid'] = $document->getId();
-    
-                $stmt = $this->getPDO()
-                    ->prepare("INSERT INTO {$this->getSQLTable($name)} 
-                ({$columns}_uid) VALUES ({$columnNames})");
-
-                foreach ($bindValues as $key => $value) {
-                    $stmt->bindValue(':' . $key, $value, $this->getPDOType($value));
-                }
-
-                $stmt->execute();
-
-                $permissions = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    foreach ($document->getPermissionsByType($type) as $permission) {
-                        $permission = \str_replace('"', '', $permission);
-                        $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
-                    }
-                }
-    
-                if (!empty($permissions)) {
-                    $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-                    $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-                    $stmtPermissions->execute();
-                    $permissions = [];
-                }
-            }
-    
-            if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
-            }
-
-            return $documents;
-
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
-    
-                default:
-                    throw $e;
-            }
-        }
-    }
-    
-    public function createDocumentsBatch(string $collection, array $documents, int $size): array
-    {
-        if (empty($documents)) {
-            return $documents;
-        }
-    
-        $this->getPDO()->beginTransaction();
-    
-        try {
-            $name = $this->filter($collection);
-            $batches = array_chunk($documents, $size);
+            $batches = array_chunk($documents, $batchSize);
     
             foreach ($batches as $batch) {
                 $bindIndex = 0;
                 $batchKeys = [];
-                $batchValues = [];
+                $bindValues = [];
                 $permissions = [];
+                
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
-
 
                     $columns = array_map(function ($attribute) {
                         $column = $this->filter($attribute);
@@ -552,7 +468,7 @@ class MariaDB extends SQL
                         $value = (is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = ':' . $bindKey;
-                        $batchValues[$bindKey] = $value;
+                        $bindValues[$bindKey] = $value;
                         $bindIndex++;
                     }
         
@@ -569,7 +485,7 @@ class MariaDB extends SQL
                     ->prepare("INSERT INTO {$this->getSQLTable($name)} 
                 $columns VALUES " . implode(', ', $batchKeys));
     
-                foreach ($batchValues as $key => $value) {
+                foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
                 }
     
@@ -592,6 +508,8 @@ class MariaDB extends SQL
     
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
+            var_dump($e->getMessage());
+            var_dump($e->getCode());
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:

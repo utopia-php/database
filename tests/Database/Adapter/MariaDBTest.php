@@ -61,6 +61,7 @@ class MariaDBTest extends Base
         return self::$database = $database;
     }
 
+
     public function testCreateDocuments()
     {
         $count = 100000;
@@ -99,137 +100,11 @@ class MariaDBTest extends Base
                 'with-dash' => 'Works',
             ]);
         }
-        $start = microtime(true);
-        $res = static::getDatabase()->createDocuments($collection, $documents);
-        $end = microtime(true);
-        var_dump('createDocuments: '.($end - $start).'s');
+
+        $res = static::getDatabase()->createDocuments($collection, $documents, 14000);
 
         $this->assertEquals($count, count($res));
 
-        foreach ($res as $document) {
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
-            $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(5, $document->getAttribute('integer'));
-            $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
-            $this->assertIsFloat($document->getAttribute('float'));
-            $this->assertEquals(5.55, $document->getAttribute('float'));
-            $this->assertIsBool($document->getAttribute('boolean'));
-            $this->assertEquals(true, $document->getAttribute('boolean'));
-            $this->assertIsArray($document->getAttribute('colors'));
-            $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-            $this->assertEquals([], $document->getAttribute('empty'));
-            $this->assertEquals('Works', $document->getAttribute('with-dash'));
-        }
-    }
-
-
-    public function testCreateDocumentsBatch()
-    {
-        $count = 100000;
-        $collection = 'testCreateDocumentsBatch';
-
-        static::getDatabase()->createCollection($collection);
-
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'boolean', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'colors', Database::VAR_STRING, 32, true, null, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'empty', Database::VAR_STRING, 32, false, null, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'with-dash', Database::VAR_STRING, 128, false, null));
-
-
-        // Create an array of documents with random attributes. Dont use the createDocument function
-        $documents = [];
-
-        for ($i = 0; $i < $count; $i++) {
-            $documents[] = new Document([
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'string' => 'text📝',
-                'integer' => 5,
-                'bigint' => 8589934592, // 2^33
-                'float' => 5.55,
-                'boolean' => true,
-                'colors' => ['pink', 'green', 'blue'],
-                'empty' => [],
-                'with-dash' => 'Works',
-            ]);
-        }
-        $start = microtime(true);
-        $res = static::getDatabase()->createDocumentsBatch($collection, $documents, 10000);
-        $end = microtime(true);
-        var_dump('createDocumentsBatch: '.($end - $start).'s');
-
-        $this->assertEquals($count, count($res));
-
-        foreach ($res as $document) {
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertIsString($document->getAttribute('string'));
-            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
-            $this->assertIsInt($document->getAttribute('integer'));
-            $this->assertEquals(5, $document->getAttribute('integer'));
-            $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
-            $this->assertIsFloat($document->getAttribute('float'));
-            $this->assertEquals(5.55, $document->getAttribute('float'));
-            $this->assertIsBool($document->getAttribute('boolean'));
-            $this->assertEquals(true, $document->getAttribute('boolean'));
-            $this->assertIsArray($document->getAttribute('colors'));
-            $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-            $this->assertEquals([], $document->getAttribute('empty'));
-            $this->assertEquals('Works', $document->getAttribute('with-dash'));
-        }
-    }
-
-    public function testCreateDocumentsSequential()
-    {
-        $count = 100000;
-        $collection = 'testCreateDocumentsSequential';
-
-        static::getDatabase()->createCollection($collection);
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'boolean', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'colors', Database::VAR_STRING, 32, true, null, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'empty', Database::VAR_STRING, 32, false, null, true, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'with-dash', Database::VAR_STRING, 128, false, null));
-
-
-        $start = microtime(true);
-        $res = [];
-        for ($i = 0; $i < $count; $i++) {
-            $res[] = static::getDatabase()->createDocument($collection, new Document([
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'string' => 'text📝',
-                'integer' => 5,
-                'bigint' => 8589934592, // 2^33
-                'float' => 5.55,
-                'boolean' => true,
-                'colors' => ['pink', 'green', 'blue'],
-                'empty' => [],
-                'with-dash' => 'Works',
-            ]));
-        }
-        $end = microtime(true);
-        var_dump('createDocumentsSequential: '.($end - $start).'s');
-
-        $this->assertEquals($count, count($res));
         foreach ($res as $document) {
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));

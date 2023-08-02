@@ -100,6 +100,8 @@ class Database
     const EVENT_INDEX_CREATE = 'index_create';
     const EVENT_INDEX_DELETE = 'index_delete';
 
+    // Insert Batch Size
+    const INSERT_BATCH_SIZE = 100;
 
     /**
      * @var Adapter
@@ -1449,55 +1451,6 @@ class Database
     }
 
     /**
-     * Create Document
-     *
-     * @param string $collection
-     * @param Document $document
-     *
-     * @return Document
-     *
-     * @throws AuthorizationException
-     * @throws StructureException
-     * @throws Exception|Throwable
-     */
-    public function createDocuments(string $collection, array $documents): array
-    {
-        $collection = $this->silent(fn() => $this->getCollection($collection));
-
-        $time = DateTime::now();
-
-        $documents = array_map(function($document) use ($collection, $time){
-            $document
-                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
-                ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', $time)
-                ->setAttribute('$updatedAt', $time);
-
-            $document = $this->encode($collection, $document);
-
-            $validator = new Structure($collection);
-
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
-            }
-
-            return $document;
-        }, $documents);
-
-        $documents = $this->adapter->createDocuments($collection->getId(), $documents);
-
-        $documents = array_map(function($document) use ($collection){
-            $document = $this->decode($collection, $document);
-
-            $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
-
-            return $document;
-        }, $documents);
-
-        return $documents;
-    }
-
-    /**
      * Create Documents in a batch
      *
      * @param string $collection
@@ -1509,7 +1462,7 @@ class Database
      * @throws StructureException
      * @throws Exception|Throwable
      */
-    public function createDocumentsBatch(string $collection, array $documents, int $size): array
+    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
     {
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
@@ -1533,7 +1486,7 @@ class Database
             return $document;
         }, $documents);
 
-        $documents = $this->adapter->createDocumentsBatch($collection->getId(), $documents, $size);
+        $documents = $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
 
         $documents = array_map(function($document) use ($collection){
             $document = $this->decode($collection, $document);

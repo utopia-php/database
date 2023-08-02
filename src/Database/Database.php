@@ -3022,7 +3022,12 @@ class Database
                         switch (\gettype($value)) {
                             case 'string':
                                 $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
-
+                                if ($related->isEmpty()) {
+                                    // If no such document exists in related collection
+                                    // For one-one we need to update the related key to old value, either null if no relation exists or old related document id
+                                    $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                    break;
+                                }
                                 if (
                                     $oldValue?->getId() !== $value
                                     && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [

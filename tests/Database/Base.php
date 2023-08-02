@@ -4527,6 +4527,23 @@ abstract class Base extends TestCase
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('country', 'country1', new Document([
+            '$id' => 'country1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'England',
+            '$collection' => 'country',
+            'city' => 'no-city'
+        ]));
+
+        $country1Document = static::getDatabase()->getDocument('country', 'country1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals('city1', $country1Document->getAttribute('city')->getAttribute('$id'));
+
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');

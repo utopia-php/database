@@ -4527,7 +4527,8 @@ class Database
         $keys = [];
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
-                $keys[] = $attribute['key'];
+                // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes
+                $keys[] = $attribute['key'] ?? $attribute['$id'];
             }
         }
 

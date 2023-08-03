@@ -2894,7 +2894,7 @@ class Database
             $relationshipKeys = [];
             foreach ($relationships as $relationship) {
                 $relationshipKey = $relationship->getAttribute('key');
-                $relationshipKeys[$relationshipKey] =   $relationshipKey;
+                $relationshipKeys[$relationshipKey] = $relationshipKey;
             }
             // Compare if the document has any changes
             foreach ($document as $key=>$value) {

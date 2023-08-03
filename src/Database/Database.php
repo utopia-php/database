@@ -2881,6 +2881,9 @@ class Database
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
         $shouldUpdate = false;
@@ -2888,13 +2891,20 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
+            $relationshipKeys = [];
+            foreach ($relationships as $relationship) {
+                $relationshipKey = $relationship->getAttribute('key');
+                $relationshipKeys[$relationshipKey] = $relationshipKey;
+            }
             // Compare if the document has any changes
             foreach ($document as $key=>$value) {
                 // Skip the nested documents as they will be checked later in recursions.
-                $oldAttributeValue = $old->getAttribute($key);
-                if ($oldAttributeValue instanceof Document) {
+                if (array_key_exists($key, $relationshipKeys)) {
                     continue;
                 }
+
+                $oldAttributeValue = $old->getAttribute($key);
+                // If values are not equal we need to update document.
                 if ($oldAttributeValue !== $value) {
                     $shouldUpdate = true;
                     break;
@@ -2910,6 +2920,8 @@ class Database
 
         if ($shouldUpdate) {
             $document->setAttribute('$updatedAt', $time);
+        } else {
+            $document->setAttribute('$updatedAt', $old->getUpdatedAt());
         }
 
         // Check if document was updated after the request timestamp

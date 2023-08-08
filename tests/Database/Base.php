@@ -281,6 +281,42 @@ abstract class Base extends TestCase
         $this->assertGreaterThan($size1, $size2);
     }
 
+    public function testSizeFullText(): void
+    {
+        if (static::getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+
+        static::getDatabase()->createCollection('fullTextTest');
+
+        $size1 = static::getDatabase()->getSizeOfCollection('fullTextTest');
+
+        static::getDatabase()->createAttribute('fullTextTest', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('fullTextTest', 'string2', Database::VAR_STRING, 254, true);
+        static::getDatabase()->createAttribute('fullTextTest', 'string3', Database::VAR_STRING, 254, true);
+
+        $loopCount = 1000;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            static::getDatabase()->createDocument('fullTextTest', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
+            ]));
+        }
+
+        $size2 = static::getDatabase()->getSizeOfCollection('fullTextTest');
+
+        $this->assertGreaterThan($size1, $size2);
+
+        static::getDatabase()->createIndex('fullTextTest', 'index_fulltext1', Database::INDEX_FULLTEXT, ['string1']);
+
+        $size3 = static::getDatabase()->getSizeOfCollection('fullTextTest');
+
+        $this->assertGreaterThan($size2, $size3);
+        } else {
+            $this->expectNotToPerformAssertions();
+        }
+    }
+
     public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');

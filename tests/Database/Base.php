@@ -4097,9 +4097,9 @@ abstract class Base extends TestCase
 
         // Update a document with non existing related document. It should not get added to the list.
         static::getDatabase()->updateDocument(
-        'person', 
-        'person1', 
-        $person1->setAttribute('library', 'no-library')
+            'person',
+            'person1',
+            $person1->setAttribute('library', 'no-library')
         );
 
         $person1Document = static::getDatabase()->getDocument('person', 'person1');

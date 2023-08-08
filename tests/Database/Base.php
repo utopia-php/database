@@ -241,14 +241,14 @@ abstract class Base extends TestCase
             }
 
             $this->expectException(Timeout::class);
-            static::getDatabase()->setTimeoutForQueries(1);
+            static::getDatabase()->setTimeout(1);
 
             try {
                 static::getDatabase()->find('global-timeouts', [
                     Query::notEqual('longtext', 'appwrite'),
                 ]);
             } catch(Timeout $ex) {
-                static::getDatabase()->clearTimeoutForQueries();
+                static::getDatabase()->clearTimeout();
                 static::getDatabase()->deleteCollection('global-timeouts');
                 throw $ex;
             }

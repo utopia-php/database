@@ -1016,7 +1016,7 @@ class Postgres extends SQL
         ";
 
         if ($timeout || self::$timeout) {
-            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1116,7 +1116,7 @@ class Postgres extends SQL
         ";
 
         if ($timeout || self::$timeout) {
-            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1175,7 +1175,7 @@ class Postgres extends SQL
         ";
 
         if ($timeout || self::$timeout) {
-            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1466,7 +1466,7 @@ class Postgres extends SQL
      * @param int $milliseconds
      * @return string
      */
-    protected function setTimeout(string $sql, int $milliseconds): string
+    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
     {
         return "SET statement_timeout = {$milliseconds};{$sql};SET statement_timeout = 0;";
     }

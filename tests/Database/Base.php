@@ -4096,21 +4096,15 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('person', 'person1', new Document([
-            '$id' => 'person1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Person 1',
-            '$collection' => 'person',
-            'library' => 'no-library'
-        ]));
+        static::getDatabase()->updateDocument(
+        'person', 
+        'person1', 
+        $person1->setAttribute('library', 'no-library')
+        );
 
         $person1Document = static::getDatabase()->getDocument('person', 'person1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('library1', $person1Document->getAttribute('library')->getAttribute('$id'));
+        $this->assertEquals('null', $person1Document->getAttribute('library'));
 
         // Update through create
         $library10 = static::getDatabase()->createDocument('library', new Document([
@@ -4528,21 +4522,11 @@ abstract class Base extends TestCase
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('country', 'country1', new Document([
-            '$id' => 'country1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'England',
-            '$collection' => 'country',
-            'city' => 'no-city'
-        ]));
+        static::getDatabase()->updateDocument('country', 'country1', $country1->setAttribute('city', 'no-city'));
 
         $country1Document = static::getDatabase()->getDocument('country', 'country1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('city1', $country1Document->getAttribute('city')->getAttribute('$id'));
+        $this->assertEquals('null', $country1Document->getAttribute('city'));
 
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
@@ -5170,20 +5154,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('artist', 'artist1', new Document([
-            '$id' => 'artist1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Artist 1',
-            '$collection' => 'artist',
-            'albums' => [
-                'album1',
-                'no-album'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('artist', 'artist1', $artist1->setAttribute('albums', ['album1, no-album']));
 
         $artist1Document = static::getDatabase()->getDocument('artist', 'artist1');
         // Assert document does not contain non existing relation document.
@@ -5569,20 +5540,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('customer', 'customer1', new Document([
-            '$id' => 'customer1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Customer 1',
-            '$collection' => 'customer',
-            'accounts' => [
-                'account1',
-                'no-account'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('customer', 'customer1', $customer1->setAttribute('accounts', ['account1','no-account']));
 
         $customer1Document = static::getDatabase()->getDocument('customer', 'customer1');
         // Assert document does not contain non existing relation document.
@@ -6030,21 +5988,11 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('review', 'review1', new Document([
-            '$id' => 'review1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Review 1',
-            '$collection' => 'review',
-            'movie' => 'no-movie'
-        ]));
+        static::getDatabase()->updateDocument('review', 'review1', $review1->setAttribute('movie', 'no-movie'));
 
         $review1Document = static::getDatabase()->getDocument('review', 'review1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('movie1', $review1Document->getAttribute('movie')->getAttribute('$id'));
+        $this->assertEquals('null', $review1Document->getAttribute('movie'));
 
         // Create document with relationship to existing document by ID
         $review10 = static::getDatabase()->createDocument('review', new Document([
@@ -6374,21 +6322,11 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('product', 'product1', new Document([
-            '$id' => 'product1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Product 1',
-            '$collection' => 'product',
-            'store' => 'no-store'
-        ]));
+        static::getDatabase()->updateDocument('product', 'product1', $product1->setAttribute('store', 'no-store'));
 
         $product1Document = static::getDatabase()->getDocument('product', 'product1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('store1', $product1Document->getAttribute('store')->getAttribute('$id'));
+        $this->assertEquals('null', $product1Document->getAttribute('store'));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('store', new Document([
@@ -6851,20 +6789,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('playlist', 'playlist1', new Document([
-            '$id' => 'playlist1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Playlist 1',
-            '$collection' => 'playlist',
-            'songs' => [
-                'song1',
-                'no-song'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('playlist', 'playlist1', $playlist1->setAttribute('songs', ['song1','no-song']));
 
         $playlist1Document = static::getDatabase()->getDocument('playlist', 'playlist1');
         // Assert document does not contain non existing relation document.
@@ -7162,20 +7087,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('students', 'student1', new Document([
-            '$id' => 'student1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Student 1',
-            '$collection' => 'students',
-            'classes' => [
-                'class1',
-                'no-class'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('students', 'student1', $student1->setAttribute('classes', ['class1', 'no-class']));
 
         $student1Document = static::getDatabase()->getDocument('students', 'student1');
         // Assert document does not contain non existing relation document.

@@ -2999,8 +2999,8 @@ class Database
                                 $related = $this->getDocument($relatedCollection->getId(), $value);
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
-                                    // For one-one we need to update the related key to old value, either null if no relation exists or old related document id
-                                    $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
                                 }
                             } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
@@ -3024,8 +3024,8 @@ class Database
                                 $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
-                                    // For one-one we need to update the related key to old value, either null if no relation exists or old related document id
-                                    $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
                                     break;
                                 }
                                 if (
@@ -3184,9 +3184,9 @@ class Database
                         if (\is_string($value)) {
                             $related = $this->getDocument($relatedCollection->getId(), $value);
                             if ($related->isEmpty()) {
-                                //If no such document exists in related collection
-                                //For one-one we need to update the related key to old value, either null if no relation exists or old related document id
-                                $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                // If no such document exists in related collection
+                                // For many-one we need to update the related key to null if no relation exists
+                                $document->setAttribute($key, null);
                             }
                             $this->deleteCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {

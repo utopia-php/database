@@ -3007,7 +3007,14 @@ class Database
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
-                            if ($value instanceof Document) {
+                            if (\is_string($value)) {
+                                $related = $this->getDocument($relatedCollection->getId(), $value);
+                                if ($related->isEmpty()) {
+                                    // If no such document exists in related collection
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
+                                }
+                            } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
                                     $collection,
                                     $relatedCollection,
@@ -3027,7 +3034,12 @@ class Database
                         switch (\gettype($value)) {
                             case 'string':
                                 $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
-
+                                if ($related->isEmpty()) {
+                                    // If no such document exists in related collection
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
+                                    break;
+                                }
                                 if (
                                     $oldValue?->getId() !== $value
                                     && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
@@ -3145,6 +3157,10 @@ class Database
                                         $this->getDocument($relatedCollection->getId(), $relation)
                                     );
 
+                                    if ($related->isEmpty()) {
+                                        continue;
+                                    }
+
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $related->getId(),
@@ -3178,6 +3194,12 @@ class Database
                         }
 
                         if (\is_string($value)) {
+                            $related = $this->getDocument($relatedCollection->getId(), $value);
+                            if ($related->isEmpty()) {
+                                // If no such document exists in related collection
+                                // For many-one we need to update the related key to null if no relation exists
+                                $document->setAttribute($key, null);
+                            }
                             $this->deleteCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             $related = $this->getDocument($relatedCollection->getId(), $value->getId());
@@ -3245,7 +3267,7 @@ class Database
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds)) {
+                                if (\in_array($relation, $oldIds) || $this->getDocument($relatedCollection->getId(), $relation)->isEmpty()) {
                                     continue;
                                 }
                             } elseif ($relation instanceof Document) {

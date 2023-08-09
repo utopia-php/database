@@ -4187,6 +4187,23 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument(
+            'person',
+            'person1',
+            $person1->setAttribute('library', 'no-library')
+        );
+
+        $person1Document = static::getDatabase()->getDocument('person', 'person1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(null, $person1Document->getAttribute('library'));
+
+        static::getDatabase()->updateDocument(
+            'person',
+            'person1',
+            $person1->setAttribute('library', 'library1')
+        );
+
         // Update through create
         $library10 = static::getDatabase()->createDocument('library', new Document([
             '$id' => 'library10',
@@ -4602,6 +4619,13 @@ abstract class Base extends TestCase
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'no-city'));
+
+        $country1Document = static::getDatabase()->getDocument('country', 'country1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(null, $country1Document->getAttribute('city'));
+        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'city1'));
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');
@@ -5227,6 +5251,13 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('artist', 'artist1', $artist1->setAttribute('albums', ['album1', 'no-album']));
+
+        $artist1Document = static::getDatabase()->getDocument('artist', 'artist1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(1, \count($artist1Document->getAttribute('albums')));
+
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('album', new Document([
             '$id' => 'album2',
@@ -5605,6 +5636,14 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
+
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('customer', 'customer1', $customer1->setAttribute('accounts', ['account1','no-account']));
+
+        $customer1Document = static::getDatabase()->getDocument('customer', 'customer1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(1, \count($customer1Document->getAttribute('accounts')));
+
         // Create document with relationship with related ID
         $account2 = static::getDatabase()->createDocument('account', new Document([
             '$id' => 'account2',
@@ -6046,6 +6085,15 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('review', 'review1', $review1->setAttribute('movie', 'no-movie'));
+
+        $review1Document = static::getDatabase()->getDocument('review', 'review1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(null, $review1Document->getAttribute('movie'));
+
+        static::getDatabase()->updateDocument('review', 'review1', $review1->setAttribute('movie', 'movie1'));
+
         // Create document with relationship to existing document by ID
         $review10 = static::getDatabase()->createDocument('review', new Document([
             '$id' => 'review10',
@@ -6372,6 +6420,15 @@ abstract class Base extends TestCase
                 'opensAt' => '09:00',
             ],
         ]));
+
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('product', 'product1', $product1->setAttribute('store', 'no-store'));
+
+        $product1Document = static::getDatabase()->getDocument('product', 'product1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(null, $product1Document->getAttribute('store'));
+
+        static::getDatabase()->updateDocument('product', 'product1', $product1->setAttribute('store', 'store1'));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('store', new Document([
@@ -6833,6 +6890,13 @@ abstract class Base extends TestCase
             ]
         ]));
 
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('playlist', 'playlist1', $playlist1->setAttribute('songs', ['song1','no-song']));
+
+        $playlist1Document = static::getDatabase()->getDocument('playlist', 'playlist1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(1, \count($playlist1Document->getAttribute('songs')));
+
         $documents = static::getDatabase()->find('playlist', [
             Query::select(['name']),
             Query::limit(1)
@@ -7123,6 +7187,13 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
+
+        // Update a document with non existing related document. It should not get added to the list.
+        static::getDatabase()->updateDocument('students', 'student1', $student1->setAttribute('classes', ['class1', 'no-class']));
+
+        $student1Document = static::getDatabase()->getDocument('students', 'student1');
+        // Assert document does not contain non existing relation document.
+        $this->assertEquals(1, \count($student1Document->getAttribute('classes')));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('classes', new Document([

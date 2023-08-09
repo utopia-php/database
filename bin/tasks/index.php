@@ -27,20 +27,19 @@ $cli
     ->param('adapter', '', new Text(0), 'Database adapter', false)
     ->param('name', '', new Text(0), 'Name of created database.', false)
     ->action(function ($adapter, $name) {
-
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
         switch ($adapter) {
             case 'mongodb':
-              $client = new Client(
-                  $name,
-                  'mongo',
-                  27017,
-                  'root',
-                  'example'
-                  , false
-               );
+                $client = new Client(
+                    $name,
+                    'mongo',
+                    27017,
+                    'root',
+                    'example',
+                    false
+                );
 
                 $database = new Database(new Mongo($client), $cache);
                 break;
@@ -112,5 +111,3 @@ $cli
     ->action(function (Exception $error) {
         Console::error($error->getMessage());
     });
-
-

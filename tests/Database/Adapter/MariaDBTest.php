@@ -12,10 +12,7 @@ use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
 {
-    /**
-     * @var Database
-     */
-    static $database = null;
+    public static ?Database $database = null;
 
     // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
@@ -24,7 +21,7 @@ class MariaDBTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
         return "mariadb";
     }
@@ -32,9 +29,9 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 
@@ -53,6 +50,17 @@ class MariaDBTest extends Base
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
+        if ($database->exists('utopiaTests')) {
+            $database->delete('utopiaTests');
+        }
+
+        $database->create();
+
         return self::$database = $database;
+    }
+
+    public static function killDatabase(): void
+    {
+        self::$database = null;
     }
 }

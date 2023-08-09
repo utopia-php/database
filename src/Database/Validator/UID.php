@@ -2,8 +2,6 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Validator\Key;
-
 class UID extends Key
 {
     /**

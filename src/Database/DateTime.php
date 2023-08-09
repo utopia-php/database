@@ -2,7 +2,7 @@
 
 namespace Utopia\Database;
 
-use Exception;
+use Utopia\Database\Exception as DatabaseException;
 
 class DateTime
 {
@@ -35,23 +35,35 @@ class DateTime
      * @param \DateTime $date
      * @param int $seconds
      * @return string
+     * @throws DatabaseException
      */
     public static function addSeconds(\DateTime $date, int $seconds): string
     {
-        $date->add(\DateInterval::createFromDateString($seconds . ' seconds'));
+        $interval  = \DateInterval::createFromDateString($seconds . ' seconds');
+
+        if (!$interval) {
+            throw new DatabaseException('Invalid interval');
+        }
+
+        $date->add($interval);
+
         return self::format($date);
     }
 
     /**
      * @param string $datetime
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public static function setTimezone(string $datetime): string
     {
-        $value = new \DateTime($datetime);
-        $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
-        return DateTime::format($value);
+        try {
+            $value = new \DateTime($datetime);
+            $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+            return DateTime::format($value);
+        } catch (\Exception $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     /**
@@ -60,12 +72,14 @@ class DateTime
      */
     public static function formatTz(?string $dbFormat): ?string
     {
-        if (is_null($dbFormat)) return null;
+        if (is_null($dbFormat)) {
+            return null;
+        }
 
         try {
             $value = new \DateTime($dbFormat);
             return $value->format(self::$formatTz);
-        } catch (\Throwable $th) {
+        } catch (\Throwable) {
             return $dbFormat;
         }
     }

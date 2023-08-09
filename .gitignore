@@ -14,3 +14,4 @@ database.sql
 Makefile
 .envrc
 .vscode
+tmp

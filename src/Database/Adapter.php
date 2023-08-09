@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Utopia\Database\Exception as DatabaseException;
 
 abstract class Adapter
 {
@@ -17,9 +18,11 @@ abstract class Adapter
     protected string $defaultDatabase = '';
 
     /**
-     * @var array
+     * @var array<string, mixed>
      */
     protected array $debug = [];
+
+    protected static ?int $timeout = null;
 
     /**
      * @param string $key
@@ -35,7 +38,7 @@ abstract class Adapter
     }
 
     /**
-     * @return array
+     * @return array<string, mixed>
      */
     public function getDebug(): array
     {
@@ -66,7 +69,7 @@ abstract class Adapter
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);
@@ -80,13 +83,13 @@ abstract class Adapter
      * Get namespace of current set scope
      *
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         return $this->namespace;
@@ -100,12 +103,13 @@ abstract class Adapter
      * @param string $name
      * @param bool $reset
      *
+     * @return bool
      * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new Exception('Missing database');
+            throw new DatabaseException('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -125,7 +129,7 @@ abstract class Adapter
     public function getDefaultDatabase(): string
     {
         if (empty($this->defaultDatabase)) {
-            throw new Exception('Missing default database');
+            throw new DatabaseException('Missing default database');
         }
 
         return $this->defaultDatabase;
@@ -133,8 +137,6 @@ abstract class Adapter
 
     /**
      * Ping Database
-     *
-     * @param string $name
      *
      * @return bool
      */
@@ -163,7 +165,7 @@ abstract class Adapter
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      */
     abstract public function list(): array;
 
@@ -180,8 +182,8 @@ abstract class Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes (optional)
+     * @param array<Document> $indexes (optional)
      * @return bool
      */
     abstract public function createCollection(string $name, array $attributes = [], array $indexes = []): bool;
@@ -202,8 +204,8 @@ abstract class Adapter
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
-     *
      * @return bool
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
@@ -215,6 +217,7 @@ abstract class Adapter
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
      *
      * @return bool
@@ -242,6 +245,46 @@ abstract class Adapter
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayKey
+     * @return bool
+     */
+    abstract public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool;
+
+    /**
+     * Update Relationship
+     *
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     */
+    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
+
+    /**
+     * Delete Relationship
+     *
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     */
+    abstract public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool;
+
+    /**
      * Rename Index
      *
      * @param string $collection
@@ -257,9 +300,9 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      *
      * @return bool
      */
@@ -280,7 +323,7 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $id
-     * @param Query[] $selections
+     * @param array<Query> $queries
      * @return Document
      */
     abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
@@ -321,40 +364,41 @@ abstract class Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param Query[] $queries
-     * @param int $limit
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param int|null $timeout
-     * @return Document[]
+     *
+     * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
 
     /**
      * Sum an attribute
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
-     * @param int $max
+     * @param array<Query> $queries
+     * @param int|null $max
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], int $max = 0);
+    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int;
 
     /**
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
-     * @param int $max
+     * @param array<Query> $queries
+     * @param int|null $max
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], int $max = 0): int;
+    abstract public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int;
 
     /**
      * Get max STRING limit
@@ -442,6 +486,13 @@ abstract class Adapter
     abstract public function getSupportForTimeouts(): bool;
 
     /**
+     * Are relationships supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForRelationships(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -493,16 +544,16 @@ abstract class Adapter
     /**
      * Get list of keywords that cannot be used
      *
-     * @return string[]
+     * @return array<string>
      */
     abstract public function getKeywords(): array;
 
     /**
      * Get an attribute projection given a list of selected attributes
      *
-     * @param string[] $selections
+     * @param array<string> $selections
      * @param string $prefix
-     * @return string[]|string
+     * @return mixed
      */
     abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
 
@@ -541,7 +592,7 @@ abstract class Adapter
         $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if (\is_null($value)) {
-            throw new Exception('Failed to filter key');
+            throw new DatabaseException('Failed to filter key');
         }
 
         return $value;
@@ -586,6 +637,44 @@ abstract class Adapter
      * @return bool
      * @throws Exception
      */
-    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null):bool;
+    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool;
 
+    /**
+     * @return int
+     */
+    abstract public function getMaxIndexLength(): int;
+
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library. Once this timeout is set, any database
+     * query that takes longer than the specified time will be automatically
+     * terminated by the library, and an appropriate error or exception will be
+     * raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @return void
+     *
+     * @throws \Exception The provided timeout value must be greater than or equal to 0.
+    */
+    public static function setTimeout(int $milliseconds): void
+    {
+        if ($milliseconds <= 0) {
+            throw new Exception('Timeout must be greater than 0');
+        }
+        self::$timeout = $milliseconds;
+    }
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @return void
+     *
+    */
+    public static function clearTimeout(): void
+    {
+        self::$timeout = null;
+    }
 }

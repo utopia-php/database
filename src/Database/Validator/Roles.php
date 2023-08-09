@@ -8,29 +8,34 @@ use Utopia\Validator;
 class Roles extends Validator
 {
     // Roles
-    const ROLE_ANY = 'any';
-    const ROLE_GUESTS = 'guests';
-    const ROLE_USERS = 'users';
-    const ROLE_USER = 'user';
-    const ROLE_TEAM = 'team';
-    const ROLE_MEMBER = 'member';
+    public const ROLE_ANY = 'any';
+    public const ROLE_GUESTS = 'guests';
+    public const ROLE_USERS = 'users';
+    public const ROLE_USER = 'user';
+    public const ROLE_TEAM = 'team';
+    public const ROLE_MEMBER = 'member';
+    public const ROLE_LABEL = 'label';
 
-    const ROLES = [
+    public const ROLES = [
         self::ROLE_ANY,
         self::ROLE_GUESTS,
         self::ROLE_USERS,
         self::ROLE_USER,
         self::ROLE_TEAM,
         self::ROLE_MEMBER,
+        self::ROLE_LABEL,
     ];
 
     protected string $message = 'Roles Error';
 
+    /**
+     * @var array<string>
+     */
     protected array $allowed;
 
     protected int $length;
 
-    const CONFIG = [
+    public const CONFIG = [
         self::ROLE_ANY => [
             'identifier' => [
                 'allowed' => false,
@@ -93,13 +98,23 @@ class Roles extends Validator
                 'required' => false,
             ],
         ],
+        self::ROLE_LABEL => [
+            'identifier' => [
+                'allowed' => true,
+                'required' => true,
+            ],
+            'dimension' =>[
+                'allowed' => false,
+                'required' => false,
+            ],
+        ],
     ];
 
     // Dimensions
-    const DIMENSION_VERIFIED = 'verified';
-    const DIMENSION_UNVERIFIED = 'unverified';
+    public const DIMENSION_VERIFIED = 'verified';
+    public const DIMENSION_UNVERIFIED = 'unverified';
 
-    const USER_DIMENSIONS = [
+    public const USER_DIMENSIONS = [
         self::DIMENSION_VERIFIED,
         self::DIMENSION_UNVERIFIED,
     ];
@@ -108,7 +123,7 @@ class Roles extends Validator
      * Roles constructor.
      *
      * @param int $length maximum amount of role. 0 means unlimited.
-     * @param array $allowed allowed roles. Defaults to all available.
+     * @param array<string> $allowed allowed roles. Defaults to all available.
      */
     public function __construct(int $length = 0, array $allowed = self::ROLES)
     {
@@ -221,9 +236,9 @@ class Roles extends Validator
         string $role,
         string $identifier,
         string $dimension
-    ): bool
-    {
+    ): bool {
         $key = new Key();
+        $label = new Label();
 
         $config = self::CONFIG[$role] ?? null;
 
@@ -232,19 +247,9 @@ class Roles extends Validator
             return false;
         }
 
-        if (!isset($config['identifier'])) {
-            $this->message = 'Role "' . $role . '" missing identifier configuration.';
-            return false;
-        }
-
-        if (!isset($config['dimension'])) {
-            $this->message = 'Role "' . $role . '" missing dimension configuration.';
-            return false;
-        }
-
         // Process identifier configuration
-        $allowed = $config['identifier']['allowed'] ?? false;
-        $required = $config['identifier']['required'] ?? false;
+        $allowed = $config['identifier']['allowed'];
+        $required = $config['identifier']['required'];
 
         // Not allowed and has an identifier
         if (!$allowed && !empty($identifier)) {
@@ -259,16 +264,19 @@ class Roles extends Validator
         }
 
         // Allowed and has an invalid identifier
-        if ($allowed
-            && !empty($identifier)
-            && !$key->isValid($identifier)) {
-            $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
-            return false;
+        if ($allowed && !empty($identifier)) {
+            if ($role === self::ROLE_LABEL && !$label->isValid($identifier)) {
+                $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $label->getDescription();
+                return false;
+            } elseif ($role !== self::ROLE_LABEL && !$key->isValid($identifier)) {
+                $this->message = 'Role "' . $role . '"' . ' identifier value is invalid: ' . $key->getDescription();
+                return false;
+            }
         }
 
         // Process dimension configuration
-        $allowed = $config['dimension']['allowed'] ?? false;
-        $required = $config['dimension']['required'] ?? false;
+        $allowed = $config['dimension']['allowed'];
+        $required = $config['dimension']['required'];
         $options = $config['dimension']['options'] ?? [$dimension];
 
         // Not allowed and has a dimension
@@ -278,6 +286,8 @@ class Roles extends Validator
         }
 
         // Required and has no dimension
+        // PHPStan complains because there are currently no dimensions that are required, but there might be in future
+        // @phpstan-ignore-next-line
         if ($allowed && $required && empty($dimension)) {
             $this->message = 'Role "' . $role . '"' . ' must have a dimension value.';
             return false;

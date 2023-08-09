@@ -3292,10 +3292,7 @@ abstract class Base extends TestCase
             'name'=>'Parent 1',
             '$collection' => 'parentRelationTest',
             'childs' => [
-                new Document([
-                    '$id' => 'child1',
-                    '$collection' => 'childRelationTest'
-                ]),
+                'child1',
             ]
         ]));
 
@@ -11588,7 +11585,6 @@ abstract class Base extends TestCase
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
-
         static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),

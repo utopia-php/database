@@ -4241,14 +4241,14 @@ class Database
         return $sum;
     }
 
-    public function setTimeoutForQueries(int $milliseconds): void
+    public function setTimeout(int $milliseconds): void
     {
-        $this->adapter->setTimeoutForQueries($milliseconds);
+        $this->adapter->setTimeout($milliseconds);
     }
 
-    public function clearTimeoutForQueries(): void
+    public function clearTimeout(): void
     {
-        $this->adapter->clearTimeoutForQueries();
+        $this->adapter->clearTimeout();
     }
     /**
      * Add Attribute Filter

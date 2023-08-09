@@ -1006,7 +1006,7 @@ class MariaDB extends SQL
         ";
 
         if ($timeout || static::$timeout) {
-            $sql = $this->setTimeout($sql, $timeout ? $timeout : static::$timeout);
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1104,7 +1104,7 @@ class MariaDB extends SQL
                 ) table_count
         ";
         if ($timeout || self::$timeout) {
-            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1160,7 +1160,7 @@ class MariaDB extends SQL
                 ) table_count
         ";
         if ($timeout || self::$timeout) {
-            $sql = $this->setTimeout($sql, $timeout ? $timeout : self::$timeout);
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1377,7 +1377,7 @@ class MariaDB extends SQL
      * @param int $milliseconds
      * @return string
      */
-    protected function setTimeout(string $sql, int $milliseconds): string
+    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
     {
         if (!$this->getSupportForTimeouts()) {
             return $sql;

@@ -659,7 +659,7 @@ abstract class Adapter
      *
      * @throws \Exception The provided timeout value must be greater than or equal to 0.
     */
-    public static function setTimeoutForQueries(int $milliseconds): void
+    public static function setTimeout(int $milliseconds): void
     {
         if ($milliseconds <= 0) {
             throw new Exception('Timeout must be greater than 0');
@@ -673,7 +673,7 @@ abstract class Adapter
      * @return void
      *
     */
-    public static function clearTimeoutForQueries(): void
+    public static function clearTimeout(): void
     {
         self::$timeout = null;
     }

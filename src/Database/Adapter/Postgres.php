@@ -1056,17 +1056,26 @@ class Postgres extends SQL
         $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
-            $results[$key]['$id'] = $value['_uid'];
-            $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$createdAt'] = $value['_createdAt'];
-            $results[$key]['$updatedAt'] = $value['_updatedAt'];
-            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
-
-            unset($results[$key]['_uid']);
-            unset($results[$key]['_id']);
-            unset($results[$key]['_createdAt']);
-            unset($results[$key]['_updatedAt']);
-            unset($results[$key]['_permissions']);
+            if (isset($value['_uid'])) {
+                $results[$key]['$id'] = $value['_uid'];
+                unset($results[$key]['_uid']);
+            }
+            if (isset($value['_id'])) {
+                $results[$key]['$internalId'] = $value['_id'];
+                unset($results[$key]['_id']);
+            }
+            if (isset($value['_createdAt'])) {
+                $results[$key]['$createdAt'] = $value['_createdAt'];
+                unset($results[$key]['_createdAt']);
+            }
+            if (isset($value['_updatedAt'])) {
+                $results[$key]['$updatedAt'] = $value['_updatedAt'];
+                unset($results[$key]['_updatedAt']);
+            }
+            if (isset($value['_permissions'])) {
+                $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
+                unset($results[$key]['_permissions']);
+            }
 
             $results[$key] = new Document($results[$key]);
         }
@@ -1212,11 +1221,24 @@ class Postgres extends SQL
             return '*';
         }
 
+        // Remove $id ,$permissions and $collection from selections if present since they are always selected
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+
         $selections[] = '_uid';
-        $selections[] = '_id';
-        $selections[] = '_createdAt';
-        $selections[] = '_updatedAt';
         $selections[] = '_permissions';
+
+        if (\in_array('$internalId', $selections)) {
+            $selections[] = '_id';
+            $selections = \array_diff($selections, ['$internalId']);
+        }
+        if (\in_array('$createdAt', $selections)) {
+            $selections[] = '_createdAt';
+            $selections = \array_diff($selections, ['$createdAt']);
+        }
+        if (\in_array('$updatedAt', $selections)) {
+            $selections[] = '_updatedAt';
+            $selections = \array_diff($selections, ['$updatedAt']);
+        }
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {

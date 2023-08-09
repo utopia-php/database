@@ -188,6 +188,20 @@ class Database
     ];
 
     /**
+     * List of Internal Attributes
+     *
+     * @var array<string>
+     */
+    public const INTERNAL_ATTRIBUTES = [
+        '$id',
+        '$internalId',
+        '$createdAt',
+        '$updatedAt',
+        '$permissions',
+        '$collection',
+    ];
+
+    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
@@ -2284,6 +2298,20 @@ class Database
             $this->cache->save($cacheKey, $document->getArrayCopy());
         }
 
+        // Remove internal attributes if not queried for select query
+        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
+        // All internal attributes are default selected attributes for (MongoDB)
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $values = $query->getValues();
+                foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                    if (!in_array($internalAttribute, $values)) {
+                        $document->removeAttribute($internalAttribute);
+                    }
+                }
+            }
+        }
+
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
@@ -4049,6 +4077,20 @@ class Database
 
         $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
 
+        // Remove internal attributes which are not queried
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $values = $query->getValues();
+                foreach ($results as $result) {
+                    foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                        if (!\in_array($internalAttribute, $values)) {
+                            $result->removeAttribute($internalAttribute);
+                        }
+                    }
+                }
+            }
+        }
+
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;
@@ -4395,7 +4437,19 @@ class Database
             }
 
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
+                if (
+                    empty($selections)
+                    || \in_array($key, $selections)
+                    || \in_array('*', $selections)
+                    || \in_array($key, ['$createdAt', '$updatedAt'])
+                ) {
+                    // Prevent null values being set for createdAt and updatedAt
+                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
+                        continue;
+                    } else {
+                        $document->setAttribute($key, ($array) ? $value : $value[0]);
+                    }
+                }
             }
         }
 
@@ -4547,6 +4601,10 @@ class Database
         }
 
         $keys = [];
+
+        // Allow querying internal attributes
+        $keys = array_merge($keys, self::INTERNAL_ATTRIBUTES);
+
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
                 // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes

@@ -1050,7 +1050,9 @@ abstract class Base extends TestCase
      */
     public function testGetDocumentSelect(Document $document): Document
     {
-        $document = static::getDatabase()->getDocument('documents', $document->getId(), [
+        $documentId = $document->getId();
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select(['string', 'integer']),
         ]);
 
@@ -1063,6 +1065,78 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$id']),
+        ]);
+
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$permissions']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$internalId']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$collection']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$createdAt']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$updatedAt']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
 
         return $document;
     }
@@ -2573,18 +2647,127 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('movies', [
             Query::select(['name', 'year'])
         ]);
+
         foreach ($documents as $document) {
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$id'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$internalId'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$collection'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$createdAt'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$updatedAt'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$permissions'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayHasKey('$permissions', $document);
         }
     }
 
@@ -4293,7 +4476,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         $person = static::getDatabase()->getDocument('person', 'person1', [
-            Query::select(['*', 'library.name'])
+            Query::select(['*', 'library.name', '$id'])
         ]);
 
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
@@ -7627,6 +7810,103 @@ abstract class Base extends TestCase
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+
+        // Select internal attributes
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$id']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$internalId']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$collection']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$createdAt']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$updatedAt']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$permissions']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         // Select all parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [

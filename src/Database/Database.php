@@ -2930,7 +2930,7 @@ class Database
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
                     switch($relationType) {
-                        case DATABASE::RELATION_ONE_TO_ONE: {
+                        case Database::RELATION_ONE_TO_ONE: {
                             $oldValue = $old->getAttribute($key) instanceof Document ? $old->getAttribute($key)->getId() : $old->getAttribute($key);
                             if (
                                 (\is_null($old->getAttribute($key)) && !\is_null($value)) ||
@@ -2952,8 +2952,8 @@ class Database
                         case Database::RELATION_ONE_TO_MANY:
                             {
                                 if (
-                                    ($side === DATABASE::RELATION_SIDE_PARENT && $relationType === Database::RELATION_MANY_TO_ONE) ||
-                                    ($side === DATABASE::RELATION_SIDE_CHILD && $relationType === Database::RELATION_ONE_TO_MANY)
+                                    ($side === Database::RELATION_SIDE_PARENT && $relationType === Database::RELATION_MANY_TO_ONE) ||
+                                    ($side === Database::RELATION_SIDE_CHILD && $relationType === Database::RELATION_ONE_TO_MANY)
                                 ) {
                                     if (
                                         (\is_null($old->getAttribute($key)) && !\is_null($value)) ||

@@ -2933,16 +2933,11 @@ class Database
                         case Database::RELATION_ONE_TO_ONE: {
                             $oldValue = $old->getAttribute($key) instanceof Document ? $old->getAttribute($key)->getId() : $old->getAttribute($key);
                             if (
-                                (\is_null($old->getAttribute($key)) && !\is_null($value)) ||
-                                (!is_null($old->getAttribute($key)) && \is_null($value))) {
-                                $shouldUpdate = true;
-                                break;
-                            } elseif (\is_string($value)) {
-                                if ($oldValue !== $value) {
-                                    $shouldUpdate = true;
-                                    break;
-                                }
-                            } elseif ($oldValue !== $value->getId()) {
+                                (\is_null($oldValue) && !\is_null($value)) ||
+                                (!is_null($oldValue) && \is_null($value)) ||
+                                (\is_string($value) && $oldValue !== $value) ||
+                                ($value instanceof Document && $oldValue !== $value->getId())
+                            ) {
                                 $shouldUpdate = true;
                                 break;
                             }
@@ -2950,74 +2945,39 @@ class Database
                         }
                         case Database::RELATION_MANY_TO_ONE:
                         case Database::RELATION_ONE_TO_MANY:
-                            {
-                                if (
-                                    ($side === Database::RELATION_SIDE_PARENT && $relationType === Database::RELATION_MANY_TO_ONE) ||
-                                    ($side === Database::RELATION_SIDE_CHILD && $relationType === Database::RELATION_ONE_TO_MANY)
-                                ) {
-                                    if (
-                                        (\is_null($old->getAttribute($key)) && !\is_null($value)) ||
-                                        (!is_null($old->getAttribute($key)) && \is_null($value))) {
-                                        $shouldUpdate = true;
-                                        break;
-                                    }
-                                    $oldValue = $old->getAttribute($key) instanceof Document ? $old->getAttribute($key)->getId() : $old->getAttribute($key);
-                                    if (\is_string($value)) {
-                                        if ($oldValue !== $value) {
-                                            $shouldUpdate = true;
-                                            break;
-                                        }
-                                    } elseif ($oldValue !== $value->getId()) {
-                                        $shouldUpdate = true;
-                                        break;
-                                    }
-                                } else {
-                                    if (
-                                        (\is_null($old->getAttribute($key)) && !\is_null($value)) ||
-                                        (!is_null($old->getAttribute($key)) && \is_null($value))) {
-                                        $shouldUpdate = true;
-                                        break;
-                                    }
-                                    if (\count($value) !== \count($old->getAttribute($key))) {
-                                        $shouldUpdate = true;
-                                        break;
-                                    }
-                                    foreach ($value as $index=>$relation) {
-                                        $oldValue = $old->getAttribute($key)[$index] instanceof Document ? $old->getAttribute($key)[$index]->getId() : $old->getAttribute($key)[$index];
-                                        if (\is_string($relation)) {
-                                            if ($oldValue !== $relation) {
-                                                $shouldUpdate = true;
-                                                break;
-                                            }
-                                        } elseif ($oldValue !== $relation->getId()) {
-                                            $shouldUpdate = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                break;
-                            }
                         case Database::RELATION_MANY_TO_MANY: {
                             if (
-                                (\is_null($old->getAttribute($key)) && !\is_null($value)) ||
-                                (!is_null($old->getAttribute($key)) && \is_null($value))) {
-                                $shouldUpdate = true;
-                                break;
-                            }
-                            if (\count($value) !== \count($old->getAttribute($key))) {
-                                $shouldUpdate = true;
-                                break;
-                            }
-                            foreach ($value as $index=>$relation) {
-                                $oldValue = $old->getAttribute($key)[$index] instanceof Document ? $old->getAttribute($key)[$index]->getId() : $old->getAttribute($key)[$index];
-                                if (\is_string($relation)) {
-                                    if ($oldValue !== $relation) {
+                                ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                                ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD)
+                            ) {
+                                $oldValue = $old->getAttribute($key) instanceof Document ? $old->getAttribute($key)->getId() : $old->getAttribute($key);
+                                if (
+                                    (\is_null($oldValue) && !\is_null($value)) ||
+                                    (!is_null($oldValue) && \is_null($value)) ||
+                                    (\is_string($value) && $oldValue !== $value) ||
+                                    ($value instanceof Document &&  $oldValue !== $value->getId())
+                                ) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+                            } else {
+                                if (
+                                    (\is_null($old->getAttribute($key)) && !\is_null($value)) ||
+                                    (!is_null($old->getAttribute($key)) && \is_null($value)) ||
+                                    \count($old->getAttribute($key)) !== \count($value)
+                                ) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+                                foreach ($value as $index=>$relation) {
+                                    $oldValue = $old->getAttribute($key)[$index] instanceof Document ? $old->getAttribute($key)[$index]->getId() : $old->getAttribute($key)[$index];
+                                    if (
+                                        (\is_string($relation) && $oldValue!==$relation) ||
+                                        ($relation instanceof Document &&  $oldValue !== $relation->getId())
+                                    ) {
                                         $shouldUpdate = true;
                                         break;
                                     }
-                                } elseif ($oldValue!== $relation->getId()) {
-                                    $shouldUpdate = true;
-                                    break;
                                 }
                             }
                             break;

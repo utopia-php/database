@@ -3221,15 +3221,14 @@ abstract class Base extends TestCase
         return $document;
     }
 
-
     /**
      * @depends testCreateDocument
      */
     public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
     {
-        Authorization::setRole(Role::any()->toString());
-
         $document = static::getDatabase()->createDocument('documents', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -3238,10 +3237,14 @@ abstract class Base extends TestCase
             'colors' => ['pink', 'green', 'blue'],
         ]));
 
-        Authorization::cleanRoles();
-        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
+        $updatedDocument = static::getDatabase()->updateDocument(
+            'documents',
+            $document->getId(),
+            $document
+        );
 
-        // Document should not be updated as there is no change. It should also not throw any authorization exception without any permission because of no change.
+        // Document should not be updated as there is no change.
+        // It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         return $document;
@@ -3254,17 +3257,9 @@ abstract class Base extends TestCase
             return;
         }
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::user('a')->toString());
+        static::getDatabase()->createCollection('parentRelationTest');
+        static::getDatabase()->createCollection('childRelationTest');
 
-        static::getDatabase()->createCollection('parentRelationTest', [], [], [
-            Permission::read(Role::user('a')),
-            Permission::create(Role::user('a')),
-        ]);
-        static::getDatabase()->createCollection('childRelationTest', [], [], [
-            Permission::read(Role::user('a')),
-            Permission::create(Role::user('a')),
-        ]);
         static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
         static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
 
@@ -3272,32 +3267,35 @@ abstract class Base extends TestCase
             collection: 'parentRelationTest',
             relatedCollection: 'childRelationTest',
             type: Database::RELATION_ONE_TO_MANY,
-            id: 'childs'
+            id: 'children'
         );
 
         // Create document with relationship with nested data
         $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
             '$id' => 'parent1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
             'name' => 'Parent 1',
-            'childs' => [
+            'children' => [
                 [
                     '$id' => 'child1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
                     'name' => 'Child 1',
                 ],
             ],
         ]));
-        $this->assertEquals(1, \count($parent['childs']));
-        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', new Document([
-            '$id' => 'parent1',
-            'name'=>'Parent 1',
-            '$collection' => 'parentRelationTest',
-            'childs' => [
-                'child1',
-            ]
-        ]));
+
+        $this->assertEquals(1, \count($parent['children']));
+
+        $parent->setAttribute('children', ['child1']);
+
+        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', $parent);
 
         $this->assertEquals($updatedParent->getUpdatedAt(), $parent->getUpdatedAt());
-        $this->assertEquals($updatedParent->getAttribute('childs')[0]->getUpdatedAt(), $parent->getAttribute('childs')[0]->getUpdatedAt());
+        $this->assertEquals($updatedParent->getAttribute('children')[0]->getUpdatedAt(), $parent->getAttribute('children')[0]->getUpdatedAt());
 
         static::getDatabase()->deleteCollection('parentRelationTest');
         static::getDatabase()->deleteCollection('childRelationTest');
@@ -3306,7 +3304,7 @@ abstract class Base extends TestCase
     public function testExceptionAttributeLimit(): void
     {
         if ($this->getDatabase()->getLimitForAttributes() > 0) {
-            // load the collection up to the limit
+            // Load the collection up to the limit
             $attributes = [];
             for ($i = 0; $i < $this->getDatabase()->getLimitForAttributes(); $i++) {
                 $attributes[] = new Document([
@@ -3320,7 +3318,8 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ]);
             }
-            $collection = static::getDatabase()->createCollection('attributeLimit', $attributes);
+
+            static::getDatabase()->createCollection('attributeLimit', $attributes);
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));

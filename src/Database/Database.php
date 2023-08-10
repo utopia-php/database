@@ -804,6 +804,18 @@ class Database
     }
 
     /**
+     * Get Collection Size
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        return $this->adapter->getSizeOfCollection($collection);
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id

@@ -280,6 +280,77 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
 
+    public function testSizeCollection(): void
+    {
+        static::getDatabase()->createCollection('sizeTest1');
+        static::getDatabase()->createCollection('sizeTest2');
+
+        $size1 = static::getDatabase()->getSizeOfCollection('sizeTest1');
+        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
+        $sizeDifference = abs($size1 - $size2);
+        // Size of an empty collection returns either 172032 or 167936 bytes randomly
+        // Therefore asserting with a tolerance of 5000 bytes
+        $byteDifference = 5000;
+        $this->assertLessThan($byteDifference, $sizeDifference);
+
+        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 40;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            static::getDatabase()->createDocument('sizeTest2', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
+            ]));
+        }
+
+        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertGreaterThan($size1, $size2);
+    }
+
+    public function testSizeFullText(): void
+    {
+        // SQLite does not support fulltext indexes
+        if (!static::getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('fullTextSizeTest');
+
+        $size1 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+
+        static::getDatabase()->createAttribute('fullTextSizeTest', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('fullTextSizeTest', 'string2', Database::VAR_STRING, 254, true);
+        static::getDatabase()->createAttribute('fullTextSizeTest', 'string3', Database::VAR_STRING, 254, true);
+        static::getDatabase()->createIndex('fullTextSizeTest', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 10;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            static::getDatabase()->createDocument('fullTextSizeTest', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
+            ]));
+        }
+
+        $size2 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+
+        $this->assertGreaterThan($size1, $size2);
+
+        static::getDatabase()->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
+
+        $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+
+        $this->assertGreaterThan($size2, $size3);
+    }
+
     public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');

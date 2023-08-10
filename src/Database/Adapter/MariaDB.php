@@ -107,7 +107,7 @@ class MariaDB extends SQL
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_uid` CHAR(255) NOT NULL,
+                        `_uid` VARCHAR(255) NOT NULL,
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,

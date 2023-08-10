@@ -22,11 +22,7 @@
         ],
         "test": [
             "Composer\\Config::disableProcessTimeout",
-            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml --stop-on-failure"
-        ],
-        "mytest": [
-            "Composer\\Config::disableProcessTimeout",
-            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml ./tests/Database/Adapter/MongoDBTest.php --filter testSizeFullText --stop-on-failure"
+            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
         ],
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",

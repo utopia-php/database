@@ -2238,11 +2238,12 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
-        $document->setAttribute('$collection', $collection->getId());
 
         if ($document->isEmpty()) {
             return $document;
         }
+
+        $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
@@ -4072,7 +4073,10 @@ class Database
             }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
-            $node->setAttribute('$collection', $collection->getId());
+
+            if (!$node->isEmpty()) {
+                $node->setAttribute('$collection', $collection->getId());
+            }
         }
 
         $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);

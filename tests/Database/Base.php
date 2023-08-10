@@ -35,8 +35,6 @@ abstract class Base extends TestCase
      */
     abstract protected static function getDatabase(): Database;
 
-    abstract protected static function killDatabase(): void;
-
     /**
      * @return string
      */
@@ -1056,7 +1054,8 @@ abstract class Base extends TestCase
             Query::select(['string', 'integer']),
         ]);
 
-        $this->assertNotEmpty(true, $document->getId());
+        $this->assertEmpty($document->getId());
+        $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
@@ -11691,6 +11690,89 @@ abstract class Base extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testEmptyOperatorValues(): void
+    {
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::equal('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::notEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThan('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThanEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThan('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThanEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::contains('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
+        }
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {
@@ -11781,94 +11863,5 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-    }
-
-    public function testEmptyOperatorValues(): void
-    {
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::equal('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::search('string', null),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::notEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::contains('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
-        }
-    }
-
-    public function testLast(): void
-    {
-        $this->expectNotToPerformAssertions();
-        static::killDatabase();
     }
 }

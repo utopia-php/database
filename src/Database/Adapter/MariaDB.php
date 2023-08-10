@@ -107,7 +107,7 @@ class MariaDB extends SQL
             $this->getPDO()
                 ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
                         `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_uid` CHAR(255) NOT NULL,
+                        `_uid` VARCHAR(255) NOT NULL,
                         `_createdAt` datetime(3) DEFAULT NULL,
                         `_updatedAt` datetime(3) DEFAULT NULL,
                         `_permissions` MEDIUMTEXT DEFAULT NULL,
@@ -1045,8 +1045,8 @@ class MariaDB extends SQL
             {$sqlLimit};
         ";
 
-        if ($timeout) {
-            $sql = $this->setTimeout($sql, $timeout);
+        if ($timeout || static::$timeout) {
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1086,17 +1086,26 @@ class MariaDB extends SQL
         $results = $stmt->fetchAll();
 
         foreach ($results as $key => $value) {
-            $results[$key]['$id'] = $value['_uid'];
-            $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$createdAt'] = $value['_createdAt'];
-            $results[$key]['$updatedAt'] = $value['_updatedAt'];
-            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
-
-            unset($results[$key]['_uid']);
-            unset($results[$key]['_id']);
-            unset($results[$key]['_createdAt']);
-            unset($results[$key]['_updatedAt']);
-            unset($results[$key]['_permissions']);
+            if (isset($value['_uid'])) {
+                $results[$key]['$id'] = $value['_uid'];
+                unset($results[$key]['_uid']);
+            }
+            if (isset($value['_id'])) {
+                $results[$key]['$internalId'] = $value['_id'];
+                unset($results[$key]['_id']);
+            }
+            if (isset($value['_createdAt'])) {
+                $results[$key]['$createdAt'] = $value['_createdAt'];
+                unset($results[$key]['_createdAt']);
+            }
+            if (isset($value['_updatedAt'])) {
+                $results[$key]['$updatedAt'] = $value['_updatedAt'];
+                unset($results[$key]['_updatedAt']);
+            }
+            if (isset($value['_permissions'])) {
+                $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
+                unset($results[$key]['_permissions']);
+            }
 
             $results[$key] = new Document($results[$key]);
         }
@@ -1118,7 +1127,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1143,6 +1152,10 @@ class MariaDB extends SQL
                     {$limit}
                 ) table_count
         ";
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1170,7 +1183,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1186,16 +1199,20 @@ class MariaDB extends SQL
         }
 
         $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        $sql = "SELECT SUM({$attribute}) as sum
+            FROM 
+                (
+                    SELECT {$attribute}
+                    FROM {$this->getSQLTable($name)} table_main
+                    " . $sqlWhere . "
+                    {$limit}
+                ) table_count
+        ";
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
+        }
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT SUM({$attribute}) as sum
-            FROM (
-                SELECT {$attribute}
-                FROM {$this->getSQLTable($name)} table_main
-                 " . $sqlWhere . "
-                {$limit}
-            ) table_count
-        ");
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1229,11 +1246,24 @@ class MariaDB extends SQL
             return '*';
         }
 
+        // Remove $id, $permissions and $collection if present since it is always selected by default
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+
         $selections[] = '_uid';
-        $selections[] = '_id';
-        $selections[] = '_createdAt';
-        $selections[] = '_updatedAt';
         $selections[] = '_permissions';
+
+        if (\in_array('$internalId', $selections)) {
+            $selections[] = '_id';
+            $selections = \array_diff($selections, ['$internalId']);
+        }
+        if (\in_array('$createdAt', $selections)) {
+            $selections[] = '_createdAt';
+            $selections = \array_diff($selections, ['$createdAt']);
+        }
+        if (\in_array('$updatedAt', $selections)) {
+            $selections[] = '_updatedAt';
+            $selections = \array_diff($selections, ['$updatedAt']);
+        }
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {
@@ -1264,7 +1294,7 @@ class MariaDB extends SQL
             default => $query->getAttribute()
         });
 
-        $attribute = "`{$query->getAttribute()}`" ;
+        $attribute = "`{$query->getAttribute()}`";
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()) {
@@ -1281,7 +1311,7 @@ class MariaDB extends SQL
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1409,7 +1439,7 @@ class MariaDB extends SQL
      * @param int $milliseconds
      * @return string
      */
-    protected function setTimeout(string $sql, int $milliseconds): string
+    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
     {
         if (!$this->getSupportForTimeouts()) {
             return $sql;

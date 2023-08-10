@@ -56,7 +56,7 @@ class MySQL extends MariaDB
      * @param int $milliseconds
      * @return string
      */
-    protected function setTimeOut(string $sql, int $milliseconds): string
+    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
     {
         return preg_replace('/SELECT/', "SELECT /*+ max_execution_time({$milliseconds}) */", $sql, 1);
     }

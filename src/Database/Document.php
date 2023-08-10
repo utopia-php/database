@@ -371,7 +371,7 @@ class Document extends ArrayObject
      */
     public function isEmpty(): bool
     {
-        return empty($this->getId());
+        return !\count($this);
     }
 
     /**

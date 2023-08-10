@@ -832,8 +832,8 @@ class Mongo extends Adapter
             $options['skip'] = $offset;
         }
 
-        if ($timeout) {
-            $options['maxTimeMS'] = $timeout;
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         $selections = $this->getAttributeSelections($queries);
@@ -1069,7 +1069,7 @@ class Mongo extends Adapter
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1079,6 +1079,10 @@ class Mongo extends Adapter
         // set max limit
         if ($max > 0) {
             $options['limit'] = $max;
+        }
+
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         // queries
@@ -1104,11 +1108,14 @@ class Mongo extends Adapter
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
         // todo $collection is not used?
+
+        // todo add $timeout for aggregate in Mongo utopia client
+
         $filters = [];
 
         // queries
@@ -1356,6 +1363,11 @@ class Mongo extends Adapter
         $projection = [];
 
         foreach ($selections as $selection) {
+            // Skip internal attributes since all are selected by default
+            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+                continue;
+            }
+
             $projection[$selection] = 1;
         }
 

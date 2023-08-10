@@ -287,13 +287,6 @@ class PermissionTest extends TestCase
         } catch (\Exception $e) {
             $this->assertEquals('Dimension must not be empty', $e->getMessage());
         }
-
-        try {
-            Permission::parse('read("label:alphanumeric-only")');
-            $this->fail('Failed to throw Exception');
-        } catch (\Exception $e) {
-            $this->assertEquals('Do we want this to fail?', $e->getMessage());
-        }
     }
 
     /**

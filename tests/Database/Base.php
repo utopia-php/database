@@ -285,32 +285,32 @@ abstract class Base extends TestCase
     {
         // SQLite does not support fulltext indexes
         if (static::getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-            static::getDatabase()->createCollection('fullTextTest');
+            static::getDatabase()->createCollection('fullTextSizeTest');
 
-            $size1 = static::getDatabase()->getSizeOfCollection('fullTextTest');
+            $size1 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
 
-            static::getDatabase()->createAttribute('fullTextTest', 'string1', Database::VAR_STRING, 128, true);
-            static::getDatabase()->createAttribute('fullTextTest', 'string2', Database::VAR_STRING, 254, true);
-            static::getDatabase()->createAttribute('fullTextTest', 'string3', Database::VAR_STRING, 254, true);
-            static::getDatabase()->createIndex('fullTextTest', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+            static::getDatabase()->createAttribute('fullTextSizeTest', 'string1', Database::VAR_STRING, 128, true);
+            static::getDatabase()->createAttribute('fullTextSizeTest', 'string2', Database::VAR_STRING, 254, true);
+            static::getDatabase()->createAttribute('fullTextSizeTest', 'string3', Database::VAR_STRING, 254, true);
+            static::getDatabase()->createIndex('fullTextSizeTest', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
             $loopCount = 10;
 
             for ($i = 0; $i < $loopCount; $i++) {
-                static::getDatabase()->createDocument('fullTextTest', new Document([
+                static::getDatabase()->createDocument('fullTextSizeTest', new Document([
                     'string1' => 'string1' . $i,
                     'string2' => 'string2' . $i,
                     'string3' => 'string3' . $i,
                 ]));
             }
 
-            $size2 = static::getDatabase()->getSizeOfCollection('fullTextTest');
+            $size2 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
 
             $this->assertGreaterThan($size1, $size2);
 
-            static::getDatabase()->createIndex('fullTextTest', 'index_fulltext1', Database::INDEX_FULLTEXT, ['string1']);
+            static::getDatabase()->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
 
-            $size3 = static::getDatabase()->getSizeOfCollection('fullTextTest');
+            $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
 
             $this->assertGreaterThan($size2, $size3);
         } else {

@@ -2920,25 +2920,83 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            $relationshipKeys = [];
             foreach ($relationships as $relationship) {
-                $relationshipKey = $relationship->getAttribute('key');
-                $relationshipKeys[$relationshipKey] = $relationshipKey;
+                $relationships[$relationship->getAttribute('key')] = $relationship;
             }
+
             // Compare if the document has any changes
-            foreach ($document as $key=>$value) {
+            foreach ($document as $key => $value) {
                 // Skip the nested documents as they will be checked later in recursions.
-                if (array_key_exists($key, $relationshipKeys)) {
+                if (\array_key_exists($key, $relationships)) {
+                    $relationType = (string) $relationships[$key]['options']['relationType'];
+                    $side = (string) $relationships[$key]['options']['side'];
+
+                    switch($relationType) {
+                        case Database::RELATION_ONE_TO_ONE:
+                            $oldValue = $old->getAttribute($key) instanceof Document
+                                ? $old->getAttribute($key)->getId()
+                                : $old->getAttribute($key);
+
+                            if ((\is_null($value) !== \is_null($oldValue))
+                            || (\is_string($value) && $value !== $oldValue)
+                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                $shouldUpdate = true;
+                            }
+                            break;
+                        case Database::RELATION_ONE_TO_MANY:
+                        case Database::RELATION_MANY_TO_ONE:
+                        case Database::RELATION_MANY_TO_MANY:
+                            if (
+                                ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                                ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD)
+                            ) {
+                                $oldValue = $old->getAttribute($key) instanceof Document
+                                    ? $old->getAttribute($key)->getId()
+                                    : $old->getAttribute($key);
+
+                                if ((\is_null($value) !== \is_null($oldValue))
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document &&  $value->getId() !== $oldValue)) {
+                                    $shouldUpdate = true;
+                                }
+                                break;
+                            }
+
+                            if ((\is_null($old->getAttribute($key)) !== \is_null($value))
+                            || \count($old->getAttribute($key)) !== \count($value)) {
+                                $shouldUpdate = true;
+                                break;
+                            }
+                            foreach ($value as $index => $relation) {
+                                $oldValue = $old->getAttribute($key)[$index] instanceof Document
+                                    ? $old->getAttribute($key)[$index]->getId()
+                                    : $old->getAttribute($key)[$index];
+
+                                if ((\is_string($relation) && $relation !== $oldValue)
+                                || ($relation instanceof Document && $relation->getId() !== $oldValue)) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+                            }
+                            break;
+                    }
+
+                    if ($shouldUpdate) {
+                        break;
+                    }
+
                     continue;
                 }
 
-                $oldAttributeValue = $old->getAttribute($key);
+                $oldValue = $old->getAttribute($key);
+
                 // If values are not equal we need to update document.
-                if ($oldAttributeValue !== $value) {
+                if ($value !== $oldValue) {
                     $shouldUpdate = true;
                     break;
                 }
             }
+
             if ($shouldUpdate && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
@@ -2949,8 +3007,6 @@ class Database
 
         if ($shouldUpdate) {
             $document->setAttribute('$updatedAt', $time);
-        } else {
-            $document->setAttribute('$updatedAt', $old->getUpdatedAt());
         }
 
         // Check if document was updated after the request timestamp
@@ -2980,6 +3036,7 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->purgeRelatedDocuments($collection, $id);
+
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);

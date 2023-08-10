@@ -266,14 +266,14 @@ class Mongo extends Adapter
         $collection = $namespace. '_' . $collection;
 
         $command = [
-             'collStats' => $collection,
-             'scale' => 1
+            'collStats' => $collection,
+            'scale' => 1
         ];
 
         try {
             $result = $this->getClient()->query($command);
-            if (is_object($result) && property_exists($result, 'size')) {
-                return $result->size;
+            if (is_object($result)) {
+                return $result->totalSize;
             } else {
                 throw new DatabaseException("No size found");
             }

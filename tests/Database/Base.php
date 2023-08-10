@@ -320,7 +320,7 @@ abstract class Base extends TestCase
             $this->expectNotToPerformAssertions();
             return;
         }
-        
+
         static::getDatabase()->createCollection('fullTextSizeTest');
 
         $size1 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');

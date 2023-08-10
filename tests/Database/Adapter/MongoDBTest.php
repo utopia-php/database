@@ -95,9 +95,4 @@ class MongoDBTest extends Base
     {
         $this->assertTrue(true);
     }
-
-    public static function killDatabase(): void
-    {
-        self::$database = null;
-    }
 }

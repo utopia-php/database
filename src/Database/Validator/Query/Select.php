@@ -13,6 +13,20 @@ class Select extends Base
     protected array $schema = [];
 
     /**
+     * List of internal attributes
+     *
+     * @var array<string>
+     */
+    protected const INTERNAL_ATTRIBUTES = [
+        '$id',
+        '$internalId',
+        '$createdAt',
+        '$updatedAt',
+        '$permissions',
+        '$collection',
+    ];
+
+    /**
      * @param array<Document> $attributes
      */
     public function __construct(array $attributes = [])
@@ -52,6 +66,11 @@ class Select extends Base
                 // For relationships, just validate the top level.
                 // Will validate each nested level during the recursive calls.
                 $attribute = \explode('.', $attribute)[0];
+            }
+
+            // Skip internal attributes
+            if (\in_array($attribute, self::INTERNAL_ATTRIBUTES)) {
+                continue;
             }
 
             if (!isset($this->schema[$attribute]) && $attribute !== '*') {

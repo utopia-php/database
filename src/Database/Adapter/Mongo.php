@@ -1334,6 +1334,11 @@ class Mongo extends Adapter
         $projection = [];
 
         foreach ($selections as $selection) {
+            // Skip internal attributes since all are selected by default
+            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+                continue;
+            }
+
             $projection[$selection] = 1;
         }
 

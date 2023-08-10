@@ -427,25 +427,25 @@ class MariaDB extends SQL
 
         return $document;
     }
-    
+
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
         if (empty($documents)) {
             return $documents;
         }
-    
+
         $this->getPDO()->beginTransaction();
-    
+
         try {
             $name = $this->filter($collection);
             $batches = array_chunk($documents, $batchSize);
-    
+
             foreach ($batches as $batch) {
                 $bindIndex = 0;
                 $batchKeys = [];
                 $bindValues = [];
                 $permissions = [];
-                
+
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
@@ -471,7 +471,7 @@ class MariaDB extends SQL
                         $bindValues[$bindKey] = $value;
                         $bindIndex++;
                     }
-        
+
                     $batchKeys[] = '(' . implode(', ', $bindKeys) . ')';
                     foreach (Database::PERMISSIONS as $type) {
                         foreach ($document->getPermissionsByType($type) as $permission) {
@@ -484,13 +484,13 @@ class MariaDB extends SQL
                 $stmt = $this->getPDO()
                     ->prepare("INSERT INTO {$this->getSQLTable($name)} 
                 $columns VALUES " . implode(', ', $batchKeys));
-    
+
                 foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
                 }
-    
+
                 $stmt->execute();
-    
+
                 if (!empty($permissions)) {
                     $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
                     $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
@@ -499,28 +499,25 @@ class MariaDB extends SQL
                     }
                 }
             }
-    
+
             if (!$this->getPDO()->commit()) {
                 throw new Exception('Failed to commit transaction');
             }
-    
+
             return $documents;
-    
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
-            var_dump($e->getMessage());
-            var_dump($e->getCode());
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-    
+
                 default:
                     throw $e;
             }
         }
     }
-    
+
 
 
     /**
@@ -712,52 +709,188 @@ class MariaDB extends SQL
     }
 
 
-    public function updateDocuments(string $collection, array $documents): array
+    public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
         if (empty($documents)) {
-            return [];
+            return $documents;
         }
 
-        $ids = [];
-        $binds = [];
-        $sets = [];
+        $this->getPDO()->beginTransaction();
 
-        foreach ($documents as $document) {
-            $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = json_encode($document->getPermissions());
+        try {
+            $name = $this->filter($collection);
+            $batches = array_chunk($documents, $batchSize);
 
-            $id = $document->getId();
-            $ids[] = $id;
-            
-            foreach ($attributes as $attribute => $value) {
-                $bindKey = ':' . $attribute . '_' . $id;
-                $binds[$bindKey] = $value;
-                $sets[$attribute][] = 'WHEN ' . $id . ' THEN ' . $bindKey;
+            foreach ($batches as $batch) {
+                $bindIndex = 0;
+                $batchKeys = [];
+                $bindValues = [];
+
+                foreach ($batch as $document) {
+                    $attributes = $document->getAttributes();
+                    $attributes['_uid'] = $document->getId();
+                    $attributes['_createdAt'] = $document->getCreatedAt();
+                    $attributes['_updatedAt'] = $document->getUpdatedAt();
+                    $attributes['_permissions'] = json_encode($document->getPermissions());
+
+                    $columns = array_map(function ($attribute) {
+                        return "`" . $this->filter($attribute) . "`";
+                    }, array_keys($attributes));
+
+                    $bindKeys = [];
+
+                    foreach ($attributes as $attribute => $value) {
+                        if (is_array($value)) {
+                            $value = json_encode($value);
+                        }
+                        $value = (is_bool($value)) ? (int)$value : $value;
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = ':' . $bindKey;
+                        $bindValues[$bindKey] = $value;
+                        $bindIndex++;
+                    }
+
+                    $batchKeys[] = '(' . implode(', ', $bindKeys) . ')';
+
+                    // Permissions logic
+                    $permissionsStmt = $this->getPDO()->prepare("
+                        SELECT _type, _permission
+                        FROM {$this->getSQLTable($name . '_perms')} p
+                        WHERE p._document = :_uid
+                    ");
+                    $permissionsStmt->bindValue(':_uid', $document->getId());
+                    $permissionsStmt->execute();
+                    $permissions = $permissionsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $initial = [];
+                    foreach (Database::PERMISSIONS as $type) {
+                        $initial[$type] = [];
+                    }
+
+                    $permissions = array_reduce($permissions, function (array $carry, array $item) {
+                        $carry[$item['_type']][] = $item['_permission'];
+                        return $carry;
+                    }, $initial);
+
+                    // Get removed Permissions
+                    $removals = [];
+                    foreach (Database::PERMISSIONS as $type) {
+                        $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
+                        if (!empty($diff)) {
+                            $removals[$type] = $diff;
+                        }
+                    }
+
+                    // Query to remove permissions
+                    $removeQuery = '';
+                    if (!empty($removals)) {
+                        $removeQuery = 'AND (';
+                        foreach ($removals as $type => $permissions) {
+                            $removeQuery .= "(
+                                _type = '{$type}'
+                                AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_{$type}_{$i}", array_keys($permissions))) . ")
+                            )";
+                            if ($type !== array_key_last($removals)) {
+                                $removeQuery .= ' OR ';
+                            }
+                        }
+                    }
+                    if (!empty($removeQuery)) {
+                        $removeQuery .= ')';
+                        $stmtRemovePermissions = $this->getPDO()
+                            ->prepare("
+                            DELETE
+                            FROM {$this->getSQLTable($name . '_perms')}
+                            WHERE
+                                _document = :_uid
+                                {$removeQuery}
+                        ");
+                        $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+
+                        foreach ($removals as $type => $permissions) {
+                            foreach ($permissions as $i => $permission) {
+                                $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
+                            }
+                        }
+                    }
+
+                    // Get added Permissions
+                    $additions = [];
+                    foreach (Database::PERMISSIONS as $type) {
+                        $diff = array_diff($document->getPermissionsByType($type), $permissions[$type]);
+                        if (!empty($diff)) {
+                            $additions[$type] = $diff;
+                        }
+                    }
+
+                    // Query to add permissions
+                    if (!empty($additions)) {
+                        $values = [];
+                        foreach ($additions as $type => $permissions) {
+                            foreach ($permissions as $i => $_) {
+                                $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                            }
+                        }
+
+                        $stmtAddPermissions = $this->getPDO()
+                            ->prepare(
+                                "
+                                INSERT INTO {$this->getSQLTable($name . '_perms')}
+                                (_document, _type, _permission) VALUES " . implode(', ', $values)
+                            );
+
+                        $stmtAddPermissions->bindValue(":_uid", $document->getId());
+                        foreach ($additions as $type => $permissions) {
+                            foreach ($permissions as $i => $permission) {
+                                $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
+                            }
+                        }
+                    }
+                }
+
+                $updateClause = implode(', ', array_map(function ($column) {
+                    return "$column=VALUES($column)";
+                }, array_slice($columns, 1))); // Exclude UID
+
+                $stmt = $this->getPDO()
+                    ->prepare("INSERT INTO {$this->getSQLTable($name)} 
+                (" . implode(", ", $columns) . ") VALUES " . implode(', ', $batchKeys) . " ON DUPLICATE KEY UPDATE $updateClause");
+
+                foreach ($bindValues as $key => $value) {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+
+                $stmt->execute();
+
+                // Execute permissions statements for each document in the batch
+                if (!empty($removals)) {
+                    var_dump($stmtRemovePermissions->queryString);
+                    $stmtRemovePermissions->execute();
+                }
+
+                if (!empty($additions)) {
+                    var_dump($stmtAddPermissions->queryString);
+                    $stmtAddPermissions->execute();
+                }
+            }
+
+            if (!$this->getPDO()->commit()) {
+                throw new Exception('Failed to commit transaction');
+            }
+
+            return $documents;
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+            switch ($e->getCode()) {
+                case 1062:
+                case 23000:
+                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+
+                default:
+                    throw $e;
             }
         }
-
-        $setClauses = [];
-        foreach ($sets as $attribute => $whenThens) {
-            $setClauses[] = '`' . $attribute . '` = CASE _uid ' . implode(' ', $whenThens) . ' END';
-        }
-
-        $sql = "UPDATE {$this->getSQLTable($collection)}
-                SET " . implode(', ', $setClauses) . "
-                WHERE _uid IN (" . implode(',', $ids) . ")";
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($binds as $bindKey => $value) {
-            $stmt->bindValue($bindKey, $value, $this->getPDOType($value));
-        }
-
-        $stmt->execute();
-
-        return $documents;
     }
-
 
 
     /**

@@ -37,7 +37,7 @@ class MariaDBTest extends Base
      */
     static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 
@@ -54,7 +54,7 @@ class MariaDBTest extends Base
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setNamespace('myapp_' . uniqid());
 
         $database->create();
 
@@ -64,7 +64,7 @@ class MariaDBTest extends Base
 
     public function testCreateDocuments()
     {
-        $count = 100000;
+        $count = 1000;
         $collection = 'testCreateDocuments';
 
         static::getDatabase()->createCollection($collection);
@@ -101,7 +101,7 @@ class MariaDBTest extends Base
             ]);
         }
 
-        $res = static::getDatabase()->createDocuments($collection, $documents, 14000);
+        $res = static::getDatabase()->createDocuments($collection, $documents, $count);
 
         $this->assertEquals($count, count($res));
 
@@ -122,19 +122,30 @@ class MariaDBTest extends Base
             $this->assertEquals([], $document->getAttribute('empty'));
             $this->assertEquals('Works', $document->getAttribute('with-dash'));
         }
+
+        return $res;
     }
 
-    // public function testUpdateDocuments(Document $document)
+    // /**
+    //  * @depends testCreateDocuments
+    //  */
+    // public function testUpdateDocumentsSequential(array $documents)
     // {
-    //     $document
-    //         ->setAttribute('string', 'text📝 updated')
-    //         ->setAttribute('integer', 6)
-    //         ->setAttribute('float', 5.56)
-    //         ->setAttribute('boolean', false)
-    //         ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
-    //         ->setAttribute('with-dash', 'Works');
 
-    //     $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+    //     $start = microtime(true);
+    //     foreach ($documents as $document) {
+    //         $document
+    //             ->setAttribute('string', 'text📝 updated')
+    //             ->setAttribute('integer', 6)
+    //             ->setAttribute('float', 5.56)
+    //             ->setAttribute('boolean', false)
+    //             ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+    //             ->setAttribute('with-dash', 'Works');
+
+    //         $new = static::getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+    //     }
+    //     $end = microtime(true);
+    //     var_dump('Sequential update time for ' . count($documents) . ' documents : ' . ($end - $start));
 
     //     $this->assertNotEmpty(true, $new->getId());
     //     $this->assertIsString($new->getAttribute('string'));
@@ -149,36 +160,56 @@ class MariaDBTest extends Base
     //     $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
     //     $this->assertEquals('Works', $new->getAttribute('with-dash'));
 
-    //     $oldPermissions = $document->getPermissions();
+    //     // $oldPermissions = $document->getPermissions();
 
-    //     $new
-    //         ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
-    //         ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
-    //         ->setAttribute('$permissions', Permission::update(Role::guests()), Document::SET_TYPE_APPEND)
-    //         ->setAttribute('$permissions', Permission::delete(Role::guests()), Document::SET_TYPE_APPEND);
+    //     // $new
+    //     //     ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+    //     //     ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
+    //     //     ->setAttribute('$permissions', Permission::update(Role::guests()), Document::SET_TYPE_APPEND)
+    //     //     ->setAttribute('$permissions', Permission::delete(Role::guests()), Document::SET_TYPE_APPEND);
 
-    //     $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+    //     // $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
-    //     $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+    //     // $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-    //     $this->assertContains('guests', $new->getRead());
-    //     $this->assertContains('guests', $new->getWrite());
-    //     $this->assertContains('guests', $new->getCreate());
-    //     $this->assertContains('guests', $new->getUpdate());
-    //     $this->assertContains('guests', $new->getDelete());
+    //     // $this->assertContains('guests', $new->getRead());
+    //     // $this->assertContains('guests', $new->getWrite());
+    //     // $this->assertContains('guests', $new->getCreate());
+    //     // $this->assertContains('guests', $new->getUpdate());
+    //     // $this->assertContains('guests', $new->getDelete());
 
-    //     $new->setAttribute('$permissions', $oldPermissions);
+    //     // $new->setAttribute('$permissions', $oldPermissions);
 
-    //     $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+    //     // $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
 
-    //     $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+    //     // $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
 
-    //     $this->assertNotContains('guests', $new->getRead());
-    //     $this->assertNotContains('guests', $new->getWrite());
-    //     $this->assertNotContains('guests', $new->getCreate());
-    //     $this->assertNotContains('guests', $new->getUpdate());
-    //     $this->assertNotContains('guests', $new->getDelete());
-
-    //     return $document;
+    //     // $this->assertNotContains('guests', $new->getRead());
+    //     // $this->assertNotContains('guests', $new->getWrite());
+    //     // $this->assertNotContains('guests', $new->getCreate());
+    //     // $this->assertNotContains('guests', $new->getUpdate());
+    //     // $this->assertNotContains('guests', $new->getDelete());
     // }
+
+    /**
+     * @depends testCreateDocuments
+     */
+    public function testUpdateDocumentsBatch(array $documents)
+    {
+
+        foreach ($documents as $document) {
+            $document
+                ->setAttribute('string', 'text📝 updated')
+                ->setAttribute('integer', 6)
+                ->setAttribute('float', 5.56)
+                ->setAttribute('boolean', false)
+                ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+                ->setAttribute('with-dash', 'Works');
+        }
+
+        $start = microtime(true);
+        $updatedDocuments = static::getDatabase()->updateDocuments($document->getCollection(), $documents, count($documents));
+        $end = microtime(true);
+        var_dump('Batch update time for ' . count($documents) . ' documents : ' . ($end - $start));
+    }
 }

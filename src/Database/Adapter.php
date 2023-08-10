@@ -317,14 +317,15 @@ abstract class Adapter
     abstract public function updateDocument(string $collection, Document $document): Document;
 
     /**
-     * Update Documents
+     * Update Documents in batches
      *
      * @param string $collection
      * @param Document[] $documents
+     * @param int $batchSize
      *
      * @return Document[]
      */
-    abstract public function updateDocuments(string $collection, array $documents): array;
+    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
 
     /**
      * Delete Document

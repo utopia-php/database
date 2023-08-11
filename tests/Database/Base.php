@@ -3342,11 +3342,11 @@ abstract class Base extends TestCase
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
         ];
-        for($i=1; $i < 6; $i++){
+        for ($i=1; $i < 6; $i++) {
             static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permission);
         }
 
-        for($i = 1; $i < 5; $i++){
+        for ($i = 1; $i < 5; $i++) {
             $collectionId = $i;
             $relatedCollectionId = $i+1;
             static::getDatabase()->createRelationship(
@@ -3382,13 +3382,13 @@ abstract class Base extends TestCase
                                             '$id' => 'level5',
                                             '$permissions' => [],
                                             'name' => 'Level 5',
-                                            
+
                                         ],
                                     ],
-                                    
+
                                 ],
                             ],
-                            
+
                         ],
                     ],
                 ],
@@ -3396,15 +3396,15 @@ abstract class Base extends TestCase
         ]));
 
         $this->assertEquals(1, \count($level1['level2']));
-        
+
         $updateLevel1 = static::getDatabase()->updateDocument('level1', 'level1', $level1);
-        
+
         $this->assertEquals($level1, $updateLevel1);
-        
+
         $this->expectException(AuthorizationException::class);
         static::getDatabase()->updateDocument('level1', 'level1', $level1->setAttribute('name', 'haha'));
 
-        for($i=1; $i < 6; $i++){
+        for ($i=1; $i < 6; $i++) {
             static::getDatabase()->deleteCollection("level{$i}");
         }
     }

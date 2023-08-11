@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "21a731a53a90dda637bc28e7d7b771c0",
+    "content-hash": "dc6582e79b47c667aa0db1e3c68dabea",
     "packages": [
         {
             "name": "composer/package-versions-deprecated",
@@ -381,16 +381,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "0.0.2",
+            "version": "dev-feat-insert-many",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "62f9a9c0201af91b6d0dd4f0aa8a335ec9b56a1e"
+                "reference": "4ab1a0c2a4bbf178658e9aa21b219c4cd80dce90"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/62f9a9c0201af91b6d0dd4f0aa8a335ec9b56a1e",
-                "reference": "62f9a9c0201af91b6d0dd4f0aa8a335ec9b56a1e",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/4ab1a0c2a4bbf178658e9aa21b219c4cd80dce90",
+                "reference": "4ab1a0c2a4bbf178658e9aa21b219c4cd80dce90",
                 "shasum": ""
             },
             "require": {
@@ -435,9 +435,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/0.0.2"
+                "source": "https://github.com/utopia-php/mongo/tree/feat-insert-many"
             },
-            "time": "2022-11-08T11:58:46+00:00"
+            "time": "2023-08-11T22:55:31+00:00"
         }
     ],
     "packages-dev": [
@@ -4258,7 +4258,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "utopia-php/mongo": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

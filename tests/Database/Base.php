@@ -3326,49 +3326,87 @@ abstract class Base extends TestCase
             $this->expectNotToPerformAssertions();
             return;
         }
+        $attribute = new Document([
+            '$id' => ID::custom("name"),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ]);
 
-        static::getDatabase()->createCollection('parentRelationTest');
-        static::getDatabase()->createCollection('childRelationTest');
+        $permission = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        for($i=1; $i < 6; $i++){
+            static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permission);
+        }
 
-        static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
-        static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
-
-        static::getDatabase()->createRelationship(
-            collection: 'parentRelationTest',
-            relatedCollection: 'childRelationTest',
-            type: Database::RELATION_ONE_TO_MANY,
-            id: 'children'
-        );
+        for($i = 1; $i < 5; $i++){
+            $collectionId = $i;
+            $relatedCollectionId = $i+1;
+            static::getDatabase()->createRelationship(
+                collection: "level{$collectionId}",
+                relatedCollection: "level{$relatedCollectionId}",
+                type: Database::RELATION_ONE_TO_MANY,
+                id: "level{$relatedCollectionId}"
+            );
+        }
 
         // Create document with relationship with nested data
-        $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
-            '$id' => 'parent1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-            ],
-            'name' => 'Parent 1',
-            'children' => [
+        $level1 = static::getDatabase()->createDocument('level1', new Document([
+            '$id' => 'level1',
+            '$permissions' => [],
+            'name' => 'Level 1',
+            'level2' => [
                 [
-                    '$id' => 'child1',
-                    '$permissions' => [
-                        Permission::read(Role::any()),
+                    '$id' => 'level2',
+                    '$permissions' => [],
+                    'name' => 'Level 2',
+                    'level3' => [
+                        [
+                            '$id' => 'level3',
+                            '$permissions' => [],
+                            'name' => 'Level haha',
+                            'level4' => [
+                                [
+                                    '$id' => 'level4',
+                                    '$permissions' => [],
+                                    'name' => 'Level 4',
+                                    'level5' => [
+                                        [
+                                            '$id' => 'level5',
+                                            '$permissions' => [],
+                                            'name' => 'Level 5',
+                                            
+                                        ],
+                                    ],
+                                    
+                                ],
+                            ],
+                            
+                        ],
                     ],
-                    'name' => 'Child 1',
                 ],
             ],
         ]));
 
-        $this->assertEquals(1, \count($parent['children']));
+        $this->assertEquals(1, \count($level1['level2']));
+        
+        $updateLevel1 = static::getDatabase()->updateDocument('level1', 'level1', $level1);
+        
+        $this->assertEquals($level1, $updateLevel1);
+        
+        $this->expectException(AuthorizationException::class);
+        static::getDatabase()->updateDocument('level1', 'level1', $level1->setAttribute('name', 'haha'));
 
-        $parent->setAttribute('children', ['child1']);
-
-        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', $parent);
-
-        $this->assertEquals($updatedParent->getUpdatedAt(), $parent->getUpdatedAt());
-        $this->assertEquals($updatedParent->getAttribute('children')[0]->getUpdatedAt(), $parent->getAttribute('children')[0]->getUpdatedAt());
-
-        static::getDatabase()->deleteCollection('parentRelationTest');
-        static::getDatabase()->deleteCollection('childRelationTest');
+        for($i=1; $i < 6; $i++){
+            static::getDatabase()->deleteCollection("level{$i}");
+        }
     }
 
     public function testExceptionAttributeLimit(): void

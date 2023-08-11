@@ -1464,11 +1464,17 @@ class Database
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
     {
+        if (empty($documents)) {
+            return [];
+        }
+
         $collection = $this->silent(fn() => $this->getCollection($collection));
+
+
 
         $time = DateTime::now();
 
-        $documents = array_map(function($document) use ($collection, $time){
+        foreach ($documents as $key => $document) {
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
@@ -1478,23 +1484,20 @@ class Database
             $document = $this->encode($collection, $document);
 
             $validator = new Structure($collection);
-
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
             }
 
-            return $document;
-        }, $documents);
+            $documents[$key] = $document;
+        }
 
         $documents = $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
 
-        $documents = array_map(function($document) use ($collection){
-            $document = $this->decode($collection, $document);
+        foreach ($documents as $key => $document) {
+            $documents[$key] = $this->decode($collection, $document);
+        }
 
-            $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
-
-            return $document;
-        }, $documents);
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE, $documents);
 
         return $documents;
     }
@@ -1546,6 +1549,11 @@ class Database
         return $document;
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws Throwable
+     * @throws StructureException
+     */
     public function updateDocuments(string $collection, array $documents, int $batchSize): array
     {
         if (empty($documents)) {
@@ -1563,6 +1571,17 @@ class Database
             $document->setAttribute('$updatedAt', $time);
             $document = $this->encode($collection, $document);
 
+            $old = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument(
+                $collection->getId(),
+                $document->getId())
+            ));
+
+            $validator = new Authorization(self::PERMISSION_UPDATE);
+            if ($collection->getId() !== self::METADATA
+                && !$validator->isValid($old->getUpdate())) {
+                throw new AuthorizationException($validator->getDescription());
+            }
+
             $validator = new Structure($collection);
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
@@ -1570,11 +1589,14 @@ class Database
         }
 
         $documents = $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
-        
-        // foreach ($documents as $document) {
-        //     $document = $this->decode($collection, $document);
-        //     $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
-        // }
+
+         foreach ($documents as $key => $document) {
+             $documents[$key] = $this->decode($collection, $document);
+
+             $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
+         }
+
+         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
 
         return $documents;
 }

@@ -428,6 +428,9 @@ class MariaDB extends SQL
         return $document;
     }
 
+    /**
+     * @throws Duplicate
+     */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
         if (empty($documents)) {
@@ -438,7 +441,7 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = array_chunk($documents, $batchSize);
+            $batches = \array_chunk($documents, $batchSize);
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -451,28 +454,29 @@ class MariaDB extends SQL
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = json_encode($document->getPermissions());
+                    $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                    $columns = array_map(function ($attribute) {
-                        $column = $this->filter($attribute);
-                        return "`$column`";
-                    }, array_keys($attributes));
-                    $columns = '(' . implode(', ', $columns) . ')';
+                    $columns = [];
+                    foreach (\array_keys($attributes) as $key => $attribute) {
+                        $columns[$key] = "`{$this->filter($attribute)}`";
+                    }
+
+                    $columns = '(' . \implode(', ', $columns) . ')';
 
                     $bindKeys = [];
 
-                    foreach ($attributes as $attribute => $value) {
-                        if (is_array($value)) { // arrays & objects should be saved as strings
-                            $value = json_encode($value);
+                    foreach ($attributes as $value) {
+                        if (\is_array($value)) {
+                            $value = \json_encode($value);
                         }
-                        $value = (is_bool($value)) ? (int)$value : $value;
+                        $value = (\is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = ':' . $bindKey;
                         $bindValues[$bindKey] = $value;
                         $bindIndex++;
                     }
 
-                    $batchKeys[] = '(' . implode(', ', $bindKeys) . ')';
+                    $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
                     foreach (Database::PERMISSIONS as $type) {
                         foreach ($document->getPermissionsByType($type) as $permission) {
                             $permission = \str_replace('"', '', $permission);
@@ -481,9 +485,10 @@ class MariaDB extends SQL
                     }
                 }
 
-                $stmt = $this->getPDO()
-                    ->prepare("INSERT INTO {$this->getSQLTable($name)} 
-                $columns VALUES " . implode(', ', $batchKeys));
+                $stmt = $this->getPDO()->prepare("
+                    INSERT INTO {$this->getSQLTable($name)} {$columns}
+                    VALUES " . \implode(', ', $batchKeys)
+                );
 
                 foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
@@ -492,11 +497,11 @@ class MariaDB extends SQL
                 $stmt->execute();
 
                 if (!empty($permissions)) {
-                    $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-                    $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-                    if (isset($stmtPermissions)) {
-                        $stmtPermissions->execute();
-                    }
+                    $stmtPermissions = $this->getPDO()->prepare("
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
+                        VALUES " . \implode(', ', $permissions)
+                    );
+                    $stmtPermissions?->execute();
                 }
             }
 
@@ -505,20 +510,16 @@ class MariaDB extends SQL
             }
 
             return $documents;
+
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                default:
-                    throw $e;
-            }
+            throw match ($e->getCode()) {
+                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                default => $e,
+            };
         }
     }
-
-
 
     /**
      * Update Document
@@ -544,12 +545,14 @@ class MariaDB extends SQL
          * Get current permissions from the database
          */
         $permissionsStmt = $this->getPDO()->prepare("
-                SELECT _type, _permission
-                FROM {$this->getSQLTable($name . '_perms')} p
-                WHERE p._document = :_uid
+            SELECT _type, _permission
+            FROM {$this->getSQLTable($name . '_perms')}
+            WHERE _document = :_uid
         ");
+
         $permissionsStmt->bindValue(':_uid', $document->getId());
         $permissionsStmt->execute();
+
         $permissions = $permissionsStmt->fetchAll();
 
         $initial = [];
@@ -708,7 +711,9 @@ class MariaDB extends SQL
         return $document;
     }
 
-
+    /**
+     * @throws Duplicate
+     */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
         if (empty($documents)) {
@@ -719,28 +724,34 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = array_chunk($documents, $batchSize);
+            $batches = \array_chunk($documents, $batchSize);
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
                 $batchKeys = [];
                 $bindValues = [];
 
-                foreach ($batch as $document) {
+                $removeQuery = '';
+                $removeBindValues = [];
+
+                $addQuery = '';
+                $addBindValues = [];
+
+                foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                    $columns = array_map(function ($attribute) {
+                    $columns = \array_map(function ($attribute) {
                         return "`" . $this->filter($attribute) . "`";
-                    }, array_keys($attributes));
+                    }, \array_keys($attributes));
 
                     $bindKeys = [];
 
-                    foreach ($attributes as $attribute => $value) {
-                        if (is_array($value)) {
+                    foreach ($attributes as $value) {
+                        if (\is_array($value)) {
                             $value = json_encode($value);
                         }
                         $value = (is_bool($value)) ? (int)$value : $value;
@@ -755,8 +766,8 @@ class MariaDB extends SQL
                     // Permissions logic
                     $permissionsStmt = $this->getPDO()->prepare("
                         SELECT _type, _permission
-                        FROM {$this->getSQLTable($name . '_perms')} p
-                        WHERE p._document = :_uid
+                        FROM {$this->getSQLTable($name . '_perms')}
+                        WHERE _document = :_uid
                     ");
                     $permissionsStmt->bindValue(':_uid', $document->getId());
                     $permissionsStmt->execute();
@@ -767,7 +778,7 @@ class MariaDB extends SQL
                         $initial[$type] = [];
                     }
 
-                    $permissions = array_reduce($permissions, function (array $carry, array $item) {
+                    $permissions = \array_reduce($permissions, function (array $carry, array $item) {
                         $carry[$item['_type']][] = $item['_permission'];
                         return $carry;
                     }, $initial);
@@ -781,80 +792,82 @@ class MariaDB extends SQL
                         }
                     }
 
-                    // Query to remove permissions
-                    $removeQuery = '';
+                    // Build inner query to remove permissions
                     if (!empty($removals)) {
-                        $removeQuery = 'AND (';
-                        foreach ($removals as $type => $permissions) {
+                        foreach ($removals as $type => $permissionsToRemove) {
+                            $bindKey = 'uid_' . $index;
+                            $removeBindKeys[] = ':uid_' . $index;
+                            $removeBindValues[$bindKey] = $document->getId();
+
                             $removeQuery .= "(
-                                _type = '{$type}'
-                                AND _permission IN (" . implode(', ', array_map(fn (string $i) => ":_remove_{$type}_{$i}", array_keys($permissions))) . ")
+                                _document = :uid_{$index}
+                                AND _type = '{$type}'
+                                AND _permission IN (" . implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
+                                    $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
+                                    $removeBindKeys[] = ':' . $bindKey;
+                                    $removeBindValues[$bindKey] = $permissionsToRemove[$i];
+
+                                    return ':' . $bindKey;
+                                }, \array_keys($permissionsToRemove))) .
+                                ")
                             )";
-                            if ($type !== array_key_last($removals)) {
+
+                            if ($type !== \array_key_last($removals)) {
                                 $removeQuery .= ' OR ';
                             }
                         }
-                    }
-                    if (!empty($removeQuery)) {
-                        $removeQuery .= ')';
-                        $stmtRemovePermissions = $this->getPDO()
-                            ->prepare("
-                            DELETE
-                            FROM {$this->getSQLTable($name . '_perms')}
-                            WHERE
-                                _document = :_uid
-                                {$removeQuery}
-                        ");
-                        $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-                        foreach ($removals as $type => $permissions) {
-                            foreach ($permissions as $i => $permission) {
-                                $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                            }
+                        if ($index !== \array_key_last($batch)) {
+                            $removeQuery .= ' OR ';
                         }
                     }
 
                     // Get added Permissions
                     $additions = [];
                     foreach (Database::PERMISSIONS as $type) {
-                        $diff = array_diff($document->getPermissionsByType($type), $permissions[$type]);
+                        $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
                         if (!empty($diff)) {
                             $additions[$type] = $diff;
                         }
                     }
 
-                    // Query to add permissions
+                    // Build inner query to add permissions
                     if (!empty($additions)) {
-                        $values = [];
-                        foreach ($additions as $type => $permissions) {
-                            foreach ($permissions as $i => $_) {
-                                $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                        foreach ($additions as $type => $permissionsToAdd) {
+                            foreach ($permissionsToAdd as $i => $permission) {
+                                $bindKey = 'uid_' . $index;
+                                $addBindValues[$bindKey] = $document->getId();
+
+                                $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
+                                $addBindValues[$bindKey] = $permission;
+
+                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey})";
+
+                                if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
+                                    $addQuery .= ', ';
+                                }
                             }
                         }
-
-                        $stmtAddPermissions = $this->getPDO()
-                            ->prepare(
-                                "
-                                INSERT INTO {$this->getSQLTable($name . '_perms')}
-                                (_document, _type, _permission) VALUES " . implode(', ', $values)
-                            );
-
-                        $stmtAddPermissions->bindValue(":_uid", $document->getId());
-                        foreach ($additions as $type => $permissions) {
-                            foreach ($permissions as $i => $permission) {
-                                $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
-                            }
+                        if ($index !== \array_key_last($batch)) {
+                            $addQuery .= ', ';
                         }
                     }
                 }
 
-                $updateClause = implode(', ', array_map(function ($column) {
-                    return "$column=VALUES($column)";
-                }, array_slice($columns, 1))); // Exclude UID
+                $updateClause = '';
+                for ($i = 0; $i < \count($columns); $i++) {
+                    $column = $columns[$i];
+                    if (!empty($updateClause)) {
+                        $updateClause .= ', ';
+                    }
+                    $updateClause .= "{$column} = VALUES({$column})";
+                }
 
-                $stmt = $this->getPDO()
-                    ->prepare("INSERT INTO {$this->getSQLTable($name)} 
-                (" . implode(", ", $columns) . ") VALUES " . implode(', ', $batchKeys) . " ON DUPLICATE KEY UPDATE $updateClause");
+                $stmt = $this->getPDO()->prepare("
+                    INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
+                    VALUES " . \implode(', ', $batchKeys) . "
+                    ON DUPLICATE KEY UPDATE $updateClause
+                ");
 
                 foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
@@ -862,14 +875,30 @@ class MariaDB extends SQL
 
                 $stmt->execute();
 
-                // Execute permissions statements for each document in the batch
-                if (!empty($removals)) {
-                    var_dump($stmtRemovePermissions->queryString);
+                if (!empty($removeQuery)) {
+                    $stmtRemovePermissions = $this->getPDO()->prepare("
+                        DELETE
+                        FROM {$this->getSQLTable($name . '_perms')}
+                        WHERE ({$removeQuery})
+                    ");
+
+                    foreach ($removeBindValues as $key => $value) {
+                        $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
+                    }
+
                     $stmtRemovePermissions->execute();
                 }
 
-                if (!empty($additions)) {
-                    var_dump($stmtAddPermissions->queryString);
+                if (!empty($addQuery)) {
+                    $stmtAddPermissions = $this->getPDO()->prepare("
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`)
+                        VALUES {$addQuery}
+                    ");
+
+                    foreach ($addBindValues as $key => $value) {
+                        $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
+                    }
+
                     $stmtAddPermissions->execute();
                 }
             }
@@ -881,17 +910,13 @@ class MariaDB extends SQL
             return $documents;
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                default:
-                    throw $e;
-            }
+            throw match ($e->getCode()) {
+                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                default => $e,
+            };
         }
     }
-
 
     /**
      * Increase or decrease an attribute value

@@ -2940,6 +2940,10 @@ class Database
             foreach ($document as $key => $value) {
                 // Skip the nested documents as they will be checked later in recursions.
                 if (\array_key_exists($key, $relationships)) {
+                    // No need to compare nested documents more than max depth.
+                    if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                        continue;
+                    }
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
 

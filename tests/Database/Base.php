@@ -3337,13 +3337,13 @@ abstract class Base extends TestCase
             'filters' => [],
         ]);
 
-        $permission = [
+        $permissions = [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
         ];
         for ($i=1; $i < 6; $i++) {
-            static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permission);
+            static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permissions);
         }
 
         for ($i = 1; $i < 5; $i++) {
@@ -3352,7 +3352,7 @@ abstract class Base extends TestCase
             static::getDatabase()->createRelationship(
                 collection: "level{$collectionId}",
                 relatedCollection: "level{$relatedCollectionId}",
-                type: Database::RELATION_ONE_TO_MANY,
+                type: Database::RELATION_ONE_TO_ONE,
                 id: "level{$relatedCollectionId}"
             );
         }
@@ -3363,46 +3363,52 @@ abstract class Base extends TestCase
             '$permissions' => [],
             'name' => 'Level 1',
             'level2' => [
-                [
-                    '$id' => 'level2',
+                '$id' => 'level2',
+                '$permissions' => [],
+                'name' => 'Level 2',
+                'level3' => [
+                    '$id' => 'level3',
                     '$permissions' => [],
-                    'name' => 'Level 2',
-                    'level3' => [
-                        [
-                            '$id' => 'level3',
+                    'name' => 'Level haha',
+                    'level4' => [
+                        '$id' => 'level4',
+                        '$permissions' => [],
+                        'name' => 'Level 4',
+                        'level5' => [
+                            '$id' => 'level5',
                             '$permissions' => [],
-                            'name' => 'Level haha',
-                            'level4' => [
-                                [
-                                    '$id' => 'level4',
-                                    '$permissions' => [],
-                                    'name' => 'Level 4',
-                                    'level5' => [
-                                        [
-                                            '$id' => 'level5',
-                                            '$permissions' => [],
-                                            'name' => 'Level 5',
-
-                                        ],
-                                    ],
-
-                                ],
-                            ],
-
-                        ],
+                            'name' => 'Level 5',
+                        ]
                     ],
                 ],
             ],
-        ]));
+        ]));        
+        static::getDatabase()->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
+        $updatedLevel1 = static::getDatabase()->getDocument('level1', $level1->getId());
+        $this->assertEquals($level1, $updatedLevel1);
 
-        $this->assertEquals(1, \count($level1['level2']));
+        try {
+            static::getDatabase()->updateDocument('level1', $level1->getId(), $level1->setAttribute('name', 'haha'));
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertInstanceOf(AuthorizationException::class, $e);
+        }
+        $level1->setAttribute('name','Level 1');
+        static::getDatabase()->updateCollection('level3', [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ], false);
+        $level2 = $level1->getAttribute('level2');
+        $level3 = $level2->getAttribute('level3');
 
-        $updateLevel1 = static::getDatabase()->updateDocument('level1', 'level1', $level1);
+        $level3->setAttribute('name', 'updated value');
+        $level2->setAttribute('level3', $level3);
+        $level1->setAttribute('level2', $level2);
 
-        $this->assertEquals($level1, $updateLevel1);
-
-        $this->expectException(AuthorizationException::class);
-        static::getDatabase()->updateDocument('level1', 'level1', $level1->setAttribute('name', 'haha'));
+        $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);        
+        $this->assertEquals('updated value', $level1['level2']['level3']['name']);
 
         for ($i=1; $i < 6; $i++) {
             static::getDatabase()->deleteCollection("level{$i}");

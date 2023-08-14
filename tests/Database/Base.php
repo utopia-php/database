@@ -3369,7 +3369,7 @@ abstract class Base extends TestCase
                 'level3' => [
                     '$id' => 'level3',
                     '$permissions' => [],
-                    'name' => 'Level haha',
+                    'name' => 'Level 3',
                     'level4' => [
                         '$id' => 'level4',
                         '$permissions' => [],

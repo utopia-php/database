@@ -254,6 +254,35 @@ class Mongo extends Adapter
     }
 
     /**
+     * Get Collection Size
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $namespace = $this->getNamespace();
+        $collection = $this->filter($collection);
+        $collection = $namespace. '_' . $collection;
+
+        $command = [
+            'collStats' => $collection,
+            'scale' => 1
+        ];
+
+        try {
+            $result = $this->getClient()->query($command);
+            if (is_object($result)) {
+                return $result->totalSize;
+            } else {
+                throw new DatabaseException('No size found');
+            }
+        } catch(Exception $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -1334,6 +1363,11 @@ class Mongo extends Adapter
         $projection = [];
 
         foreach ($selections as $selection) {
+            // Skip internal attributes since all are selected by default
+            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+                continue;
+            }
+
             $projection[$selection] = 1;
         }
 

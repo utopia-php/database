@@ -188,6 +188,20 @@ class Database
     ];
 
     /**
+     * List of Internal Attributes
+     *
+     * @var array<string>
+     */
+    public const INTERNAL_ATTRIBUTES = [
+        '$id',
+        '$internalId',
+        '$createdAt',
+        '$updatedAt',
+        '$permissions',
+        '$collection',
+    ];
+
+    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
@@ -787,6 +801,18 @@ class Database
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
         return $result;
+    }
+
+    /**
+     * Get Collection Size
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        return $this->adapter->getSizeOfCollection($collection);
     }
 
     /**
@@ -2224,11 +2250,12 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
-        $document->setAttribute('$collection', $collection->getId());
 
         if ($document->isEmpty()) {
             return $document;
         }
+
+        $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
@@ -2282,6 +2309,20 @@ class Database
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($cacheKey, $document->getArrayCopy());
+        }
+
+        // Remove internal attributes if not queried for select query
+        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
+        // All internal attributes are default selected attributes for (MongoDB)
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $values = $query->getValues();
+                foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                    if (!in_array($internalAttribute, $values)) {
+                        $document->removeAttribute($internalAttribute);
+                    }
+                }
+            }
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
@@ -2891,25 +2932,87 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            $relationshipKeys = [];
             foreach ($relationships as $relationship) {
-                $relationshipKey = $relationship->getAttribute('key');
-                $relationshipKeys[$relationshipKey] =   $relationshipKey;
+                $relationships[$relationship->getAttribute('key')] = $relationship;
             }
+
             // Compare if the document has any changes
-            foreach ($document as $key=>$value) {
+            foreach ($document as $key => $value) {
                 // Skip the nested documents as they will be checked later in recursions.
-                if (array_key_exists($key, $relationshipKeys)) {
+                if (\array_key_exists($key, $relationships)) {
+                    // No need to compare nested documents more than max depth.
+                    if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                        continue;
+                    }
+                    $relationType = (string) $relationships[$key]['options']['relationType'];
+                    $side = (string) $relationships[$key]['options']['side'];
+
+                    switch($relationType) {
+                        case Database::RELATION_ONE_TO_ONE:
+                            $oldValue = $old->getAttribute($key) instanceof Document
+                                ? $old->getAttribute($key)->getId()
+                                : $old->getAttribute($key);
+
+                            if ((\is_null($value) !== \is_null($oldValue))
+                            || (\is_string($value) && $value !== $oldValue)
+                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                $shouldUpdate = true;
+                            }
+                            break;
+                        case Database::RELATION_ONE_TO_MANY:
+                        case Database::RELATION_MANY_TO_ONE:
+                        case Database::RELATION_MANY_TO_MANY:
+                            if (
+                                ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                                ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD)
+                            ) {
+                                $oldValue = $old->getAttribute($key) instanceof Document
+                                    ? $old->getAttribute($key)->getId()
+                                    : $old->getAttribute($key);
+
+                                if ((\is_null($value) !== \is_null($oldValue))
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document &&  $value->getId() !== $oldValue)) {
+                                    $shouldUpdate = true;
+                                }
+                                break;
+                            }
+
+                            if ((\is_null($old->getAttribute($key)) !== \is_null($value))
+                            || \count($old->getAttribute($key)) !== \count($value)) {
+                                $shouldUpdate = true;
+                                break;
+                            }
+                            foreach ($value as $index => $relation) {
+                                $oldValue = $old->getAttribute($key)[$index] instanceof Document
+                                    ? $old->getAttribute($key)[$index]->getId()
+                                    : $old->getAttribute($key)[$index];
+
+                                if ((\is_string($relation) && $relation !== $oldValue)
+                                || ($relation instanceof Document && $relation->getId() !== $oldValue)) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+                            }
+                            break;
+                    }
+
+                    if ($shouldUpdate) {
+                        break;
+                    }
+
                     continue;
                 }
 
-                $oldAttributeValue = $old->getAttribute($key);
+                $oldValue = $old->getAttribute($key);
+
                 // If values are not equal we need to update document.
-                if ($oldAttributeValue !== $value) {
+                if ($value !== $oldValue) {
                     $shouldUpdate = true;
                     break;
                 }
             }
+
             if ($shouldUpdate && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
@@ -2920,8 +3023,6 @@ class Database
 
         if ($shouldUpdate) {
             $document->setAttribute('$updatedAt', $time);
-        } else {
-            $document->setAttribute('$updatedAt', $old->getUpdatedAt());
         }
 
         // Check if document was updated after the request timestamp
@@ -2951,6 +3052,7 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->purgeRelatedDocuments($collection, $id);
+
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
@@ -3011,8 +3113,8 @@ class Database
                                 $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $value));
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
-                                    // For one-one we need to update the related key to old value, either null if no relation exists or old related document id
-                                    $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
                                 }
                             } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
@@ -3036,8 +3138,8 @@ class Database
                                 $related = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value)));
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
-                                    // For one-one we need to update the related key to old value, either null if no relation exists or old related document id
-                                    $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
                                     break;
                                 }
                                 if (
@@ -3196,9 +3298,9 @@ class Database
                         if (\is_string($value)) {
                             $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $value));
                             if ($related->isEmpty()) {
-                                //If no such document exists in related collection
-                                //For one-one we need to update the related key to old value, either null if no relation exists or old related document id
-                                $document->setAttribute($key, ($oldValue instanceof Document && !($oldValue->isEmpty()) ? $oldValue->getId() : null));
+                                // If no such document exists in related collection
+                                // For many-one we need to update the related key to null if no relation exists
+                                $document->setAttribute($key, null);
                             }
                             $this->deleteCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
@@ -4044,10 +4146,27 @@ class Database
             }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
-            $node->setAttribute('$collection', $collection->getId());
+
+            if (!$node->isEmpty()) {
+                $node->setAttribute('$collection', $collection->getId());
+            }
         }
 
         $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
+
+        // Remove internal attributes which are not queried
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $values = $query->getValues();
+                foreach ($results as $result) {
+                    foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                        if (!\in_array($internalAttribute, $values)) {
+                            $result->removeAttribute($internalAttribute);
+                        }
+                    }
+                }
+            }
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -4241,14 +4360,14 @@ class Database
         return $sum;
     }
 
-    public function setTimeoutForQueries(int $milliseconds): void
+    public function setTimeout(int $milliseconds): void
     {
-        $this->adapter->setTimeoutForQueries($milliseconds);
+        $this->adapter->setTimeout($milliseconds);
     }
 
-    public function clearTimeoutForQueries(): void
+    public function clearTimeout(): void
     {
-        $this->adapter->clearTimeoutForQueries();
+        $this->adapter->clearTimeout();
     }
     /**
      * Add Attribute Filter
@@ -4395,7 +4514,19 @@ class Database
             }
 
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
+                if (
+                    empty($selections)
+                    || \in_array($key, $selections)
+                    || \in_array('*', $selections)
+                    || \in_array($key, ['$createdAt', '$updatedAt'])
+                ) {
+                    // Prevent null values being set for createdAt and updatedAt
+                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
+                        continue;
+                    } else {
+                        $document->setAttribute($key, ($array) ? $value : $value[0]);
+                    }
+                }
             }
         }
 
@@ -4547,9 +4678,14 @@ class Database
         }
 
         $keys = [];
+
+        // Allow querying internal attributes
+        $keys = array_merge($keys, self::INTERNAL_ATTRIBUTES);
+
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
-                $keys[] = $attribute['key'];
+                // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes
+                $keys[] = $attribute['key'] ?? $attribute['$id'];
             }
         }
 

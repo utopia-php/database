@@ -35,8 +35,6 @@ abstract class Base extends TestCase
      */
     abstract protected static function getDatabase(): Database;
 
-    abstract protected static function killDatabase(): void;
-
     /**
      * @return string
      */
@@ -241,14 +239,14 @@ abstract class Base extends TestCase
             }
 
             $this->expectException(Timeout::class);
-            static::getDatabase()->setTimeoutForQueries(1);
+            static::getDatabase()->setTimeout(1);
 
             try {
                 static::getDatabase()->find('global-timeouts', [
                     Query::notEqual('longtext', 'appwrite'),
                 ]);
             } catch(Timeout $ex) {
-                static::getDatabase()->clearTimeoutForQueries();
+                static::getDatabase()->clearTimeout();
                 static::getDatabase()->deleteCollection('global-timeouts');
                 throw $ex;
             }
@@ -280,6 +278,77 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
+    }
+
+    public function testSizeCollection(): void
+    {
+        static::getDatabase()->createCollection('sizeTest1');
+        static::getDatabase()->createCollection('sizeTest2');
+
+        $size1 = static::getDatabase()->getSizeOfCollection('sizeTest1');
+        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
+        $sizeDifference = abs($size1 - $size2);
+        // Size of an empty collection returns either 172032 or 167936 bytes randomly
+        // Therefore asserting with a tolerance of 5000 bytes
+        $byteDifference = 5000;
+        $this->assertLessThan($byteDifference, $sizeDifference);
+
+        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 40;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            static::getDatabase()->createDocument('sizeTest2', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
+            ]));
+        }
+
+        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertGreaterThan($size1, $size2);
+    }
+
+    public function testSizeFullText(): void
+    {
+        // SQLite does not support fulltext indexes
+        if (!static::getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('fullTextSizeTest');
+
+        $size1 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+
+        static::getDatabase()->createAttribute('fullTextSizeTest', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('fullTextSizeTest', 'string2', Database::VAR_STRING, 254, true);
+        static::getDatabase()->createAttribute('fullTextSizeTest', 'string3', Database::VAR_STRING, 254, true);
+        static::getDatabase()->createIndex('fullTextSizeTest', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 10;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            static::getDatabase()->createDocument('fullTextSizeTest', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
+            ]));
+        }
+
+        $size2 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+
+        $this->assertGreaterThan($size1, $size2);
+
+        static::getDatabase()->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
+
+        $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+
+        $this->assertGreaterThan($size2, $size3);
     }
 
     public function testCreateDeleteAttribute(): void
@@ -1050,11 +1119,14 @@ abstract class Base extends TestCase
      */
     public function testGetDocumentSelect(Document $document): Document
     {
-        $document = static::getDatabase()->getDocument('documents', $document->getId(), [
+        $documentId = $document->getId();
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select(['string', 'integer']),
         ]);
 
-        $this->assertNotEmpty(true, $document->getId());
+        $this->assertEmpty($document->getId());
+        $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
@@ -1063,6 +1135,78 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$id']),
+        ]);
+
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$permissions']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$internalId']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$collection']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$createdAt']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $documentId, [
+            Query::select(['string', 'integer', '$updatedAt']),
+        ]);
+
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
 
         return $document;
     }
@@ -2573,18 +2717,127 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('movies', [
             Query::select(['name', 'year'])
         ]);
+
         foreach ($documents as $document) {
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
             $this->assertArrayHasKey('name', $document);
             $this->assertArrayHasKey('year', $document);
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$id'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$internalId'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$collection'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$createdAt'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$updatedAt'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+        }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['name', 'year', '$permissions'])
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertArrayHasKey('name', $document);
+            $this->assertArrayHasKey('year', $document);
+            $this->assertArrayNotHasKey('director', $document);
+            $this->assertArrayNotHasKey('price', $document);
+            $this->assertArrayNotHasKey('active', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayHasKey('$permissions', $document);
         }
     }
 
@@ -3038,15 +3291,14 @@ abstract class Base extends TestCase
         return $document;
     }
 
-
     /**
      * @depends testCreateDocument
      */
     public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
     {
-        Authorization::setRole(Role::any()->toString());
-
         $document = static::getDatabase()->createDocument('documents', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [],
             'string' => 'text📝',
             'integer' => 5,
             'bigint' => 8589934592, // 2^33
@@ -3055,10 +3307,14 @@ abstract class Base extends TestCase
             'colors' => ['pink', 'green', 'blue'],
         ]));
 
-        Authorization::cleanRoles();
-        $updatedDocument = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
+        $updatedDocument = static::getDatabase()->updateDocument(
+            'documents',
+            $document->getId(),
+            $document
+        );
 
-        // Document should not be updated as there is no change. It should also not throw any authorization exception without any permission because of no change.
+        // Document should not be updated as there is no change.
+        // It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         return $document;
@@ -3070,63 +3326,99 @@ abstract class Base extends TestCase
             $this->expectNotToPerformAssertions();
             return;
         }
-
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::user('a')->toString());
-
-        static::getDatabase()->createCollection('parentRelationTest', [], [], [
-            Permission::read(Role::user('a')),
-            Permission::create(Role::user('a')),
+        $attribute = new Document([
+            '$id' => ID::custom("name"),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
         ]);
-        static::getDatabase()->createCollection('childRelationTest', [], [], [
-            Permission::read(Role::user('a')),
-            Permission::create(Role::user('a')),
-        ]);
-        static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
-        static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
 
-        static::getDatabase()->createRelationship(
-            collection: 'parentRelationTest',
-            relatedCollection: 'childRelationTest',
-            type: Database::RELATION_ONE_TO_MANY,
-            id: 'childs'
-        );
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        for ($i=1; $i < 6; $i++) {
+            static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permissions);
+        }
+
+        for ($i = 1; $i < 5; $i++) {
+            $collectionId = $i;
+            $relatedCollectionId = $i+1;
+            static::getDatabase()->createRelationship(
+                collection: "level{$collectionId}",
+                relatedCollection: "level{$relatedCollectionId}",
+                type: Database::RELATION_ONE_TO_ONE,
+                id: "level{$relatedCollectionId}"
+            );
+        }
 
         // Create document with relationship with nested data
-        $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
-            '$id' => 'parent1',
-            'name' => 'Parent 1',
-            'childs' => [
-                [
-                    '$id' => 'child1',
-                    'name' => 'Child 1',
+        $level1 = static::getDatabase()->createDocument('level1', new Document([
+            '$id' => 'level1',
+            '$permissions' => [],
+            'name' => 'Level 1',
+            'level2' => [
+                '$id' => 'level2',
+                '$permissions' => [],
+                'name' => 'Level 2',
+                'level3' => [
+                    '$id' => 'level3',
+                    '$permissions' => [],
+                    'name' => 'Level 3',
+                    'level4' => [
+                        '$id' => 'level4',
+                        '$permissions' => [],
+                        'name' => 'Level 4',
+                        'level5' => [
+                            '$id' => 'level5',
+                            '$permissions' => [],
+                            'name' => 'Level 5',
+                        ]
+                    ],
                 ],
             ],
         ]));
-        $this->assertEquals(1, \count($parent['childs']));
-        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', new Document([
-            '$id' => 'parent1',
-            'name'=>'Parent 1',
-            '$collection' => 'parentRelationTest',
-            'childs' => [
-                new Document([
-                    '$id' => 'child1',
-                    '$collection' => 'childRelationTest'
-                ]),
-            ]
-        ]));
+        static::getDatabase()->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
+        $updatedLevel1 = static::getDatabase()->getDocument('level1', $level1->getId());
+        $this->assertEquals($level1, $updatedLevel1);
 
-        $this->assertEquals($updatedParent->getUpdatedAt(), $parent->getUpdatedAt());
-        $this->assertEquals($updatedParent->getAttribute('childs')[0]->getUpdatedAt(), $parent->getAttribute('childs')[0]->getUpdatedAt());
+        try {
+            static::getDatabase()->updateDocument('level1', $level1->getId(), $level1->setAttribute('name', 'haha'));
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertInstanceOf(AuthorizationException::class, $e);
+        }
+        $level1->setAttribute('name', 'Level 1');
+        static::getDatabase()->updateCollection('level3', [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ], false);
+        $level2 = $level1->getAttribute('level2');
+        $level3 = $level2->getAttribute('level3');
 
-        static::getDatabase()->deleteCollection('parentRelationTest');
-        static::getDatabase()->deleteCollection('childRelationTest');
+        $level3->setAttribute('name', 'updated value');
+        $level2->setAttribute('level3', $level3);
+        $level1->setAttribute('level2', $level2);
+
+        $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);
+        $this->assertEquals('updated value', $level1['level2']['level3']['name']);
+
+        for ($i=1; $i < 6; $i++) {
+            static::getDatabase()->deleteCollection("level{$i}");
+        }
     }
 
     public function testExceptionAttributeLimit(): void
     {
         if ($this->getDatabase()->getLimitForAttributes() > 0) {
-            // load the collection up to the limit
+            // Load the collection up to the limit
             $attributes = [];
             for ($i = 0; $i < $this->getDatabase()->getLimitForAttributes(); $i++) {
                 $attributes[] = new Document([
@@ -3140,7 +3432,8 @@ abstract class Base extends TestCase
                     'filters' => [],
                 ]);
             }
-            $collection = static::getDatabase()->createCollection('attributeLimit', $attributes);
+
+            static::getDatabase()->createCollection('attributeLimit', $attributes);
 
             $this->expectException(LimitException::class);
             $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
@@ -4188,21 +4481,21 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('person', 'person1', new Document([
-            '$id' => 'person1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Person 1',
-            '$collection' => 'person',
-            'library' => 'no-library'
-        ]));
+        static::getDatabase()->updateDocument(
+            'person',
+            'person1',
+            $person1->setAttribute('library', 'no-library')
+        );
 
         $person1Document = static::getDatabase()->getDocument('person', 'person1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('library1', $person1Document->getAttribute('library')->getAttribute('$id'));
+        $this->assertEquals(null, $person1Document->getAttribute('library'));
+
+        static::getDatabase()->updateDocument(
+            'person',
+            'person1',
+            $person1->setAttribute('library', 'library1')
+        );
 
         // Update through create
         $library10 = static::getDatabase()->createDocument('library', new Document([
@@ -4293,7 +4586,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         $person = static::getDatabase()->getDocument('person', 'person1', [
-            Query::select(['*', 'library.name'])
+            Query::select(['*', 'library.name', '$id'])
         ]);
 
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
@@ -4620,22 +4913,12 @@ abstract class Base extends TestCase
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('country', 'country1', new Document([
-            '$id' => 'country1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'England',
-            '$collection' => 'country',
-            'city' => 'no-city'
-        ]));
+        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'no-city'));
 
         $country1Document = static::getDatabase()->getDocument('country', 'country1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('city1', $country1Document->getAttribute('city')->getAttribute('$id'));
-
+        $this->assertEquals(null, $country1Document->getAttribute('city'));
+        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'city1'));
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');
@@ -5262,20 +5545,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('artist', 'artist1', new Document([
-            '$id' => 'artist1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Artist 1',
-            '$collection' => 'artist',
-            'albums' => [
-                'album1',
-                'no-album'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('artist', 'artist1', $artist1->setAttribute('albums', ['album1', 'no-album']));
 
         $artist1Document = static::getDatabase()->getDocument('artist', 'artist1');
         // Assert document does not contain non existing relation document.
@@ -5661,20 +5931,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('customer', 'customer1', new Document([
-            '$id' => 'customer1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Customer 1',
-            '$collection' => 'customer',
-            'accounts' => [
-                'account1',
-                'no-account'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('customer', 'customer1', $customer1->setAttribute('accounts', ['account1','no-account']));
 
         $customer1Document = static::getDatabase()->getDocument('customer', 'customer1');
         // Assert document does not contain non existing relation document.
@@ -6122,21 +6379,13 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('review', 'review1', new Document([
-            '$id' => 'review1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Review 1',
-            '$collection' => 'review',
-            'movie' => 'no-movie'
-        ]));
+        static::getDatabase()->updateDocument('review', 'review1', $review1->setAttribute('movie', 'no-movie'));
 
         $review1Document = static::getDatabase()->getDocument('review', 'review1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('movie1', $review1Document->getAttribute('movie')->getAttribute('$id'));
+        $this->assertEquals(null, $review1Document->getAttribute('movie'));
+
+        static::getDatabase()->updateDocument('review', 'review1', $review1->setAttribute('movie', 'movie1'));
 
         // Create document with relationship to existing document by ID
         $review10 = static::getDatabase()->createDocument('review', new Document([
@@ -6466,21 +6715,13 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('product', 'product1', new Document([
-            '$id' => 'product1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Product 1',
-            '$collection' => 'product',
-            'store' => 'no-store'
-        ]));
+        static::getDatabase()->updateDocument('product', 'product1', $product1->setAttribute('store', 'no-store'));
 
         $product1Document = static::getDatabase()->getDocument('product', 'product1');
         // Assert document does not contain non existing relation document.
-        $this->assertEquals('store1', $product1Document->getAttribute('store')->getAttribute('$id'));
+        $this->assertEquals(null, $product1Document->getAttribute('store'));
+
+        static::getDatabase()->updateDocument('product', 'product1', $product1->setAttribute('store', 'store1'));
 
         // Create document with relationship with related ID
         static::getDatabase()->createDocument('store', new Document([
@@ -6943,20 +7184,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('playlist', 'playlist1', new Document([
-            '$id' => 'playlist1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Playlist 1',
-            '$collection' => 'playlist',
-            'songs' => [
-                'song1',
-                'no-song'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('playlist', 'playlist1', $playlist1->setAttribute('songs', ['song1','no-song']));
 
         $playlist1Document = static::getDatabase()->getDocument('playlist', 'playlist1');
         // Assert document does not contain non existing relation document.
@@ -7254,20 +7482,7 @@ abstract class Base extends TestCase
         ]));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('students', 'student1', new Document([
-            '$id' => 'student1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'Student 1',
-            '$collection' => 'students',
-            'classes' => [
-                'class1',
-                'no-class'
-            ]
-        ]));
+        static::getDatabase()->updateDocument('students', 'student1', $student1->setAttribute('classes', ['class1', 'no-class']));
 
         $student1Document = static::getDatabase()->getDocument('students', 'student1');
         // Assert document does not contain non existing relation document.
@@ -7705,6 +7920,103 @@ abstract class Base extends TestCase
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+
+        // Select internal attributes
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$id']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$internalId']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$collection']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$createdAt']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$updatedAt']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+
+        $make = static::getDatabase()->findOne('make', [
+            Query::select(['name', '$permissions']),
+        ]);
+
+        if (!$make instanceof Document) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         // Select all parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
@@ -11386,7 +11698,6 @@ abstract class Base extends TestCase
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
-
         static::getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
@@ -11554,6 +11865,89 @@ abstract class Base extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testEmptyOperatorValues(): void
+    {
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::equal('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::search('string', null),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::notEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThan('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::lessThanEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThan('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::greaterThanEqual('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::contains('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
+        }
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {
@@ -11644,94 +12038,5 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-    }
-
-    public function testEmptyOperatorValues(): void
-    {
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::equal('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::search('string', null),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::notEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::contains('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
-        }
-    }
-
-    public function testLast(): void
-    {
-        $this->expectNotToPerformAssertions();
-        static::killDatabase();
     }
 }

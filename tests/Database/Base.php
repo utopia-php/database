@@ -3382,7 +3382,7 @@ abstract class Base extends TestCase
                     ],
                 ],
             ],
-        ]));        
+        ]));
         static::getDatabase()->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
         $updatedLevel1 = static::getDatabase()->getDocument('level1', $level1->getId());
         $this->assertEquals($level1, $updatedLevel1);
@@ -3393,7 +3393,7 @@ abstract class Base extends TestCase
         } catch(Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
         }
-        $level1->setAttribute('name','Level 1');
+        $level1->setAttribute('name', 'Level 1');
         static::getDatabase()->updateCollection('level3', [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -3407,7 +3407,7 @@ abstract class Base extends TestCase
         $level2->setAttribute('level3', $level3);
         $level1->setAttribute('level2', $level2);
 
-        $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);        
+        $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);
         $this->assertEquals('updated value', $level1['level2']['level3']['name']);
 
         for ($i=1; $i < 6; $i++) {

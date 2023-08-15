@@ -985,17 +985,11 @@ abstract class Base extends TestCase
                 ]);
         }
 
-        $start = microtime(true);
-
         $documents = static::getDatabase()->updateDocuments(
             $collection,
             $documents,
             \count($documents)
         );
-
-        $end = microtime(true);
-
-        \var_dump('Batch update time for ' . \count($documents) . ' documents : ' . ($end - $start));
 
         foreach ($documents as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));

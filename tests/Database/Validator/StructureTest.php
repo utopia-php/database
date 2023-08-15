@@ -251,7 +251,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and at least 1 chars and no longer than 256 chars', $validator->getDescription());
     }
 
     public function testArrayOfStringsValidation()

@@ -98,7 +98,7 @@ class Postgres extends SQL
         //INDEX (\"_createdAt\"),
         //INDEX (\"_updatedAt\")
         $stmtIndex = $this->getPDO()
-            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (_uid);");
+            ->prepare("CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid));");
         try {
             $stmt->execute();
             $stmtIndex->execute();
@@ -422,11 +422,9 @@ class Postgres extends SQL
                 case 23505:
                     $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                    break;
 
                 default:
                     throw $e;
-                    break;
             }
         }
 
@@ -870,7 +868,7 @@ class Postgres extends SQL
                 $stmt = $this->getPDO()->prepare("
                     INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
                     VALUES " . \implode(', ', $batchKeys) . "
-                    ON CONFLICT (\"_uid\") DO UPDATE SET $updateClause
+                    ON CONFLICT (LOWER(_uid)) DO UPDATE SET $updateClause
                 ");
 
                 foreach ($bindValues as $key => $value) {

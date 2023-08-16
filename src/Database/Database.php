@@ -1470,8 +1470,6 @@ class Database
 
         $collection = $this->silent(fn() => $this->getCollection($collection));
 
-
-
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {

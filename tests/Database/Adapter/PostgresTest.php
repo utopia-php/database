@@ -51,6 +51,8 @@ class PostgresTest extends Base
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
+        $database->create();
+
         return self::$database = $database;
     }
 }

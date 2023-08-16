@@ -8,6 +8,10 @@ use Utopia\Database\Database;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Tests\Base;
 
 class MariaDBTest extends Base
@@ -34,7 +38,7 @@ class MariaDBTest extends Base
      */
     static function getDatabase(): Database
     {
-        if(!is_null(self::$database)) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 
@@ -51,7 +55,9 @@ class MariaDBTest extends Base
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setNamespace('myapp_' . uniqid());
+
+        $database->create();
 
         return self::$database = $database;
     }

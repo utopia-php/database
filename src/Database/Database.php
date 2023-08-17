@@ -2941,9 +2941,10 @@ class Database
                 // Skip the nested documents as they will be checked later in recursions.
                 if (\array_key_exists($key, $relationships)) {
                     // No need to compare nested documents more than max depth.
-                    if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                    if (\count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
                         continue;
                     }
+
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
 
@@ -3043,7 +3044,7 @@ class Database
             $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
         }
 
-        $this->adapter->updateDocument($collection->getId(), $document);
+        $document = $this->adapter->updateDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -3074,13 +3075,17 @@ class Database
      */
     private function updateDocumentRelationships(Document $collection, Document $old, Document $document): Document
     {
+        if ($collection->getId() === self::METADATA) {
+            return $document;
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = \array_filter($attributes, function ($attribute) {
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        $stackCount = count($this->relationshipWriteStack);
+        $stackCount = \count($this->relationshipWriteStack);
 
         foreach ($relationships as $index => $relationship) {
             /** @var string $key */
@@ -3092,11 +3097,6 @@ class Database
             $twoWay = (bool) $relationship['options']['twoWay'];
             $twoWayKey = (string) $relationship['options']['twoWayKey'];
             $side = (string) $relationship['options']['side'];
-
-            if ($oldValue == $value) {
-                $document->removeAttribute($key);
-                continue;
-            }
 
             if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->relationshipWriteStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);

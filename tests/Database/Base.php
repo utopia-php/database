@@ -4415,6 +4415,47 @@ abstract class Base extends TestCase
         $this->assertEquals('newCat', $docs[0]['type']);
     }
 
+    public function testNoInvalidKeys(): void
+    {
+        static::getDatabase()->createCollection('species');
+        static::getDatabase()->createCollection('animals');
+
+        static::getDatabase()->createAttribute('species', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('animals', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'species',
+            relatedCollection: 'animals',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'animal',
+        );
+
+        $species = static::getDatabase()->createDocument('species', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Canine',
+            'animal' => [
+                '$id' => ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Dog',
+            ]
+        ]));
+
+        $this->assertEquals('', $species->getAttribute('animal')->getAttribute('_createdAt', ''));
+        $this->assertEquals('', $species->getAttribute('animal')->getAttribute('_updatedAt', ''));
+
+        $species = static::getDatabase()->updateDocument('species', $species->getId(), $species->setAttribute('name', 'Tiger'));
+
+        $this->assertEquals('', $species->getAttribute('animal')->getAttribute('_createdAt', ''));
+        $this->assertEquals('', $species->getAttribute('animal')->getAttribute('_updatedAt', ''));
+    }
+
     // Relationships
     public function testOneToOneOneWayRelationship(): void
     {

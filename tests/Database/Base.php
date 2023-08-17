@@ -4481,7 +4481,7 @@ abstract class Base extends TestCase
             ]
         ]));
         $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
-        $this->assertEquals($species, $updatedSpecies);    
+        $this->assertEquals($species, $updatedSpecies);
     }
 
     // Relationships
@@ -4986,7 +4986,8 @@ abstract class Base extends TestCase
         $country1Document = static::getDatabase()->getDocument('country', 'country1');
         // Assert document does not contain non existing relation document.
         $this->assertEquals(null, $country1Document->getAttribute('city'));
-        static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city','city1'));        try {
+        static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'city1'));
+        try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {

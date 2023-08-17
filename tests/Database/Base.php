@@ -23,7 +23,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Index;
-use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -4415,6 +4414,76 @@ abstract class Base extends TestCase
         $this->assertEquals('newCat', $docs[0]['type']);
     }
 
+    public function testNoInvalidKeysWithRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('species');
+        static::getDatabase()->createCollection('creatures');
+        static::getDatabase()->createCollection('characterstics');
+
+        static::getDatabase()->createAttribute('species', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('creatures', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('characterstics', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'species',
+            relatedCollection: 'creatures',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'creature',
+            twoWayKey:'species'
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'creatures',
+            relatedCollection: 'characterstics',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'characterstic',
+            twoWayKey:'creature'
+        );
+
+        $species = static::getDatabase()->createDocument('species', new Document([
+            '$id' => ID::custom('1'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Canine',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Dog',
+                'characterstic' => [
+                    '$id' => ID::custom('1'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'active',
+                ]
+            ]
+        ]));
+        static::getDatabase()->updateDocument('species', $species->getId(), new Document([
+            '$id' => ID::custom('1'),
+            '$collection' => 'species',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$collection' => 'creatures',
+                'characterstic' => [
+                    '$id' => ID::custom('1'),
+                    'name' => 'active',
+                    '$collection' => 'characterstics',
+                ]
+            ]
+        ]));
+        $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
+        $this->assertEquals($species, $updatedSpecies);
+    }
+
     // Relationships
     public function testOneToOneOneWayRelationship(): void
     {
@@ -4913,12 +4982,12 @@ abstract class Base extends TestCase
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'no-city'));
+        static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'no-city'));
 
         $country1Document = static::getDatabase()->getDocument('country', 'country1');
         // Assert document does not contain non existing relation document.
         $this->assertEquals(null, $country1Document->getAttribute('city'));
-        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'city1'));
+        static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'city1'));
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');

@@ -2920,6 +2920,11 @@ class Database
 
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+        $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collectionID
+        $document['$createdAt'] = $old->getCreatedAt();        // Make sure user doesn't switch createdAt
+        $document['$id'] = $old->getId();
+        $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {

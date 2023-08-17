@@ -4981,6 +4981,7 @@ abstract class Base extends TestCase
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
+        // Update a document with non existing related document. It should not get added to the list.
         static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'no-city'));
 
         $country1Document = static::getDatabase()->getDocument('country', 'country1');

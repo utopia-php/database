@@ -296,6 +296,17 @@ abstract class Adapter
     abstract public function createDocument(string $collection, Document $document): Document;
 
     /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param Document[] $documents
+     * @param int $batchSize
+     *
+     * @return Document[]
+     */
+    abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
+
+    /**
      * Update Document
      *
      * @param string $collection
@@ -304,6 +315,17 @@ abstract class Adapter
      * @return Document
      */
     abstract public function updateDocument(string $collection, Document $document): Document;
+
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param Document[] $documents
+     * @param int $batchSize
+     *
+     * @return Document[]
+     */
+    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
 
     /**
      * Delete Document

@@ -79,8 +79,10 @@ class Database
     
     const EVENT_DOCUMENT_FIND = 'document_find';
     const EVENT_DOCUMENT_CREATE = 'document_create';
+    const EVENT_DOCUMENTS_CREATE = 'documents_create';
     const EVENT_DOCUMENT_READ = 'document_read';
     const EVENT_DOCUMENT_UPDATE = 'document_update';
+    const EVENT_DOCUMENTS_UPDATE = 'documents_update';
     const EVENT_DOCUMENT_DELETE = 'document_delete';
     const EVENT_DOCUMENT_COUNT = 'document_count';
     const EVENT_DOCUMENT_SUM = 'document_sum';
@@ -93,6 +95,8 @@ class Database
     const EVENT_INDEX_CREATE = 'index_create';
     const EVENT_INDEX_DELETE = 'index_delete';
 
+    // Insert Batch Size
+    const INSERT_BATCH_SIZE = 100;
 
     /**
      * @var Adapter
@@ -1373,6 +1377,56 @@ class Database
     }
 
     /**
+     * Create Documents in a batch
+     *
+     * @param string $collection
+     * @param Document $document
+     *
+     * @return Document
+     *
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Exception|Throwable
+     */
+    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+
+        $time = DateTime::now();
+
+        foreach ($documents as $key => $document) {
+            $document
+                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$collection', $collection->getId())
+                ->setAttribute('$createdAt', $time)
+                ->setAttribute('$updatedAt', $time);
+
+            $document = $this->encode($collection, $document);
+
+            $validator = new Structure($collection);
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+
+            $documents[$key] = $document;
+        }
+
+        $documents = $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
+
+        foreach ($documents as $key => $document) {
+            $documents[$key] = $this->decode($collection, $document);
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE, $documents);
+
+        return $documents;
+    }
+
+    /**
      * Update Document
      *
      * @param string $collection
@@ -1416,6 +1470,58 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
         return $document;
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws Throwable
+     * @throws StructureException
+     */
+    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $time = DateTime::now();
+        $collection = $this->silent(fn() => $this->getCollection($collection));
+
+        foreach ($documents as $document) {
+            if (!$document->getId()) {
+                throw new Exception('Must define $id attribute for each document');
+            }
+
+            $document->setAttribute('$updatedAt', $time);
+            $document = $this->encode($collection, $document);
+
+            $old = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument(
+                $collection->getId(),
+                $document->getId())
+            ));
+
+            $validator = new Authorization(self::PERMISSION_UPDATE);
+            if ($collection->getId() !== self::METADATA
+                && !$validator->isValid($old->getUpdate())) {
+                throw new AuthorizationException($validator->getDescription());
+            }
+
+            $validator = new Structure($collection);
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+        }
+
+        $documents = $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
+
+         foreach ($documents as $key => $document) {
+             $documents[$key] = $this->decode($collection, $document);
+
+             $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
+         }
+
+         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
+
+        return $documents;
     }
 
     /**

@@ -391,6 +391,21 @@ class MongoDBAdapter extends Adapter
         return $document;
     }
 
+    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $records = [];
+        foreach ($documents as $document) {
+            $document->removeAttribute('$internalId');
+
+            $records[] = $this->replaceChars('$', '_', (array)$document);
+        }
+
+        $this->client->insertMany($name, $records);
+
+        return $documents;
+    }
     /**
      * Update Document
      *
@@ -414,6 +429,33 @@ class MongoDBAdapter extends Adapter
         $newDoc = $this->replaceChars('_', '$', $newDoc);
 
         return new Document($newDoc);
+    }
+
+    /**
+     * Update a batch of documents
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return Document
+     * @throws Exception
+     */
+    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        foreach ($documents as $index => $document) {
+            $document = $document->getArrayCopy();
+
+            $document = $this->replaceChars('$', '_', $document);
+
+            $this->client->update($name, ['_uid' => $document['_uid']], $document);
+
+            $documents[$index] = new Document($document);
+        }
+
+        return $documents;
     }
 
     /**

@@ -366,6 +366,28 @@ class MongoClient
         return new Document($this->toArray($docObj));
     }
 
+    public function insertMany(string $collection, array $documents, array $options = [])
+    {
+        $docObjs = [];
+
+        foreach ($documents as $document) {
+            $docObj = new \stdClass();
+
+            foreach ($document as $key => $value) {
+                $docObj->{$key} = $value;
+            }
+
+            $docObjs[] = $docObj;
+        }
+
+        $this->query(array_merge([
+            MongoCommand::INSERT => $collection,
+            'documents' => $docObjs,
+        ], $options));
+
+        return $documents;
+    }
+
     /**
      * Update a document/s.
      * https://docs.mongodb.com/manual/reference/command/update/#syntax

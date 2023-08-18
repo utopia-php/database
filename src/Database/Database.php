@@ -2793,7 +2793,7 @@ class Database
         }
 
         // Try to get the related document
-        $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $relation->getId()));
+        $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
@@ -2814,7 +2814,7 @@ class Database
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
             $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-            Authorization::skip(fn () => $this->createDocument($junction, new Document([
+            $this->createDocument($junction, new Document([
                 $key => $related->getId(),
                 $twoWayKey => $document->getId(),
                 '$permissions' => [
@@ -2822,7 +2822,7 @@ class Database
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ]
-            ])));
+            ]));
         }
 
         return $related->getId();
@@ -3115,7 +3115,7 @@ class Database
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
                             if (\is_string($value)) {
-                                $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $value));
+                                $related = $this->getDocument($relatedCollection->getId(), $value);
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
                                     // For one-one we need to update the related key to null if no relation exists
@@ -3140,7 +3140,7 @@ class Database
 
                         switch (\gettype($value)) {
                             case 'string':
-                                $related = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value)));
+                                $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
                                     // For one-one we need to update the related key to null if no relation exists
@@ -3149,9 +3149,9 @@ class Database
                                 }
                                 if (
                                     $oldValue?->getId() !== $value
-                                    && Authorization::skip(fn () => $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                    && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                         Query::equal($twoWayKey, [$value]),
-                                    ])))
+                                    ]))
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                     throw new DuplicateException('Document already has a related document');
@@ -3165,13 +3165,13 @@ class Database
                                 break;
                             case 'object':
                                 if ($value instanceof Document) {
-                                    $related = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId())));
+                                    $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
 
                                     if (
                                         $oldValue?->getId() !== $value->getId()
-                                        && Authorization::skip(fn () => $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                        && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                             Query::equal($twoWayKey, [$value->getId()]),
-                                        ])))
+                                        ]))
                                     ) {
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                         throw new DuplicateException('Document already has a related document');
@@ -3201,10 +3201,10 @@ class Database
                                 // no break
                             case 'NULL':
                                 if (!\is_null($oldValue?->getId())) {
-                                    $oldRelated = Authorization::skip(fn () => $this->skipRelationships(
+                                    $oldRelated = $this->skipRelationships(
                                         fn () =>
                                         $this->getDocument($relatedCollection->getId(), $oldValue->getId())
-                                    ));
+                                    );
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $oldRelated->getId(),
@@ -3259,10 +3259,10 @@ class Database
 
                             foreach ($value as $relation) {
                                 if (\is_string($relation)) {
-                                    $related = Authorization::skip(fn () => $this->skipRelationships(
+                                    $related = $this->skipRelationships(
                                         fn () =>
                                         $this->getDocument($relatedCollection->getId(), $relation)
-                                    ));
+                                    );
 
                                     if ($related->isEmpty()) {
                                         continue;
@@ -3274,7 +3274,7 @@ class Database
                                         $related->setAttribute($twoWayKey, $document->getId())
                                     ));
                                 } elseif ($relation instanceof Document) {
-                                    $related = Authorization::skip(fn () =>$this->getDocument($relatedCollection->getId(), $relation->getId()));
+                                    $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                                     if ($related->isEmpty()) {
                                         if (!isset($value['$permissions'])) {
@@ -3285,11 +3285,12 @@ class Database
                                             $relation->setAttribute($twoWayKey, $document->getId())
                                         );
                                     } else {
-                                        $this->updateDocument(
+                                        // We need to skip the relationship when updating document so that comparison check does not fail
+                                        $this->skipRelationships(fn () => $this->updateDocument(
                                             $relatedCollection->getId(),
                                             $related->getId(),
                                             $relation->setAttribute($twoWayKey, $document->getId())
-                                        );
+                                        ));
                                     }
                                 } else {
                                     throw new DatabaseException('Invalid value for relationship');
@@ -3301,7 +3302,7 @@ class Database
                         }
 
                         if (\is_string($value)) {
-                            $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $value));
+                            $related = $this->getDocument($relatedCollection->getId(), $value);
                             if ($related->isEmpty()) {
                                 // If no such document exists in related collection
                                 // For many-one we need to update the related key to null if no relation exists
@@ -3309,7 +3310,7 @@ class Database
                             }
                             $this->deleteCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
-                            $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
+                            $related = $this->getDocument($relatedCollection->getId(), $value->getId());
 
                             if ($related->isEmpty()) {
                                 if (!isset($value['$permissions'])) {
@@ -3361,11 +3362,11 @@ class Database
                         foreach ($removedDocuments as $relation) {
                             $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                            $junctions = Authorization::skip(fn () => $this->find($junction, [
+                            $junctions = $this->find($junction, [
                                 Query::equal($key, [$relation]),
                                 Query::equal($twoWayKey, [$document->getId()]),
                                 Query::limit(PHP_INT_MAX)
-                            ]));
+                            ]);
 
                             foreach ($junctions as $junction) {
                                 Authorization::skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
@@ -3374,11 +3375,11 @@ class Database
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds) || Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $relation)->isEmpty())) {
+                                if (\in_array($relation, $oldIds) || $this->getDocument($relatedCollection->getId(), $relation)->isEmpty()) {
                                     continue;
                                 }
                             } elseif ($relation instanceof Document) {
-                                $related = Authorization::skip(fn () => $this->getDocument($relatedCollection->getId(), $relation->getId()));
+                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
                                 if ($related->isEmpty()) {
                                     if (!isset($value['$permissions'])) {

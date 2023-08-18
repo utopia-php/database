@@ -11870,39 +11870,35 @@ abstract class Base extends TestCase
             collection: 'parentRelationTest',
             relatedCollection: 'childRelationTest',
             type: Database::RELATION_ONE_TO_MANY,
-            id: 'childs'
+            id: 'children'
         );
 
         // Create document with relationship with nested data
         $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
             '$id' => 'parent1',
             'name' => 'Parent 1',
-            'childs' => [
+            'children' => [
                 [
                     '$id' => 'child1',
                     'name' => 'Child 1',
                 ],
             ],
         ]));
-        $this->assertEquals(1, \count($parent['childs']));
-        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', new Document([
-            '$id' => 'parent1',
-            'name'=>'Parent 1',
-            '$collection' => 'parentRelationTest',
-            'childs' => [
-                new Document([
-                    '$id' => 'child1',
-                    '$collection' => 'childRelationTest'
-                ]),
-                new Document([
-                    '$id' => 'child2',
-                    'name' => 'Child 2',
-                    '$collection' => 'childRelationTest'
-                ]),
-            ]
-        ]));
+        $doc =  static::getDatabase()->skipRelationships(
+            fn () => static::getDatabase()->getDocument('childRelationTest', 'child1')
+        );
+        $this->assertEquals(1, \count($parent['children']));
+        $parent->setAttribute('children', [
+            [
+                '$id' => 'child1',
+            ],
+            [
+                '$id' => 'child2',
+            ],
+        ]);
+        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', $parent);
 
-        $this->assertEquals(2, \count($updatedParent['childs']));
+        $this->assertEquals(2, \count($updatedParent['children']));
 
         static::getDatabase()->deleteCollection('parentRelationTest');
         static::getDatabase()->deleteCollection('childRelationTest');

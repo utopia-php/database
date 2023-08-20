@@ -616,7 +616,7 @@ class MariaDB extends Adapter
                 }
 
                 $stmt = $this->getPDO()->prepare("
-                    INSERT INTO {$this->getSQLTable($name)} {$columns}
+                    INSERT IGNORE INTO {$this->getSQLTable($name)} {$columns}
                     VALUES " . \implode(', ', $batchKeys)
                 );
 
@@ -628,7 +628,7 @@ class MariaDB extends Adapter
 
                 if (!empty($permissions)) {
                     $stmtPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
+                        INSERT IGNORE INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
                         VALUES " . \implode(', ', $permissions)
                     );
                     $stmtPermissions?->execute();

@@ -1090,29 +1090,29 @@ class Postgres extends SQL
 
         $results = $stmt->fetchAll();
 
-        foreach ($results as $key => $value) {
-            if (isset($value['_uid'])) {
-                $results[$key]['$id'] = $value['_uid'];
-                unset($results[$key]['_uid']);
+        foreach ($results as $index => $document) {
+            if (\array_key_exists('_uid', $document)) {
+                $results[$index]['$id'] = $document['_uid'];
+                unset($results[$index]['_uid']);
             }
-            if (isset($value['_id'])) {
-                $results[$key]['$internalId'] = $value['_id'];
-                unset($results[$key]['_id']);
+            if (\array_key_exists('_id', $document)) {
+                $results[$index]['$internalId'] = $document['_id'];
+                unset($results[$index]['_id']);
             }
-            if (isset($value['_createdAt'])) {
-                $results[$key]['$createdAt'] = $value['_createdAt'];
-                unset($results[$key]['_createdAt']);
+            if (\array_key_exists('_createdAt', $document)) {
+                $results[$index]['$createdAt'] = $document['_createdAt'];
+                unset($results[$index]['_createdAt']);
             }
-            if (isset($value['_updatedAt'])) {
-                $results[$key]['$updatedAt'] = $value['_updatedAt'];
-                unset($results[$key]['_updatedAt']);
+            if (\array_key_exists('_updatedAt', $document)) {
+                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+                unset($results[$index]['_updatedAt']);
             }
-            if (isset($value['_permissions'])) {
-                $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
-                unset($results[$key]['_permissions']);
+            if (\array_key_exists('_permissions', $document)) {
+                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+                unset($results[$index]['_permissions']);
             }
 
-            $results[$key] = new Document($results[$key]);
+            $results[$index] = new Document($results[$index]);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {

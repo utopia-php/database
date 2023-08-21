@@ -127,23 +127,23 @@ abstract class SQL extends Adapter
             return new Document([]);
         }
 
-        if (isset($document['_id'])) {
+        if (\array_key_exists('_id', $document)) {
             $document['$internalId'] = $document['_id'];
             unset($document['_id']);
         }
-        if (isset($document['_uid'])) {
+        if (\array_key_exists('_uid', $document)) {
             $document['$id'] = $document['_uid'];
             unset($document['_uid']);
         }
-        if (isset($document['_createdAt'])) {
+        if (\array_key_exists('_createdAt', $document)) {
             $document['$createdAt'] = $document['_createdAt'];
             unset($document['_createdAt']);
         }
-        if (isset($document['_updatedAt'])) {
+        if (\array_key_exists('_updatedAt', $document)) {
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
         }
-        if (isset($document['_permissions'])) {
+        if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
             unset($document['_permissions']);
         }

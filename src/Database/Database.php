@@ -2180,7 +2180,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException("Collection not found");
+            throw new DatabaseException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -4242,7 +4242,6 @@ class Database
 
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
-
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();

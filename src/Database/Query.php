@@ -200,7 +200,7 @@ class Query
         $paramsStart = mb_strpos($filter, static::CHAR_PARENTHESES_START);
 
         if ($paramsStart === false) {
-            throw new QueryException("Invalid query");
+            throw new QueryException('Invalid query');
         }
 
         $method = mb_substr($filter, 0, $paramsStart);
@@ -211,7 +211,7 @@ class Query
 
         // Check for deprecated query syntax
         if (\str_contains($method, '.')) {
-            throw new QueryException("Invalid query method");
+            throw new QueryException('Invalid query method');
         }
 
         $currentParam = ""; // We build param here before pushing when it's ended

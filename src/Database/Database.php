@@ -3244,16 +3244,16 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                $relation = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument(
                                     $relatedCollection->getId(),
                                     $relation
-                                ));
+                                )));
 
-                                $this->skipRelationships(fn () => $this->updateDocument(
+                                Authorization::skip(fn () => $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation->getId(),
                                     $relation->setAttribute($twoWayKey, null)
-                                ));
+                                )));
                             }
 
                             foreach ($value as $relation) {
@@ -3367,7 +3367,7 @@ class Database
                             ]);
 
                             foreach ($junctions as $junction) {
-                                $this->deleteDocument($junction->getCollection(), $junction->getId());
+                                Authorization::skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
                             }
                         }
 

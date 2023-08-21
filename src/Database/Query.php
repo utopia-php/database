@@ -706,7 +706,7 @@ class Query
         $filtered = [];
         foreach ($queries as $query) {
             if (in_array($query->getMethod(), $types, true)) {
-                $filtered[] = $query;
+                $filtered[] = clone $query;
             }
         }
 
@@ -786,11 +786,11 @@ class Query
                     break;
 
                 case Query::TYPE_SELECT:
-                    $selections[] = $query;
+                    $selections[] = clone $query;
                     break;
 
                 default:
-                    $filters[] = $query;
+                    $filters[] = clone $query;
                     break;
             }
         }

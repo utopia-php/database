@@ -3285,12 +3285,11 @@ class Database
                                             $relation->setAttribute($twoWayKey, $document->getId())
                                         );
                                     } else {
-                                        // We need to skip the relationship when updating document so that comparison check does not fail
-                                        $this->skipRelationships(fn () => $this->updateDocument(
+                                        $this->updateDocument(
                                             $relatedCollection->getId(),
                                             $related->getId(),
                                             $relation->setAttribute($twoWayKey, $document->getId())
-                                        ));
+                                        );
                                     }
                                 } else {
                                     throw new DatabaseException('Invalid value for relationship');

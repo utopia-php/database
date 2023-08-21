@@ -4046,7 +4046,7 @@ class Database
 
         $validator = new Documents($attributes, $indexes);
         if (!$validator->isValid($queries)) {
-            throw new Exception($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);

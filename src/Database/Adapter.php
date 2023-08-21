@@ -671,7 +671,7 @@ abstract class Adapter
     public static function setTimeout(int $milliseconds): void
     {
         if ($milliseconds <= 0) {
-            throw new Exception('Timeout must be greater than 0');
+            throw new DatabaseException('Timeout must be greater than 0');
         }
         self::$timeout = $milliseconds;
     }

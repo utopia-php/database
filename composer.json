@@ -31,6 +31,7 @@
     },
     "require": {
         "ext-pdo": "*",
+        "ext-mbstring": "*",
         "php": ">=8.0",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.8.*",

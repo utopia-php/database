@@ -11884,21 +11884,15 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-        $doc =  static::getDatabase()->skipRelationships(
-            fn () => static::getDatabase()->getDocument('childRelationTest', 'child1')
-        );
-        $this->assertEquals(1, \count($parent['children']));
+        $this->assertEquals('child1', $parent->getAttribute('children')[0]->getId());
         $parent->setAttribute('children', [
-            [
-                '$id' => 'child1',
-            ],
             [
                 '$id' => 'child2',
             ],
         ]);
         $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', $parent);
 
-        $this->assertEquals(2, \count($updatedParent['children']));
+        $this->assertEquals('child2', $updatedParent->getAttribute('children')[0]->getId());
 
         static::getDatabase()->deleteCollection('parentRelationTest');
         static::getDatabase()->deleteCollection('childRelationTest');

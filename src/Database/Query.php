@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Query as QueryException;
 
 class Query
 {
@@ -200,7 +201,7 @@ class Query
         $paramsStart = mb_strpos($filter, static::CHAR_PARENTHESES_START);
 
         if ($paramsStart === false) {
-            throw new DatabaseException("Invalid query");
+            throw new QueryException("Invalid query");
         }
 
         $method = mb_substr($filter, 0, $paramsStart);
@@ -211,7 +212,7 @@ class Query
 
         // Check for deprecated query syntax
         if (\str_contains($method, '.')) {
-            throw new DatabaseException("Invalid query method");
+            throw new QueryException("Invalid query method");
         }
 
         $currentParam = ""; // We build param here before pushing when it's ended
@@ -822,7 +823,7 @@ class Query
             try {
                 $parsed[] = Query::parse($query);
             } catch (\Throwable $th) {
-                throw new DatabaseException("Invalid query: ${query}", previous: $th);
+                throw new QueryException("Invalid query: ${query}", previous: $th);
             }
         }
 

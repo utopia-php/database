@@ -12,11 +12,13 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Database\Validator\Queries\Document as DocumentValidator;
+use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
@@ -2177,6 +2179,17 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->isEmpty()) {
+            throw new DatabaseException("Collection not found");
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $validator = new DocumentValidator($attributes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -4044,9 +4057,9 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new Documents($attributes, $indexes);
+        $validator = new DocumentsValidator($attributes, $indexes);
         if (!$validator->isValid($queries)) {
-            throw new DatabaseException($validator->getDescription());
+            throw new QueryException($validator->getDescription());
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4157,8 +4170,6 @@ class Database
             }
         }
 
-        $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
-
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
@@ -4179,112 +4190,6 @@ class Database
     }
 
     /**
-     * @param array<Document> $results
-     * @param array<Query> $queries
-     * @param array<Document> $relationships
-     * @return array<Document>
-     */
-    private function applyNestedQueries(array $results, array $queries, array $relationships): array
-    {
-        foreach ($results as $index => &$node) {
-            foreach ($queries as $query) {
-                $path = \explode('.', $query->getAttribute());
-
-                if (\count($path) == 1) {
-                    continue;
-                }
-
-                $matched = false;
-                foreach ($relationships as $relationship) {
-                    if ($relationship->getId() === $path[0]) {
-                        $matched = true;
-                        break;
-                    }
-                }
-
-                if (!$matched) {
-                    continue;
-                }
-
-                $value = $node->getAttribute($path[0]);
-
-                $levels = \count($path);
-                for ($i = 1; $i < $levels; $i++) {
-                    if ($value instanceof Document) {
-                        $value = $value->getAttribute($path[$i]);
-                    }
-                }
-
-                if (\is_array($value)) {
-                    $values = \array_map(function ($value) use ($path, $levels) {
-                        return $value[$path[$levels - 1]];
-                    }, $value);
-                } else {
-                    $values = [$value];
-                }
-
-                $matched = false;
-                foreach ($values as $value) {
-                    switch ($query->getMethod()) {
-                        case Query::TYPE_EQUAL:
-                            foreach ($query->getValues() as $queryValue) {
-                                if ($value === $queryValue) {
-                                    $matched = true;
-                                    break 2;
-                                }
-                            }
-                            break;
-                        case Query::TYPE_NOT_EQUAL:
-                            $matched = $value !== $query->getValue();
-                            break;
-                        case Query::TYPE_GREATER:
-                            $matched = $value > $query->getValue();
-                            break;
-                        case Query::TYPE_GREATER_EQUAL:
-                            $matched = $value >= $query->getValue();
-                            break;
-                        case Query::TYPE_LESSER:
-                            $matched = $value < $query->getValue();
-                            break;
-                        case Query::TYPE_LESSER_EQUAL:
-                            $matched = $value <= $query->getValue();
-                            break;
-                        case Query::TYPE_CONTAINS:
-                            $matched = \in_array($query->getValue(), $value);
-                            break;
-                        case Query::TYPE_SEARCH:
-                            $matched = \str_contains($value, $query->getValue());
-                            break;
-                        case Query::TYPE_IS_NULL:
-                            $matched = $value === null;
-                            break;
-                        case Query::TYPE_IS_NOT_NULL:
-                            $matched = $value !== null;
-                            break;
-                        case Query::TYPE_BETWEEN:
-                            $matched = $value >= $query->getValues()[0] && $value <= $query->getValues()[1];
-                            break;
-                        case Query::TYPE_STARTS_WITH:
-                            $matched = \str_starts_with($value, $query->getValue());
-                            break;
-                        case Query::TYPE_ENDS_WITH:
-                            $matched = \str_ends_with($value, $query->getValue());
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                if (!$matched) {
-                    unset($results[$index]);
-                }
-            }
-        }
-
-        return \array_values($results);
-    }
-
-    /**
      * @param string $collection
      * @param array<Query> $queries
      * @return bool|Document
@@ -4292,7 +4197,10 @@ class Database
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
-        $results = $this->silent(fn () => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
+        $results = $this->silent(fn () => $this->find($collection, \array_merge([
+            Query::limit(1)
+        ], $queries)));
+
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
@@ -4320,6 +4228,14 @@ class Database
             throw new DatabaseException("Collection not found");
         }
 
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+
         $authorization = new Authorization(self::PERMISSION_READ);
         if ($authorization->isValid($collection->getRead())) {
             $skipAuth = true;
@@ -4327,6 +4243,7 @@ class Database
 
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
+
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -4357,7 +4274,16 @@ class Database
             throw new DatabaseException("Collection not found");
         }
 
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+
         $queries = self::convertQueries($collection, $queries);
+
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);

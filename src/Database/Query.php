@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Query as QueryException;
 
 class Query

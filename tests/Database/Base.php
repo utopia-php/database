@@ -11843,6 +11843,61 @@ abstract class Base extends TestCase
         ));
     }
 
+    public function testCreateRelationDocumentWithoutUpdatePermission(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('a')->toString());
+
+        static::getDatabase()->createCollection('parentRelationTest', [], [], [
+            Permission::read(Role::user('a')),
+            Permission::create(Role::user('a')),
+            Permission::update(Role::user('a')),
+            Permission::delete(Role::user('a'))
+        ]);
+        static::getDatabase()->createCollection('childRelationTest', [], [], [
+            Permission::create(Role::user('a')),
+            Permission::read(Role::user('a')),
+        ]);
+        static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
+        static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
+
+        static::getDatabase()->createRelationship(
+            collection: 'parentRelationTest',
+            relatedCollection: 'childRelationTest',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children'
+        );
+
+        // Create document with relationship with nested data
+        $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
+            '$id' => 'parent1',
+            'name' => 'Parent 1',
+            'children' => [
+                [
+                    '$id' => 'child1',
+                    'name' => 'Child 1',
+                ],
+            ],
+        ]));
+        $this->assertEquals('child1', $parent->getAttribute('children')[0]->getId());
+        $parent->setAttribute('children', [
+            [
+                '$id' => 'child2',
+            ],
+        ]);
+        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', $parent);
+
+        $this->assertEquals('child2', $updatedParent->getAttribute('children')[0]->getId());
+
+        static::getDatabase()->deleteCollection('parentRelationTest');
+        static::getDatabase()->deleteCollection('childRelationTest');
+    }
+
     public function testLabels(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection(

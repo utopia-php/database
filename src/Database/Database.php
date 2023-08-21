@@ -2936,7 +2936,6 @@ class Database
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
         $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collectionID
         $document['$createdAt'] = $old->getCreatedAt();        // Make sure user doesn't switch createdAt
-        $document['$id'] = $old->getId();
         $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -3258,16 +3257,16 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                $relation = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument(
                                     $relatedCollection->getId(),
                                     $relation
-                                ));
+                                )));
 
-                                $this->skipRelationships(fn () => $this->updateDocument(
+                                Authorization::skip(fn () => $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation->getId(),
                                     $relation->setAttribute($twoWayKey, null)
-                                ));
+                                )));
                             }
 
                             foreach ($value as $relation) {
@@ -3381,7 +3380,7 @@ class Database
                             ]);
 
                             foreach ($junctions as $junction) {
-                                $this->deleteDocument($junction->getCollection(), $junction->getId());
+                                Authorization::skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
                             }
                         }
 

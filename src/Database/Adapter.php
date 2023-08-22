@@ -301,10 +301,11 @@ abstract class Adapter
      * @param string $collection
      * @param Document[] $documents
      * @param int $batchSize
+     * @paran bool $copyInternalId
      *
      * @return Document[]
      */
-    abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function createDocuments(string $collection, array $documents, int $batchSize, bool $copyInternalId): array;
 
     /**
      * Update Document

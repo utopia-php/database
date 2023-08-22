@@ -391,13 +391,15 @@ class MongoDBAdapter extends Adapter
         return $document;
     }
 
-    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    public function createDocuments(string $collection, array $documents, int $batchSize, bool $copyInternalId = false): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $records = [];
         foreach ($documents as $document) {
-            $document->removeAttribute('$internalId');
+            if(!$copyInternalId) {
+                $document->removeAttribute('$internalId');
+            }
 
             $records[] = $this->replaceChars('$', '_', (array)$document);
         }

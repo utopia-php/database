@@ -397,6 +397,9 @@ class MongoDBAdapter extends Adapter
 
         $records = [];
         foreach ($documents as $document) {
+            $document->setAttribute('_id', $document->getInternalId());
+            $document->removeAttribute('$internalId');
+
             $records[] = $this->replaceChars('$', '_', (array)$document);
         }
 

@@ -11315,18 +11315,17 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
 
-        $documents = static::getDatabase()->find(
-            $collection->getId()
-        );
+        $documents = static::getDatabase()->find($collection->getId());
         $this->assertNotEmpty($documents);
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::user('random')->toString());
 
-        $documents = static::getDatabase()->find(
-            $collection->getId()
-        );
-        $this->assertNotEmpty($documents);
+        try {
+            static::getDatabase()->find($collection->getId());
+            $this->fail('Failed to throw exception');
+        } catch (AuthorizationException) {
+        }
 
         return $data;
     }
@@ -11342,10 +11341,8 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
 
-        $documents = static::getDatabase()->find(
-            $collection->getId()
-        );
-        $this->assertEmpty($documents);
+        $this->expectException(AuthorizationException::class);
+        static::getDatabase()->find($collection->getId());
     }
 
     /**

@@ -2934,8 +2934,8 @@ class Database
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-        $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collectionID
-        $document['$createdAt'] = $old->getCreatedAt();        // Make sure user doesn't switch createdAt
+        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
+        $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
         $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -4062,7 +4062,12 @@ class Database
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getRead());
+
+        if (!$skipAuth && !$documentSecurity) {
+            throw new AuthorizationException($validator->getDescription());
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -4092,7 +4097,6 @@ class Database
 
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
-        $nestedQueries = [];
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
@@ -4129,7 +4133,6 @@ class Database
                     break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {
-                        $nestedQueries[] = $query;
                         unset($queries[$index]);
                     }
                     break;
@@ -4137,6 +4140,7 @@ class Database
         }
 
         $queries = \array_values($queries);
+
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -4151,13 +4155,7 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $relationships = $this->resolveRelationships
-            ? \array_filter($attributes, fn (Document $attribute) =>  $attribute->getAttribute('type') === self::VAR_RELATIONSHIP)
-            : [];
-
-        foreach ($results as $index => &$node) {
+        foreach ($results as  &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }

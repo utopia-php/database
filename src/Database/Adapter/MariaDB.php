@@ -561,7 +561,7 @@ class MariaDB extends Adapter
     /**
      * @throws Duplicate
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE, bool $copyInternalId = false): array
     {
         if (empty($documents)) {
             return $documents;
@@ -585,6 +585,9 @@ class MariaDB extends Adapter
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+                    if($copyInternalId) {
+                        $attributes['_id'] = $document->getInternalId();
+                    }
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {

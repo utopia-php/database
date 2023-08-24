@@ -440,8 +440,6 @@ class Document extends ArrayObject
                 $this[$key] = clone $value;
             } else if (\is_array($value)) {
                 $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
-            } else {
-                $this[$key] = $value;
             }
         }
     }

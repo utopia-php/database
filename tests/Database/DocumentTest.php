@@ -321,6 +321,49 @@ class DocumentTest extends TestCase
         $this->assertEquals(true, $this->document->isSet('title'));
     }
 
+    public function testClone(): void
+    {
+        $before = new Document([
+            'level' => 0,
+            'name' => '_',
+            'document' => new Document(['name' => 'zero']),
+            'children' => [
+                new Document([
+                    'level' => 1,
+                    'name' => 'a',
+                    'document' => new Document(['name' => 'one']),
+                    'children' => [
+                        new Document([
+                            'level' => 2,
+                            'name' => 'x',
+                            'document' => new Document(['name' => 'two']),
+                            'children' => [
+                                new Document([
+                                    'level' => 3,
+                                    'name' => 'i'
+                                ]),
+                            ]
+                        ])
+                    ]
+                ])
+            ]
+        ]);
+
+        $after = clone $before;
+
+        $before->setAttribute('name', 'before');
+        $before->getAttribute('document')->setAttribute('name', 'before_one');
+        $before->getAttribute('children')[0]->setAttribute('name', 'before_a');
+        $before->getAttribute('children')[0]->getAttribute('document')->setAttribute('name', 'before_two');
+        $before->getAttribute('children')[0]->getAttribute('children')[0]->setAttribute('name', 'before_x');
+
+        $this->assertEquals('_', $after->getAttribute('name'));
+        $this->assertEquals('zero', $after->getAttribute('document')->getAttribute('name'));
+        $this->assertEquals('a', $after->getAttribute('children')[0]->getAttribute('name'));
+        $this->assertEquals('one', $after->getAttribute('children')[0]->getAttribute('document')->getAttribute('name'));
+        $this->assertEquals('x', $after->getAttribute('children')[0]->getAttribute('children')[0]->getAttribute('name'));
+    }
+
     public function testGetArrayCopy(): void
     {
         $this->assertEquals([

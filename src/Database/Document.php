@@ -438,7 +438,7 @@ class Document extends ArrayObject
         foreach ($this as $key => $value) {
             if ($value instanceof self) {
                 $this[$key] = clone $value;
-            } else if (\is_array($value)) {
+            } elseif (\is_array($value)) {
                 $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
             }
         }

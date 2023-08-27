@@ -1407,10 +1407,11 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $validator = new Structure($collection);
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
-            }
+            // TODO find a way to skip with special parameter for migrations
+            // $validator = new Structure($collection);
+            // if (!$validator->isValid($document)) {
+            //     throw new StructureException($validator->getDescription());
+            // }
 
             $documents[$key] = $document;
         }

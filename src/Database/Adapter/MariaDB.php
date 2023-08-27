@@ -585,7 +585,9 @@ class MariaDB extends Adapter
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
-                    $attributes['_id'] = $document->getInternalId();
+                    if(!empty($document->getInternalId())) {
+                        $attributes['_id'] = $document->getInternalId();
+                    }
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {

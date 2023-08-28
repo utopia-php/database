@@ -108,6 +108,8 @@ class Database
      */
     protected Cache $cache;
 
+    protected string $name;
+
     /**
      * @var array
      */
@@ -236,11 +238,12 @@ class Database
      * @param Adapter $adapter
      * @param Cache $cache
      */
-    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [], String $name = 'default')
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
+        $this->name = $name;
 
         self::addFilter(
             'json',
@@ -1303,7 +1306,7 @@ class Database
         $validator = new Authorization(self::PERMISSION_READ);
 
         // TODO@kodumbeats Check if returned cache id matches request
-        if ($cache = $this->cache->load('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
+        if ($cache = $this->cache->load($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, self::TTL)) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA
@@ -1330,7 +1333,7 @@ class Database
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->save('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
+        $this->cache->save($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id, $document->getArrayCopy()); // save to cache after fetching from db
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
         return $document;
@@ -1467,7 +1470,7 @@ class Database
         $document = $this->adapter->updateDocument($collection->getId(), $document);
         $document = $this->decode($collection, $document);
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
         return $document;
@@ -1517,7 +1520,7 @@ class Database
          foreach ($documents as $key => $document) {
              $documents[$key] = $this->decode($collection, $document);
 
-             $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
+             $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
          }
 
          $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
@@ -1547,7 +1550,7 @@ class Database
             throw new AuthorizationException($validator->getDescription());
         }
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
+        $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id);
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
@@ -1563,7 +1566,7 @@ class Database
      */
     public function deleteCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
+        return $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection . ':*');
     }
 
     /**
@@ -1576,7 +1579,7 @@ class Database
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
+        return $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection . ':' . $id);
     }
 
     /**

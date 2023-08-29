@@ -34,7 +34,7 @@ class Structure extends Validator
         [
             '$id' => '$internalId',
             'type' => Database::VAR_STRING,
-            'size' => 64,
+            'size' => 0,
             'required' => false,
             'signed' => true,
             'array' => false,

@@ -612,6 +612,14 @@ class Postgres extends SQL
         /**
          * Insert Attributes
          */
+
+        // Insert manual id if set
+        if (!empty($document->getInternalId())) {
+            $bindKey = '_id';
+            $columns .= "\"_id\", ";
+            $columnNames .= ':' . $bindKey . ', ';
+        }
+
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
@@ -626,6 +634,11 @@ class Postgres extends SQL
                 ({$columns}\"_uid\") VALUES ({$columnNames}:_uid) RETURNING _id;");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        // Bind manual internal id if set
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        }
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {

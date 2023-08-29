@@ -933,6 +933,51 @@ abstract class Base extends TestCase
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
+        // Test create document with manual internal id
+
+        $manualIdDocument = static::getDatabase()->createDocument('documents', new Document([
+            '$id' => '56000',
+            '$internalId' => '56000',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
+            'string' => 'text📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+            'empty' => [],
+            'with-dash' => 'Works',
+        ]));
+
+        $this->assertEquals('56000', $manualIdDocument->getInternalId());
+        $this->assertNotEmpty(true, $manualIdDocument->getId());
+        $this->assertIsString($manualIdDocument->getAttribute('string'));
+        $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
+        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
+        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
+        $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
+        $this->assertIsArray($manualIdDocument->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
+        $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
+        $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
         return $document;
     }
 
@@ -3636,6 +3681,7 @@ abstract class Base extends TestCase
     public function testExceptionCaseInsensitiveDuplicate(Document $document): Document
     {
         $document->setAttribute('$id', 'caseSensitive');
+        $document->setAttribute('$internalId', '200');
         static::getDatabase()->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');

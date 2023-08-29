@@ -934,7 +934,6 @@ abstract class Base extends TestCase
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
         // Test create document with manual internal id
-
         $manualIdDocument = static::getDatabase()->createDocument('documents', new Document([
             '$id' => '56000',
             '$internalId' => '56000',

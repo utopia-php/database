@@ -432,4 +432,15 @@ class Document extends ArrayObject
 
         return $output;
     }
+
+    public function __clone()
+    {
+        foreach ($this as $key => $value) {
+            if ($value instanceof self) {
+                $this[$key] = clone $value;
+            } elseif (\is_array($value)) {
+                $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
+            }
+        }
+    }
 }

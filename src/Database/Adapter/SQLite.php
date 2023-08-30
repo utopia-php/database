@@ -319,11 +319,22 @@ class SQLite extends MySQL
             $bindIndex++;
         }
 
+         // Insert manual id if set
+         if (!empty($document->getInternalId())) {
+            $values[] = '_id';
+            $columns[] = "_id";
+        }
+
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO `{$this->getNamespace()}_{$name}`
                 (".implode(', ', $columns).") VALUES (:".implode(', :', $values).");");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        // Bind manual internal id if set
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        }
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {

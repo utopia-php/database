@@ -496,11 +496,22 @@ class MariaDB extends Adapter
             $bindIndex++;
         }
 
+        // Insert manual id if set
+        if (!empty($document->getInternalId())) {
+            $bindKey = '_id';
+            $columns .= " _id" . ' = :' . $bindKey . ',';
+        }
+
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_uid");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        // Bind manual internal id if set
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        }
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
@@ -531,11 +542,7 @@ class MariaDB extends Adapter
         try {
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("select last_insert_id() as id");
-            $statment->execute();
-            $last = $statment->fetch();
-            $document['$internalId'] = $last['id'];
-
+            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }

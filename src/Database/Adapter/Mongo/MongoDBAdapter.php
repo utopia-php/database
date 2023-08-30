@@ -386,6 +386,11 @@ class MongoDBAdapter extends Adapter
 
         $record =  $this->replaceChars('$', '_', $document->getArrayCopy());
 
+        // Insert manual id if set
+        if (!empty($internalId)) {
+            $record['_id'] = $internalId;
+        }
+
         $this->client->insert($name, $record);
 
         return $document;

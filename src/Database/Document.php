@@ -226,9 +226,12 @@ class Document extends ArrayObject
      */
     public function removeAttribute(string $key): self
     {
-        if (isset($this[$key])) {
+        // this check is not required, also this
+        // prevents from removing if the key is set
+        // as null value explicitly
+        // if (isset($this[$key])) {
             unset($this[$key]);
-        }
+        // }
 
         return $this;
     }

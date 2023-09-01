@@ -662,10 +662,16 @@ class Mongo extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $internalId = $document->getInternalId();
         $document->removeAttribute('$internalId');
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
+
+        // Insert manual id if set
+        if (!empty($internalId)) {
+            $record['_id'] = $internalId;
+        }
 
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
         $result = $this->replaceChars('_', '$', $result);

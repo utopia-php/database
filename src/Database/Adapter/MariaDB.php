@@ -612,11 +612,23 @@ class MariaDB extends SQL
             $bindIndex++;
         }
 
+        // Insert manual id if set
+        if (!empty($document->getInternalId())) {
+            $bindKey = '_id';
+            $columns .= "_id, ";
+            $columnNames .= ':' . $bindKey . ', ';
+        }
+
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO {$this->getSQLTable($name)}
                 ({$columns}_uid) VALUES ({$columnNames}:_uid)");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        // Bind manual internal id if set
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        }
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {

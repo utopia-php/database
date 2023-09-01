@@ -977,6 +977,26 @@ abstract class Base extends TestCase
         $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
         $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+
+        $manualIdDocument = static::getDatabase()->getDocument('documents', '56000');
+
+        $this->assertEquals('56000', $manualIdDocument->getInternalId());
+        $this->assertNotEmpty(true, $manualIdDocument->getId());
+        $this->assertIsString($manualIdDocument->getAttribute('string'));
+        $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
+        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
+        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
+        $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
+        $this->assertIsArray($manualIdDocument->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
+        $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
+        $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+
         return $document;
     }
 

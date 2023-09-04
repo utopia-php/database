@@ -3112,11 +3112,11 @@ class Database
 
             if ($oldValue == $value) {
                 if (
-                    ($relationType === Database::RELATION_ONE_TO_ONE  || 
-                    ($relationType === DATABASE::RELATION_MANY_TO_ONE && $side === DATABASE::RELATION_SIDE_PARENT)) && 
+                    ($relationType === Database::RELATION_ONE_TO_ONE  ||
+                    ($relationType === DATABASE::RELATION_MANY_TO_ONE && $side === DATABASE::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
-                    $document->setAttribute($key,$value->getId());
+                    $document->setAttribute($key, $value->getId());
                     continue;
                 }
                 $document->removeAttribute($key);

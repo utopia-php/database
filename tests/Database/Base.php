@@ -11960,7 +11960,8 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('childRelationTest');
     }
 
-    public function testUpdateDocumentWithRelationships(): void {
+    public function testUpdateDocumentWithRelationships(): void
+    {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -12110,7 +12111,6 @@ abstract class Base extends TestCase
             Permission::delete(Role::any())
         ]);
 
-
         static::getDatabase()->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'links',
@@ -12208,7 +12208,6 @@ abstract class Base extends TestCase
         $this->assertEquals('product1', $profile->getAttribute('products')[0]->getId());
         $this->assertEquals('appearance1', $profile->getAttribute('appearance')->getId());
 
-
         $profile->setAttribute('links', [
             [
                 '$id' => 'link1',
@@ -12238,7 +12237,6 @@ abstract class Base extends TestCase
         $this->assertEquals('Meta Title', $updatedProfile->getAttribute('appearance')->getAttribute('metaTitle'));
         $this->assertEquals('Community 1', $updatedProfile->getAttribute('community')->getAttribute('name'));
 
-
         // updating document using two way key in one to many relationship
         $product = static::getDatabase()->getDocument('products', 'product1');
         $product->setAttribute('userProfile', [
@@ -12250,7 +12248,7 @@ abstract class Base extends TestCase
         $this->assertEquals('Product 1', $updatedProduct->getAttribute('title'));
         $this->assertEquals('product1', $updatedProduct->getId());
         $this->assertEquals('1', $updatedProduct->getAttribute('userProfile')->getId());
-        
+
         static::getDatabase()->deleteCollection('userProfiles');
         static::getDatabase()->deleteCollection('links');
         static::getDatabase()->deleteCollection('settings');

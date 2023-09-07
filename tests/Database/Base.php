@@ -11960,6 +11960,305 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('childRelationTest');
     }
 
+    public function testUpdateDocumentWithRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('userProfiles', [
+            new Document([
+                '$id' => ID::custom('username'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('links', [
+            new Document([
+                '$id' => ID::custom('title'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('videos', [
+            new Document([
+                '$id' => ID::custom('title'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('products', [
+            new Document([
+                '$id' => ID::custom('title'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('settings', [
+            new Document([
+                '$id' => ID::custom('metaTitle'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('appearance', [
+            new Document([
+                '$id' => ID::custom('metaTitle'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('group', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('community', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'links',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'links'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'videos',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'videos'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'products',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'products',
+            twoWayKey: 'userProfile',
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'settings',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'settings'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'appearance',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'appearance'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'group',
+            type: Database::RELATION_MANY_TO_ONE,
+            id: 'group'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'community',
+            type: Database::RELATION_MANY_TO_ONE,
+            id: 'community'
+        );
+
+        $profile = static::getDatabase()->createDocument('userProfiles', new Document([
+            '$id' => '1',
+            'username' => 'user1',
+            'links' => [
+                [
+                    '$id' => 'link1',
+                    'title' => 'Link 1',
+                ],
+            ],
+            'videos' => [
+                [
+                    '$id' => 'video1',
+                    'title' => 'Video 1',
+                ],
+            ],
+            'products' => [
+                [
+                    '$id' => 'product1',
+                    'title' => 'Product 1',
+                ],
+            ],
+            'settings' => [
+                '$id' => 'settings1',
+                'metaTitle' => 'Meta Title',
+            ],
+            'appearance' => [
+                '$id' => 'appearance1',
+                'metaTitle' => 'Meta Title',
+            ],
+            'group' => [
+                '$id' => 'group1',
+                'name' => 'Group 1',
+            ],
+            'community' => [
+                '$id' => 'community1',
+                'name' => 'Community 1',
+            ],
+        ]));
+        $this->assertEquals('link1', $profile->getAttribute('links')[0]->getId());
+        $this->assertEquals('settings1', $profile->getAttribute('settings')->getId());
+        $this->assertEquals('group1', $profile->getAttribute('group')->getId());
+        $this->assertEquals('community1', $profile->getAttribute('community')->getId());
+        $this->assertEquals('video1', $profile->getAttribute('videos')[0]->getId());
+        $this->assertEquals('product1', $profile->getAttribute('products')[0]->getId());
+        $this->assertEquals('appearance1', $profile->getAttribute('appearance')->getId());
+
+        $profile->setAttribute('links', [
+            [
+                '$id' => 'link1',
+                'title' => 'New Link Value',
+            ],
+        ]);
+
+        $profile->setAttribute('settings', [
+            '$id' => 'settings1',
+            'metaTitle' => 'New Meta Title',
+        ]);
+
+        $profile->setAttribute('group', [
+            '$id' => 'group1',
+            'name' => 'New Group Name',
+        ]);
+
+        $updatedProfile = static::getDatabase()->updateDocument('userProfiles', '1', $profile);
+
+        $this->assertEquals('New Link Value', $updatedProfile->getAttribute('links')[0]->getAttribute('title'));
+        $this->assertEquals('New Meta Title', $updatedProfile->getAttribute('settings')->getAttribute('metaTitle'));
+        $this->assertEquals('New Group Name', $updatedProfile->getAttribute('group')->getAttribute('name'));
+
+        // This is the point of test, related documents should be present if they are not updated
+        $this->assertEquals('Video 1', $updatedProfile->getAttribute('videos')[0]->getAttribute('title'));
+        $this->assertEquals('Product 1', $updatedProfile->getAttribute('products')[0]->getAttribute('title'));
+        $this->assertEquals('Meta Title', $updatedProfile->getAttribute('appearance')->getAttribute('metaTitle'));
+        $this->assertEquals('Community 1', $updatedProfile->getAttribute('community')->getAttribute('name'));
+
+        // updating document using two way key in one to many relationship
+        $product = static::getDatabase()->getDocument('products', 'product1');
+        $product->setAttribute('userProfile', [
+            '$id' => '1',
+            'username' => 'updated user value',
+        ]);
+        $updatedProduct = static::getDatabase()->updateDocument('products', 'product1', $product);
+        $this->assertEquals('updated user value', $updatedProduct->getAttribute('userProfile')->getAttribute('username'));
+        $this->assertEquals('Product 1', $updatedProduct->getAttribute('title'));
+        $this->assertEquals('product1', $updatedProduct->getId());
+        $this->assertEquals('1', $updatedProduct->getAttribute('userProfile')->getId());
+
+        static::getDatabase()->deleteCollection('userProfiles');
+        static::getDatabase()->deleteCollection('links');
+        static::getDatabase()->deleteCollection('settings');
+        static::getDatabase()->deleteCollection('group');
+        static::getDatabase()->deleteCollection('community');
+        static::getDatabase()->deleteCollection('videos');
+        static::getDatabase()->deleteCollection('products');
+        static::getDatabase()->deleteCollection('appearance');
+    }
+
     public function testLabels(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection(

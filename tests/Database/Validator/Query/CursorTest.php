@@ -15,9 +15,7 @@ class CursorTest extends TestCase
 
         $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSORAFTER, values: ['asdf'])));
         $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: ['asdf'])));
-        $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: [
-            new Document(['$id' => 'abc102030'])
-        ])));
+        $this->assertTrue($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: [new Document(['$id' => 'abc102030'])])));
     }
 
     public function testValueFailure(): void
@@ -36,9 +34,7 @@ class CursorTest extends TestCase
         $uid = 'uid0123456_uid0123456_uid0123456_uid0123456_uid0123456_uid0123456_uid0123456_uid0123456_uid0123456_uid0123456_';
 
         $this->assertFalse($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: [$uid])));
-        $this->assertFalse($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: [
-            new Document(['$id' => $uid])
-        ])));
+        $this->assertFalse($validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: [new Document(['$id' => $uid])])));
         $this->assertEquals('Invalid cursor: Cursor must contain at most 100 chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore', $validator->getDescription());
     }
 }

@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-class Cursor extends Key
+class Cursor extends UID
 {
     protected int $maxLength = 100;
 

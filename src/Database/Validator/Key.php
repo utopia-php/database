@@ -6,7 +6,8 @@ use Utopia\Validator;
 
 class Key extends Validator
 {
-    protected bool $allowInternal = false; // If true, you keys starting with $ are allowed
+    protected bool $allowInternal = false; // If true, keys starting with $ are allowed
+    protected int $maxLength = 36;
 
     /**
      * @var string
@@ -73,7 +74,7 @@ class Key extends Validator
             return false;
         }
 
-        if (\mb_strlen($value) > 36) {
+        if (\mb_strlen($value) > $this->maxLength) {
             return false;
         }
 

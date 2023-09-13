@@ -4,7 +4,7 @@ namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\UID;
+use Utopia\Database\Validator\Cursor as CursorUid;
 
 class Cursor extends Base
 {
@@ -33,7 +33,7 @@ class Cursor extends Base
                 $cursor = $cursor->getId();
             }
 
-            $validator = new UID();
+            $validator = new CursorUid();
             if ($validator->isValid($cursor)) {
                 return true;
             }

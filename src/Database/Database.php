@@ -1393,7 +1393,7 @@ class Database
      * Create Documents in a batch
      *
      * @param string $collection
-     * @param Document $document
+     * @param array<string, Document> $documents
      *
      * @return Document
      *
@@ -1412,11 +1412,14 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
+            $documentId = $document->getId();
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
             $document
-                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$id', empty($documentId) ? ID::unique() : $documentId)
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', $time)
-                ->setAttribute('$updatedAt', $time);
+                ->setAttribute('$createdAt', empty($createdAt) ? $time : $createdAt)
+                ->setAttribute('$updatedAt', empty($updatedAt) ? $time : $updatedAt);
 
             $document = $this->encode($collection, $document);
 

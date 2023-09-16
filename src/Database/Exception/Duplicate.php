@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Exception;
 
-class Duplicate extends \Exception
+use Utopia\Database\Exception;
+
+class Duplicate extends Exception
 {
 }

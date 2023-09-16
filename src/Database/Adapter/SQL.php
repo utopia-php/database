@@ -8,23 +8,21 @@ use PDOException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-    /**
-     * @var PDO
-     */
-    protected $pdo;
+    protected mixed $pdo;
 
     /**
      * Constructor.
      *
      * Set connection and settings
      *
-     * @param PDO $pdo
+     * @param mixed $pdo
      */
-    public function __construct($pdo)
+    public function __construct(mixed $pdo)
     {
         $this->pdo = $pdo;
     }
@@ -91,8 +89,8 @@ abstract class SQL extends Adapter
 
     /**
      * List Databases
-     * 
-     * @return array
+     *
+     * @return array<Document>
      */
     public function list(): array
     {
@@ -104,16 +102,18 @@ abstract class SQL extends Adapter
      *
      * @param string $collection
      * @param string $id
+     * @param Query[] $queries
      * @return Document
      * @throws Exception
-     * @throws PDOException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
 
+        $selections = $this->getAttributeSelections($queries);
+
         $stmt = $this->getPDO()->prepare("
-            SELECT * 
+            SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid;
         ");
@@ -121,23 +121,32 @@ abstract class SQL extends Adapter
         $stmt->bindValue(':_uid', $id);
         $stmt->execute();
 
-        /** @var array $document */
         $document = $stmt->fetch();
+
         if (empty($document)) {
             return new Document([]);
         }
 
-        $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
-        $document['$createdAt'] = $document['_createdAt'];
-        $document['$updatedAt'] = $document['_updatedAt'];
-        $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
-
-        unset($document['_id']);
-        unset($document['_uid']);
-        unset($document['_createdAt']);
-        unset($document['_updatedAt']);
-        unset($document['_permissions']);
+        if (\array_key_exists('_id', $document)) {
+            $document['$internalId'] = $document['_id'];
+            unset($document['_id']);
+        }
+        if (\array_key_exists('_uid', $document)) {
+            $document['$id'] = $document['_uid'];
+            unset($document['_uid']);
+        }
+        if (\array_key_exists('_createdAt', $document)) {
+            $document['$createdAt'] = $document['_createdAt'];
+            unset($document['_createdAt']);
+        }
+        if (\array_key_exists('_updatedAt', $document)) {
+            $document['$updatedAt'] = $document['_updatedAt'];
+            unset($document['_updatedAt']);
+        }
+        if (\array_key_exists('_permissions', $document)) {
+            $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+            unset($document['_permissions']);
+        }
 
         return new Document($document);
     }
@@ -298,8 +307,8 @@ abstract class SQL extends Adapter
         // but this number seems to vary, so we give a +500 byte buffer
         $total = 1500;
 
-        /** @var array $attributes */
         $attributes = $collection->getAttributes()['attributes'];
+
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
@@ -314,7 +323,7 @@ abstract class SQL extends Adapter
                             $total += 11;
                             break;
 
-                        case ($attribute['size'] > 16383):
+                        case ($attribute['size'] > $this->getMaxVarcharLength()):
                             // 8 bytes length + 2 bytes for TEXT
                             $total += 10;
                             break;
@@ -350,17 +359,16 @@ abstract class SQL extends Adapter
                     $total += 1;
                     break;
 
-                case Database::VAR_DOCUMENT:
-                    // CHAR(255)
-                    $total += 255;
+                case Database::VAR_RELATIONSHIP:
+                    // INT(11)
+                    $total += 4;
                     break;
 
                 case Database::VAR_DATETIME:
                     $total += 19; // 2022-06-26 14:46:24
                     break;
                 default:
-                    throw new Exception('Unknown Type');
-                    break;
+                    throw new DatabaseException('Unknown type: ' . $attribute['type']);
             }
         }
 
@@ -370,8 +378,8 @@ abstract class SQL extends Adapter
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
-     * 
-     * @return string[]
+     *
+     * @return array<string>
      */
     public function getKeywords(): array
     {
@@ -673,6 +681,60 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForRelationships(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @param mixed $stmt
+     * @param Query $query
+     * @return void
+     * @throws Exception
+     */
+    protected function bindConditionValue(mixed $stmt, Query $query): void
+    {
+        if ($query->getMethod() == Query::TYPE_SELECT) {
+            return;
+        }
+
+        foreach ($query->getValues() as $key => $value) {
+            $value = match ($query->getMethod()) {
+                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                default => $value
+            };
+
+            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+        }
+    }
+
+    /**
+     * @param string $value
+     * @return string
+     */
+    protected function getFulltextValue(string $value): string
+    {
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+
+        /** Replace reserved chars with space. */
+        $specialChars = '@,+,-,*,),(,<,>,~,"';
+        $value = str_replace(explode(',', $specialChars), ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value);
+
+        if ($exact) {
+            $value = '"' . $value . '"';
+        } else {
+            /** Prepend wildcard by default on the back. */
+            $value .= '*';
+        }
+
+        return $value;
+    }
+
     /**
      * Get SQL Operator
      *
@@ -685,27 +747,56 @@ abstract class SQL extends Adapter
         switch ($method) {
             case Query::TYPE_EQUAL:
                 return '=';
-            case Query::TYPE_NOTEQUAL:
+            case Query::TYPE_NOT_EQUAL:
                 return '!=';
             case Query::TYPE_LESSER:
                 return '<';
-            case Query::TYPE_LESSEREQUAL:
+            case Query::TYPE_LESSER_EQUAL:
                 return '<=';
             case Query::TYPE_GREATER:
                 return '>';
-            case Query::TYPE_GREATEREQUAL:
+            case Query::TYPE_GREATER_EQUAL:
                 return '>=';
             case Query::TYPE_IS_NULL:
                 return 'IS NULL';
             case Query::TYPE_IS_NOT_NULL:
                 return 'IS NOT NULL';
+            case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_ENDS_WITH:
             case Query::TYPE_LIKE:
                 return 'LIKE';
             case Query::TYPE_NOT_LIKE:
                 return 'NOT LIKE';
             default:
-                throw new Exception('Unknown method:' . $method);
+                throw new DatabaseException('Unknown method: ' . $method);
         }
+    }
+
+    /**
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    protected function getSQLPlaceholder(Query $query): string
+    {
+        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
+
+        if ($json === false) {
+            throw new DatabaseException('Failed to encode query');
+        }
+
+        return \md5($json);
+    }
+
+    public function escapeWildcards(string $value): string
+    {
+        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
+        }
+
+        return $value;
     }
 
     /**
@@ -729,17 +820,17 @@ abstract class SQL extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new Exception('Unknown Index Type:' . $type);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
     /**
      * Get SQL condition for permissions
      *
-     * @param string $collection 
-     * @param array $roles 
-     * @return string 
-     * @throws Exception 
+     * @param string $collection
+     * @param array<string> $roles
+     * @return string
+     * @throws Exception
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
@@ -755,7 +846,7 @@ abstract class SQL extends Adapter
     /**
      * Get SQL schema
      *
-     * @return string 
+     * @return string
      */
     protected function getSQLSchema(): string
     {
@@ -769,8 +860,8 @@ abstract class SQL extends Adapter
     /**
      * Get SQL table
      *
-     * @param string $name 
-     * @return string 
+     * @param string $name
+     * @return string
      */
     protected function getSQLTable(string $name): string
     {
@@ -779,15 +870,26 @@ abstract class SQL extends Adapter
 
     /**
      * Returns the current PDO object
-     * @return PDO 
+     * @return mixed
      */
-    protected function getPDO()
+    protected function getPDO(): mixed
     {
         return $this->pdo;
     }
 
     /**
+     * Get PDO Type
+     *
+     * @param mixed $value
+     * @return int
+     * @throws Exception
+     */
+    abstract protected function getPDOType(mixed $value): int;
+
+    /**
      * Returns default PDO configuration
+     *
+     * @return array<int, mixed>
      */
     public static function getPDOAttributes(): array
     {
@@ -799,5 +901,21 @@ abstract class SQL extends Adapter
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
+    }
+
+    /**
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+    }
+
+    /**
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return 768;
     }
 }

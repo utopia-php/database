@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -10,7 +11,9 @@ use Utopia\Database\Adapter;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
 use Utopia\Mongo\Exception as MongoException;
@@ -19,7 +22,7 @@ use Utopia\Mongo\Client;
 class Mongo extends Adapter
 {
     /**
-     * @var array
+     * @var array<string>
      */
     private array $operators = [
         '$eq',
@@ -34,6 +37,7 @@ class Mongo extends Adapter
         '$or',
         '$and',
         '$match',
+        '$regex',
     ];
 
     protected Client $client;
@@ -44,6 +48,7 @@ class Mongo extends Adapter
      * Set connection and settings
      *
      * @param Client $client
+     * @throws MongoException
      */
     public function __construct(Client $client)
     {
@@ -52,17 +57,11 @@ class Mongo extends Adapter
     }
 
     /**
-     * @throws Exception
-     */
-    public function hello()
-    {
-        return $this->getClient()->query(['hello' => 1]);
-    }
-
-    /**
      * Ping Database
      *
      * @return bool
+     * @throws Exception
+     * @throws MongoException
      */
     public function ping(): bool
     {
@@ -73,7 +72,7 @@ class Mongo extends Adapter
      * Create Database
      *
      * @param string $name
-     * 
+     *
      * @return bool
      */
     public function create(string $name): bool
@@ -97,30 +96,31 @@ class Mongo extends Adapter
             $collection = $this->getNamespace() . "_" . $collection;
             $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
             foreach ($list as $obj) {
-                if (\is_object($obj)) {
-                    if ($obj->name == $collection) {
-                        return true;
-                    }
+                if (\is_object($obj)
+                    && isset($obj->name)
+                    && $obj->name === $collection
+                ) {
+                    return true;
                 }
             }
 
             return false;
         }
 
-        return !\is_null($this->getClient()->selectDatabase());
+        return $this->getClient()->selectDatabase() != null;
     }
 
     /**
      * List Databases
      *
-     * @return array
+     * @return array<Document>
      * @throws Exception
      */
     public function list(): array
     {
         $list = [];
 
-        foreach ($this->getClient()->listDatabaseNames() as $key => $value) {
+        foreach ((array)$this->getClient()->listDatabaseNames() as $value) {
             $list[] = $value;
         }
 
@@ -146,8 +146,8 @@ class Mongo extends Adapter
      * Create Collection
      *
      * @param string $name
-     * @param Document[] $attributes (optional)
-     * @param Document[] $indexes (optional)
+     * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @return bool
      * @throws Exception
      */
@@ -155,15 +155,15 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        if($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        if ($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
-        
+
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
         } catch (MongoException $e) {
-            throw $e;
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
         $indexesCreated = $this->client->createIndexes($id, [
@@ -191,7 +191,6 @@ class Mongo extends Adapter
         if (!empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
-             * @var array
              */
             $newIndexes = [];
 
@@ -240,18 +239,47 @@ class Mongo extends Adapter
     /**
      * List Collections
      *
-     * @return array
+     * @return array<Document>
      * @throws Exception
      */
     public function listCollections(): array
     {
         $list = [];
 
-        foreach ($this->getClient()->listCollectionNames() as $key => $value) {
+        foreach ((array)$this->getClient()->listCollectionNames() as $value) {
             $list[] = $value;
         }
 
         return $list;
+    }
+
+    /**
+     * Get Collection Size
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $namespace = $this->getNamespace();
+        $collection = $this->filter($collection);
+        $collection = $namespace. '_' . $collection;
+
+        $command = [
+            'collStats' => $collection,
+            'scale' => 1
+        ];
+
+        try {
+            $result = $this->getClient()->query($command);
+            if (is_object($result)) {
+                return $result->totalSize;
+            } else {
+                throw new DatabaseException('No size found');
+            }
+        } catch(Exception $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -287,14 +315,23 @@ class Mongo extends Adapter
 
     /**
      * Delete Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
-     * 
+     *
      * @return bool
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $this->getClient()->update(
+            $collection,
+            [],
+            ['$unset' => [$id => '']],
+            multi: true
+        );
+
         return true;
     }
 
@@ -308,6 +345,162 @@ class Mongo extends Adapter
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $this->getClient()->update(
+            $collection,
+            [],
+            ['$rename' => [$id => $name]],
+            multi: true
+        );
+
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $id
+     * @param string $twoWayKey
+     * @return bool
+     */
+    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
+    {
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string|null $newKey
+     * @param string|null $newTwoWayKey
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function updateRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ?string $newKey = null,
+        ?string $newTwoWayKey = null
+    ): bool {
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+
+        $renameKey = [
+            '$rename' => [
+                $key => $newKey,
+            ]
+        ];
+
+        $renameTwoWayKey = [
+            '$rename' => [
+                $twoWayKey => $newTwoWayKey,
+            ]
+        ];
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($relatedCollection, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($collection, updates: $renameKey, multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $collection = $this->getDocument(Database::METADATA, $collection);
+                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+
+                $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+
+                if (!\is_null($newKey)) {
+                    $this->getClient()->update($junction, updates: $renameKey, multi: true);
+                }
+                if ($twoWay && !\is_null($newTwoWayKey)) {
+                    $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
+                }
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
+        return true;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws MongoException
+     * @throws Exception
+     */
+    public function deleteRelationship(
+        string $collection,
+        string $relatedCollection,
+        string $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        string $side
+    ): bool {
+        $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
+        $collection = $this->getNamespace() . '_' . $this->filter($collection);
+        $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
+
+        switch ($type) {
+            case Database::RELATION_ONE_TO_ONE:
+                $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                if ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
+                } elseif ($twoWay) {
+                    $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
+                }
+                break;
+            case Database::RELATION_MANY_TO_MANY:
+                $this->getClient()->dropCollection($junction);
+                break;
+            default:
+                throw new DatabaseException('Invalid relationship type');
+        }
+
         return true;
     }
 
@@ -317,10 +510,10 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     * @param array $collation
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
+     * @param array<string, mixed> $collation
      * @return bool
      * @throws Exception
      */
@@ -363,6 +556,48 @@ class Mongo extends Adapter
     }
 
     /**
+     * Rename Index.
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     *
+     * @return bool
+     * @throws Exception
+     */
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $indexes = json_decode($collectionDocument['indexes'], true);
+        $index = null;
+
+        foreach ($indexes as $node) {
+            if ($node['key'] === $old) {
+                $index = $node;
+                break;
+            }
+        }
+
+        if ($index
+            && $this->deleteIndex($collection, $old)
+            && $this->createIndex(
+                $collection,
+                $new,
+                $index['type'],
+                $index['attributes'],
+                $index['lengths'] ?? [],
+                $index['orders'] ?? [],
+            )) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Delete Index
      *
      * @param string $collection
@@ -376,8 +611,9 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
         $collection = $this->getDatabase();
+        $collection->dropIndexes($name, [$id]);
 
-        return (!!$collection->dropIndexes($name, [$id]));
+        return true;
     }
 
     /**
@@ -385,15 +621,24 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param string $id
-     *
+     * @param Query[] $queries
      * @return Document
-     * @throws Exception
+     * @throws MongoException
      */
-    public function getDocument(string $collection, string $id): Document
+    public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $result = $this->client->find($name, ['_uid' => $id], ['limit' => 1])->cursor->firstBatch;
+        $filters = ['_uid' => $id];
+        $options = [];
+
+        $selections = $this->getAttributeSelections($queries);
+
+        if (!empty($selections) && !\in_array('*', $selections)) {
+            $options['projection'] = $this->getAttributeProjection($selections);
+        }
+
+        $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
 
         if (empty($result)) {
             return new Document([]);
@@ -417,10 +662,16 @@ class Mongo extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $internalId = $document->getInternalId();
         $document->removeAttribute('$internalId');
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
+
+        // Insert manual id if set
+        if (!empty($internalId)) {
+            $record['_id'] = $internalId;
+        }
 
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
         $result = $this->replaceChars('_', '$', $result);
@@ -430,6 +681,11 @@ class Mongo extends Adapter
     }
 
     /**
+     *
+     * @param string $name
+     * @param array<string, mixed> $document
+     *
+     * @return array<string, mixed>
      * @throws Duplicate
      */
     private function insertDocument(string $name, array $document): array
@@ -444,7 +700,6 @@ class Mongo extends Adapter
             )->cursor->firstBatch[0];
 
             return $this->client->toArray($result);
-
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }
@@ -477,6 +732,40 @@ class Mongo extends Adapter
     }
 
     /**
+     * Increase or decrease an attribute value
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $attribute
+     * @param int|float $value
+     * @param int|float|null $min
+     * @param int|float|null $max
+     * @return bool
+     * @throws Exception
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    {
+        $attribute = $this->filter($attribute);
+        $where = ['_uid' => $id];
+
+        if ($max) {
+            $where[$attribute] = ['$lte' => $max];
+        }
+
+        if ($min) {
+            $where[$attribute] = ['$gte' => $min];
+        }
+
+        $this->client->update(
+            $this->getNamespace() . '_' . $this->filter($collection),
+            $where,
+            ['$inc' => [$attribute => $value]],
+        );
+
+        return true;
+    }
+
+    /**
      * Delete Document
      *
      * @param string $collection
@@ -492,20 +781,6 @@ class Mongo extends Adapter
         $result = $this->client->delete($name, ['_uid' => $id]);
 
         return (!!$result);
-    }
-
-    /**
-     * Rename Index.
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     *
-     * @return bool
-     */
-    public function renameIndex(string $collection, string $old, string $new): bool
-    {
-        return true;
     }
 
     /**
@@ -530,18 +805,20 @@ class Mongo extends Adapter
      * Find data sets using chosen queries
      *
      * @param string $collection
-     * @param array $queries
-     * @param int $limit
-     * @param int $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param int|null $timeout
      *
-     * @return Document[]
+     * @return array<Document>
      * @throws Exception
+     * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], int $limit = 25, int $offset = 0, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -553,13 +830,29 @@ class Mongo extends Adapter
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        $options = ['limit' => $limit, 'skip' => $offset];
+        $options = [];
+        if (!\is_null($limit)) {
+            $options['limit'] = $limit;
+        }
+        if (!\is_null($offset)) {
+            $options['skip'] = $offset;
+        }
+
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
+        }
+
+        $selections = $this->getAttributeSelections($queries);
+
+        if (!empty($selections) && !\in_array('*', $selections)) {
+            $options['projection'] = $this->getAttributeProjection($selections);
+        }
 
         // orders
         foreach ($orderAttributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            
+
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
@@ -595,7 +888,7 @@ class Mongo extends Adapter
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
-                
+
                 $options['sort']['_id'] = $this->getOrder($orderType);
             }
         }
@@ -604,7 +897,7 @@ class Mongo extends Adapter
             $attribute = $orderAttributes[0];
 
             if (is_null($cursor[$attribute] ?? null)) {
-                throw new Exception("Order attribute '{$attribute}' is empty.");
+                throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
 
             $orderOperatorInternalId = Query::TYPE_GREATER;
@@ -637,19 +930,28 @@ class Mongo extends Adapter
             ];
         }
 
-        $filters = $this->recursiveReplace($filters, '$', '_',  $this->operators);
+        $filters = $this->recursiveReplace($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
 
         /**
-         * @var Document[]
+         * @var array<Document>
          */
         $found = [];
-        $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
 
-        foreach ($this->client->toArray($results) as $i => $result) {
+        try {
+            $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
+
+        if (empty($results)) {
+            return $found;
+        }
+
+        foreach ($this->client->toArray($results) as $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
             $record = $this->timeToDocument($record);
-    
+
             $found[] = new Document($record);
         }
 
@@ -664,26 +966,26 @@ class Mongo extends Adapter
      * Recursive function to convert timestamps/datetime
      * to BSON based UTCDatetime type for Mongo filter/query.
      *
-     * @param array $filters
+     * @param array<string, mixed> $filters
      *
-     * @return array
+     * @return array<string, mixed>
      * @throws Exception
      */
-    private function timeFilter(array $filters):array 
+    private function timeFilter(array $filters): array
     {
         $results = $filters;
 
-        foreach($filters as $k=>$v) {
-            if($k === '_createdAt' || $k == '_updatedAt') {
-                if(is_array($v)) {
-                    foreach($v as $sk=>$sv) {
+        foreach ($filters as $k => $v) {
+            if ($k === '_createdAt' || $k == '_updatedAt') {
+                if (is_array($v)) {
+                    foreach ($v as $sk=>$sv) {
                         $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
                 } else {
                     $results[$k] = $this->toMongoDatetime($v);
                 }
             } else {
-                if(is_array($v)) {
+                if (is_array($v)) {
                     $results[$k] = $this->timeFilter($v);
                 }
             }
@@ -694,12 +996,12 @@ class Mongo extends Adapter
 
     /**
      * Converts timestamp base fields to Utopia\Document format.
-     * 
-     * @param array $record
-     * 
-     * @return array
+     *
+     * @param array<string, mixed> $record
+     *
+     * @return array<string, mixed>
      */
-    private function timeToDocument(array $record):array
+    private function timeToDocument(array $record): array
     {
         $record['$createdAt'] = DateTime::format($record['$createdAt']->toDateTime());
         $record['$updatedAt'] = DateTime::format($record['$updatedAt']->toDateTime());
@@ -710,12 +1012,12 @@ class Mongo extends Adapter
     /**
      * Converts timestamp base fields to Mongo\BSON datetime format.
      *
-     * @param array $record
+     * @param array<string, mixed> $record
      *
-     * @return array
+     * @return array<string, mixed>
      * @throws Exception
      */
-    private function timeToMongo(array $record):array
+    private function timeToMongo(array $record): array
     {
         $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
         $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
@@ -730,32 +1032,32 @@ class Mongo extends Adapter
      * @return UTCDateTime
      * @throws Exception
      */
-    private function toMongoDatetime(string $dt): UTCDateTime {
-        $dt = new \DateTime($dt);
-
-        return new UTCDateTime($dt->getTimestamp() . $dt->format('v'));
+    private function toMongoDatetime(string $dt): UTCDateTime
+    {
+        return new UTCDateTime(new \DateTime($dt));
     }
 
     /**
      * Recursive function to replace chars in array keys, while
      * skipping any that are explicitly excluded.
      *
-     * @param array $array
+     * @param array<string, mixed> $array
      * @param string $from
      * @param string $to
-     * @param array $exclude
-     * @return array
+     * @param array<string> $exclude
+     * @return array<string, mixed>
      */
-    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []):array {
+    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []): array
+    {
         $result = [];
 
         foreach ($array as $key => $value) {
-            if (false == in_array($key, $exclude)) {
+            if (!in_array($key, $exclude)) {
                 $key = str_replace($from, $to, $key);
             }
-            
-            $result[$key] = is_array($value) 
-                ? $this->recursiveReplace($value, $from, $to, $exclude) 
+
+            $result[$key] = is_array($value)
+                ? $this->recursiveReplace($value, $from, $to, $exclude)
                 : $value;
         }
 
@@ -767,24 +1069,26 @@ class Mongo extends Adapter
      * Count Documents
      *
      * @param string $collection
-     * @param Query[] $queries
-     * @param int $max
+     * @param array<Query> $queries
+     * @param int|null $max
      *
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], int $max = 0): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
-        // todo $collection is not used?
-        $filters = [];
 
+        $filters = [];
         $options = [];
 
         // set max limit
         if ($max > 0) {
             $options['limit'] = $max;
+        }
+
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         // queries
@@ -804,17 +1108,20 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param Query[] $queries
-     * @param int $max
+     * @param array<Query> $queries
+     * @param int|null $max
      *
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int $max = 0): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
-// todo $collection is not used?
+        // todo $collection is not used?
+
+        // todo add $timeout for aggregate in Mongo utopia client
+
         $filters = [];
 
         // queries
@@ -859,10 +1166,7 @@ class Mongo extends Adapter
      */
     protected function getDatabase(string $name = null): Client
     {
-        $database = is_null($name) ? $this->getDefaultDatabase() : $name;
-        $selected = $this->getClient()->selectDatabase($database);
-
-        return $selected;
+        return $this->getClient()->selectDatabase();
     }
 
     /**
@@ -881,8 +1185,8 @@ class Mongo extends Adapter
      *
      * @param string $from
      * @param string $to
-     * @param array $array
-     * @return array
+     * @param array<string, mixed> $array
+     * @return array<string, mixed>
      */
     protected function replaceChars(string $from, string $to, array $array): array
     {
@@ -913,7 +1217,7 @@ class Mongo extends Adapter
 
                 unset($result['_uid']);
             }
-        } else if ($from === '$') {
+        } elseif ($from === '$') {
             if (array_key_exists('$id', $array)) {
                 $result['_uid'] = $array['$id'];
 
@@ -927,21 +1231,26 @@ class Mongo extends Adapter
             }
         }
 
-        return $result;        
+        return $result;
     }
 
     /**
      * Build mongo filters from array of $queries
      *
-     * @param Query[] $queries
+     * @param array<Query> $queries
      *
-     * @return array
+     * @return array<string, mixed>
+     * @throws Exception
      */
-    protected function buildFilters($queries): array
+    protected function buildFilters(array $queries): array
     {
         $filters = [];
 
         foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             }
@@ -953,7 +1262,7 @@ class Mongo extends Adapter
             if ($query->getAttribute() === '$updatedAt') {
                 $query->setAttribute('_updatedAt');
             }
-            
+
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
 
@@ -972,13 +1281,16 @@ class Mongo extends Adapter
 
             if ($operator == '$eq' && \is_array($value)) {
                 $filters[$attribute]['$in'] = $value;
-            } else if ($operator == '$ne' && \is_array($value)) {
+            } elseif ($operator == '$ne' && \is_array($value)) {
                 $filters[$attribute]['$nin'] = $value;
-            } else if($operator == '$in') {
+            } elseif ($operator == '$in') {
                 $filters[$attribute]['$in'] = $query->getValues();
-            } else if ($operator == '$search') {
+            } elseif ($operator == '$search') {
                 $filters['$text'][$operator] = $value;
-            } else if ($negated) {
+            } elseif ($operator === Query::TYPE_BETWEEN) {
+                $filters[$attribute]['$lte'] = $value[1];
+                $filters[$attribute]['$gte'] = $value[0];
+            } elseif ($negated) {
                 $filters[$attribute]['$not'][$operator] = $value;
             } else {
                 $filters[$attribute][$operator] = $value;
@@ -990,37 +1302,45 @@ class Mongo extends Adapter
 
     /**
      * Get Query Operator
-     * 
+     *
      * @param string $operator
-     * 
+     *
      * @return string
+     * @throws Exception
      */
     protected function getQueryOperator(string $operator): string
     {
-        switch ($operator) {
-            case Query::TYPE_EQUAL:
-            case Query::TYPE_IS_NULL:
-                return '$eq';
-            case Query::TYPE_NOTEQUAL:
-            case Query::TYPE_IS_NOT_NULL:
-                return '$ne';
-            case Query::TYPE_LESSER:
-                return '$lt';
-            case Query::TYPE_LESSEREQUAL:
-                return '$lte';
-            case Query::TYPE_GREATER:
-                return '$gt';
-            case Query::TYPE_GREATEREQUAL:
-                return '$gte';
-            case Query::TYPE_CONTAINS:
-                return '$in';
-            case Query::TYPE_SEARCH:
-                return '$search';
-            case Query::TYPE_LIKE:
-            case Query::TYPE_NOT_LIKE:
-                return '$regex';
+        return match ($operator) {
+            Query::TYPE_EQUAL,
+            Query::TYPE_IS_NULL => '$eq',
+            Query::TYPE_NOT_EQUAL,
+            Query::TYPE_IS_NOT_NULL => '$ne',
+            Query::TYPE_LESSER => '$lt',
+            Query::TYPE_LESSER_EQUAL => '$lte',
+            Query::TYPE_GREATER => '$gt',
+            Query::TYPE_GREATER_EQUAL => '$gte',
+            Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_SEARCH => '$search',
+            Query::TYPE_BETWEEN => 'between',
+            Query::TYPE_STARTS_WITH,
+            Query::TYPE_ENDS_WITH,
+            Query::TYPE_LIKE,
+            Query::TYPE_NOT_LIKE => '$regex',
+            default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
+        };
+    }
+
+    protected function getQueryValue(string $method, mixed $value): mixed
+    {
+        switch ($method) {
+            case Query::TYPE_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return $value.'.*';
+            case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return '.*'.$value;
             default:
-                throw new Exception('Unknown Operator:' . $operator);
+                return $value;
         }
     }
 
@@ -1037,8 +1357,35 @@ class Mongo extends Adapter
         return match ($order) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
-            default => throw new Exception('Unknown sort order:' . $order),
+            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' .  Database::ORDER_DESC),
         };
+    }
+
+    /**
+     * @param array<string> $selections
+     * @param string $prefix
+     * @return mixed
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    {
+        $projection = [];
+
+        foreach ($selections as $selection) {
+            // Skip internal attributes since all are selected by default
+            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+                continue;
+            }
+
+            $projection[$selection] = 1;
+        }
+
+        $projection['_uid'] = 1;
+        $projection['_id'] = 1;
+        $projection['_createdAt'] = 1;
+        $projection['_updatedAt'] = 1;
+        $projection['_permissions'] = 1;
+
+        return $projection;
     }
 
     /**
@@ -1145,6 +1492,21 @@ class Mongo extends Adapter
     }
 
     /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1159,27 +1521,27 @@ class Mongo extends Adapter
 
     /**
      * Get current index count from collection document
-     * 
+     *
      * @param Document $collection
      * @return int
      */
     public function getCountOfIndexes(Document $collection): int
     {
-        $indexes = \count((array) $collection->getAttribute('indexes') ?? []);
+        $indexes = \count($collection->getAttribute('indexes') ?? []);
 
         return $indexes + static::getCountOfDefaultIndexes();
     }
 
     /**
      * Returns number of attributes used by default.
-     *
+     *p
      * @return int
      */
     public static function getCountOfDefaultAttributes(): int
     {
         return 6;
     }
-    
+
     /**
      * Returns number of indexes used by default.
      *
@@ -1206,7 +1568,7 @@ class Mongo extends Adapter
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.
      * Return 0 when no restrictions apply to row width
-     * 
+     *
      * @param Document $collection
      * @return int
      */
@@ -1217,7 +1579,7 @@ class Mongo extends Adapter
 
     /**
      * Is casting supported?
-     * 
+     *
      * @return bool
      */
     public function getSupportForCasting(): bool
@@ -1229,12 +1591,12 @@ class Mongo extends Adapter
      * Return set namespace.
      *
      * @return string
-     * @throws \Exception
+     * @throws Exception
      */
     public function getNamespace(): string
     {
         if (empty($this->namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         return $this->namespace;
@@ -1246,12 +1608,12 @@ class Mongo extends Adapter
      * @param string $name
      * @param bool $reset
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setDefaultDatabase(string $name, bool $reset = false): bool
     {
         if (empty($name) && $reset === false) {
-            throw new Exception('Missing database');
+            throw new DatabaseException('Missing database');
         }
 
         $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
@@ -1264,12 +1626,12 @@ class Mongo extends Adapter
      *
      * @param string $namespace
      * @return bool
-     * @throws \Exception
+     * @throws Exception
      */
     public function setNamespace(string $namespace): bool
     {
         if (empty($namespace)) {
-            throw new Exception('Missing namespace');
+            throw new DatabaseException('Missing namespace');
         }
 
         $this->namespace = $this->filter($namespace);
@@ -1281,7 +1643,7 @@ class Mongo extends Adapter
      * Flattens the array.
      *
      * @param mixed $list
-     * @return array
+     * @return array<mixed>
      */
     protected function flattenArray(mixed $list): array
     {
@@ -1290,22 +1652,28 @@ class Mongo extends Adapter
             return array($list);
         }
 
-        $new_array = [];
+        $newArray = [];
 
         foreach ($list as $value) {
-            $new_array = array_merge($new_array, $this->flattenArray($value));
+            $newArray = array_merge($newArray, $this->flattenArray($value));
         }
 
-        return $new_array;
+        return $newArray;
     }
 
+    /**
+     * @param array<string, mixed>|Document $target
+     * @return array<string, mixed>
+     */
     protected function removeNullKeys(array|Document $target): array
     {
-        $target = is_array($target) ? $target : $target->getArrayCopy();
+        $target = \is_array($target) ? $target : $target->getArrayCopy();
         $cleaned = [];
 
         foreach ($target as $key => $value) {
-            if (\is_null($value)) continue;
+            if (\is_null($value)) {
+                continue;
+            }
 
             $cleaned[$key] = $value;
         }
@@ -1314,8 +1682,29 @@ class Mongo extends Adapter
         return $cleaned;
     }
 
-    public function getKeywords(): array 
+    public function getKeywords(): array
     {
         return [];
+    }
+
+    /**
+     * @throws Timeout
+     * @throws Exception
+     */
+    protected function processException(Exception $e): void
+    {
+        if ($e->getCode() === 50) {
+            throw new Timeout($e->getMessage());
+        }
+
+        throw $e;
+    }
+
+    /**
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return 0;
     }
 }

@@ -2,13 +2,18 @@
 
 namespace Utopia\Database\Helpers;
 
+use Exception;
 use Utopia\Database\Database;
+use Utopia\Database\Exception as DatabaseException;
 
 class Permission
 {
     private Role $role;
 
-    private static $aggregates = [
+    /**
+     * @var array<string, array<string>>
+     */
+    private static array $aggregates = [
         'write' => [
             Database::PERMISSION_CREATE,
             Database::PERMISSION_UPDATE,
@@ -21,8 +26,7 @@ class Permission
         string $role,
         string $identifier = '',
         string $dimension = '',
-    )
-    {
+    ) {
         $this->role = new Role($role, $identifier, $dimension);
     }
 
@@ -74,17 +78,21 @@ class Permission
      *
      * @param string $permission
      * @return Permission
-     * @throws \Exception
+     * @throws Exception
      */
     public static function parse(string $permission): self
     {
         $permissionParts = \explode('("', $permission);
 
         if (\count($permissionParts) !== 2) {
-            throw new \Exception('Invalid permission string format: "' . $permission . '".');
+            throw new DatabaseException('Invalid permission string format: "' . $permission . '".');
         }
 
         $permission = $permissionParts[0];
+
+        if (!\in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))) {
+            throw new DatabaseException('Invalid permission type: "' . $permission . '".');
+        }
         $fullRole = \str_replace('")', '', $permissionParts[1]);
         $roleParts = \explode(':', $fullRole);
         $role = $roleParts[0];
@@ -101,17 +109,17 @@ class Permission
             return new self($permission, $role, $identifier);
         }
 
-        if (!$hasIdentifier && $hasDimension) {
+        if (!$hasIdentifier) {
             $dimensionParts = \explode('/', $fullRole);
             if (\count($dimensionParts) !== 2) {
-                throw new \Exception('Only one dimension can be provided.');
+                throw new DatabaseException('Only one dimension can be provided');
             }
 
             $role = $dimensionParts[0];
             $dimension = $dimensionParts[1];
 
             if (empty($dimension)) {
-                throw new \Exception('Dimension must not be empty.');
+                throw new DatabaseException('Dimension must not be empty');
             }
             return new self($permission, $role, '', $dimension);
         }
@@ -119,14 +127,14 @@ class Permission
         // Has both identifier and dimension
         $dimensionParts = \explode('/', $roleParts[1]);
         if (\count($dimensionParts) !== 2) {
-            throw new \Exception('Only one dimension can be provided.');
+            throw new DatabaseException('Only one dimension can be provided');
         }
 
         $identifier = $dimensionParts[0];
         $dimension = $dimensionParts[1];
 
         if (empty($dimension)) {
-            throw new \Exception('Dimension must not be empty.');
+            throw new DatabaseException('Dimension must not be empty');
         }
 
         return new self($permission, $role, $identifier, $dimension);
@@ -135,9 +143,10 @@ class Permission
     /**
      * Map aggregate permissions into the set of individual permissions they represent.
      *
-     * @param ?array $permissions
-     * @param array $allowed
-     * @return ?array
+     * @param array<string>|null $permissions
+     * @param array<string> $allowed
+     * @return array<string>|null
+     * @throws Exception
      */
     public static function aggregate(?array $permissions, array $allowed = Database::PERMISSIONS): ?array
     {
@@ -165,7 +174,7 @@ class Permission
                 }
             }
         }
-        return $mutated;
+        return \array_values(\array_unique($mutated));
     }
 
     /**
@@ -253,4 +262,3 @@ class Permission
         return $permission->toString();
     }
 }
-

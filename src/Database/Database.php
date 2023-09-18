@@ -207,6 +207,16 @@ class Database
                 'signed' => true,
                 'array' => false,
                 'filters' => ['json'],
+            ],
+            [
+                '$id' => 'documentSecurity',
+                'key' => 'documentSecurity',
+                'type' => self::VAR_BOOLEAN,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => []
             ]
         ],
         'indexes' => [],

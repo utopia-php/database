@@ -1858,7 +1858,7 @@ class Database
                 continue;
             }
 
-            if ($collection->getId() === self::METADATA && $key === 'documentSecurity' && !str_contains($this->name, 'v14x')) {
+            if ($collection->getId() === self::METADATA && $document->getId() === self::METADATA && $key === 'documentSecurity' && !str_contains($this->name, 'v14x')) {
                 continue;
             }
 

@@ -1794,6 +1794,11 @@ class Database
             }
 
             $document->setAttribute($key, $value);
+            $documentId = $document->getId();
+            $keepDocumentSecurity = str_starts_with($documentId, 'database_') && !str_contains($documentId, '_collection_');
+            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x')) {
+                $document->removeAttribute('documentSecurity');
+            }
         }
 
         return $document;
@@ -1828,6 +1833,11 @@ class Database
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);
+            $documentId = $document->getId();
+            $keepDocumentSecurity = str_starts_with($documentId, 'database_') && !str_contains($documentId, '_collection_');
+            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x')) {
+                $document->removeAttribute('documentSecurity');
+            }
         }
 
         return $document;
@@ -1855,10 +1865,6 @@ class Database
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
             if (is_null($value)) {
-                continue;
-            }
-
-            if ($collection->getId() === self::METADATA && $document->getId() === self::METADATA && $key === 'documentSecurity' && !str_contains($this->name, 'v14x')) {
                 continue;
             }
 
@@ -1891,6 +1897,11 @@ class Database
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);
+            $documentId = $document->getId();
+            $keepDocumentSecurity = str_starts_with($documentId, 'database_') && !str_contains($documentId, '_collection_');
+            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x')) {
+                $document->removeAttribute('documentSecurity');
+            }
         }
 
         return $document;

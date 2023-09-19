@@ -213,7 +213,7 @@ class Database
                 'key' => 'documentSecurity',
                 'type' => self::VAR_BOOLEAN,
                 'size' => 0,
-                'required' => true,
+                'required' => false,
                 'signed' => true,
                 'array' => false,
                 'filters' => []

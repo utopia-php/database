@@ -1302,7 +1302,11 @@ class Database
     public function getDocument(string $collection, string $id): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return new Document($this->collection);
+            $coll = $this->collection;
+            if(!str_contains($this->name, 'v14x')) {
+                unset($coll['attributes'][3]);
+            }
+            return new Document($coll);
         }
 
         if (empty($collection)) {
@@ -1851,6 +1855,10 @@ class Database
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
             if (is_null($value)) {
+                continue;
+            }
+
+            if ($collection->getId() === self::METADATA && $key === 'documentSecurity' && !str_contains($this->name, 'v14x')) {
                 continue;
             }
 

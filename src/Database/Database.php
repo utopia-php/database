@@ -1303,7 +1303,7 @@ class Database
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
             $coll = $this->collection;
-            if(!str_contains($this->name, 'v14x')) {
+            if(!str_contains($this->name, 'v14x') || $this->namespace === '_console') {
                 unset($coll['attributes'][3]);
             }
             return new Document($coll);
@@ -1796,7 +1796,7 @@ class Database
             $document->setAttribute($key, $value);
             $documentId = $document->getId();
             $keepDocumentSecurity = str_starts_with($documentId, 'database_') && !str_contains($documentId, '_collection_');
-            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x')) {
+            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x') && $this->namespace != '_console') {
                 $document->removeAttribute('documentSecurity');
             }
         }
@@ -1835,7 +1835,7 @@ class Database
             $document->setAttribute($key, ($array) ? $value : $value[0]);
             $documentId = $document->getId();
             $keepDocumentSecurity = str_starts_with($documentId, 'database_') && !str_contains($documentId, '_collection_');
-            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x')) {
+            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x') && $this->namespace != '_console') {
                 $document->removeAttribute('documentSecurity');
             }
         }
@@ -1899,7 +1899,7 @@ class Database
             $document->setAttribute($key, ($array) ? $value : $value[0]);
             $documentId = $document->getId();
             $keepDocumentSecurity = str_starts_with($documentId, 'database_') && !str_contains($documentId, '_collection_');
-            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x')) {
+            if ($collection->getId() === self::METADATA && !$keepDocumentSecurity && !str_contains($this->name, 'v14x') && $this->namespace != '_console') {
                 $document->removeAttribute('documentSecurity');
             }
         }

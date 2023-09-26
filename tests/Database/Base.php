@@ -1455,8 +1455,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $document->isEmpty());
     }
 
-
-
     public function testFind(): void
     {
         Authorization::setRole(Role::any()->toString());
@@ -1617,6 +1615,46 @@ abstract class Base extends TestCase
             'with-dash' => 'Works3',
             'nullable' => 'Not null'
         ]));
+    }
+
+    public function testOrderByNonEnglish(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        static::getDatabase()->createCollection('orderNonEnglish', permissions: [
+            Permission::create(Role::any()),
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('orderNonEnglish', 'name', Database::VAR_STRING, 128, true));
+
+        static::getDatabase()->createDocument('orderNonEnglish', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Asbjörn',
+        ]));
+
+        static::getDatabase()->createDocument('orderNonEnglish', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Åsa',
+        ]));
+
+        $documents = static::getDatabase()->find('orderNonEnglish', [
+            Query::orderAsc('name'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('Åsa', $documents[0]->getAttribute('name'));
+        $this->assertEquals('Asbjörn', $documents[1]->getAttribute('name'));
+
+        $documents = static::getDatabase()->find('orderNonEnglish', [
+            Query::orderDesc('name'),
+        ]);
+
+        $this->assertEquals('Asbjörn', $documents[0]->getAttribute('name'));
+        $this->assertEquals('Åsa', $documents[1]->getAttribute('name'));
     }
 
     public function testFindBasicChecks(): void

@@ -1631,14 +1631,14 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
-            'name' => 'Asbjörn',
+            'name' => 'Å',
         ]));
 
         static::getDatabase()->createDocument('orderNonEnglish', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
-            'name' => 'Åsa',
+            'name' => 'A',
         ]));
 
         $documents = static::getDatabase()->find('orderNonEnglish', [
@@ -1646,15 +1646,15 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(2, count($documents));
-        $this->assertEquals('Åsa', $documents[0]->getAttribute('name'));
-        $this->assertEquals('Asbjörn', $documents[1]->getAttribute('name'));
+        $this->assertEquals('A', $documents[0]->getAttribute('name'));
+        $this->assertEquals('Å', $documents[1]->getAttribute('name'));
 
         $documents = static::getDatabase()->find('orderNonEnglish', [
             Query::orderDesc('name'),
         ]);
 
-        $this->assertEquals('Asbjörn', $documents[0]->getAttribute('name'));
-        $this->assertEquals('Åsa', $documents[1]->getAttribute('name'));
+        $this->assertEquals('Å', $documents[0]->getAttribute('name'));
+        $this->assertEquals('A', $documents[1]->getAttribute('name'));
     }
 
     public function testFindBasicChecks(): void

@@ -1290,10 +1290,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testListDocumentSearch(Document $document): void
+    public function testListDocumentSearch(): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
         if (!$fulltextSupport) {
@@ -1326,6 +1323,30 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    public function testEmptySearch(): void
+    {
+        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        if (!$fulltextSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', ''),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '<>'),
+        ]);
+        $this->assertEquals(0, count($documents));
     }
 
     /**

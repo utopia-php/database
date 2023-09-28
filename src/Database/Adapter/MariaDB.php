@@ -945,10 +945,10 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     *
+     * @param int|null $timeout
      * @return array<Document>
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
+     * @throws Timeout
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
@@ -959,6 +959,7 @@ class MariaDB extends SQL
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
+            '$internalId' => '_id',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -1071,6 +1072,7 @@ class MariaDB extends SQL
 
             $attribute = match ($attribute) {
                 '_uid' => '$id',
+                '_id' => '$internalId',
                 '_createdAt' => '$createdAt',
                 '_updatedAt' => '$updatedAt',
                 default => $attribute
@@ -1301,6 +1303,7 @@ class MariaDB extends SQL
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',
+            '$internalId' => '_id',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $query->getAttribute()

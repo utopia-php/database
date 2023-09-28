@@ -30,14 +30,18 @@ class Documents extends IndexedQueries
             'type' => Database::VAR_STRING,
             'array' => false,
         ]);
-
+        $attributes[] = new Document([
+            '$id' => '$internalId',
+            'key' => '$internalId',
+            'type' => Database::VAR_STRING,
+            'array' => false,
+        ]);
         $attributes[] = new Document([
             '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);
-
         $attributes[] = new Document([
             '$id' => '$updatedAt',
             'key' => '$updatedAt',

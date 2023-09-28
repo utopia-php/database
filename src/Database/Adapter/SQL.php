@@ -702,6 +702,7 @@ abstract class SQL extends Adapter
             $value = match ($query->getMethod()) {
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                Query::TYPE_LIKE => '%' . $this->escapeWildcards($value) . '%',
                 Query::TYPE_SEARCH => $this->getFulltextValue($value),
                 default => $value
             };
@@ -748,32 +749,22 @@ abstract class SQL extends Adapter
      */
     protected function getSQLOperator(string $method): string
     {
-        switch ($method) {
-            case Query::TYPE_EQUAL:
-                return '=';
-            case Query::TYPE_NOT_EQUAL:
-                return '!=';
-            case Query::TYPE_LESSER:
-                return '<';
-            case Query::TYPE_LESSER_EQUAL:
-                return '<=';
-            case Query::TYPE_GREATER:
-                return '>';
-            case Query::TYPE_GREATER_EQUAL:
-                return '>=';
-            case Query::TYPE_IS_NULL:
-                return 'IS NULL';
-            case Query::TYPE_IS_NOT_NULL:
-                return 'IS NOT NULL';
-            case Query::TYPE_STARTS_WITH:
-            case Query::TYPE_ENDS_WITH:
-            case Query::TYPE_LIKE:
-                return 'LIKE';
-            case Query::TYPE_NOT_LIKE:
-                return 'NOT LIKE';
-            default:
-                throw new DatabaseException('Unknown method: ' . $method);
-        }
+        return match ($method) {
+            Query::TYPE_EQUAL => '=',
+            Query::TYPE_NOT_EQUAL => '!=',
+            Query::TYPE_LESSER => '<',
+            Query::TYPE_LESSER_EQUAL => '<=',
+            Query::TYPE_GREATER => '>',
+            Query::TYPE_GREATER_EQUAL => '>=',
+            Query::TYPE_IS_NULL => 'IS NULL',
+            Query::TYPE_IS_NOT_NULL => 'IS NOT NULL',
+            Query::TYPE_STARTS_WITH,
+            Query::TYPE_ENDS_WITH,
+            Query::TYPE_LIKE => 'LIKE',
+            Query::TYPE_NOT_LIKE => 'NOT LIKE',
+            Query::TYPE_REGEX => 'REGEXP',
+            default => throw new DatabaseException('Unknown method: ' . $method),
+        };
     }
 
     /**
@@ -840,11 +831,11 @@ abstract class SQL extends Adapter
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (
-                SELECT distinct(_document)
-                FROM {$this->getSQLTable($collection . '_perms')}
-                WHERE _permission IN (" . implode(', ', $roles) . ")
-                AND _type = 'read'
-            )";
+            SELECT distinct(_document)
+            FROM {$this->getSQLTable($collection . '_perms')}
+            WHERE _permission IN (" . implode(', ', $roles) . ")
+            AND _type = 'read'
+        )";
     }
 
     /**

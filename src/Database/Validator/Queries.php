@@ -82,7 +82,10 @@ class Queries extends Validator
                 Query::TYPE_BETWEEN,
                 Query::TYPE_STARTS_WITH,
                 Query::TYPE_CONTAINS,
-                Query::TYPE_ENDS_WITH => Base::METHOD_TYPE_FILTER,
+                Query::TYPE_ENDS_WITH,
+                Query::TYPE_LIKE,
+                Query::TYPE_NOT_LIKE,
+                Query::TYPE_REGEX => Base::METHOD_TYPE_FILTER,
                 default => '',
             };
 

@@ -1334,7 +1334,8 @@ class Mongo extends Adapter
             Query::TYPE_STARTS_WITH,
             Query::TYPE_ENDS_WITH,
             Query::TYPE_LIKE,
-            Query::TYPE_NOT_LIKE => '$regex',
+            Query::TYPE_NOT_LIKE,
+            Query::TYPE_REGEX => '$regex',
             default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
         };
     }
@@ -1348,6 +1349,10 @@ class Mongo extends Adapter
             case Query::TYPE_ENDS_WITH:
                 $value = $this->escapeWildcards($value);
                 return '.*'.$value;
+            case Query::TYPE_LIKE:
+            case Query::TYPE_NOT_LIKE:
+                $value = $this->escapeWildcards($value);
+                return '.*'.$value.'.*';
             default:
                 return $value;
         }

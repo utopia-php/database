@@ -22,6 +22,7 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_LIKE = 'like';
     public const TYPE_NOT_LIKE = 'notLike';
+    public const TYPE_REGEX = 'regex';
 
     public const TYPE_SELECT = 'select';
 
@@ -52,7 +53,6 @@ class Query
      * @var array<mixed>
      */
     protected array $values = [];
-
 
     /**
      * Construct a new query object
@@ -346,6 +346,7 @@ class Query
             case self::TYPE_ENDS_WITH:
             case self::TYPE_LIKE:
             case self::TYPE_NOT_LIKE:
+            case self::TYPE_REGEX:
                 $attribute = $parsedParams[0] ?? '';
                 if (count($parsedParams) < 2) {
                     return new self($method, $attribute);
@@ -700,14 +701,29 @@ class Query
         return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
     }
 
-    public static function like(string $attribute, string $value): self
+    /**
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return self
+     */
+    public static function like(string $attribute, array $values): self
     {
-        return new self(self::TYPE_LIKE, $attribute, [$value]);
+        return new self(self::TYPE_LIKE, $attribute, $values);
     }
 
-    public static function notLike(string $attribute, string $value): self
+    /**
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return self
+     */
+    public static function notLike(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_LIKE, $attribute, [$value]);
+        return new self(self::TYPE_NOT_LIKE, $attribute, $values);
+    }
+
+    public static function regex(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_REGEX, $attribute, [$value]);
     }
 
     /**

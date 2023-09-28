@@ -138,6 +138,8 @@ class Filter extends Base
         switch ($method) {
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_LIKE:
+            case Query::TYPE_NOT_LIKE:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;
@@ -153,6 +155,7 @@ class Filter extends Base
             case Query::TYPE_SEARCH:
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
+            case Query::TYPE_REGEX:
                 if (count($value->getValues()) != 1) {
                     $this->message = \ucfirst($method) . ' queries require exactly one value.';
                     return false;

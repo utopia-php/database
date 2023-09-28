@@ -2953,7 +2953,7 @@ abstract class Base extends TestCase
     public function testFindLike(): void
     {
         $documents = static::getDatabase()->find('movies', [
-            Query::like('name', 'Frozen%'),
+            Query::like('name', ['Frozen']),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -2962,10 +2962,19 @@ abstract class Base extends TestCase
     public function testFindNotLike(): void
     {
         $documents = static::getDatabase()->find('movies', [
-            Query::notLike('name', 'Frozen%'),
+            Query::notLike('name', ['Frozen']),
         ]);
 
-        $this->assertEquals(4, count($documents));
+        $this->assertEquals(5, count($documents));
+    }
+
+    public function testFindRegex(): void
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::regex('name', 'Fr..en\sII'),
+        ]);
+
+        $this->assertEquals(1, count($documents));
     }
 
     /**

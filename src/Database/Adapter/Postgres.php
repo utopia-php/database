@@ -972,6 +972,7 @@ class Postgres extends SQL
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
+            '$internalId' => '_id',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -1077,6 +1078,7 @@ class Postgres extends SQL
 
             $attribute = match ($attribute) {
                 '_uid' => '$id',
+                '_id' => '$internalId',
                 '_createdAt' => '$createdAt',
                 '_updatedAt' => '$updatedAt',
                 default => $attribute
@@ -1313,6 +1315,7 @@ class Postgres extends SQL
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',
+            '$internalId' => '_id',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $query->getAttribute()

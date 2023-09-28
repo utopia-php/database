@@ -1477,8 +1477,10 @@ abstract class Base extends TestCase
     }
 
 
-
-    public function testFind(): void
+    /**
+     * @return array<string, mixed>
+     */
+    public function testFind(): array
     {
         Authorization::setRole(Role::any()->toString());
         static::getDatabase()->createCollection('movies', permissions: [
@@ -1495,7 +1497,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
-        static::getDatabase()->createDocument('movies', new Document([
+        $document = static::getDatabase()->createDocument('movies', new Document([
             '$id' => ID::custom('frozen'),
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -1638,6 +1640,10 @@ abstract class Base extends TestCase
             'with-dash' => 'Works3',
             'nullable' => 'Not null'
         ]));
+
+        return [
+            '$internalId' => $document->getInternalId()
+        ];
     }
 
     public function testFindBasicChecks(): void
@@ -1978,6 +1984,25 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
+    }
+
+
+    /**
+     * @depends testFind
+     * @param array<string, mixed> $data
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
+    public function testFindByInternalID(array $data): void
+    {
+        /**
+         * Test that internal ID queries are handled correctly
+         */
+        $documents = static::getDatabase()->find('movies', [
+            Query::equal('$internalId', [$data['$internalId']]),
+        ]);
+
+        $this->assertEquals(1, count($documents));
     }
 
     public function testFindOrderBy(): void

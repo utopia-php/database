@@ -725,6 +725,10 @@ abstract class SQL extends Adapter
         $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
         $value = trim($value);
 
+        if (empty($value)) {
+            return '';
+        }
+
         if ($exact) {
             $value = '"' . $value . '"';
         } else {

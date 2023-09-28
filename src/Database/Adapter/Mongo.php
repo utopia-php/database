@@ -857,9 +857,10 @@ class Mongo extends Adapter
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $attribute = $attribute == 'id' ? "_uid" : $attribute;
-            $attribute = $attribute == 'createdAt' ? "_createdAt" : $attribute;
-            $attribute = $attribute == 'updatedAt' ? "_updatedAt" : $attribute;
+            $attribute = $attribute == 'id' ? '_uid' : $attribute;
+            $attribute = $attribute == 'internalId' ? '_id' : $attribute;
+            $attribute = $attribute == 'createdAt' ? '_createdAt' : $attribute;
+            $attribute = $attribute == 'updatedAt' ? '_updatedAt' : $attribute;
 
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
@@ -1253,25 +1254,33 @@ class Mongo extends Adapter
 
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
-            }
-
-            if ($query->getAttribute() === '$createdAt') {
+            } elseif ($query->getAttribute() === '$internalId') {
+                $query->setAttribute('_id');
+                $values = $query->getValues();
+                foreach ($values as &$value) {
+                    $value = new ObjectId($value);
+                }
+                $query->setValues($values);
+            } elseif ($query->getAttribute() === '$createdAt') {
                 $query->setAttribute('_createdAt');
-            }
-
-            if ($query->getAttribute() === '$updatedAt') {
+            } elseif ($query->getAttribute() === '$updatedAt') {
                 $query->setAttribute('_updatedAt');
             }
 
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
 
+            unset($value);
+
             $value = match ($query->getMethod()) {
                 Query::TYPE_IS_NULL,
                 Query::TYPE_IS_NOT_NULL => null,
-                default => count($query->getValues()) > 1
-                    ? $query->getValues()
-                    : $query->getValues()[0],
+                default => $this->getQueryValue(
+                    $query->getMethod(),
+                    count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0]
+                ),
             };
 
             $negated = match ($query->getMethod()) {

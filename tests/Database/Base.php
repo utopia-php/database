@@ -3429,6 +3429,47 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testRelationSameKey(): void
+    {
+    if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        static::getDatabase()->createCollection("c1", [], [], $permissions);
+        static::getDatabase()->createCollection("c2", [], [], $permissions);
+
+        $res = static::getDatabase()->createRelationship(
+            collection: "c1",
+            relatedCollection: "c2",
+            type: Database::RELATION_ONE_TO_ONE,
+            id: "c2"
+        );
+        $this->assertTrue($res);
+
+        $res = static::getDatabase()->createRelationship(
+            collection: "c1",
+            relatedCollection: "c2",
+            type: Database::RELATION_ONE_TO_MANY,
+            id: "c1"
+        );
+        $this->assertTrue($res);
+
+        $res = static::getDatabase()->createRelationship(
+            collection: "c1",
+            relatedCollection: "c2",
+            type: Database::RELATION_MANY_TO_ONE,
+            id: "c3"
+        );
+        $this->assertTrue($res);
+    }
+
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

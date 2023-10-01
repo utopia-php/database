@@ -1528,7 +1528,7 @@ class Database
 
         $id ??= $relatedCollection->getId();
 
-        $twoWayKey ??= $collection->getId();
+        $twoWayKey ??= $collection->getId() . '_' . uniqid();
 
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */

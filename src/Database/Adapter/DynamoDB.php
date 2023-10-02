@@ -8,12 +8,32 @@ use Utopia\Database\Document;
 use Utopia\Database\Database;
 use Utopia\Database\Query;
 use Utopia\Database\Exception as DatabaseException;
+use Aws\DynamoDb\Exception\DynamoDbException;
 use Aws\DynamoDb\DynamoDbClient as Client;
 
 class DynamoDB extends Adapter
 {
+    // Data types
+    public const VAR_STRING = 'S';
+    public const VAR_NUMBER = 'N';
+    public const VAR_BINARY = 'B';
+
+    // Index types
+    public const SIMPLE_INDEX = 'SIMPLE';
+    public const COMPOSITE_INDEX = 'COMPOSITE';
 
     protected Client $client;
+
+    /**
+     * @return Client
+     *
+     * @throws Exception
+     */
+    protected function getClient(): Client
+    {
+        return $this->client;
+    }
+
 
 
     public function __construct(Client $client)
@@ -23,7 +43,8 @@ class DynamoDB extends Adapter
 
     /**
      * Ping Database
-     *
+     * 
+     * DynamoDB is a managed database - If the DynamoDB client is successfully initialized, you can assume the service is accessible.
      * @return bool
      */
     public function ping(): bool
@@ -36,6 +57,7 @@ class DynamoDB extends Adapter
      *
      * @param string $name
      *
+     * No concept of Database schemas in DynamoDb.
      * @return bool
      */
     public function create(string $name): bool
@@ -54,12 +76,23 @@ class DynamoDB extends Adapter
      */
     public function exists(string $database, ?string $collection): bool
     {
+        if (!\is_null($collection)) {
+            $collection = $this->filter($collection);
+            try {
+                $this->client->describeTable([
+                    'TableName' => "{$this->getNamespace()}_{$collection}",
+                ]);
+            } catch (DynamoDbException $e) {
+                return false;
+            }
+        }
         return true;
     }
 
     /**
      * List Databases
      *
+     * No concept of Database schemas in DynamoDb.
      * @return array<Document>
      */
     public function list(): array
@@ -72,11 +105,31 @@ class DynamoDB extends Adapter
      *
      * @param string $name
      *
+     * No concept of Database schemas in DynamoDb.
      * @return bool
      */
     public function delete(string $name): bool
     {
         return true;
+    }
+
+    /**
+     * Get DynamoDb Type
+     *
+     * @param string $type
+     * @param int $size in chars
+     *
+     * @return string
+     */
+    protected function getDynamoDbType(string $type): string
+    {
+        if (in_array($type, array(Database::VAR_STRING, Database::VAR_RELATIONSHIP))) {
+            return DynamoDB::VAR_STRING;
+        } else if (in_array($type, array(Database::VAR_INTEGER, Database::VAR_FLOAT, Database::VAR_BOOLEAN, Database::VAR_DATETIME))) {
+            return DynamoDB::VAR_NUMBER;
+        } else {
+            throw new DatabaseException('Unknown Type: ' . $type);
+        }
     }
 
     /**
@@ -89,6 +142,150 @@ class DynamoDB extends Adapter
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
+        $tableName = "{$this->getNamespace()}_{$this->filter($name)}";
+
+        $attributeDefinitions = [
+            [
+                'AttributeName' => '_id',
+                'AttributeType' => DynamoDB::VAR_NUMBER,
+            ],
+            [
+                'AttributeName' => '_uid',
+                'AttributeType' => DynamoDB::VAR_STRING,
+            ],
+            [
+                'AttributeName' => '_createdAt',
+                'AttributeType' => DynamoDB::VAR_NUMBER,
+            ],
+            [
+                'AttributeName' => '_updatedAt',
+                'AttributeType' => DynamoDB::VAR_NUMBER,
+            ],
+            [
+                'AttributeName' => '_permissions',
+                'AttributeType' => DynamoDB::VAR_STRING,
+            ]
+        ];
+        
+        $permsAttributeDefinitions = [
+            [
+                'AttributeName' => '_id',
+                'AttributeType' => DynamoDB::VAR_NUMBER,
+            ],
+            [
+                'AttributeName' => '_type',
+                'AttributeType' => DynamoDB::VAR_STRING,
+            ],
+            [
+                'AttributeName' => '_permission',
+                'AttributeType' => DynamoDB::VAR_STRING,
+            ],
+            [
+                'AttributeName' => '_document',
+                'AttributeType' => DynamoDB::VAR_STRING,
+            ]
+        ];
+
+        $globalIndexes = [
+            [
+                'IndexName' => '_uid',
+                'KeySchema' => [
+                    [
+                        'AttributeName' => '_uid',
+                        'KeyType' => 'HASH',
+                    ],
+                ],
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ],
+        ];
+
+        $permsGlobalIndexes = [
+            [
+                'IndexName' => "index_{$tableName}_ukey",
+                'KeySchema' => [
+                    [
+                        'AttributeName' => '_document',
+                        'KeyType' => 'HASH',
+                    ],
+                    [
+                        'AttributeName' => '_permission',
+                        'KeyType' => 'RANGE'
+                    ]
+                ],
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ],
+        ];
+
+        foreach ($attributes as $attribute) {
+            $attrId = $this->filter($attribute->getId());
+            $attrType = $this->getDynamoDbType($attribute->getAttribute('type'));
+
+            $attributeDef = [
+                'AttributeName' => $attrId,
+                'AttributeType' => $attrType,
+            ];
+
+            array_push($attributeDefinitions, $attributeDef);
+        }
+
+        foreach ($indexes as $index) {
+            $indexId = $this->filter($index->getId());
+            $indexType = $index->getAttribute('type');
+            $indexAttributes = $index->getAttribute('attributes');
+
+            $globalIndex = [
+                'IndexName' => $indexId,
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ];
+
+            $globalIndex['KeySchema'] = [
+                    [
+                        'AttributeName' => $indexAttributes[0],
+                        'KeyType' => 'HASH',
+                    ]
+            ];
+            if ($indexType == DynamoDB::COMPOSITE_INDEX) {
+                array_push($globalIndex['KeySchema'], [
+                    'AttributeName' => $indexAttributes[1],
+                    'KeyType' => 'RANGE',
+                ]);
+            }
+            array_push($globalIndexes, $globalIndex);
+        }
+
+        $params = [
+            'TableName' => $tableName,
+            'AttributeDefinitions' => $attributeDefinitions,
+            'KeySchema' => [
+                [
+                    'AttributeName' => '_id',
+                    'KeyType' => 'HASH',
+                ],
+            ],
+            'GlobalSecondaryIndexes' => $globalIndexes,
+        ];
+
+        $permsParams = [
+            'TableName' => "{$tableName}_perms",
+            'AttributeDefinitions' => $permsAttributeDefinitions,
+            'KeySchema' => [
+                [
+                    'AttributeName' => '_id',
+                    'KeyType' => 'HASH',
+                ],
+            ],
+            'GlobalSecondaryIndexes' => $permsGlobalIndexes,
+        ];
+
+        $this->client->createTable($params);
+        $this->client->createTable($permsParams);
+        
         return true;
     }
 

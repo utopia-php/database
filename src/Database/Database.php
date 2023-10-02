@@ -1528,7 +1528,7 @@ class Database
 
         $id ??= $relatedCollection->getId();
 
-        $twoWayKey ??= $collection->getId() . '_' . uniqid();
+        $twoWayKey ??= $collection->getId();
 
         $attributes = $collection->getAttribute('attributes', []);
         /** @var Document[] $attributes */
@@ -1537,11 +1537,15 @@ class Database
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
-                && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
-                && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
-            ) {
-                throw new DuplicateException('Related attribute already exists');
+            try {
+                if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+                    && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
+                    && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
+                ) {
+                    throw new DuplicateException('Related attribute already exists');
+                }
+            } catch (DuplicateException $e) {
+                $twoWayKey ??= $collection->getId() . '_' . uniqid();
             }
         }
 

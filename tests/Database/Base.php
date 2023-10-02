@@ -3429,7 +3429,7 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testRelationSameKey(): void
+    public function testRelationSametwoWayKey(): void
     {
     if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3442,30 +3442,30 @@ abstract class Base extends TestCase
             Permission::delete(Role::any()),
         ];
 
-        static::getDatabase()->createCollection("c1", [], [], $permissions);
-        static::getDatabase()->createCollection("c2", [], [], $permissions);
+        static::getDatabase()->createCollection('c1', [], [], $permissions);
+        static::getDatabase()->createCollection('c2', [], [], $permissions);
 
         $res = static::getDatabase()->createRelationship(
-            collection: "c1",
-            relatedCollection: "c2",
+            collection: 'c1',
+            relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_ONE,
-            id: "c2"
+            id: 'c2'
         );
         $this->assertTrue($res);
 
         $res = static::getDatabase()->createRelationship(
-            collection: "c1",
-            relatedCollection: "c2",
+            collection: 'c1',
+            relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_MANY,
-            id: "c1"
+            id: 'c1'
         );
         $this->assertTrue($res);
 
         $res = static::getDatabase()->createRelationship(
-            collection: "c1",
-            relatedCollection: "c2",
+            collection: 'c1',
+            relatedCollection: 'c2',
             type: Database::RELATION_MANY_TO_ONE,
-            id: "c3"
+            id: 'c3'
         );
         $this->assertTrue($res);
     }
@@ -5625,18 +5625,6 @@ abstract class Base extends TestCase
             type: Database::RELATION_ONE_TO_ONE,
             id: 'child1'
         );
-
-        try {
-            static::getDatabase()->createRelationship(
-                collection: 'parent',
-                relatedCollection: 'child',
-                type: Database::RELATION_ONE_TO_MANY,
-                id: 'children',
-            );
-            $this->fail('Failed to throw Exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Related attribute already exists', $e->getMessage());
-        }
 
         static::getDatabase()->createRelationship(
             collection: 'parent',

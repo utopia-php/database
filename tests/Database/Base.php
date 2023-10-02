@@ -3431,7 +3431,7 @@ abstract class Base extends TestCase
 
     public function testRelationSametwoWayKey(): void
     {
-    if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }

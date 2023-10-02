@@ -198,11 +198,47 @@ class DynamoDB extends Adapter
                     'ProjectionType' => 'ALL',
                 ],
             ],
+            [
+                'IndexName' => '_createdAt',
+                'KeySchema' => [
+                    [
+                        'AttributeName' => '_createdAt',
+                        'KeyType' => 'HASH',
+                    ],
+                ],
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ],
+            [
+                'IndexName' => '_updatedAt',
+                'KeySchema' => [
+                    [
+                        'AttributeName' => '_updatedAt',
+                        'KeyType' => 'HASH',
+                    ],
+                ],
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ],
+            [
+                'IndexName' => '_permissions',
+                'KeySchema' => [
+                    [
+                        'AttributeName' => '_permissions',
+                        'KeyType' => 'HASH',
+                    ],
+                ],
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ],
         ];
 
         $permsGlobalIndexes = [
             [
-                'IndexName' => "index_{$tableName}_ukey",
+                'IndexName' => "index_{$tableName}_document_permission",
                 'KeySchema' => [
                     [
                         'AttributeName' => '_document',
@@ -217,7 +253,25 @@ class DynamoDB extends Adapter
                     'ProjectionType' => 'ALL',
                 ],
             ],
+            [
+                'IndexName' => "index_{$tableName}_document_type",
+                'KeySchema' => [
+                    [
+                        'AttributeName' => '_document',
+                        'KeyType' => 'HASH',
+                    ],
+                    [
+                        'AttributeName' => '_type',
+                        'KeyType' => 'RANGE'
+                    ]
+                ],
+                'Projection' => [
+                    'ProjectionType' => 'ALL',
+                ],
+            ],
         ];
+
+        $attributeDefMap = [];
 
         foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
@@ -228,7 +282,7 @@ class DynamoDB extends Adapter
                 'AttributeType' => $attrType,
             ];
 
-            array_push($attributeDefinitions, $attributeDef);
+            $attributeDefMap[$attrId] = $attributeDef;
         }
 
         foreach ($indexes as $index) {
@@ -242,24 +296,28 @@ class DynamoDB extends Adapter
                     'ProjectionType' => 'ALL',
                 ],
             ];
-
+            
             $globalIndex['KeySchema'] = [
-                    [
-                        'AttributeName' => $indexAttributes[0],
-                        'KeyType' => 'HASH',
+                [
+                    'AttributeName' => $indexAttributes[0],
+                    'KeyType' => 'HASH',
                     ]
             ];
+            array_push($attributeDefinitions, $attributeDefMap[$indexAttributes[0]]);
+
             if ($indexType == DynamoDB::COMPOSITE_INDEX) {
                 array_push($globalIndex['KeySchema'], [
                     'AttributeName' => $indexAttributes[1],
                     'KeyType' => 'RANGE',
                 ]);
+                array_push($attributeDefinitions, $attributeDefMap[$indexAttributes[1]]);
             }
             array_push($globalIndexes, $globalIndex);
         }
 
         $params = [
             'TableName' => $tableName,
+            'BillingMode' => 'PAY_PER_REQUEST',
             'AttributeDefinitions' => $attributeDefinitions,
             'KeySchema' => [
                 [
@@ -272,6 +330,7 @@ class DynamoDB extends Adapter
 
         $permsParams = [
             'TableName' => "{$tableName}_perms",
+            'BillingMode' => 'PAY_PER_REQUEST',
             'AttributeDefinitions' => $permsAttributeDefinitions,
             'KeySchema' => [
                 [

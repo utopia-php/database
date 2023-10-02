@@ -117,7 +117,6 @@ class DynamoDB extends Adapter
      * Get DynamoDb Type
      *
      * @param string $type
-     * @param int $size in chars
      *
      * @return string
      */

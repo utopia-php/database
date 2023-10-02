@@ -16,6 +16,9 @@ services:
       - ./phpunit.xml:/usr/src/code/phpunit.xml
     ports:
       - "8708:8708"
+    environment:
+      AWS_ACCESS_KEY_ID: "DUMMYKEYID"
+      AWS_SECRET_ACCESS_KEY: "DUMMYSECRETKEY"
 
   adminer:
     image: adminer

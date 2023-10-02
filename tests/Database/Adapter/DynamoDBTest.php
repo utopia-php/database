@@ -42,7 +42,7 @@ class DynamoDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $schema = 'utopiaTests'; // same as $this->testDatabase
-        $client = new Client(['region' => 'us-west-2', 'version' => 'latest', 'endpoint' => 'http://localhost:8012']);
+        $client = new Client(['region' => 'us-west-2', 'version' => 'latest', 'endpoint' => 'http://dynamodb:8012']);
 
         $database = new Database(new DynamoDB($client), $cache);
         $database->setDefaultDatabase($schema);

@@ -3429,6 +3429,61 @@ abstract class Base extends TestCase
         return $document;
     }
 
+
+
+    public function testRelationsChildsBadDatatype(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection("relation1", [], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        static::getDatabase()->createCollection("relation2", [], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $this->assertTrue(static::getDatabase()->createAttribute('relation2', 'phone_integer', Database::VAR_INTEGER, 0, true));
+        $this->assertTrue(static::getDatabase()->createAttribute('relation2', 'phone_string', Database::VAR_STRING, 5, true));
+
+        $this->assertTrue(static::getDatabase()->createRelationship(
+            collection: "relation1",
+            relatedCollection: "relation2",
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+            twoWayKey: 'parent_id'
+        ));
+
+        $res = static::getDatabase()->createDocument('relation1', new Document([
+            '$id' => 'bla',
+            '$permissions' => [],
+            'children' => [
+                [
+                    '$id' => 'bar',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'phone_integer' => 123,
+                    'phone_string' => '123',
+                ],
+                [
+                    '$id' => 'foo',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'phone_integer' => 123456123456123456123456123456,
+                    'phone_string' => '12345',
+                ],
+            ],
+        ]));
+
+        exit;
+
+    }
+
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

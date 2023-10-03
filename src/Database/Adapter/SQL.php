@@ -50,41 +50,27 @@ abstract class SQL extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function exists(string $database, ?string $collection): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
 
         if (!\is_null($collection)) {
             $collection = $this->filter($collection);
-
-            $select = 'TABLE_NAME';
-            $from = 'INFORMATION_SCHEMA.TABLES';
-            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
-            $match = "{$this->getNamespace()}_{$collection}";
-        } else {
-            $select = 'SCHEMA_NAME';
-            $from = 'INFORMATION_SCHEMA.SCHEMATA';
-            $where = 'SCHEMA_NAME = :schema';
-            $match = $database;
-        }
-
-        $stmt = $this->getPDO()
-            ->prepare("SELECT {$select}
-                FROM {$from}
-                WHERE {$where};");
-
-        $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
-
-        if (!\is_null($collection)) {
+            $stmt = $this->getPDO()->prepare("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table");
+            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
             $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+        } else {
+            $stmt = $this->getPDO()->prepare("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = :schema");
+            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
         $stmt->execute();
-
         $document = $stmt->fetch();
+        if (empty($document)) {
+            return false;
+        }
 
-        return (($document[$select] ?? '') === $match) || // case insensitive check
-            (($document[strtolower($select)] ?? '') === $match);
+        return true;
     }
 
     /**

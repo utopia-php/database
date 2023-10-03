@@ -27,6 +27,10 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
+        if ($this->exists($name)) {
+            return true;
+        }
+
         return $this->getPDO()
             ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
             ->execute();

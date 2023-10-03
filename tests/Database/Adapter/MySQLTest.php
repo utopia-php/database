@@ -60,11 +60,6 @@ class MySQLTest extends Base
         $database = new Database(new MySQL($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
-
-        if ($database->exists('utopiaTests')) {
-            $database->delete('utopiaTests');
-        }
-
         $database->create();
 
         return self::$database = $database;

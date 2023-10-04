@@ -158,6 +158,10 @@ class Index extends Validator
     public function isValid($value): bool
     {
         foreach ($value->getAttribute('attributes', []) as $attribute) {
+
+            var_dump($attribute);
+
+
             $this->attributes[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute;
         }
 

@@ -32,7 +32,7 @@
     "require": {
         "ext-pdo": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "dev-feat-v2 as 0.28.4",
+        "utopia-php/framework": "dev-fix-v2-swoole-coroutines as 0.31.0",
         "utopia-php/cache": "0.8.*",
         "utopia-php/mongo": "0.2.*"
     },

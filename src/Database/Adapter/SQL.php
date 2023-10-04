@@ -121,13 +121,11 @@ abstract class SQL extends Adapter
         $stmt->bindValue(':_uid', $id);
         $stmt->execute();
 
-        $document = $stmt->fetchAll();
+        $document = $stmt->fetch();
 
         if (empty($document)) {
             return new Document([]);
         }
-
-        $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
             $document['$internalId'] = $document['_id'];

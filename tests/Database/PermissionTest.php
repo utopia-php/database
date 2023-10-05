@@ -260,20 +260,33 @@ class PermissionTest extends TestCase
 
     public function testInvalidFormats(): void
     {
-        $this->expectException(\Exception::class);
-        Permission::parse('read');
+        try {
+            Permission::parse('read');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Invalid permission string format: "read".', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read(("any")');
+        try {
+            Permission::parse('read(("any")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Invalid permission type: "read(".', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read("users/un/verified")');
+        try {
+            Permission::parse('read("users/un/verified")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Only one dimension can be provided', $e->getMessage());
+        }
 
-        $this->expectException(\Exception::class);
-        Permission::parse('read("users/")');
-
-        $this->expectException(\Exception::class);
-        Permission::parse('read("label:alphanumeric-only")');
+        try {
+            Permission::parse('read("users/")');
+            $this->fail('Failed to throw Exception');
+        } catch (\Exception $e) {
+            $this->assertEquals('Dimension must not be empty', $e->getMessage());
+        }
     }
 
     /**

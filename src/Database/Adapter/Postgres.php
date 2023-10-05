@@ -152,6 +152,41 @@ class Postgres extends SQL
     }
 
     /**
+     * Get Collection Size
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     *
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection . '_perms');
+
+        $collectionSize = $this->getPDO()->prepare("
+             SELECT pg_total_relation_size(:name);
+        ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT pg_total_relation_size(:permissions);
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return  $size;
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -577,6 +612,14 @@ class Postgres extends SQL
         /**
          * Insert Attributes
          */
+
+        // Insert manual id if set
+        if (!empty($document->getInternalId())) {
+            $bindKey = '_id';
+            $columns .= "\"_id\", ";
+            $columnNames .= ':' . $bindKey . ', ';
+        }
+
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) { // Parse statement
             $column = $this->filter($attribute);
@@ -591,6 +634,11 @@ class Postgres extends SQL
                 ({$columns}\"_uid\") VALUES ({$columnNames}:_uid) RETURNING _id;");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        // Bind manual internal id if set
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        }
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
@@ -924,6 +972,7 @@ class Postgres extends SQL
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
+            '$internalId' => '_id',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -1015,8 +1064,8 @@ class Postgres extends SQL
             {$sqlLimit};
         ";
 
-        if ($timeout) {
-            $sql = $this->setTimeout($sql, $timeout);
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1029,6 +1078,7 @@ class Postgres extends SQL
 
             $attribute = match ($attribute) {
                 '_uid' => '$id',
+                '_id' => '$internalId',
                 '_createdAt' => '$createdAt',
                 '_updatedAt' => '$updatedAt',
                 default => $attribute
@@ -1055,20 +1105,29 @@ class Postgres extends SQL
 
         $results = $stmt->fetchAll();
 
-        foreach ($results as $key => $value) {
-            $results[$key]['$id'] = $value['_uid'];
-            $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$createdAt'] = $value['_createdAt'];
-            $results[$key]['$updatedAt'] = $value['_updatedAt'];
-            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
+        foreach ($results as $index => $document) {
+            if (\array_key_exists('_uid', $document)) {
+                $results[$index]['$id'] = $document['_uid'];
+                unset($results[$index]['_uid']);
+            }
+            if (\array_key_exists('_id', $document)) {
+                $results[$index]['$internalId'] = $document['_id'];
+                unset($results[$index]['_id']);
+            }
+            if (\array_key_exists('_createdAt', $document)) {
+                $results[$index]['$createdAt'] = $document['_createdAt'];
+                unset($results[$index]['_createdAt']);
+            }
+            if (\array_key_exists('_updatedAt', $document)) {
+                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+                unset($results[$index]['_updatedAt']);
+            }
+            if (\array_key_exists('_permissions', $document)) {
+                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+                unset($results[$index]['_permissions']);
+            }
 
-            unset($results[$key]['_uid']);
-            unset($results[$key]['_id']);
-            unset($results[$key]['_createdAt']);
-            unset($results[$key]['_updatedAt']);
-            unset($results[$key]['_permissions']);
-
-            $results[$key] = new Document($results[$key]);
+            $results[$index] = new Document($results[$index]);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1089,7 +1148,7 @@ class Postgres extends SQL
      *
      * @return int
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1114,6 +1173,11 @@ class Postgres extends SQL
                     {$limit}
                 ) table_count
         ";
+
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1142,7 +1206,7 @@ class Postgres extends SQL
      *
      * @return int|float
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1159,13 +1223,21 @@ class Postgres extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $stmt = $this->getPDO()->prepare("SELECT SUM({$attribute}) as sum
-            FROM (
-                SELECT {$attribute}
-                FROM {$this->getSQLTable($name)} table_main
-                WHERE {$permissions} AND " . implode(' AND ', $where) . "
-                {$limit}
-            ) table_count");
+        $sql = "SELECT SUM({$attribute}) as sum
+            FROM 
+                (
+                    SELECT {$attribute}
+                    FROM {$this->getSQLTable($name)} table_main
+                    WHERE {$permissions} AND " . implode(' AND ', $where) . "
+                    {$limit}
+                ) table_count
+        ";
+
+        if ($timeout || self::$timeout) {
+            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
+        }
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1199,11 +1271,24 @@ class Postgres extends SQL
             return '*';
         }
 
+        // Remove $id ,$permissions and $collection from selections if present since they are always selected
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+
         $selections[] = '_uid';
-        $selections[] = '_id';
-        $selections[] = '_createdAt';
-        $selections[] = '_updatedAt';
         $selections[] = '_permissions';
+
+        if (\in_array('$internalId', $selections)) {
+            $selections[] = '_id';
+            $selections = \array_diff($selections, ['$internalId']);
+        }
+        if (\in_array('$createdAt', $selections)) {
+            $selections[] = '_createdAt';
+            $selections = \array_diff($selections, ['$createdAt']);
+        }
+        if (\in_array('$updatedAt', $selections)) {
+            $selections[] = '_updatedAt';
+            $selections = \array_diff($selections, ['$updatedAt']);
+        }
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {
@@ -1230,6 +1315,7 @@ class Postgres extends SQL
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',
+            '$internalId' => '_id',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $query->getAttribute()
@@ -1453,7 +1539,7 @@ class Postgres extends SQL
      * @param int $milliseconds
      * @return string
      */
-    protected function setTimeout(string $sql, int $milliseconds): string
+    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
     {
         return "SET statement_timeout = {$milliseconds};{$sql};SET statement_timeout = 0;";
     }

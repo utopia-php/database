@@ -22,6 +22,8 @@ abstract class Adapter
      */
     protected array $debug = [];
 
+    protected static ?int $timeout = null;
+
     /**
      * @param string $key
      * @param mixed $value
@@ -385,7 +387,7 @@ abstract class Adapter
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int;
 
     /**
      * Count Documents
@@ -396,7 +398,16 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int;
+
+    /**
+     * Get Collection Size
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollection(string $collection): int;
 
     /**
      * Get max STRING limit
@@ -641,4 +652,38 @@ abstract class Adapter
      * @return int
      */
     abstract public function getMaxIndexLength(): int;
+
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library. Once this timeout is set, any database
+     * query that takes longer than the specified time will be automatically
+     * terminated by the library, and an appropriate error or exception will be
+     * raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @return void
+     *
+     * @throws \Exception The provided timeout value must be greater than or equal to 0.
+    */
+    public static function setTimeout(int $milliseconds): void
+    {
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+        self::$timeout = $milliseconds;
+    }
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @return void
+     *
+    */
+    public static function clearTimeout(): void
+    {
+        self::$timeout = null;
+    }
 }

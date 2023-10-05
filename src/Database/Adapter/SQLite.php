@@ -159,6 +159,42 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Get Collection Size
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     *
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $namespace = $this->getNamespace();
+        $name = $namespace . '_' . $collection;
+        $permissions = $namespace . '_' . $collection . '_perms';
+
+        $collectionSize = $this->getPDO()->prepare("
+             SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name=:name;
+        ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT SUM(\"pgsize\") FROM \"dbstat\" WHERE name=:name;
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':name', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
      * Delete Collection
      * @param string $id
      * @return bool
@@ -359,11 +395,22 @@ class SQLite extends MariaDB
             $bindIndex++;
         }
 
+        // Insert manual id if set
+        if (!empty($document->getInternalId())) {
+            $values[] = '_id';
+            $columns[] = "_id";
+        }
+
         $stmt = $this->getPDO()
             ->prepare("INSERT INTO `{$this->getNamespace()}_{$name}`
                 (".implode(', ', $columns).") VALUES (:".implode(', :', $values).");");
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+        // Bind manual internal id if set
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        }
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {

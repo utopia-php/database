@@ -254,6 +254,35 @@ class Mongo extends Adapter
     }
 
     /**
+     * Get Collection Size
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $namespace = $this->getNamespace();
+        $collection = $this->filter($collection);
+        $collection = $namespace. '_' . $collection;
+
+        $command = [
+            'collStats' => $collection,
+            'scale' => 1
+        ];
+
+        try {
+            $result = $this->getClient()->query($command);
+            if (is_object($result)) {
+                return $result->totalSize;
+            } else {
+                throw new DatabaseException('No size found');
+            }
+        } catch(Exception $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -633,10 +662,16 @@ class Mongo extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $internalId = $document->getInternalId();
         $document->removeAttribute('$internalId');
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
+
+        // Insert manual id if set
+        if (!empty($internalId)) {
+            $record['_id'] = $internalId;
+        }
 
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
         $result = $this->replaceChars('_', '$', $result);
@@ -803,8 +838,8 @@ class Mongo extends Adapter
             $options['skip'] = $offset;
         }
 
-        if ($timeout) {
-            $options['maxTimeMS'] = $timeout;
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         $selections = $this->getAttributeSelections($queries);
@@ -822,9 +857,10 @@ class Mongo extends Adapter
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $attribute = $attribute == 'id' ? "_uid" : $attribute;
-            $attribute = $attribute == 'createdAt' ? "_createdAt" : $attribute;
-            $attribute = $attribute == 'updatedAt' ? "_updatedAt" : $attribute;
+            $attribute = $attribute == 'id' ? '_uid' : $attribute;
+            $attribute = $attribute == 'internalId' ? '_id' : $attribute;
+            $attribute = $attribute == 'createdAt' ? '_createdAt' : $attribute;
+            $attribute = $attribute == 'updatedAt' ? '_updatedAt' : $attribute;
 
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
@@ -1040,7 +1076,7 @@ class Mongo extends Adapter
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1050,6 +1086,10 @@ class Mongo extends Adapter
         // set max limit
         if ($max > 0) {
             $options['limit'] = $max;
+        }
+
+        if ($timeout || self::$timeout) {
+            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
         }
 
         // queries
@@ -1075,11 +1115,14 @@ class Mongo extends Adapter
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $collection = $this->getDatabase()->selectCollection($name);
         // todo $collection is not used?
+
+        // todo add $timeout for aggregate in Mongo utopia client
+
         $filters = [];
 
         // queries
@@ -1211,33 +1254,34 @@ class Mongo extends Adapter
 
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
-            }
-
-            if ($query->getAttribute() === '$createdAt') {
+            } elseif ($query->getAttribute() === '$internalId') {
+                $query->setAttribute('_id');
+                $values = $query->getValues();
+                foreach ($values as &$value) {
+                    $value = new ObjectId($value);
+                }
+                $query->setValues($values);
+            } elseif ($query->getAttribute() === '$createdAt') {
                 $query->setAttribute('_createdAt');
-            }
-
-            if ($query->getAttribute() === '$updatedAt') {
+            } elseif ($query->getAttribute() === '$updatedAt') {
                 $query->setAttribute('_updatedAt');
             }
 
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
 
-            switch ($query->getMethod()) {
-                case Query::TYPE_IS_NULL:
-                case Query::TYPE_IS_NOT_NULL:
-                    $value = null;
-                    break;
-                default:
-                    $value = $this->getQueryValue(
-                        $query->getMethod(),
-                        count($query->getValues()) > 1
-                            ? $query->getValues()
-                            : $query->getValues()[0]
-                    );
-                    break;
-            }
+            unset($value);
+
+            $value = match ($query->getMethod()) {
+                Query::TYPE_IS_NULL,
+                Query::TYPE_IS_NOT_NULL => null,
+                default => $this->getQueryValue(
+                    $query->getMethod(),
+                    count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0]
+                ),
+            };
 
             if ($operator == '$eq' && \is_array($value)) {
                 $filters[$attribute]['$in'] = $value;
@@ -1327,6 +1371,11 @@ class Mongo extends Adapter
         $projection = [];
 
         foreach ($selections as $selection) {
+            // Skip internal attributes since all are selected by default
+            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+                continue;
+            }
+
             $projection[$selection] = 1;
         }
 

@@ -12,11 +12,13 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Database\Validator\Queries\Document as DocumentValidator;
+use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
@@ -188,6 +190,20 @@ class Database
     ];
 
     /**
+     * List of Internal Attributes
+     *
+     * @var array<string>
+     */
+    public const INTERNAL_ATTRIBUTES = [
+        '$id',
+        '$internalId',
+        '$createdAt',
+        '$updatedAt',
+        '$permissions',
+        '$collection',
+    ];
+
+    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
@@ -259,7 +275,14 @@ class Database
         '*' => [],
     ];
 
-    protected bool $silentEvents = false;
+    /**
+     * Array in which the keys are the names of databse listeners that
+     * should be skipped when dispatching events. null $silentListeners
+     * will skip all listeners.
+     *
+     * @var ?array<string, bool>
+     */
+    protected ?array $silentListeners = [];
 
     protected ?\DateTime $timestamp = null;
 
@@ -372,31 +395,41 @@ class Database
      * @param callable $callback
      * @return self
      */
-    public function on(string $event, callable $callback): self
+    public function on(string $event, string $name, callable $callback): self
     {
         if (!isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
         }
-        $this->listeners[$event][] = $callback;
+        $this->listeners[$event][$name] = $callback;
         return $this;
     }
 
     /**
-     * Silent event generation for all the calls inside the callback
+     * Silent event generation for calls inside the callback
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $listeners List of listeners to silence; if null, all listeners will be silenced
      * @return T
      */
-    public function silent(callable $callback): mixed
+    public function silent(callable $callback, array $listeners = null): mixed
     {
-        $previous = $this->silentEvents;
-        $this->silentEvents = true;
+        $previous = $this->silentListeners;
+
+        if (is_null($listeners)) {
+            $this->silentListeners = null;
+        } else {
+            $silentListeners = [];
+            foreach ($listeners as $listener) {
+                $silentListeners[$listener] = true;
+            }
+            $this->silentListeners = $silentListeners;
+        }
 
         try {
             return $callback();
         } finally {
-            $this->silentEvents = $previous;
+            $this->silentListeners = $previous;
         }
     }
 
@@ -428,14 +461,20 @@ class Database
      */
     protected function trigger(string $event, mixed $args = null): void
     {
-        if ($this->silentEvents) {
+        if (\is_null($this->silentListeners)) {
             return;
         }
-        foreach ($this->listeners[self::EVENT_ALL] as $callback) {
+        foreach ($this->listeners[self::EVENT_ALL] as $name => $callback) {
+            if (isset($this->silentListeners[$name])) {
+                continue;
+            }
             call_user_func($callback, $event, $args);
         }
 
-        foreach (($this->listeners[$event] ?? []) as $callback) {
+        foreach (($this->listeners[$event] ?? []) as $name => $callback) {
+            if (isset($this->silentListeners[$name])) {
+                continue;
+            }
             call_user_func($callback, $event, $args);
         }
     }
@@ -764,6 +803,18 @@ class Database
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
         return $result;
+    }
+
+    /**
+     * Get Collection Size
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        return $this->adapter->getSizeOfCollection($collection);
     }
 
     /**
@@ -2128,6 +2179,17 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $validator = new DocumentValidator($attributes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -2201,11 +2263,12 @@ class Database
         }
 
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
-        $document->setAttribute('$collection', $collection->getId());
 
         if ($document->isEmpty()) {
             return $document;
         }
+
+        $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
@@ -2259,6 +2322,20 @@ class Database
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($cacheKey, $document->getArrayCopy());
+        }
+
+        // Remove internal attributes if not queried for select query
+        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
+        // All internal attributes are default selected attributes for (MongoDB)
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $values = $query->getValues();
+                foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                    if (!in_array($internalAttribute, $values)) {
+                        $document->removeAttribute($internalAttribute);
+                    }
+                }
+            }
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
@@ -2855,22 +2932,114 @@ class Database
         }
 
         $time = DateTime::now();
-        $document->setAttribute('$updatedAt', $time);
-
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
+        $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+        $document = new Document($document);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+        });
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
+        $shouldUpdate = false;
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-            if (!$validator->isValid([
+            foreach ($relationships as $relationship) {
+                $relationships[$relationship->getAttribute('key')] = $relationship;
+            }
+
+            // Compare if the document has any changes
+            foreach ($document as $key => $value) {
+                // Skip the nested documents as they will be checked later in recursions.
+                if (\array_key_exists($key, $relationships)) {
+                    // No need to compare nested documents more than max depth.
+                    if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                        continue;
+                    }
+                    $relationType = (string) $relationships[$key]['options']['relationType'];
+                    $side = (string) $relationships[$key]['options']['side'];
+
+                    switch($relationType) {
+                        case Database::RELATION_ONE_TO_ONE:
+                            $oldValue = $old->getAttribute($key) instanceof Document
+                                ? $old->getAttribute($key)->getId()
+                                : $old->getAttribute($key);
+
+                            if ((\is_null($value) !== \is_null($oldValue))
+                            || (\is_string($value) && $value !== $oldValue)
+                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                $shouldUpdate = true;
+                            }
+                            break;
+                        case Database::RELATION_ONE_TO_MANY:
+                        case Database::RELATION_MANY_TO_ONE:
+                        case Database::RELATION_MANY_TO_MANY:
+                            if (
+                                ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                                ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD)
+                            ) {
+                                $oldValue = $old->getAttribute($key) instanceof Document
+                                    ? $old->getAttribute($key)->getId()
+                                    : $old->getAttribute($key);
+
+                                if ((\is_null($value) !== \is_null($oldValue))
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document &&  $value->getId() !== $oldValue)) {
+                                    $shouldUpdate = true;
+                                }
+                                break;
+                            }
+
+                            if ((\is_null($old->getAttribute($key)) !== \is_null($value))
+                            || \count($old->getAttribute($key)) !== \count($value)) {
+                                $shouldUpdate = true;
+                                break;
+                            }
+                            foreach ($value as $index => $relation) {
+                                $oldValue = $old->getAttribute($key)[$index] instanceof Document
+                                    ? $old->getAttribute($key)[$index]->getId()
+                                    : $old->getAttribute($key)[$index];
+
+                                if ((\is_string($relation) && $relation !== $oldValue)
+                                || ($relation instanceof Document && $relation->getId() !== $oldValue)) {
+                                    $shouldUpdate = true;
+                                    break;
+                                }
+                            }
+                            break;
+                    }
+
+                    if ($shouldUpdate) {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                $oldValue = $old->getAttribute($key);
+
+                // If values are not equal we need to update document.
+                if ($value !== $oldValue) {
+                    $shouldUpdate = true;
+                    break;
+                }
+            }
+
+            if ($shouldUpdate && !$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
             ])) {
                 throw new AuthorizationException($validator->getDescription());
             }
+        }
+
+        if ($shouldUpdate) {
+            $document->setAttribute('$updatedAt', $time);
         }
 
         // Check if document was updated after the request timestamp
@@ -2900,6 +3069,7 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->purgeRelatedDocuments($collection, $id);
+
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
@@ -2941,6 +3111,14 @@ class Database
             $side = (string) $relationship['options']['side'];
 
             if ($oldValue == $value) {
+                if (
+                    ($relationType === Database::RELATION_ONE_TO_ONE  ||
+                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                    $value instanceof Document
+                ) {
+                    $document->setAttribute($key, $value->getId());
+                    continue;
+                }
                 $document->removeAttribute($key);
                 continue;
             }
@@ -2956,7 +3134,14 @@ class Database
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
-                            if ($value instanceof Document) {
+                            if (\is_string($value)) {
+                                $related = $this->getDocument($relatedCollection->getId(), $value);
+                                if ($related->isEmpty()) {
+                                    // If no such document exists in related collection
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
+                                }
+                            } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
                                     $collection,
                                     $relatedCollection,
@@ -2976,7 +3161,12 @@ class Database
                         switch (\gettype($value)) {
                             case 'string':
                                 $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value));
-
+                                if ($related->isEmpty()) {
+                                    // If no such document exists in related collection
+                                    // For one-one we need to update the related key to null if no relation exists
+                                    $document->setAttribute($key, null);
+                                    break;
+                                }
                                 if (
                                     $oldValue?->getId() !== $value
                                     && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
@@ -3075,16 +3265,16 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                $relation = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument(
                                     $relatedCollection->getId(),
                                     $relation
-                                ));
+                                )));
 
-                                $this->skipRelationships(fn () => $this->updateDocument(
+                                Authorization::skip(fn () => $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation->getId(),
                                     $relation->setAttribute($twoWayKey, null)
-                                ));
+                                )));
                             }
 
                             foreach ($value as $relation) {
@@ -3093,6 +3283,10 @@ class Database
                                         fn () =>
                                         $this->getDocument($relatedCollection->getId(), $relation)
                                     );
+
+                                    if ($related->isEmpty()) {
+                                        continue;
+                                    }
 
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
@@ -3127,6 +3321,12 @@ class Database
                         }
 
                         if (\is_string($value)) {
+                            $related = $this->getDocument($relatedCollection->getId(), $value);
+                            if ($related->isEmpty()) {
+                                // If no such document exists in related collection
+                                // For many-one we need to update the related key to null if no relation exists
+                                $document->setAttribute($key, null);
+                            }
                             $this->deleteCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             $related = $this->getDocument($relatedCollection->getId(), $value->getId());
@@ -3188,13 +3388,13 @@ class Database
                             ]);
 
                             foreach ($junctions as $junction) {
-                                $this->deleteDocument($junction->getCollection(), $junction->getId());
+                                Authorization::skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
                             }
                         }
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds)) {
+                                if (\in_array($relation, $oldIds) || $this->getDocument($relatedCollection->getId(), $relation)->isEmpty()) {
                                     continue;
                                 }
                             } elseif ($relation instanceof Document) {
@@ -3864,13 +4064,18 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new Documents($attributes, $indexes);
+        $validator = new DocumentsValidator($attributes, $indexes);
         if (!$validator->isValid($queries)) {
-            throw new Exception($validator->getDescription());
+            throw new QueryException($validator->getDescription());
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getRead());
+
+        if (!$skipAuth && !$documentSecurity) {
+            throw new AuthorizationException($validator->getDescription());
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -3900,7 +4105,6 @@ class Database
 
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
-        $nestedQueries = [];
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
@@ -3937,7 +4141,6 @@ class Database
                     break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {
-                        $nestedQueries[] = $query;
                         unset($queries[$index]);
                     }
                     break;
@@ -3945,6 +4148,7 @@ class Database
         }
 
         $queries = \array_values($queries);
+
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -3959,132 +4163,35 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $relationships = $this->resolveRelationships
-            ? \array_filter($attributes, fn (Document $attribute) =>  $attribute->getAttribute('type') === self::VAR_RELATIONSHIP)
-            : [];
-
-        foreach ($results as $index => &$node) {
+        foreach ($results as  &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
-            $node->setAttribute('$collection', $collection->getId());
+
+            if (!$node->isEmpty()) {
+                $node->setAttribute('$collection', $collection->getId());
+            }
         }
 
-        $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
-
-        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
-
-        return $results;
-    }
-
-    /**
-     * @param array<Document> $results
-     * @param array<Query> $queries
-     * @param array<Document> $relationships
-     * @return array<Document>
-     */
-    private function applyNestedQueries(array $results, array $queries, array $relationships): array
-    {
-        foreach ($results as $index => &$node) {
-            foreach ($queries as $query) {
-                $path = \explode('.', $query->getAttribute());
-
-                if (\count($path) == 1) {
-                    continue;
-                }
-
-                $matched = false;
-                foreach ($relationships as $relationship) {
-                    if ($relationship->getId() === $path[0]) {
-                        $matched = true;
-                        break;
+        // Remove internal attributes which are not queried
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $values = $query->getValues();
+                foreach ($results as $result) {
+                    foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                        if (!\in_array($internalAttribute, $values)) {
+                            $result->removeAttribute($internalAttribute);
+                        }
                     }
-                }
-
-                if (!$matched) {
-                    continue;
-                }
-
-                $value = $node->getAttribute($path[0]);
-
-                $levels = \count($path);
-                for ($i = 1; $i < $levels; $i++) {
-                    if ($value instanceof Document) {
-                        $value = $value->getAttribute($path[$i]);
-                    }
-                }
-
-                if (\is_array($value)) {
-                    $values = \array_map(function ($value) use ($path, $levels) {
-                        return $value[$path[$levels - 1]];
-                    }, $value);
-                } else {
-                    $values = [$value];
-                }
-
-                $matched = false;
-                foreach ($values as $value) {
-                    switch ($query->getMethod()) {
-                        case Query::TYPE_EQUAL:
-                            foreach ($query->getValues() as $queryValue) {
-                                if ($value === $queryValue) {
-                                    $matched = true;
-                                    break 2;
-                                }
-                            }
-                            break;
-                        case Query::TYPE_NOT_EQUAL:
-                            $matched = $value !== $query->getValue();
-                            break;
-                        case Query::TYPE_GREATER:
-                            $matched = $value > $query->getValue();
-                            break;
-                        case Query::TYPE_GREATER_EQUAL:
-                            $matched = $value >= $query->getValue();
-                            break;
-                        case Query::TYPE_LESSER:
-                            $matched = $value < $query->getValue();
-                            break;
-                        case Query::TYPE_LESSER_EQUAL:
-                            $matched = $value <= $query->getValue();
-                            break;
-                        case Query::TYPE_CONTAINS:
-                            $matched = \in_array($query->getValue(), $value);
-                            break;
-                        case Query::TYPE_SEARCH:
-                            $matched = \str_contains($value, $query->getValue());
-                            break;
-                        case Query::TYPE_IS_NULL:
-                            $matched = $value === null;
-                            break;
-                        case Query::TYPE_IS_NOT_NULL:
-                            $matched = $value !== null;
-                            break;
-                        case Query::TYPE_BETWEEN:
-                            $matched = $value >= $query->getValues()[0] && $value <= $query->getValues()[1];
-                            break;
-                        case Query::TYPE_STARTS_WITH:
-                            $matched = \str_starts_with($value, $query->getValue());
-                            break;
-                        case Query::TYPE_ENDS_WITH:
-                            $matched = \str_ends_with($value, $query->getValue());
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                if (!$matched) {
-                    unset($results[$index]);
                 }
             }
         }
 
-        return \array_values($results);
+        $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
+
+        return $results;
     }
 
     /**
@@ -4095,7 +4202,10 @@ class Database
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
-        $results = $this->silent(fn () => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
+        $results = $this->silent(fn () => $this->find($collection, \array_merge([
+            Query::limit(1)
+        ], $queries)));
+
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
@@ -4121,6 +4231,14 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new DatabaseException("Collection not found");
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4160,7 +4278,16 @@ class Database
             throw new DatabaseException("Collection not found");
         }
 
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+
         $queries = self::convertQueries($collection, $queries);
+
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
@@ -4168,6 +4295,15 @@ class Database
         return $sum;
     }
 
+    public function setTimeout(int $milliseconds): void
+    {
+        $this->adapter->setTimeout($milliseconds);
+    }
+
+    public function clearTimeout(): void
+    {
+        $this->adapter->clearTimeout();
+    }
     /**
      * Add Attribute Filter
      *
@@ -4313,7 +4449,19 @@ class Database
             }
 
             if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                $document->setAttribute($key, ($array) ? $value : $value[0]);
+                if (
+                    empty($selections)
+                    || \in_array($key, $selections)
+                    || \in_array('*', $selections)
+                    || \in_array($key, ['$createdAt', '$updatedAt'])
+                ) {
+                    // Prevent null values being set for createdAt and updatedAt
+                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
+                        continue;
+                    } else {
+                        $document->setAttribute($key, ($array) ? $value : $value[0]);
+                    }
+                }
             }
         }
 
@@ -4465,9 +4613,14 @@ class Database
         }
 
         $keys = [];
+
+        // Allow querying internal attributes
+        $keys = array_merge($keys, self::INTERNAL_ATTRIBUTES);
+
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
-                $keys[] = $attribute['key'];
+                // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes
+                $keys[] = $attribute['key'] ?? $attribute['$id'];
             }
         }
 

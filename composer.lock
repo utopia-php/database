@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6409a4a403e59db3dfbc2eb7ab251bc0",
+    "content-hash": "b01ce402808990664d677e2754c65578",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -272,12 +272,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "c9ea90ea4326852ec530c0f17912c78cd2fceebf"
+                "reference": "e34ed9c34d50b64e997ab53fd4f486b6179ae6ef"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/c9ea90ea4326852ec530c0f17912c78cd2fceebf",
-                "reference": "c9ea90ea4326852ec530c0f17912c78cd2fceebf",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/e34ed9c34d50b64e997ab53fd4f486b6179ae6ef",
+                "reference": "e34ed9c34d50b64e997ab53fd4f486b6179ae6ef",
                 "shasum": ""
             },
             "require": {
@@ -311,7 +311,7 @@
                 "issues": "https://github.com/utopia-php/framework/issues",
                 "source": "https://github.com/utopia-php/framework/tree/fix-v2-swoole-coroutines"
             },
-            "time": "2023-10-03T12:56:31+00:00"
+            "time": "2023-10-04T11:53:40+00:00"
         },
         {
             "name": "utopia-php/mongo",

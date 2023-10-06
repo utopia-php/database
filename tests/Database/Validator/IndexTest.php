@@ -22,6 +22,44 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
      */
+    public function testAttributeNotFound(): void
+    {
+        $validator = new Index(768);
+
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ])
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('index1'),
+                    'type' => Database::INDEX_KEY,
+                    'attributes' => ['not_exist'],
+                    'lengths' => [],
+                    'orders' => [],
+                ]),
+            ],
+        ]);
+
+        $this->assertFalse($validator->isValid($collection));
+        $this->assertEquals('Invalid index attribute "not_exist" not found', $validator->getDescription());
+    }
+
+    /**
+     * @throws Exception
+     */
     public function testFulltextWithNonString(): void
     {
         $validator = new Index(768);

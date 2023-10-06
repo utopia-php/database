@@ -38,6 +38,24 @@ class Index extends Validator
      * @param Document $collection
      * @return bool
      */
+    public function checkAttributesNotFound(Document $collection): bool
+    {
+        foreach ($collection->getAttribute('indexes', []) as $index) {
+            foreach ($index->getAttribute('attributes', []) as $attributeName) {
+                if (!isset($this->attributes[$attributeName])) {
+                    $this->message = 'Invalid index attribute "' . $attributeName . '" not found';
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $collection
+     * @return bool
+     */
     public function checkEmptyIndexAttributes(Document $collection): bool
     {
         foreach ($collection->getAttribute('indexes', []) as $index) {
@@ -163,6 +181,10 @@ class Index extends Validator
 
         foreach (Database::getInternalAttributes() as $attribute) {
             $this->attributes[$attribute->getAttribute('$id')] = $attribute;
+        }
+
+        if (!$this->checkAttributesNotFound($value)) {
+            return false;
         }
 
         if (!$this->checkEmptyIndexAttributes($value)) {

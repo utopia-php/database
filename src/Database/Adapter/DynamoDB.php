@@ -142,6 +142,10 @@ class DynamoDB extends Adapter
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $tableName = "{$this->getNamespace()}_{$this->filter($name)}";
+        
+        if ($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+            return true;
+        }
 
         $attributeDefinitions = [
             [
@@ -162,25 +166,6 @@ class DynamoDB extends Adapter
             ],
             [
                 'AttributeName' => '_permissions',
-                'AttributeType' => DynamoDB::VAR_STRING,
-            ]
-        ];
-        
-        $permsAttributeDefinitions = [
-            [
-                'AttributeName' => '_id',
-                'AttributeType' => DynamoDB::VAR_NUMBER,
-            ],
-            [
-                'AttributeName' => '_type',
-                'AttributeType' => DynamoDB::VAR_STRING,
-            ],
-            [
-                'AttributeName' => '_permission',
-                'AttributeType' => DynamoDB::VAR_STRING,
-            ],
-            [
-                'AttributeName' => '_document',
                 'AttributeType' => DynamoDB::VAR_STRING,
             ]
         ];
@@ -236,41 +221,6 @@ class DynamoDB extends Adapter
             ],
         ];
 
-        $permsGlobalIndexes = [
-            [
-                'IndexName' => "index_{$tableName}_document_permission",
-                'KeySchema' => [
-                    [
-                        'AttributeName' => '_document',
-                        'KeyType' => 'HASH',
-                    ],
-                    [
-                        'AttributeName' => '_permission',
-                        'KeyType' => 'RANGE'
-                    ]
-                ],
-                'Projection' => [
-                    'ProjectionType' => 'ALL',
-                ],
-            ],
-            [
-                'IndexName' => "index_{$tableName}_document_type",
-                'KeySchema' => [
-                    [
-                        'AttributeName' => '_document',
-                        'KeyType' => 'HASH',
-                    ],
-                    [
-                        'AttributeName' => '_type',
-                        'KeyType' => 'RANGE'
-                    ]
-                ],
-                'Projection' => [
-                    'ProjectionType' => 'ALL',
-                ],
-            ],
-        ];
-
         $attributeDefMap = [];
 
         foreach ($attributes as $attribute) {
@@ -315,7 +265,7 @@ class DynamoDB extends Adapter
             array_push($globalIndexes, $globalIndex);
         }
 
-        $params = [
+        $createTableParams = [
             'TableName' => $tableName,
             'BillingMode' => 'PAY_PER_REQUEST',
             'AttributeDefinitions' => $attributeDefinitions,
@@ -328,21 +278,7 @@ class DynamoDB extends Adapter
             'GlobalSecondaryIndexes' => $globalIndexes,
         ];
 
-        $permsParams = [
-            'TableName' => "{$tableName}_perms",
-            'BillingMode' => 'PAY_PER_REQUEST',
-            'AttributeDefinitions' => $permsAttributeDefinitions,
-            'KeySchema' => [
-                [
-                    'AttributeName' => '_id',
-                    'KeyType' => 'HASH',
-                ],
-            ],
-            'GlobalSecondaryIndexes' => $permsGlobalIndexes,
-        ];
-
-        $this->client->createTable($params);
-        $this->client->createTable($permsParams);
+        $this->client->createTable($createTableParams);
         
         return true;
     }

@@ -347,6 +347,7 @@ class DynamoDB extends Adapter
     public function deleteAttribute(string $collection, string $id): bool
     {
         $collection = $this->filter($collection);
+        $id = $this->filter($id);
         $queryParams = [
             'TableName' => "{$this->getNamespace()}_{$collection}",
             'ProjectionExpression' => '_id'
@@ -355,8 +356,8 @@ class DynamoDB extends Adapter
         foreach ($items as $item) {
             $updateParams = [
                 'TableName' => "{$this->getNamespace()}_{$collection}",
-                'Key' => ['_id' => $item['_id']], // Replace with your primary key
-                'UpdateExpression' => 'REMOVE ' . $id,
+                'Key' => ['_id' => [ 'N' => $item['_id']]], // Replace with your primary key
+                'UpdateExpression' => "REMOVE {$id}",
             ];
             try {
                 $this->client->updateItem($updateParams);
@@ -377,6 +378,31 @@ class DynamoDB extends Adapter
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $queryParams = [
+            'TableName' => "{$this->getNamespace()}_{$collection}",
+            'ProjectionExpression' => "_id, {$old}",
+        ];
+        $items = ($this->client->query($queryParams))['Items'];
+        foreach ($items as $item) {
+            $oldItemValues = $item[$old];
+            $oldItemValue = null;
+            foreach ($oldItemValues as $value) {
+                $oldItemValue = $value;
+            }
+            $updateParams = [
+                'TableName' => "{$this->getNamespace()}_{$collection}",
+                'Key' => ['_id' => [ 'N' => $item['_id']['N']]], // Replace with your primary key
+                'UpdateExpression' => "SET {$new} = {$oldItemValue} REMOVE {$old}",
+            ];
+            try {
+                $this->client->updateItem($updateParams);
+            } catch (DynamoDbException $e) {
+                return false;
+            }
+        }
         return true;
     }
 

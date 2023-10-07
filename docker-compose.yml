@@ -85,6 +85,19 @@ services:
       - database
     ports:
       - "8704:8012"
+  
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    container_name: dynamodb-admin
+    ports:
+      - "8705:8705"
+    environment:
+      DYNAMO_ENDPOINT: http://dynamodb:8012
+      PORT: 8705
+      AWS_ACCESS_KEY_ID: "DUMMYKEYID"
+      AWS_SECRET_ACCESS_KEY: "DUMMYSECRETKEY"
+    networks:
+      - database
 
   redis:
     image: redis:6.0-alpine

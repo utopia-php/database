@@ -508,7 +508,65 @@ class DynamoDB extends Adapter
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        return new Document();
+        $tableName = "{$this->getNamespace()}_{$collection}";
+        $id = $this->filter($id);
+
+        $selections = $this->getAttributeSelections($queries);
+
+        $getItemParams = [
+            'TableName' => $tableName,
+            'IndexName' => '_uid',
+            'KeyConditionExpression' => '#uid = :uid',
+            'ExpressionAttributeValues' => [
+                ':uid' => [
+                    'S' => $id,
+                ],
+            ],
+            'ExpressionAttributeNames' => [ '#uid' => '_uid' ],
+        ];
+
+        if (!empty($selections) && !\in_array('*', $selections)) {
+            $getItemParams['ProjectionExpression'] = $this->getAttributeProjection($selections);
+        }
+
+        $result = $this->client->query($getItemParams);
+
+        $result = $result['Items'];
+
+        if (empty($result)) {
+            return new Document([]);
+        }
+
+        $document = [];
+
+        foreach ($result[0] as $resultKey => $resultAttributes) {
+            foreach ($resultAttributes as $attribute) {
+                $document[$resultKey] = $attribute;
+            }
+        }
+
+        if (\array_key_exists('_id', $document)) {
+            $document['$internalId'] = $result['_id'];
+            unset($document['_id']);
+        }
+        if (\array_key_exists('_uid', $document)) {
+            $document['$id'] = $document['_uid'];
+            unset($document['_uid']);
+        }
+        if (\array_key_exists('_createdAt', $document)) {
+            $document['$createdAt'] = $document['_createdAt'];
+            unset($document['_createdAt']);
+        }
+        if (\array_key_exists('_updatedAt', $document)) {
+            $document['$updatedAt'] = $document['_updatedAt'];
+            unset($document['_updatedAt']);
+        }
+        if (\array_key_exists('_permissions', $document)) {
+            $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+            unset($document['_permissions']);
+        }
+        
+        return new Document($document);
     }
 
     /**
@@ -831,7 +889,17 @@ class DynamoDB extends Adapter
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
-        return false;
+        $projection = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions'];
+
+        foreach ($selections as $selection) {
+            // Skip internal attributes since all are selected by default
+            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+                continue;
+            }
+
+            \array_push($projection, $selection);
+        }
+        return \implode(", ", $projection);
     }
     
     /**

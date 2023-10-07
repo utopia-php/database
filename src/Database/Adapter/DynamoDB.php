@@ -742,7 +742,7 @@ class DynamoDB extends Adapter
      */
     public function getSupportForRelationships(): bool
     {
-        return true;
+        return false;
     }
 
     /**

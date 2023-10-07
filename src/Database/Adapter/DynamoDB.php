@@ -292,6 +292,14 @@ class DynamoDB extends Adapter
      */
     public function deleteCollection(string $name): bool
     {
+        $name = $this->filter($name);
+        try {
+            $this->client->deleteTable([
+                'TableName' => "{$this->getNamespace()}_{$name}",
+            ]);
+        } catch (DynamoDbException $e) {
+            return false;
+        }
         return true;
     }
 
@@ -338,6 +346,24 @@ class DynamoDB extends Adapter
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        $collection = $this->filter($collection);
+        $queryParams = [
+            'TableName' => "{$this->getNamespace()}_{$collection}",
+            'ProjectionExpression' => '_id'
+        ];
+        $items = ($this->client->query($queryParams))['Items'];
+        foreach ($items as $item) {
+            $updateParams = [
+                'TableName' => "{$this->getNamespace()}_{$collection}",
+                'Key' => ['_id' => $item['_id']], // Replace with your primary key
+                'UpdateExpression' => 'REMOVE ' . $id,
+            ];
+            try {
+                $this->client->updateItem($updateParams);
+            } catch (DynamoDbException $e) {
+                return false;
+            }
+        }
         return true;
     }
 

@@ -673,22 +673,26 @@ class DynamoDB extends Adapter
 
     /**
      * Get max STRING limit
+     * 
+     * DynamoDb string limits are governed by item size limit at 400 Kb - using MariaDB Limit for now.
      *
      * @return int
      */
     public function getLimitForString(): int
     {
-        return 0;
+        return 4294967295;
     }
 
     /**
      * Get max INT limit
+     * 
+     * The actual limit is 9.9999999999999999999999999999999999999E+125 but the PHP Limit is obviously much less.
      *
      * @return int
      */
     public function getLimitForInt(): int
     {
-        return 0;
+        return PHP_INT_MAX;
     }
 
     /**
@@ -705,11 +709,12 @@ class DynamoDB extends Adapter
     /**
      * Get maximum index limit.
      *
+     * DynamoDb limit for Global Secondary Indexes.
      * @return int
      */
     public function getLimitForIndexes(): int
     {
-        return 0;
+        return 20;
     }
 
     /**

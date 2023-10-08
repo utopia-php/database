@@ -81,7 +81,10 @@ abstract class SQL extends Adapter
 
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchall();
+        if(!empty($document)){
+            $document = $document[0];
+        }
 
         return (($document[$select] ?? '') === $match) || // case insensitive check
             (($document[strtolower($select)] ?? '') === $match);

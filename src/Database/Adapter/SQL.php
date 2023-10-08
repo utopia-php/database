@@ -82,7 +82,7 @@ abstract class SQL extends Adapter
         $stmt->execute();
 
         $document = $stmt->fetchall();
-        if(!empty($document)){
+        if (!empty($document)) {
             $document = $document[0];
         }
 

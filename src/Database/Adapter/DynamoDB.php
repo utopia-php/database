@@ -18,6 +18,8 @@ class DynamoDB extends Adapter
     public const VAR_STRING = 'S';
     public const VAR_NUMBER = 'N';
     public const VAR_BINARY = 'B';
+    public const VAR_NULL = 'NULL';
+    public const VAR_BOOL = 'BOOL';
 
     // Index types
     public const SIMPLE_INDEX = 'SIMPLE';
@@ -572,6 +574,36 @@ class DynamoDB extends Adapter
         return new Document($document);
     }
 
+    protected function getAttributeValueType(mixed $attributeValue): string
+    {
+        $dataType = gettype($attributeValue);
+        if (\in_array($dataType, ['integer', 'double'])) {
+            return DynamoDB::VAR_NUMBER;
+        } else if (\in_array($dataType, ['boolean'])) {
+            return DynamoDB::VAR_BOOL;
+        } else if (\in_array($dataType, ['string', 'array', 'object'])) {
+            return DynamoDB::VAR_STRING;
+        } else if (\in_array($dataType, ['resource', 'unknown type'])) {
+            return DynamoDB::VAR_BINARY;
+        } else {
+            return DynamoDB::VAR_NULL;
+        }
+    }
+
+    protected function getGuidv4($data = null): string {
+        // Generate 16 bytes (128 bits) of random data or use the data passed into the function.
+        $data = $data ?? random_bytes(16);
+        assert(strlen($data) == 16);
+    
+        // Set version to 0100
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        // Set bits 6-7 to 10
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+    
+        // Output the 36 character UUID.
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
     /**
      * Create Document
      *
@@ -582,7 +614,47 @@ class DynamoDB extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        return new Document();
+        $tableName = $this->getNamespace() . '_' . $this->filter($collection);
+        $internalId = $document->getInternalId();
+        $documentUid = $document->getId();
+        $document->removeAttribute('$internalId');
+
+        $documentAttributes = [];
+
+        if (\array_key_exists('$id', (array)$document)) {
+            $documentAttributes['_uid'] = [ 'S' => $document['$id'] ];
+            unset($document['$id']);
+        }
+        if (\array_key_exists('$createdAt', (array)$document)) {
+            $documentAttributes['_createdAt'] = [ 'N' => \strtotime($document['$createdAt']) ];
+            unset($document['$createdAt']);
+        }
+        if (\array_key_exists('$updatedAt', (array)$document)) {
+            $documentAttributes['_updatedAt'] = [ 'N' => \strtotime($document['$updatedAt']) ];
+            unset($document['$updatedAt']);
+        }
+        if (\array_key_exists('$permissions', (array)$document)) {
+            $documentAttributes['_permissions'] = [ 'S' => json_encode($document['_permissions'] ?? []) ];
+            unset($document['$permissions']);
+        }
+
+        if (empty($internalId)) {
+            $internalId = $this->getGuidv4();
+        }
+        $documentAttributes['_id'] = [ 'S' => $internalId ];
+
+        foreach ((array)$document as $documentAttributeKey => $documentAttributeValue) {
+            $documentAttributes[$documentAttributeKey] = [ $this->getAttributeValueType($documentAttributeValue) => $documentAttributeValue];
+        }
+
+        // echo(json_encode($documentAttributes));
+
+        $this->client->putItem([
+            'Item' => $documentAttributes,
+            'TableName' => $tableName,
+        ]);
+
+        return $this->getDocument($collection, $documentUid);
     }
 
     /**
@@ -595,7 +667,7 @@ class DynamoDB extends Adapter
      */
     public function updateDocument(string $collection, Document $document): Document
     {
-        return new Document();
+        return $this->createDocument($collection, $document);
     }
 
     /**

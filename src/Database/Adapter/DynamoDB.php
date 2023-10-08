@@ -150,7 +150,7 @@ class DynamoDB extends Adapter
         $attributeDefinitions = [
             [
                 'AttributeName' => '_id',
-                'AttributeType' => DynamoDB::VAR_NUMBER,
+                'AttributeType' => DynamoDB::VAR_STRING,
             ],
             [
                 'AttributeName' => '_uid',
@@ -356,7 +356,7 @@ class DynamoDB extends Adapter
         foreach ($items as $item) {
             $updateParams = [
                 'TableName' => "{$this->getNamespace()}_{$collection}",
-                'Key' => ['_id' => [ 'N' => $item['_id']]], // Replace with your primary key
+                'Key' => ['_id' => [ 'S' => $item['_id']]], // Replace with your primary key
                 'UpdateExpression' => "REMOVE {$id}",
             ];
             try {
@@ -394,7 +394,7 @@ class DynamoDB extends Adapter
             }
             $updateParams = [
                 'TableName' => "{$this->getNamespace()}_{$collection}",
-                'Key' => ['_id' => [ 'N' => $item['_id']['N']]], // Replace with your primary key
+                'Key' => ['_id' => [ 'S' => $item['_id']['S']]], // Replace with your primary key
                 'UpdateExpression' => "SET {$new} = {$oldItemValue} REMOVE {$old}",
             ];
             try {

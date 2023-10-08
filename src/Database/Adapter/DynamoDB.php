@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Adapter;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Query;
 use Utopia\Database\Exception as DatabaseException;
 use Aws\DynamoDb\Exception\DynamoDbException;
@@ -546,7 +547,7 @@ class DynamoDB extends Adapter
         }
 
         if (\array_key_exists('_id', $document)) {
-            $document['$internalId'] = $result['_id'];
+            $document['$internalId'] = $document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {
@@ -554,11 +555,13 @@ class DynamoDB extends Adapter
             unset($document['_uid']);
         }
         if (\array_key_exists('_createdAt', $document)) {
-            $document['$createdAt'] = $document['_createdAt'];
+            $epoch = $document['_createdAt'];
+            $document['$createdAt'] = DateTime::format(new \DateTime("@$epoch"));
             unset($document['_createdAt']);
         }
         if (\array_key_exists('_updatedAt', $document)) {
-            $document['$updatedAt'] = $document['_updatedAt'];
+            $epoch = $document['_updatedAt'];
+            $document['$updatedAt'] = DateTime::format(new \DateTime("@$epoch"));
             unset($document['_updatedAt']);
         }
         if (\array_key_exists('_permissions', $document)) {

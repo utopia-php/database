@@ -219,7 +219,7 @@ class Postgres extends SQL
         $type = $this->getSQLType($type, $size, $signed);
 
         if ($array) {
-            $type = 'TEXT';
+            $type = 'JSONB';
         }
 
         return $this->getPDO()
@@ -292,7 +292,7 @@ class Postgres extends SQL
         $type = $this->getSQLType($type, $size, $signed);
 
         if ($array) {
-            $type = 'LONGTEXT';
+            $type = 'JSONB';
         }
 
         if ($type == 'TIMESTAMP(3)') {
@@ -1045,7 +1045,6 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
@@ -1321,7 +1320,7 @@ class Postgres extends SQL
             default => $query->getAttribute()
         });
 
-        $attribute = "\"{$query->getAttribute()}\"" ;
+        $attribute = "\"{$query->getAttribute()}\"";
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()) {
@@ -1334,6 +1333,14 @@ class Postgres extends SQL
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
                 return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
+            case Query::TYPE_CONTAINS:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $conditions[] = "{$attribute} @> :{$placeholder}_{$key}";
+                }
+                $condition = implode(' OR ', $conditions);
+                return empty($condition) ? '' : '(' . $condition . ')';
 
             default:
                 $conditions = [];

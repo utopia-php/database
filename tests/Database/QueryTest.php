@@ -375,22 +375,6 @@ class QueryTest extends TestCase
         $this->assertEquals('"quoted":"colon"', $query->getValue());
     }
 
-    /*
-    Tests for aliases if we enable them:
-    public function testAlias(): void    {
-        $query = Query::parse('eq(1)');
-        $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
-        $query = Query::parse('lt(1)');
-        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
-        $query = Query::parse('lte(1)');
-        $this->assertEquals(Query::TYPE_LESSEREQUAL, $query->getMethod());
-        $query = Query::parse('gt(1)');
-        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
-        $query = Query::parse('gte(1)');
-        $this->assertEquals(Query::TYPE_GREATEREQUAL, $query->getMethod());
-    }
-    */
-
     public function testParseComplex(): void
     {
         $queries = [

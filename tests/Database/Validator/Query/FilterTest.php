@@ -34,6 +34,7 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::isNull('attr')));
         $this->assertTrue($this->validator->isValid(Query::startsWith('attr', 'super')));
         $this->assertTrue($this->validator->isValid(Query::endsWith('attr', 'man')));
+        $this->assertTrue($this->validator->isValid(Query::contains('attr', ['super'])));
     }
 
     public function testFailure(): void

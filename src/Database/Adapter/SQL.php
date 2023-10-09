@@ -678,7 +678,7 @@ abstract class SQL extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForRelationships(): bool
@@ -703,10 +703,12 @@ abstract class SQL extends Adapter
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                 Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                Query::TYPE_CONTAINS => \json_encode($value),
                 default => $value
             };
 
-            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
+
             $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
         }
     }

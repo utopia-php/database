@@ -218,7 +218,7 @@ class MariaDB extends SQL
         $type = $this->getSQLType($type, $size, $signed);
 
         if ($array) {
-            $type = 'LONGTEXT';
+            $type = 'JSON';
         }
 
         return $this->getPDO()
@@ -246,7 +246,7 @@ class MariaDB extends SQL
         $type = $this->getSQLType($type, $size, $signed);
 
         if ($array) {
-            $type = 'LONGTEXT';
+            $type = 'JSON';
         }
 
         return $this->getPDO()
@@ -1314,19 +1314,26 @@ class MariaDB extends SQL
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
-                return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+                return "MATCH(`table_main`.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
-                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+                return "`table_main`.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+                return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
+            case Query::TYPE_CONTAINS:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    $conditions[] = "JSON_CONTAINS(`table_main`.{$attribute}, :{$placeholder}_{$key})";;
+                }
+                $condition = implode(' OR ', $conditions);
+                return empty($condition) ? '' : '(' . $condition . ')';
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
+                    $conditions[] = "{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';

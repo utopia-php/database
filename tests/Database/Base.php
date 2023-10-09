@@ -1483,17 +1483,18 @@ abstract class Base extends TestCase
     public function testFind(): array
     {
         Authorization::setRole(Role::any()->toString());
+
         static::getDatabase()->createCollection('movies', permissions: [
             Permission::create(Role::any()),
             Permission::update(Role::users())
-        ], documentSecurity: true);
+        ]);
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
@@ -1518,7 +1519,7 @@ abstract class Base extends TestCase
             'year' => 2013,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works'
         ]));
 
@@ -1542,7 +1543,7 @@ abstract class Base extends TestCase
             'year' => 2019,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works'
         ]));
 
@@ -1566,7 +1567,7 @@ abstract class Base extends TestCase
             'year' => 2011,
             'price' => 25.94,
             'active' => true,
-            'generes' => ['science fiction', 'action', 'comics'],
+            'genres' => ['science fiction', 'action', 'comics'],
             'with-dash' => 'Works2'
         ]));
 
@@ -1590,7 +1591,7 @@ abstract class Base extends TestCase
             'year' => 2019,
             'price' => 25.99,
             'active' => true,
-            'generes' => ['science fiction', 'action', 'comics'],
+            'genres' => ['science fiction', 'action', 'comics'],
             'with-dash' => 'Works2'
         ]));
 
@@ -1614,7 +1615,7 @@ abstract class Base extends TestCase
             'year' => 2025,
             'price' => 0.0,
             'active' => false,
-            'generes' => [],
+            'genres' => [],
             'with-dash' => 'Works3'
         ]));
 
@@ -1636,7 +1637,7 @@ abstract class Base extends TestCase
             'year' => 2026,
             'price' => 0.0,
             'active' => false,
-            'generes' => [],
+            'genres' => [],
             'with-dash' => 'Works3',
             'nullable' => 'Not null'
         ]));
@@ -1665,8 +1666,8 @@ abstract class Base extends TestCase
         $this->assertIsFloat($documents[0]->getAttribute('price'));
         $this->assertEquals(true, $documents[0]->getAttribute('active'));
         $this->assertIsBool($documents[0]->getAttribute('active'));
-        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
-        $this->assertIsArray($documents[0]->getAttribute('generes'));
+        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('genres'));
+        $this->assertIsArray($documents[0]->getAttribute('genres'));
         $this->assertEquals('Works', $documents[0]->getAttribute('with-dash'));
 
         // Alphabetical order
@@ -1836,7 +1837,7 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::contains('generes', ['comics'])
+            Query::contains('genres', ['comics'])
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1845,7 +1846,7 @@ abstract class Base extends TestCase
          * Array contains OR condition
          */
         $documents = static::getDatabase()->find('movies', [
-            Query::contains('generes', ['comics', 'kids']),
+            Query::contains('genres', ['comics', 'kids']),
         ]);
 
         $this->assertEquals(4, count($documents));
@@ -3786,7 +3787,7 @@ abstract class Base extends TestCase
             'year' => 2013,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works4'
         ]));
     }
@@ -3818,7 +3819,7 @@ abstract class Base extends TestCase
             'year' => 2013,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works4'
         ]));
 

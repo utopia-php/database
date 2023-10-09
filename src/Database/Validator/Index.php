@@ -26,11 +26,11 @@ class Index extends Validator
         $this->maxLength = $maxLength;
 
         foreach ($attributes as $attribute) {
-            $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+            $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
         }
         foreach (Database::getInternalAttributes() as $attribute) {
-            $key = $attribute->getAttribute('$id');
+            $key = \strtolower($attribute->getAttribute('$id'));
             $this->attributes[$key] = $attribute;
         }
     }
@@ -51,7 +51,7 @@ class Index extends Validator
     public function checkAttributesNotFound(Document $index): bool
     {
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if (!isset($this->attributes[$attribute])) {
+            if (!isset($this->attributes[\strtolower($attribute)])) {
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }

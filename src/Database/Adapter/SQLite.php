@@ -657,6 +657,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForQueryContains(): bool
+    {
+        return false;
+    }
+
     /**
      * Is fulltext index supported?
      *

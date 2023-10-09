@@ -26,10 +26,12 @@ class Index extends Validator
         $this->maxLength = $maxLength;
 
         foreach ($attributes as $attribute) {
-            $this->attributes[$attribute->getAttribute('$id')] = $attribute;
+            $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+            $this->attributes[$key] = $attribute;
         }
         foreach (Database::getInternalAttributes() as $attribute) {
-            $this->attributes[$attribute->getAttribute('$id')] = $attribute;
+            $key = $attribute->getAttribute('$id');
+            $this->attributes[$key] = $attribute;
         }
     }
 

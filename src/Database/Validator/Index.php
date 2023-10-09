@@ -102,7 +102,7 @@ class Index extends Validator
     {
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
-                $attribute = $this->attributes[$attribute] ?? new Document();
+                $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
                     $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a FULLTEXT index, must be of type string';
                     return false;
@@ -126,7 +126,7 @@ class Index extends Validator
         $lengths = $index->getAttribute('lengths', []);
 
         foreach ($index->getAttribute('attributes', []) as $attributePosition => $attributeName) {
-            $attribute = $this->attributes[$attributeName];
+            $attribute = $this->attributes[\strtolower($attributeName)];
 
             switch ($attribute->getAttribute('type')) {
                 case Database::VAR_STRING:

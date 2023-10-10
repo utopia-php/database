@@ -22,6 +22,13 @@ abstract class Adapter
      */
     protected array $debug = [];
 
+    /**
+     * @var array<string, array<callable>>
+     */
+    protected array $transformations = [
+        '*' => [],
+    ];
+
     protected static ?int $timeout = null;
 
     /**
@@ -133,6 +140,37 @@ abstract class Adapter
         }
 
         return $this->defaultDatabase;
+    }
+
+
+    /**
+     * Apply a transformation to a query before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param ?callable $callback
+     * @return self
+     */
+    public function before(string $event, string $name = '', ?callable $callback = null): self
+    {
+        if (!isset($this->transformations[$event])) {
+            $this->transformations[$event] = [];
+        }
+        $this->transformations[$event][$name] = $callback;
+
+        return $this;
+    }
+
+    protected function trigger(string $event, mixed $query): mixed
+    {
+        foreach ($this->transformations[Database::EVENT_ALL] as $callback) {
+            $query = $callback($query);
+        }
+        foreach (($this->transformations[$event] ?? []) as $callback) {
+            $query = $callback($query);
+        }
+
+        return $query;
     }
 
     /**

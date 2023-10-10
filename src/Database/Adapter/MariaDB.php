@@ -1182,8 +1182,8 @@ class MariaDB extends SQL
         $stmt->execute();
 
         $result = $stmt->fetchall();
-        if (!empty($document)) {
-            $result = $document[0];
+        if (!empty($result)) {
+            $result = $result[0];
         }
 
         return $result['sum'] ?? 0;
@@ -1242,8 +1242,8 @@ class MariaDB extends SQL
         $stmt->execute();
 
         $result = $stmt->fetchall();
-        if (!empty($document)) {
-            $result = $document[0];
+        if (!empty($result)) {
+            $result = $result[0];
         }
 
         return $result['sum'] ?? 0;

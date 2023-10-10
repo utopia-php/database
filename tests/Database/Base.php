@@ -12331,6 +12331,15 @@ abstract class Base extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testMetadata(): void
+    {
+        static::getDatabase()->setMetadata('key', 'value');
+
+        static::getDatabase()->createCollection('testers');
+
+        $this->expectNotToPerformAssertions();
+    }
+
     public function testEmptyOperatorValues(): void
     {
         try {
@@ -12412,6 +12421,31 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
+    }
+
+    public function testTransformations(): void
+    {
+        static::getDatabase()->createCollection('docs', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ]);
+
+        static::getDatabase()->createDocument('docs', new Document([
+            '$id' => 'doc1',
+            'name' => 'value1',
+        ]));
+
+        static::getDatabase()->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
+            return "SELECT 1";
+        });
+
+        $result = static::getDatabase()->getDocument('docs', 'doc1');
+
+        $this->assertTrue($result->isEmpty());
     }
 
     public function testEvents(): void

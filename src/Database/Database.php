@@ -580,6 +580,24 @@ class Database
         return $this->adapter->getDefaultDatabase();
     }
 
+    /**
+     * Set a metadata value to be printed in the query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return self
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->adapter->setMetadata($key, $value);
+
+        return $this;
+    }
+
+    public function clearMetadata(): void
+    {
+        $this->adapter->clearMetadata();
+    }
 
     /**
      * Set maximum query execution time

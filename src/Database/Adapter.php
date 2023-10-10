@@ -29,6 +29,11 @@ abstract class Adapter
         '*' => [],
     ];
 
+    /**
+     * @var array<string, mixed>
+     */
+    protected array $metadata = [];
+
     protected static ?int $timeout = null;
 
     /**
@@ -142,6 +147,31 @@ abstract class Adapter
         return $this->defaultDatabase;
     }
 
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->metadata[$key] = $value;
+
+        $output = '';
+        foreach ($this->metadata as $key => $value) {
+            $output .= "-- {$key}: {$value}";
+            if (\array_key_last($this->metadata) !== $key) {
+                $output .= "\n";
+            }
+        }
+
+        $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {
+            return $output . $query;
+        });
+
+        return $this;
+    }
+
+    public function clearMetadata(): self
+    {
+        $this->metadata = [];
+
+        return $this;
+    }
 
     /**
      * Apply a transformation to a query before an event occurs

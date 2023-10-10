@@ -723,6 +723,7 @@ class Postgres extends SQL
         $permissionsStmt->bindValue(':_uid', $document->getId());
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll();
+        $permissionsStmt->closeCursor();
 
         $initial = [];
         foreach (Database::PERMISSIONS as $type) {
@@ -1104,6 +1105,7 @@ class Postgres extends SQL
         }
 
         $results = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {

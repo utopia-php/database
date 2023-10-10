@@ -82,6 +82,7 @@ abstract class SQL extends Adapter
         $stmt->execute();
 
         $document = $stmt->fetchall();
+        $stmt->closeCursor();
         if (!empty($document)) {
             $document = $document[0];
         }
@@ -125,6 +126,7 @@ abstract class SQL extends Adapter
         $stmt->execute();
 
         $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         if (empty($document)) {
             return new Document([]);

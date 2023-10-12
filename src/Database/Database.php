@@ -4108,6 +4108,16 @@ class Database
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
+                case Query::TYPE_CONTAINS:
+                    $attribute = $query->getAttribute();
+                    foreach ($collection->getAttribute('attributes', []) as $attr) {
+                        $key = $attr->getAttribute('key', $attr->getAttribute('$id'));
+                        $array = $attr->getAttribute('array', false);
+                        if ($key === $attribute && !$array) {
+                            throw new DatabaseException('Cannot query contains on attribute "' . $attribute . '" because it is not an array.');
+                        }
+                    }
+                    break;
                 case Query::TYPE_SELECT:
                     $values = $query->getValues();
                     foreach ($values as $valueIndex => $value) {

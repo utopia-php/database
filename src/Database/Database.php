@@ -690,9 +690,14 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
+        $validator = new IndexValidator(
+            $attributes,
+            $this->adapter->getMaxIndexLength()
+        );
+        foreach ($indexes as $index) {
+            if (!$validator->isValid($index)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -2047,11 +2052,6 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
-        }
-
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -2089,17 +2089,23 @@ class Database
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
-        $collection->setAttribute('indexes', new Document([
+        $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
             'lengths' => $lengths,
             'orders' => $orders,
-        ]), Document::SET_TYPE_APPEND);
+        ]);
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+
+        $validator = new IndexValidator(
+            $collection->getAttribute('attributes', []),
+            $this->adapter->getMaxIndexLength()
+        );
+
+        if (!$validator->isValid($index)) {
             throw new DatabaseException($validator->getDescription());
         }
 

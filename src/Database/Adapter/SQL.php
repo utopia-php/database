@@ -132,8 +132,6 @@ abstract class SQL extends Adapter
             return new Document([]);
         }
 
-        $document = $document[0];
-
         if (\array_key_exists('_id', $document)) {
             $document['$internalId'] = $document['_id'];
             unset($document['_id']);

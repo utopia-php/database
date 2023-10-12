@@ -10,6 +10,7 @@ use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -1850,6 +1851,18 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(4, count($documents));
+
+		$documents = static::getDatabase()->find('movies', [
+			Query::contains('genres', ['non-existent']),
+		]);
+
+		$this->assertEquals(0, count($documents));
+
+		$this->expectException(DatabaseException::class);
+
+		static::getDatabase()->find('movies', [
+			Query::contains('name', ['Frozen']),
+		]);
     }
 
     public function testFindFulltext(): void

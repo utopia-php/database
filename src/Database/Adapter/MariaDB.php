@@ -1183,7 +1183,7 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        $result = $stmt->fetchall();
+        $result = $stmt->fetchAll();
         $stmt->closeCursor();
         if (!empty($result)) {
             $result = $result[0];
@@ -1244,7 +1244,7 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        $result = $stmt->fetchall();
+        $result = $stmt->fetchAll();
         $stmt->closeCursor();
         if (!empty($result)) {
             $result = $result[0];

@@ -53,7 +53,7 @@ class SQLite extends MariaDB
 
         $stmt->execute();
 
-        $document = $stmt->fetchall();
+        $document = $stmt->fetchAll();
         $stmt->closeCursor();
         if (!empty($document)) {
             $document = $document[0];

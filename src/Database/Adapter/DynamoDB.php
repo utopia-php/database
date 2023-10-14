@@ -634,7 +634,7 @@ class DynamoDB extends Adapter
             unset($document['$updatedAt']);
         }
         if (\array_key_exists('$permissions', (array)$document)) {
-            $documentAttributes['_permissions'] = [ 'S' => json_encode($document['_permissions'] ?? []) ];
+            $documentAttributes['_permissions'] = [ 'S' => json_encode($document['$permissions'] ?? []) ];
             unset($document['$permissions']);
         }
 

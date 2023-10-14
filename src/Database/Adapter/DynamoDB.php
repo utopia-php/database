@@ -353,9 +353,10 @@ class DynamoDB extends Adapter
         $id = $this->filter($id);
         $queryParams = [
             'TableName' => "{$this->getNamespace()}_{$collection}",
-            'ProjectionExpression' => '_id'
+            'ProjectionExpression' => '#id',
+            'ExpressionAttributeNames' => [ '#id' => '_id' ],
         ];
-        $items = ($this->client->query($queryParams))['Items'];
+        $items = ($this->client->scan($queryParams))['Items'];
         foreach ($items as $item) {
             $updateParams = [
                 'TableName' => "{$this->getNamespace()}_{$collection}",
@@ -386,9 +387,10 @@ class DynamoDB extends Adapter
         $new = $this->filter($new);
         $queryParams = [
             'TableName' => "{$this->getNamespace()}_{$collection}",
-            'ProjectionExpression' => "_id, {$old}",
+            'ProjectionExpression' => "#id, {$old}",
+            'ExpressionAttributeNames' => [ '#id' => '_id' ],
         ];
-        $items = ($this->client->query($queryParams))['Items'];
+        $items = ($this->client->scan($queryParams))['Items'];
         foreach ($items as $item) {
             $oldItemValues = $item[$old];
             $oldItemValue = null;

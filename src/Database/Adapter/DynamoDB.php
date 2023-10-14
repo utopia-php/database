@@ -518,23 +518,26 @@ class DynamoDB extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
-        $getItemParams = [
+        $queryParams = [
             'TableName' => $tableName,
             'IndexName' => '_uid',
             'KeyConditionExpression' => '#uid = :uid',
-            'ExpressionAttributeValues' => [
-                ':uid' => [
-                    'S' => $id,
-                ],
-            ],
+            'ExpressionAttributeValues' => [ ':uid' => [ 'S' => $id ] ],
             'ExpressionAttributeNames' => [ '#uid' => '_uid' ],
         ];
 
         if (!empty($selections) && !\in_array('*', $selections)) {
-            $getItemParams['ProjectionExpression'] = $this->getAttributeProjection($selections);
+            $queryParams['ProjectionExpression'] = $this->getAttributeProjection($selections);
+            $queryParams['ExpressionAttributeNames'] = [
+                '#uid' => '_uid',
+                '#id' => '_id', 
+                '#createdAt' => '_createdAt', 
+                '#updatedAt'=> '_updatedAt', 
+                '#permissions' => '_permissions' 
+            ];
         }
 
-        $result = $this->client->query($getItemParams);
+        $result = $this->client->query($queryParams);
 
         $result = $result['Items'];
 
@@ -971,7 +974,7 @@ class DynamoDB extends Adapter
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
-        $projection = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions'];
+        $projection = ['#uid', '#id', '#createdAt', '#updatedAt', '#permissions'];
 
         foreach ($selections as $selection) {
             // Skip internal attributes since all are selected by default

@@ -685,7 +685,13 @@ class DynamoDB extends Adapter
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        return true;
+        $tableName = $this->getNamespace() . '_' . $this->filter($collection);
+        $document = $this->getDocument($collection, $id, [Query::select(['$id'])]);
+        $result = $this->client->deleteItem([
+            'Key' => [ '_id' => [ 'S' => $document->getInternalId() ] ],
+            'TableName' => $tableName,
+        ]);
+        return (!!$result);
     }
 
     /**

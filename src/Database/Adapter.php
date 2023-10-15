@@ -191,11 +191,11 @@ abstract class Adapter
     /**
      * Delete Collection
      *
-     * @param string $name
+     * @param string $id
      *
      * @return bool
      */
-    abstract public function deleteCollection(string $name): bool;
+    abstract public function deleteCollection(string $id): bool;
 
     /**
      * Create Attribute

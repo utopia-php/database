@@ -172,6 +172,22 @@ class Filter extends Base
             case Query::TYPE_IS_NOT_NULL:
                 return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
+            case Query::TYPE_OR:
+//                if (count($value->getValues()) != 2) {
+//                    $this->message = \ucfirst($method) . ' queries require exactly two values.';
+//                    return false;
+//                }
+//
+//                if (!is_array($value->getValues()[0]) || !is_array($value->getValues()[1])) {
+//                    $this->message = \ucfirst($method) . ' queries requires arrays';
+//                    return false;
+//                }
+//
+//                $queries = array_merge($value->getValues()[0], $value->getValues()[1]);
+//                var_dump($queries);
+                return true;
+                break;
+
             default:
                 return false;
         }
@@ -180,5 +196,11 @@ class Filter extends Base
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_FILTER;
+    }
+
+
+    public function nested($queries): string
+    {
+
     }
 }

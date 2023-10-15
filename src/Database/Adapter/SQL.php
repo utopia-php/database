@@ -705,6 +705,17 @@ abstract class SQL extends Adapter
             return;
         }
 
+        if($query->getMethod() === Query::TYPE_OR){
+            var_dump($query);
+        }
+
+
+//        var_dump($query);
+//        if(is_array($query->getValue())){
+//            $this->bindConditionValue($stmt, $query);
+//            return;
+//        }
+
         foreach ($query->getValues() as $key => $value) {
             $value = match ($query->getMethod()) {
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
@@ -950,12 +961,12 @@ public function bindNestedConditionValue($stmt, array $queries = []){
                 }
             }
         }
-    }
+    }}
 
     /**
      * @throws Exception
      */
-    public function getSQLConditions2(array $queries = []): string
+    public function getSQLConditions(array $queries = []): string
     {
         $separator = 'and';
         $conditions = [];

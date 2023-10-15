@@ -67,9 +67,16 @@ class IndexedQueries extends Queries
             return false;
         }
         $queries = [];
+
         foreach ($value as $query) {
             if (!$query instanceof Query) {
                 $query = Query::parse($query);
+            }
+
+            if($query->getMethod() === Query::TYPE_OR){
+                if(!self::isValid($query->getValue())){
+                    return false;
+                }
             }
 
             $queries[] = $query;

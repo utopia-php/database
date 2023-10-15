@@ -1063,6 +1063,7 @@ class MariaDB extends SQL
             $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
         }
 
+        var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1302,7 +1303,7 @@ class MariaDB extends SQL
         return \implode(', ', $selections);
     }
 
-    /*
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1323,6 +1324,15 @@ class MariaDB extends SQL
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()) {
+            case Query::TYPE_OR:
+                $conditions = [];
+                /* @var $q Query */
+                foreach ($query->getValue() as $q){
+                    $conditions[] = $this->getSQLCondition($q);
+                }
+
+                return ' OR ' . implode(' ', $conditions);
+
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 

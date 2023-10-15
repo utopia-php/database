@@ -694,9 +694,13 @@ class Query
         return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
     }
 
-    public static function or(array ...$queries): Query
+    /**
+     * @param array<Query> $queries
+     * @return static
+     */
+    public static function or(array $queries): self
     {
-        return new self(self::TYPE_OR, '', $queries);
+        return new self(self::TYPE_OR, '', [$queries]);
     }
 
     /**

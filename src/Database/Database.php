@@ -761,7 +761,7 @@ class Database
             case self::VAR_BOOLEAN:
             case self::VAR_DATETIME:
             case self::VAR_ID:
-            break;
+                break;
             default:
                 throw new Exception('Unknown attribute type: ' . $type);
         }

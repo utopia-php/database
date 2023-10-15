@@ -2,20 +2,19 @@
 
 namespace Utopia\Tests\Validator;
 
+use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Permissions;
-use PHPUnit\Framework\TestCase;
 use Utopia\Database\Validator\Roles;
 
 class PermissionsTest extends TestCase
 {
-
     public function setUp(): void
     {
-
     }
 
     public function tearDown(): void
@@ -23,9 +22,9 @@ class PermissionsTest extends TestCase
     }
 
     /**
-     * @throws \Exception
+     * @throws DatabaseException
      */
-    public function testSingleMethodSingleValue()
+    public function testSingleMethodSingleValue(): void
     {
         $object = new Permissions();
 
@@ -92,9 +91,11 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
         $document['$permissions'] = [Permission::delete(Role::users('verified'))];
         $this->assertTrue($object->isValid($document->getPermissions()));
+        $document['$permissions'] = [Permission::delete(Role::label('vip'))];
+        $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodSingleValue()
+    public function testMultipleMethodSingleValue(): void
     {
         $object = new Permissions();
 
@@ -152,7 +153,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testMultipleMethodMultipleValues()
+    public function testMultipleMethodMultipleValues(): void
     {
         $object = new Permissions();
 
@@ -188,7 +189,7 @@ class PermissionsTest extends TestCase
         $this->assertTrue($object->isValid($document->getPermissions()));
     }
 
-    public function testInvalidPermissions()
+    public function testInvalidPermissions(): void
     {
         $object = new Permissions();
 
@@ -278,13 +279,13 @@ class PermissionsTest extends TestCase
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd/')))]));
-        $this->assertEquals('Dimension must not be empty.', $object->getDescription());
-        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''),'abcd'))]));
+        $this->assertEquals('Dimension must not be empty', $object->getDescription());
+        $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''), 'abcd'))]));
         $this->assertEquals('Role "team" must have an ID value.', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), '/efgh'))]));
-        $this->assertEquals('Only one dimension can be provided.', $object->getDescription());
+        $this->assertEquals('Only one dimension can be provided', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'e/fgh'))]));
-        $this->assertEquals('Only one dimension can be provided.', $object->getDescription());
+        $this->assertEquals('Only one dimension can be provided', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('ab&cd3'), 'efgh'))]));
         $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'ef*gh'))]));
@@ -297,5 +298,47 @@ class PermissionsTest extends TestCase
         $permissions[] = Permission::read(Role::any());
         $this->assertFalse($object->isValid($permissions));
         $this->assertEquals('You can only provide up to 100 permissions.', $object->getDescription());
+    }
+
+    /*
+     *  Test for checking duplicate methods input. The getPermissions should return an a list array
+      */
+    public function testDuplicateMethods(): void
+    {
+        $validator = new Permissions();
+
+        $user = ID::unique();
+
+        $document = new Document([
+            '$id' => uniqid(),
+            '$collection' => uniqid(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user($user)),
+                Permission::read(Role::user($user)),
+                Permission::write(Role::user($user)),
+                Permission::update(Role::user($user)),
+                Permission::delete(Role::user($user)),
+            ],
+            'title' => 'This is a test.',
+            'list' => [
+                'one'
+            ],
+            'children' => [
+                new Document(['name' => 'x']),
+                new Document(['name' => 'y']),
+                new Document(['name' => 'z']),
+            ]
+        ]);
+        $this->assertTrue($validator->isValid($document->getPermissions()));
+        $permissions = $document->getPermissions();
+        $this->assertEquals(5, count($permissions));
+        $this->assertEquals([
+            'read("any")',
+            'read("user:' . $user . '")',
+            'write("user:' . $user . '")',
+            'update("user:' . $user . '")',
+            'delete("user:' . $user . '")',
+        ], $permissions);
     }
 }

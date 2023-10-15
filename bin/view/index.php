@@ -43,16 +43,16 @@
 
 const results = <?php
     $directory = './results';
-    $scanned_directory = array_diff(scandir($directory), array('..', '.'));
+$scanned_directory = array_diff(scandir($directory), array('..', '.'));
 
-    $results = [];
-    foreach ($scanned_directory as $path) {
-        $results[] = [
-            'name' => $path,
-            'data' => json_decode(file_get_contents("{$directory}/{$path}"), true)
-        ];
-    }
-    echo json_encode($results);
+$results = [];
+foreach ($scanned_directory as $path) {
+    $results[] = [
+        'name' => $path,
+        'data' => json_decode(file_get_contents("{$directory}/{$path}"), true)
+    ];
+}
+echo json_encode($results);
 ?>
 
 console.log(results)

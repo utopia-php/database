@@ -3,30 +3,33 @@
 namespace Utopia\Database;
 
 use ArrayObject;
-use Exception;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 
+/**
+ * @extends ArrayObject<string, mixed>
+ */
 class Document extends ArrayObject
 {
-    const SET_TYPE_ASSIGN = 'assign';
-    const SET_TYPE_PREPEND = 'prepend';
-    const SET_TYPE_APPEND = 'append';
+    public const SET_TYPE_ASSIGN = 'assign';
+    public const SET_TYPE_PREPEND = 'prepend';
+    public const SET_TYPE_APPEND = 'append';
 
     /**
      * Construct.
      *
      * Construct a new fields object
      *
-     * @param array $input
-     * @throws Exception
+     * @param array<string, mixed> $input
+     * @throws DatabaseException
      * @see ArrayObject::__construct
      *
      */
     public function __construct(array $input = [])
     {
         if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
-            throw new Exception('$permissions must be of type array');
+            throw new DatabaseException('$permissions must be of type array');
         }
 
         foreach ($input as $key => &$value) {
@@ -72,36 +75,48 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return array
+     * @return array<string>
      */
     public function getPermissions(): array
     {
-        return \array_unique($this->getAttribute('$permissions', []));
+        return \array_values(\array_unique($this->getAttribute('$permissions', [])));
     }
 
     /**
-     * @return array
+     * @return array<string>
      */
     public function getRead(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_READ);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getCreate(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_CREATE);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getUpdate(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_UPDATE);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getDelete(): array
     {
         return $this->getPermissionsByType(Database::PERMISSION_DELETE);
     }
 
+    /**
+     * @return array<string>
+     */
     public function getWrite(): array
     {
         return \array_unique(\array_intersect(
@@ -111,6 +126,9 @@ class Document extends ArrayObject
         ));
     }
 
+    /**
+     * @return array<string>
+     */
     public function getPermissionsByType(string $type): array
     {
         $typePermissions = [];
@@ -144,7 +162,7 @@ class Document extends ArrayObject
     /**
      * Get Document Attributes
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getAttributes(): array
     {
@@ -178,7 +196,7 @@ class Document extends ArrayObject
      *
      * @return mixed
      */
-    public function getAttribute(string $name, $default = null)
+    public function getAttribute(string $name, mixed $default = null): mixed
     {
         if (isset($this[$name])) {
             return $this[$name];
@@ -198,7 +216,7 @@ class Document extends ArrayObject
      *
      * @return self
      */
-    public function setAttribute(string $key, $value, string $type = self::SET_TYPE_ASSIGN): self
+    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): self
     {
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
@@ -218,6 +236,21 @@ class Document extends ArrayObject
     }
 
     /**
+     * Set Attributes.
+     *
+     * @param array<string, mixed> $attributes
+     * @return self
+     */
+    public function setAttributes(array $attributes): self
+    {
+        foreach ($attributes as $key => $value) {
+            $this->setAttribute($key, $value);
+        }
+
+        return $this;
+    }
+
+    /**
      * Remove Attribute.
      *
      * Method for removing a specific field attribute
@@ -228,7 +261,7 @@ class Document extends ArrayObject
      */
     public function removeAttribute(string $key): self
     {
-        if (isset($this[$key])) {
+        if (\array_key_exists($key, (array)$this)) {
             unset($this[$key]);
         }
 
@@ -244,7 +277,7 @@ class Document extends ArrayObject
      *
      * @return mixed
      */
-    public function find(string $key, $find, string $subject = '')
+    public function find(string $key, $find, string $subject = ''): mixed
     {
         $subject = $this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
@@ -338,7 +371,7 @@ class Document extends ArrayObject
      */
     public function isEmpty(): bool
     {
-        return empty($this->getId());
+        return !\count($this);
     }
 
     /**
@@ -348,7 +381,7 @@ class Document extends ArrayObject
      *
      * @return bool
      */
-    public function isSet($key): bool
+    public function isSet(string $key): bool
     {
         return isset($this[$key]);
     }
@@ -358,10 +391,10 @@ class Document extends ArrayObject
      *
      * Outputs entity as a PHP array
      *
-     * @param array $allow
-     * @param array $disallow
+     * @param array<string> $allow
+     * @param array<string> $disallow
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getArrayCopy(array $allow = [], array $disallow = []): array
     {
@@ -398,5 +431,16 @@ class Document extends ArrayObject
         }
 
         return $output;
+    }
+
+    public function __clone()
+    {
+        foreach ($this as $key => $value) {
+            if ($value instanceof self) {
+                $this[$key] = clone $value;
+            } elseif (\is_array($value)) {
+                $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
+            }
+        }
     }
 }

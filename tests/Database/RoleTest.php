@@ -8,7 +8,7 @@ use Utopia\Database\Helpers\Role;
 
 class RoleTest extends TestCase
 {
-    public function testOutputFromString()
+    public function testOutputFromString(): void
     {
         $role = Role::parse('any');
         $this->assertEquals('any', $role->getRole());
@@ -49,9 +49,14 @@ class RoleTest extends TestCase
         $this->assertEquals('users', $role->getRole());
         $this->assertEmpty($role->getIdentifier());
         $this->assertEquals('verified', $role->getDimension());
+
+        $role = Role::parse('label:vip');
+        $this->assertEquals('label', $role->getRole());
+        $this->assertEquals('vip', $role->getIdentifier());
+        $this->assertEmpty($role->getDimension());
     }
 
-    public function testInputFromParameters()
+    public function testInputFromParameters(): void
     {
         $role = new Role('any');
         $this->assertEquals('any', $role->toString());
@@ -70,9 +75,12 @@ class RoleTest extends TestCase
 
         $role = new Role('team', '123', '456');
         $this->assertEquals('team:123/456', $role->toString());
+
+        $role = new Role('label', 'vip');
+        $this->assertEquals('label:vip', $role->toString());
     }
 
-    public function testInputFromRoles()
+    public function testInputFromRoles(): void
     {
         $role = Role::any();
         $this->assertEquals('any', $role->toString());
@@ -91,9 +99,12 @@ class RoleTest extends TestCase
 
         $role = Role::team(ID::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
+
+        $role = Role::label('vip');
+        $this->assertEquals('label:vip', $role->toString());
     }
 
-    public function testInputFromID()
+    public function testInputFromID(): void
     {
         $role = Role::user(ID::custom('123'));
         $this->assertEquals('user:123', $role->toString());

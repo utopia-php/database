@@ -5088,7 +5088,7 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        static::getDatabase()->createDocument('country', $doc);
+        static::getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
@@ -5116,7 +5116,7 @@ abstract class Base extends TestCase
 
         $this->assertTrue(static::getDatabase()->deleteDocument('country', 'country1'));
 
-        static::getDatabase()->createDocument('country', $doc);
+        static::getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 

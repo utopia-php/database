@@ -45,8 +45,8 @@ abstract class Proxy extends Adapter
                 'x-utopia-namespace' => $this->getNamespace(),
                 'x-utopia-default-database' => $this->defaultDatabase,
                 'x-utopia-auth-roles' => $roles,
-                'x-utopia-auth-status' => Authorization::$status,
-                'x-utopia-auth-status-default' => Authorization::$statusDefault,
+                'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
+                'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
                 'x-utopia-timeout' => self::$timeout,
                 'content-type' => 'application/json'
             ],

@@ -2,7 +2,6 @@
 
 namespace Utopia\Tests\Adapter;
 
-use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;

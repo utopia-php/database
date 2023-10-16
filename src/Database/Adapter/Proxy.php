@@ -47,24 +47,25 @@ abstract class Proxy extends Adapter
                 'x-utopia-auth-roles' => $roles,
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                'x-utopia-timeout' => self::$timeout,
+                'x-utopia-timeout' => self::$timeout ? \strval(self::$timeout) : '',
                 'content-type' => 'application/json'
             ],
             body: $body
         );
 
         if ($response->getStatusCode() >= 400) {
-            if(empty($response->getBody())) {
-                throw new Exception('Internal ' . $response->getBody() . ' HTTP error in database proxy.');
+            if (empty($response->getBody())) {
+                throw new Exception('Internal ' . $response->getStatusCode() . ' HTTP error in database proxy');
             }
 
             $error = \json_decode($response->getBody(), true);
 
-            /**
-             * @var \Utopia\Database\Exception $exception
-             */
             try {
                 $exception = new $error['type']($error['message'], $error['code']);
+                /**
+                 * @var \Utopia\Database\Exception $exception
+                 */
+
                 $exception->setFile($error['file']);
                 $exception->setLine($error['line']);
                 // TODO: If possible in PHP, set trace too for better error reporting

@@ -147,14 +147,14 @@ abstract class Adapter
         return $this->defaultDatabase;
     }
 
-	/**
-	 * Set metadata for query comments
-	 *
-	 * @param string $key
-	 * @param mixed $value
-	 * @return $this
-	 */
-	public function setMetadata(string $key, mixed $value): self
+    /**
+     * Set metadata for query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return $this
+     */
+    public function setMetadata(string $key, mixed $value): self
     {
         $this->metadata[$key] = $value;
 
@@ -170,21 +170,21 @@ abstract class Adapter
         return $this;
     }
 
-	/**
-	 * Get metadata
-	 *
-	 * @return array<string, mixed>
-	 */
-	public function getMetadata(): array
-	{
-		return $this->metadata;
-	}
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->metadata;
+    }
 
-	/**
-	 * Clear existing metadata
-	 *
-	 * @return $this
-	 */
+    /**
+     * Clear existing metadata
+     *
+     * @return $this
+     */
     public function resetMetadata(): self
     {
         $this->metadata = [];

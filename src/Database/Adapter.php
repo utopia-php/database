@@ -153,10 +153,7 @@ abstract class Adapter
 
         $output = '';
         foreach ($this->metadata as $key => $value) {
-            $output .= "-- {$key}: {$value}";
-            if (\array_key_last($this->metadata) !== $key) {
-                $output .= "\n";
-            }
+            $output .= "-- {$key}: {$value}\n";
         }
 
         $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {

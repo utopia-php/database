@@ -22,6 +22,18 @@ abstract class Adapter
      */
     protected array $debug = [];
 
+    /**
+     * @var array<string, array<callable>>
+     */
+    protected array $transformations = [
+        '*' => [],
+    ];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected array $metadata = [];
+
     protected static ?int $timeout = null;
 
     /**
@@ -133,6 +145,81 @@ abstract class Adapter
         }
 
         return $this->defaultDatabase;
+    }
+
+    /**
+     * Set metadata for query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return $this
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->metadata[$key] = $value;
+
+        $output = '';
+        foreach ($this->metadata as $key => $value) {
+            $output .= "-- {$key}: {$value}\n";
+        }
+
+        $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {
+            return $output . $query;
+        });
+
+        return $this;
+    }
+
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->metadata;
+    }
+
+    /**
+     * Clear existing metadata
+     *
+     * @return $this
+     */
+    public function resetMetadata(): self
+    {
+        $this->metadata = [];
+
+        return $this;
+    }
+
+    /**
+     * Apply a transformation to a query before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param ?callable $callback
+     * @return self
+     */
+    public function before(string $event, string $name = '', ?callable $callback = null): self
+    {
+        if (!isset($this->transformations[$event])) {
+            $this->transformations[$event] = [];
+        }
+        $this->transformations[$event][$name] = $callback;
+
+        return $this;
+    }
+
+    protected function trigger(string $event, mixed $query): mixed
+    {
+        foreach ($this->transformations[Database::EVENT_ALL] as $callback) {
+            $query = $callback($query);
+        }
+        foreach (($this->transformations[$event] ?? []) as $callback) {
+            $query = $callback($query);
+        }
+
+        return $query;
     }
 
     /**

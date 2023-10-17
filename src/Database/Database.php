@@ -115,6 +115,10 @@ class Database
     public const EVENT_DOCUMENT_INCREASE = 'document_increase';
     public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
 
+    public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
+    public const EVENT_PERMISSIONS_READ = 'permissions_read';
+    public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
+
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
     public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
@@ -392,6 +396,7 @@ class Database
      * Add listener to events
      *
      * @param string $event
+     * @param string $name
      * @param callable $callback
      * @return self
      */
@@ -401,6 +406,22 @@ class Database
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][$name] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Add a transformation to be applied to a query string before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param callable $callback
+     * @return $this
+     */
+    public function before(string $event, string $name, callable $callback): self
+    {
+        $this->adapter->before($event, $name, $callback);
+
         return $this;
     }
 
@@ -468,14 +489,14 @@ class Database
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
 
         foreach (($this->listeners[$event] ?? []) as $name => $callback) {
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
     }
 
@@ -557,6 +578,63 @@ class Database
     public function getDefaultDatabase(): string
     {
         return $this->adapter->getDefaultDatabase();
+    }
+
+    /**
+     * Set a metadata value to be printed in the query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return self
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->adapter->setMetadata($key, $value);
+
+        return $this;
+    }
+
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->adapter->getMetadata();
+    }
+
+    /**
+     * Clear metadata
+     *
+     * @return void
+     */
+    public function resetMetadata(): void
+    {
+        $this->adapter->resetMetadata();
+    }
+
+    /**
+     * Set maximum query execution time
+     *
+     * @param int $milliseconds
+     * @return void
+     * @throws Exception
+     */
+    public function setTimeout(int $milliseconds): void
+    {
+        $this->adapter->setTimeout($milliseconds);
+    }
+
+    /**
+     * Clear maximum query execution time
+     *
+     * @return void
+     * @throws Exception
+     */
+    public function clearTimeout(): void
+    {
+        $this->adapter->clearTimeout();
     }
 
     /**
@@ -4301,15 +4379,6 @@ class Database
         return $sum;
     }
 
-    public function setTimeout(int $milliseconds): void
-    {
-        $this->adapter->setTimeout($milliseconds);
-    }
-
-    public function clearTimeout(): void
-    {
-        $this->adapter->clearTimeout();
-    }
     /**
      * Add Attribute Filter
      *

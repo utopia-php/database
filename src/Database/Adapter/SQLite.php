@@ -47,7 +47,14 @@ class SQLite extends MariaDB
 
         $collection = $this->filter($collection);
 
-        $stmt = $this->getPDO()->prepare("SELECT name FROM sqlite_master WHERE type='table'  AND name = :table");
+        $sql = "
+			SELECT name FROM sqlite_master 
+			WHERE type='table' AND name = :table
+		";
+
+        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
 
@@ -119,15 +126,21 @@ class SQLite extends MariaDB
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
+        $sql = "
+			CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
+				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+				`_uid` CHAR(255) NOT NULL,
+				`_createdAt` datetime(3) DEFAULT NULL,
+				`_updatedAt` datetime(3) DEFAULT NULL,
+				`_permissions` MEDIUMTEXT DEFAULT NULL".(!empty($attributes) ? ',' : '')."
+				" . \substr(\implode(' ', $attributeStrings), 0, -2) . "
+			)
+		";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+
         $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
-                    `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-                    `_uid` CHAR(255) NOT NULL,
-                    `_createdAt` datetime(3) DEFAULT NULL,
-                    `_updatedAt` datetime(3) DEFAULT NULL,
-                    `_permissions` MEDIUMTEXT DEFAULT NULL".((!empty($attributes)) ? ',' : '')."
-                    " . substr(\implode(' ', $attributeStrings), 0, -2) . "
-                )")
+            ->prepare($sql)
             ->execute();
 
         $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
@@ -144,13 +157,19 @@ class SQLite extends MariaDB
             $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
         }
 
+        $sql = "
+			CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
+				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+				`_type` VARCHAR(12) NOT NULL,
+				`_permission` VARCHAR(255) NOT NULL,
+				`_document` VARCHAR(255) NOT NULL
+			)
+		";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+
         $this->getPDO()
-            ->prepare("CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
-                    `_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-                    `_type` VARCHAR(12) NOT NULL,
-                    `_permission` VARCHAR(255) NOT NULL,
-                    `_document` VARCHAR(255) NOT NULL
-                )")
+            ->prepare($sql)
             ->execute();
 
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
@@ -211,12 +230,18 @@ class SQLite extends MariaDB
 
         $this->getPDO()->beginTransaction();
 
-        $this->getPDO()
-            ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}`;")
-            ->execute();
+        $sql = "DROP TABLE `{$this->getNamespace()}_{$id}`";
+        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
-            ->prepare("DROP TABLE `{$this->getNamespace()}_{$id}_perms`;")
+            ->prepare($sql)
+            ->execute();
+
+        $sql = "DROP TABLE `{$this->getNamespace()}_{$id}_perms`";
+        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+
+        $this->getPDO()
+            ->prepare($sql)
             ->execute();
 
         $this->getPDO()->commit();
@@ -275,9 +300,15 @@ class SQLite extends MariaDB
             }
         }
 
+        $sql = "
+			ALTER TABLE {$this->getSQLTable($name)}
+			DROP COLUMN `{$id}`
+		";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)}
-                DROP COLUMN `{$id}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -341,8 +372,12 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+
+        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
+
         return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+            ->prepare($sql)
             ->execute();
     }
 
@@ -360,8 +395,11 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $sql = "DROP INDEX `{$this->getNamespace()}_{$name}_{$id}`";
+        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("DROP INDEX `{$this->getNamespace()}_{$name}_{$id}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -405,9 +443,14 @@ class SQLite extends MariaDB
             $columns[] = "_id";
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO `{$this->getNamespace()}_{$name}`
-                (".implode(', ', $columns).") VALUES (:".implode(', :', $values).");");
+        $sql = "
+			INSERT INTO `{$this->getNamespace()}_{$name}` (".\implode(', ', $columns).") 
+			VALUES (:".\implode(', :', $values).");
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -438,14 +481,21 @@ class SQLite extends MariaDB
         }
 
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document) VALUES " . implode(', ', $permissions);
+            $queryPermissions = "
+				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document)
+				VALUES " . \implode(
+                ', ',
+                $permissions
+            );
+            $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
+
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
         }
 
         try {
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare("select last_insert_rowid() as id");
+            $statment = $this->getPDO()->prepare("SELECT last_insert_rowid() AS id");
             $statment->execute();
             $last = $statment->fetch();
             $document['$internalId'] = $last['id'];
@@ -488,14 +538,19 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $columns = '';
 
+
+        $sql = "
+			SELECT _type, _permission
+			FROM `{$this->getNamespace()}_{$name}_perms`
+			WHERE _document = :_uid
+		";
+
+        $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+
         /**
          * Get current permissions from the database
          */
-        $permissionsStmt = $this->getPDO()->prepare("
-                SELECT _type, _permission
-                FROM `{$this->getNamespace()}_{$name}_perms` p
-                WHERE p._document = :_uid
-        ");
+        $permissionsStmt = $this->getPDO()->prepare($sql);
         $permissionsStmt->bindValue(':_uid', $document->getId());
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll();
@@ -554,14 +609,16 @@ class SQLite extends MariaDB
         }
         if (!empty($removeQuery)) {
             $removeQuery .= ')';
-            $stmtRemovePermissions = $this->getPDO()
-                ->prepare("
-                DELETE
+            $removeQuery = "
+				DELETE
                 FROM `{$this->getNamespace()}_{$name}_perms`
                 WHERE
                     _document = :_uid
                     {$removeQuery}
-            ");
+			";
+            $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
+
+            $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
             foreach ($removals as $type => $permissions) {
@@ -582,12 +639,13 @@ class SQLite extends MariaDB
                 }
             }
 
-            $stmtAddPermissions = $this->getPDO()
-                ->prepare(
-                    "
-                    INSERT INTO `{$this->getNamespace()}_{$name}_perms`
-                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
-                );
+            $sql = "
+			   INSERT INTO `{$this->getNamespace()}_{$name}_perms`
+				(_document, _type, _permission) VALUES " . \implode(', ', $values);
+
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
+
+            $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
             foreach ($additions as $type => $permissions) {
@@ -600,7 +658,6 @@ class SQLite extends MariaDB
         /**
          * Update Attributes
          */
-
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
@@ -609,9 +666,14 @@ class SQLite extends MariaDB
             $bindIndex++;
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("UPDATE `{$this->getNamespace()}_{$name}`
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+        $sql = "
+			UPDATE `{$this->getNamespace()}_{$name}`
+			SET {$columns} _uid = :_uid WHERE _uid = :_uid
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $document->getId());
 

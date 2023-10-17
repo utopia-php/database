@@ -706,15 +706,11 @@ abstract class SQL extends Adapter
         }
 
         if($query->getMethod() === Query::TYPE_OR){
-            var_dump($query);
+            foreach ($query->getValue() as $value) {
+                $this->bindConditionValue($stmt, $value);
+            }
+            return;
         }
-
-
-//        var_dump($query);
-//        if(is_array($query->getValue())){
-//            $this->bindConditionValue($stmt, $query);
-//            return;
-//        }
 
         foreach ($query->getValues() as $key => $value) {
             $value = match ($query->getMethod()) {
@@ -963,28 +959,34 @@ public function bindNestedConditionValue($stmt, array $queries = []){
         }
     }}
 
-    /**
-     * @throws Exception
-     */
+
     public function getSQLConditions(array $queries = []): string
     {
-        $separator = 'and';
+        $separator = 'AND';
         $conditions = [];
         foreach ($queries as $query) {
+
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
             /* @var $query Query */
             if($query->getMethod() === Query::TYPE_OR){
                 $separator = 'or';
-                foreach ($query->getValues() as $queriesArray) {
-                    $conditions[] = $this->getSQLConditions($queriesArray);
-                }
+                $conditions[] = $this->getSQLConditions($query->getValue());
+
+//                foreach ($query->getValue() as $queriesArray) {
+//                    var_dump($queriesArray);
+//
+//                    $conditions[] = $this->getSQLConditions($queriesArray);
+//                }
             }
             else $conditions[] = $this->getSQLCondition($query);
         }
 
-        $tmp = implode(" {$separator} ", $conditions);
+        $tmp = implode(' ' . $separator . ' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
     }
-
 
     /**
      * @param $stmt

@@ -1032,13 +1032,17 @@ class MariaDB extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-            $where[] = $this->getSQLCondition($query);
-        }
+//        $filters = $this->getSQLConditions($queries);
+//        if(!empty($filters)){
+//            $where[] = $filters;
+//        }
 
+//        foreach ($queries as $query) {
+//            if ($query->getMethod() === Query::TYPE_SELECT) {
+//                continue;
+//            }
+//            $where[] = $this->getSQLCondition($query);
+//        }
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
@@ -1059,11 +1063,13 @@ class MariaDB extends SQL
             {$sqlLimit};
         ";
 
+        var_dump($sql);
+
+
         if ($timeout || static::$timeout) {
             $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
         }
 
-        var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -1331,7 +1337,7 @@ class MariaDB extends SQL
                     $conditions[] = $this->getSQLCondition($q);
                 }
 
-                return ' OR ' . implode(' ', $conditions);
+                return empty($condition) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";

@@ -173,6 +173,8 @@ class Filter extends Base
                 return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
             case Query::TYPE_OR:
+                var_dump($value);
+
 //                if (count($value->getValues()) != 2) {
 //                    $this->message = \ucfirst($method) . ' queries require exactly two values.';
 //                    return false;

@@ -785,6 +785,7 @@ class MariaDB extends SQL
         $sqlPermissions->bindValue(':_uid', $document->getId());
         $sqlPermissions->execute();
         $permissions = $sqlPermissions->fetchAll();
+        $sqlPermissions->closeCursor();
 
         $initial = [];
         foreach (Database::PERMISSIONS as $type) {
@@ -1212,6 +1213,7 @@ class MariaDB extends SQL
         }
 
         $results = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -1300,7 +1302,11 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
 
         return $result['sum'] ?? 0;
     }
@@ -1362,7 +1368,11 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
 
         return $result['sum'] ?? 0;
     }

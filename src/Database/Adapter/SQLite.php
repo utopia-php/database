@@ -60,7 +60,11 @@ class SQLite extends MariaDB
 
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($document)) {
+            $document = $document[0];
+        }
 
         return (($document['name'] ?? '') === "{$this->getNamespace()}_{$collection}");
     }
@@ -550,6 +554,7 @@ class SQLite extends MariaDB
         $permissionsStmt->bindValue(':_uid', $document->getId());
         $permissionsStmt->execute();
         $permissions = $permissionsStmt->fetchAll();
+        $permissionsStmt->closeCursor();
 
         $initial = [];
         foreach (Database::PERMISSIONS as $type) {

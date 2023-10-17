@@ -24,8 +24,6 @@ class IndexTest extends TestCase
      */
     public function testAttributeNotFound(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -53,7 +51,9 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertFalse($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Invalid index attribute "not_exist" not found', $validator->getDescription());
     }
 
@@ -62,8 +62,6 @@ class IndexTest extends TestCase
      */
     public function testFulltextWithNonString(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -102,7 +100,9 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertFalse($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Attribute "date" cannot be part of a FULLTEXT index, must be of type string', $validator->getDescription());
     }
 
@@ -111,8 +111,6 @@ class IndexTest extends TestCase
      */
     public function testIndexLength(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -140,7 +138,9 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertFalse($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
@@ -149,8 +149,6 @@ class IndexTest extends TestCase
      */
     public function testMultipleIndexLength(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -187,15 +185,18 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertTrue($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertTrue($validator->isValid($index));
 
-        $collection->setAttribute('indexes', new Document([
+        $index = new Document([
             '$id' => ID::custom('index2'),
             'type' => Database::INDEX_KEY,
             'attributes' => ['title', 'description'],
-        ]), Document::SET_TYPE_APPEND);
+        ]);
 
-        $this->assertFalse($validator->isValid($collection));
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+        $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
@@ -204,8 +205,6 @@ class IndexTest extends TestCase
      */
     public function testEmptyAttributes(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -233,7 +232,9 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertFalse($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
         $this->assertEquals('No attributes provided for index', $validator->getDescription());
     }
 
@@ -242,8 +243,6 @@ class IndexTest extends TestCase
      */
     public function testDuplicatedAttributes(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -271,7 +270,9 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertFalse($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
         $this->assertEquals('Duplicate attributes provided', $validator->getDescription());
     }
 
@@ -280,8 +281,6 @@ class IndexTest extends TestCase
      */
     public function testDuplicatedAttributesDifferentOrder(): void
     {
-        $validator = new Index(768);
-
         $collection = new Document([
             '$id' => ID::custom('test'),
             'name' => 'test',
@@ -309,6 +308,8 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $this->assertTrue($validator->isValid($collection));
+        $validator = new Index($collection->getAttribute('attributes'), 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertTrue($validator->isValid($index));
     }
 }

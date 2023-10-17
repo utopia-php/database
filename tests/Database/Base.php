@@ -122,10 +122,10 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index(static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
-        $this->assertFalse($validator->isValid($collection));
+        $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
@@ -149,7 +149,7 @@ abstract class Base extends TestCase
 
         if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
-            $this->assertFalse($validator->isValid($collection));
+            $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
 
             try {
@@ -189,8 +189,9 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
+        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
-        $this->assertFalse($validator->isValid($collection));
+        $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {

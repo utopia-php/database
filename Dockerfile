@@ -23,6 +23,7 @@ RUN \
   apk update \
   && apk add --no-cache postgresql-libs postgresql-dev make automake autoconf gcc g++ git brotli-dev \
   && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+  && apk del postgresql-dev \
   && rm -rf /var/cache/apk/*
 
 # Redis Extension

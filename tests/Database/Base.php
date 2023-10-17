@@ -12337,7 +12337,12 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createCollection('testers');
 
-        $this->expectNotToPerformAssertions();
+		$this->assertEquals(['key' => 'value'], static::getDatabase()->getMetadata());
+
+		static::getDatabase()->resetMetadata();
+
+		$this->assertEquals([], static::getDatabase()->getMetadata());
+
     }
 
     public function testEmptyOperatorValues(): void

@@ -594,9 +594,24 @@ class Database
         return $this;
     }
 
-    public function clearMetadata(): void
+	/**
+	 * Get metadata
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function getMetadata(): array
+	{
+		return $this->adapter->getMetadata();
+	}
+
+	/**
+	 * Clear metadata
+	 *
+	 * @return void
+	 */
+    public function resetMetadata(): void
     {
-        $this->adapter->clearMetadata();
+        $this->adapter->resetMetadata();
     }
 
     /**

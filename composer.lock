@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "380105c8b3dd19b33bfc29e7207b077b",
+    "content-hash": "166c47b45e7e2dab4adf13ab91abd446",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -268,11 +268,17 @@
         },
         {
             "name": "utopia-php/fetch",
-            "version": "dev-main",
+            "version": "0.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/fetch.git",
                 "reference": "2fa214b9262acd1a3583515a364da4f35929d5c5"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/fetch/zipball/2fa214b9262acd1a3583515a364da4f35929d5c5",
+                "reference": "2fa214b9262acd1a3583515a364da4f35929d5c5",
+                "shasum": ""
             },
             "require": {
                 "php": ">=8.0"
@@ -282,31 +288,21 @@
                 "phpstan/phpstan": "^1.10",
                 "phpunit/phpunit": "^9.5"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
                     "Utopia\\Fetch\\": "src/"
                 }
             },
-            "scripts": {
-                "lint": [
-                    "./vendor/bin/pint --test --config pint.json"
-                ],
-                "format": [
-                    "./vendor/bin/pint --config pint.json"
-                ],
-                "check": [
-                    "./vendor/bin/phpstan analyse -c phpstan.neon"
-                ],
-                "test": [
-                    "./vendor/bin/phpunit --configuration phpunit.xml --debug"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
             "description": "A simple library that provides an interface for making HTTP Requests.",
+            "support": {
+                "issues": "https://github.com/utopia-php/fetch/issues",
+                "source": "https://github.com/utopia-php/fetch/tree/0.1.0"
+            },
             "time": "2023-10-10T11:58:32+00:00"
         },
         {
@@ -2640,18 +2636,9 @@
             "time": "2022-10-09T10:19:07+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "utopia-php/fetch",
-            "version": "dev-main",
-            "alias": "0.1.99",
-            "alias_normalized": "0.1.99.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "utopia-php/fetch": 20
-    },
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

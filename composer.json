@@ -36,7 +36,7 @@
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.8.*",
         "utopia-php/mongo": "0.3.*",
-        "utopia-php/fetch": "dev-main as 0.1.99"
+        "utopia-php/fetch": "0.1.*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.14",
@@ -53,11 +53,5 @@
         "ext-redis": "Needed to support Redis Cache Adapter",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
-    },
-    "repositories": [
-        {
-            "type": "git",
-            "url": "https://github.com/utopia-php/fetch.git"
-        }
-    ]
+    }
 }

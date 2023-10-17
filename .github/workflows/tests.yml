@@ -28,6 +28,14 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    - name: Build Database Proxy
+      run:  |
+        git clone https://github.com/utopia-php/database-proxy.git
+        cd database-proxy
+        git checkout dev
+        docker build -t utopia-php/database-proxy-test .
+        cd ..
+
     - name: Start Databases
       run:  |
         docker compose up -d

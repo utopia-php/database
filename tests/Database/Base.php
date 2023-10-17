@@ -254,7 +254,6 @@ abstract class Base extends TestCase
         $this->expectNotToPerformAssertions();
     }
 
-
     /**
      * @depends testCreateExistsDelete
      */
@@ -1080,6 +1079,43 @@ abstract class Base extends TestCase
 
         // cleanup collection
         static::getDatabase()->deleteCollection('defaults');
+    }
+
+    public function testInvalidUtfCharacters(): void
+    {
+        $collection = 'null_character';
+
+        static::getDatabase()->createCollection($collection);
+        static::getDatabase()->createAttribute($collection, 'str', Database::VAR_STRING, 128, true);
+
+        $str = "\x00";
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str,
+        ])));
+
+        $str = "\u0000";
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str,
+        ])));
+
+        $str = "\000";
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str,
+        ])));
+
+        $str = "\xE2\x94";
+        try {
+            $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+                'str' => $str,
+            ])));
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertTrue(true);
+        }
+
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => mb_convert_encoding($str, 'UTF-8', 'UTF-8'),
+        ])));
     }
 
     /**

@@ -739,9 +739,9 @@ class Postgres extends SQL
                 $stmtPermissions->execute();
             }
         } catch (Throwable $e) {
+            $this->getPDO()->rollBack();
             switch ($e->getCode()) {
                 case 23505:
-                    $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
                 default:

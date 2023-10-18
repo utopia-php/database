@@ -880,7 +880,7 @@ abstract class SQL extends Adapter
      * Returns the current PDO object
      * @return mixed
      */
-    protected function getPDO(): PDO
+    protected function getPDO(): mixed
     {
         return $this->pdo;
     }

@@ -11,8 +11,16 @@ class Datetime extends Validator
      */
     protected string $message = 'Date is not valid';
 
-    public function __construct()
+    /**
+     * @var bool
+     */
+    protected bool $allowOldDates = true;
+
+    public function __construct(?bool $allowOldDates = null)
     {
+        if (!is_null($allowOldDates)) {
+            $this->allowOldDates = $allowOldDates;
+        }
     }
 
     /**
@@ -37,7 +45,13 @@ class Datetime extends Validator
         }
 
         try {
-            new \DateTime($value);
+            $date = new \DateTime($value);
+            $now = new \DateTime();
+
+            if ($this->allowOldDates === false && $date < $now) {
+                $this->message = 'Date is in the past';
+                return false;
+            }
         } catch(\Exception $e) {
             $this->message = $e->getMessage();
             return false;

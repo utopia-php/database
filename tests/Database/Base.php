@@ -1117,8 +1117,8 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $messages = [
                 "SQLSTATE[22021]: Character not in repertoire: 7 ERROR:  invalid byte sequence for encoding \"UTF8\": 0xe2 0x94 0x20", // Postgres
-                "SQLSTATE[HY000]: General error: 1366 Incorrect string value: '\xE2\x94' for column 'str' at row 1", // MySQL
-                "Detected invalid UTF-8 for field path \"documents.0.str\": \xE2\x94", // Mongo, must use double quotes!
+                'SQLSTATE[HY000]: General error: 1366 Incorrect string value: \'\xE2\x94\' for column \'str\' at row 1', // MySQL // Use single quotes!
+                "Detected invalid UTF-8 for field path \"documents.0.str\": \xE2\x94", // Mongo, Use double quotes!
             ];
 
             $codes = [

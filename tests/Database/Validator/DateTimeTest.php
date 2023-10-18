@@ -54,13 +54,13 @@ class DateTimeTest extends TestCase
 
     public function testPastDateValidation(): void
     {
-        $dateValidator = new DatetimeValidator(allowOldDates: false);
+        $dateValidator = new DatetimeValidator(requireDateInFuture: false);
 
         $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
         $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
 
 
-        $dateValidator = new DatetimeValidator(allowOldDates: true);
+        $dateValidator = new DatetimeValidator(requireDateInFuture: true);
 
         $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
         $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));

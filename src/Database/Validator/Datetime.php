@@ -14,12 +14,12 @@ class Datetime extends Validator
     /**
      * @var bool
      */
-    protected bool $allowOldDates = true;
+    protected bool $requireDateInFuture = false;
 
-    public function __construct(?bool $allowOldDates = null)
+    public function __construct(?bool $requireDateInFuture = null)
     {
-        if (!is_null($allowOldDates)) {
-            $this->allowOldDates = $allowOldDates;
+        if (!is_null($requireDateInFuture)) {
+            $this->requireDateInFuture = $requireDateInFuture;
         }
     }
 
@@ -48,8 +48,8 @@ class Datetime extends Validator
             $date = new \DateTime($value);
             $now = new \DateTime();
 
-            if ($this->allowOldDates === false && $date < $now) {
-                $this->message = 'Date is in the past';
+            if ($this->requireDateInFuture === false && $date < $now) {
+                $this->message = 'Date must be in the future';
                 return false;
             }
         } catch(\Exception $e) {

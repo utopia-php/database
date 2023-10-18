@@ -1134,7 +1134,6 @@ abstract class Base extends TestCase
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str
         ])));
-
     }
 
     /**

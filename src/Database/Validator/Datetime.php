@@ -48,7 +48,7 @@ class Datetime extends Validator
             $date = new \DateTime($value);
             $now = new \DateTime();
 
-            if ($this->requireDateInFuture === false && $date < $now) {
+            if ($this->requireDateInFuture === true && $date < $now) {
                 $this->message = 'Date must be in the future';
                 return false;
             }

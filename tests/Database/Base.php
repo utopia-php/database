@@ -1083,26 +1083,31 @@ abstract class Base extends TestCase
 
     public function testInvalidUtfCharacters(): void
     {
-        $collection = 'null_character';
+        // This test is a reminder we can not insert non UTF chars to UTF field
+        $collection = 'invalid_characters';
 
         static::getDatabase()->createCollection($collection);
         static::getDatabase()->createAttribute($collection, 'str', Database::VAR_STRING, 128, true);
 
+        // Test insert of null
         $str = "\x00";
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str,
         ])));
 
+        // Test insert of null
         $str = "\u0000";
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str,
         ])));
 
+        // Test insert of null
         $str = "\000";
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str,
         ])));
 
+        // Test fail to insert non-utf chars
         $str = "\xE2\x94";
         try {
             $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
@@ -1113,8 +1118,12 @@ abstract class Base extends TestCase
             $this->assertTrue(true);
         }
 
+        // Suggestion for fix after cleanup non
+        // Test success to insert non-utf chars after removal of non-utf chars
+        $str = "\xE2\x94";
+        $str = mb_convert_encoding($str, 'UTF-8', 'UTF-8');
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
-            'str' => mb_convert_encoding($str, 'UTF-8', 'UTF-8'),
+            'str' => $str
         ])));
     }
 

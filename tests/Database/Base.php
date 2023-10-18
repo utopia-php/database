@@ -1115,7 +1115,17 @@ abstract class Base extends TestCase
             ])));
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
-            $this->assertTrue(true);
+            $messages = [
+                'SQLSTATE[22021]: Character not in repertoire: 7 ERROR:  invalid byte sequence for encoding "UTF8": 0xe2 0x94 0x20', // Postgres
+                'SQLSTATE[HY000]: General error: 1366 Incorrect string value: \'\xE2\x94\' for column \'str\' at row 1', // MySQL
+                'Detected invalid UTF-8 for field path "documents.0.str": ?', // Mongo
+            ];
+
+            $codes = [
+                '22007', // MariaDB
+            ];
+
+            $this->assertTrue(in_array($e->getMessage(), $messages) || in_array($e->getCode(), $codes));
         }
 
         // Suggestion for fix after cleanup non
@@ -1124,6 +1134,7 @@ abstract class Base extends TestCase
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str
         ])));
+
     }
 
     /**

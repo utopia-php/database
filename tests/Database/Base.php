@@ -1120,7 +1120,6 @@ abstract class Base extends TestCase
 
         // Suggestion for fix after cleanup non
         // Test success to insert non-utf chars after removal of non-utf chars
-        $str = "\xE2\x94";
         $str = mb_convert_encoding($str, 'UTF-8', 'UTF-8');
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str

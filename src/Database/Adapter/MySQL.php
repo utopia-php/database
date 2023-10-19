@@ -79,12 +79,12 @@ class MySQL extends MariaDB
         throw $e;
     }
 
-     /**
-     * Get Collection Size
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     */
+    /**
+    * Get Collection Size
+    * @param string $collection
+    * @return int
+    * @throws DatabaseException
+    */
     public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);

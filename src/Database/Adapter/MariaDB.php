@@ -1589,7 +1589,7 @@ class MariaDB extends SQL
 
         $seconds = $milliseconds / 1000;
 
-        $this->before(Database::EVENT_ALL, 'timeout', function ($sql) use ($seconds) {
+        $this->before($event, 'timeout', function ($sql) use ($seconds) {
             return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
         });
     }

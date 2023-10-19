@@ -1644,7 +1644,7 @@ class Postgres extends SQL
         if ($milliseconds <= 0) {
             throw new DatabaseException('Timeout must be greater than 0');
         }
-        $this->before(Database::EVENT_ALL, 'timeout', function ($sql) use ($milliseconds) {
+        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
             return "
 				SET statement_timeout = {$milliseconds};
 				{$sql};

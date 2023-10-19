@@ -1090,46 +1090,25 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute($collection, 'str', Database::VAR_STRING, 128, true);
 
         // Test insert of null
-        $str = "\x00";
+        $str = "\x00"; // Use double quotes!
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
-            'str' => $str,
+            'str' => $str
         ])));
 
         // Test insert of null
-        $str = "\u0000";
+        $str = "\u0000"; // Use double quotes!
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str
+        ])));
+
+        // Test insert of null Use double quotes
+        $str = "\000"; // Use double quotes!
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str,
         ])));
 
-        // Test insert of null
-        $str = "\000";
-        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
-            'str' => $str,
-        ])));
-
-        // Test fail to insert non-utf chars
-        $str = "\xE2\x94";
-        try {
-            $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
-                'str' => $str,
-            ])));
-            $this->fail('Failed to throw Exception');
-        } catch (Exception $e) {
-            $messages = [
-                "SQLSTATE[22021]: Character not in repertoire: 7 ERROR:  invalid byte sequence for encoding \"UTF8\": 0xe2 0x94 0x20", // Postgres
-                'SQLSTATE[HY000]: General error: 1366 Incorrect string value: \'\xE2\x94\' for column \'str\' at row 1', // MySQL // Use single quotes!
-                "Detected invalid UTF-8 for field path \"documents.0.str\": \xE2\x94", // Mongo, Use double quotes!
-            ];
-
-            $codes = [
-                '22007', // MariaDB
-            ];
-
-            $this->assertTrue(in_array($e->getMessage(), $messages) || in_array($e->getCode(), $codes));
-        }
-
-        // Suggestion for fix after cleanup non
-        // Test success to insert non-utf chars after removal of non-utf chars
+        // Suggestion for fix: cleanup non-utf chars
+        $str = "\xE2\x94"; // Use double quotes!
         $str = mb_convert_encoding($str, 'UTF-8', 'UTF-8');
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
             'str' => $str

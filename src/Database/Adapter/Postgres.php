@@ -1058,14 +1058,13 @@ class Postgres extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws Exception
      * @throws PDOException
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1168,10 +1167,6 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ?: self::$timeout);
-        }
-
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
@@ -1254,7 +1249,7 @@ class Postgres extends SQL
      *
      * @return int
      */
-    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1280,10 +1275,6 @@ class Postgres extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
-
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ?: self::$timeout);
-        }
 
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -1314,7 +1305,7 @@ class Postgres extends SQL
      *
      * @return int|float
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1341,10 +1332,6 @@ class Postgres extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
-
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
-        }
 
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -1644,13 +1631,26 @@ class Postgres extends SQL
 
     /**
      * Returns Max Execution Time
-     * @param string $sql
      * @param int $milliseconds
-     * @return string
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
      */
-    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        return "SET statement_timeout = {$milliseconds};{$sql};SET statement_timeout = 0;";
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+        $this->before(Database::EVENT_ALL, 'timeout', function ($sql) use ($milliseconds) {
+            return "
+				SET statement_timeout = {$milliseconds};
+				{$sql};
+				SET statement_timeout = 0;
+			";
+        });
     }
 
     /**

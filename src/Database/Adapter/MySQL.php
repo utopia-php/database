@@ -5,7 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 
 class MySQL extends MariaDB
 {
@@ -51,29 +51,43 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Returns Max Execution Time
-     * @param string $sql
+     * Set max execution time
      * @param int $milliseconds
-     * @return string
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
      */
-    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        return preg_replace('/SELECT/', "SELECT /*+ max_execution_time({$milliseconds}) */", $sql, 1);
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+        $this->before(Database::EVENT_ALL, 'timeout', function ($sql) use ($milliseconds) {
+            return \preg_replace(
+                pattern: '/SELECT/',
+                replacement: "SELECT /*+ max_execution_time({$milliseconds}) */",
+                subject: $sql,
+                limit: 1
+            );
+        });
     }
 
     /**
      * @param PDOException $e
-     * @throws Timeout
+     * @throws TimeoutException
      */
     protected function processException(PDOException $e): void
     {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         // PDOProxy which who switches errorInfo
         if ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         throw $e;

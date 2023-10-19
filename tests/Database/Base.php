@@ -221,13 +221,14 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
-    public function testQueryTimeoutUsingStaticTimeout(): void
+
+    public function testQueryTimeout(): void
     {
         if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             static::getDatabase()->createCollection('global-timeouts');
             $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-            for ($i = 0 ; $i <= 5 ; $i++) {
+            for ($i = 0 ; $i <= 20 ; $i++) {
                 static::getDatabase()->createDocument('global-timeouts', new Document([
                     'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [
@@ -239,6 +240,7 @@ abstract class Base extends TestCase
             }
 
             $this->expectException(Timeout::class);
+
             static::getDatabase()->setTimeout(1);
 
             try {
@@ -251,9 +253,9 @@ abstract class Base extends TestCase
                 throw $ex;
             }
         }
+
         $this->expectNotToPerformAssertions();
     }
-
 
     /**
      * @depends testCreateExistsDelete
@@ -2651,33 +2653,6 @@ abstract class Base extends TestCase
             Query::offset(0),
             Query::cursorAfter($document)
         ]);
-    }
-
-    public function testTimeout(): void
-    {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            static::getDatabase()->createCollection('timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 5 ; $i++) {
-                static::getDatabase()->createDocument('timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(Timeout::class);
-
-            static::getDatabase()->find('timeouts', [
-                Query::notEqual('longtext', 'appwrite'),
-            ], 1);
-        }
-
-        $this->expectNotToPerformAssertions();
     }
 
     /**

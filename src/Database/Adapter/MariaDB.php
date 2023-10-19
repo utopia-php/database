@@ -5,11 +5,11 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -641,7 +641,7 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -736,7 +736,7 @@ class MariaDB extends SQL
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
 
                 default:
                     throw $e;
@@ -758,7 +758,7 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -939,7 +939,7 @@ class MariaDB extends SQL
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
 
                 default:
                     throw $e;
@@ -1058,12 +1058,11 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      * @return array<Document>
      * @throws DatabaseException
-     * @throws Timeout
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1173,11 +1172,8 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-        if ($timeout || static::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
-        }
-
         $stmt = $this->getPDO()->prepare($sql);
+
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
@@ -1257,7 +1253,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1287,11 +1283,8 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
-        }
-
         $stmt = $this->getPDO()->prepare($sql);
+
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
@@ -1322,7 +1315,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1351,10 +1344,6 @@ class MariaDB extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
-
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
-        }
 
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -1583,35 +1572,42 @@ class MariaDB extends SQL
     }
 
     /**
-     * Returns Max Execution Time
-     * @param string $sql
+     * Set max execution time
      * @param int $milliseconds
-     * @return string
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
      */
-    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
-            return $sql;
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
         }
 
         $seconds = $milliseconds / 1000;
-        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+
+        $this->before($event, 'timeout', function ($sql) use ($seconds) {
+            return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+        });
     }
 
     /**
      * @param PDOException $e
-     * @throws Timeout
+     * @throws TimeoutException
      */
     protected function processException(PDOException $e): void
     {
         // Regular PDO
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         throw $e;

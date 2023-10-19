@@ -10,9 +10,10 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -618,23 +619,24 @@ class Database
      * Set maximum query execution time
      *
      * @param int $milliseconds
+     * @param string $event
      * @return void
      * @throws Exception
      */
-    public function setTimeout(int $milliseconds): void
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        $this->adapter->setTimeout($milliseconds);
+        $this->adapter->setTimeout($milliseconds, $event);
     }
 
     /**
      * Clear maximum query execution time
      *
+     * @param string $event
      * @return void
-     * @throws Exception
      */
-    public function clearTimeout(): void
+    public function clearTimeout(string $event = Database::EVENT_ALL): void
     {
-        $this->adapter->clearTimeout();
+        $this->adapter->clearTimeout($event);
     }
 
     /**
@@ -4127,17 +4129,14 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $timeout = null): array
+    public function find(string $collection, array $queries = []): array
     {
-        if (!\is_null($timeout) && $timeout <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-
         $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4241,8 +4240,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
-            $timeout
+            $cursorDirection ?? Database::CURSOR_AFTER
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();

@@ -34,8 +34,6 @@ abstract class Adapter
      */
     protected array $metadata = [];
 
-    protected static ?int $timeout = null;
-
     /**
      * @param string $key
      * @param mixed $value
@@ -205,7 +203,12 @@ abstract class Adapter
         if (!isset($this->transformations[$event])) {
             $this->transformations[$event] = [];
         }
-        $this->transformations[$event][$name] = $callback;
+
+        if (\is_null($callback)) {
+            unset($this->transformations[$event][$name]);
+        } else {
+            $this->transformations[$event][$name] = $callback;
+        }
 
         return $this;
     }
@@ -458,11 +461,10 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
     /**
      * Sum an attribute
@@ -474,7 +476,7 @@ abstract class Adapter
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int;
+    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
 
     /**
      * Count Documents
@@ -485,7 +487,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int;
+    abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
      * Get Collection Size
@@ -745,32 +747,28 @@ abstract class Adapter
      * Set a global timeout for database queries in milliseconds.
      *
      * This function allows you to set a maximum execution time for all database
-     * queries executed using the library. Once this timeout is set, any database
-     * query that takes longer than the specified time will be automatically
-     * terminated by the library, and an appropriate error or exception will be
-     * raised to handle the timeout condition.
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
      *
      * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
      * @return void
      *
-     * @throws \Exception The provided timeout value must be greater than or equal to 0.
-    */
-    public static function setTimeout(int $milliseconds): void
-    {
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-        self::$timeout = $milliseconds;
-    }
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
 
     /**
      * Clears a global timeout for database queries.
      *
+     * @param string $event
      * @return void
-     *
-    */
-    public static function clearTimeout(): void
+     */
+    public function clearTimeout(string $event): void
     {
-        self::$timeout = null;
+        // Clear existing callback
+        $this->before($event, 'timeout', null);
     }
 }

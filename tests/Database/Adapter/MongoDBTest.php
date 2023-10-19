@@ -30,7 +30,7 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    public static function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -51,7 +51,7 @@ class MongoDBTest extends Base
             false
         );
 
-        $database = new Database(new Mongo($client), $cache);
+        $database = new Database(new Mongo($client), $cache, [], $this->authorization);
         $database->setDefaultDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
 

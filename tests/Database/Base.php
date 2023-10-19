@@ -122,10 +122,10 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index(static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
-        $this->assertFalse($validator->isValid($collection));
+        $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
@@ -149,7 +149,7 @@ abstract class Base extends TestCase
 
         if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
-            $this->assertFalse($validator->isValid($collection));
+            $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
 
             try {
@@ -189,8 +189,9 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
+        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
-        $this->assertFalse($validator->isValid($collection));
+        $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
@@ -220,13 +221,14 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
-    public function testQueryTimeoutUsingStaticTimeout(): void
+
+    public function testQueryTimeout(): void
     {
         if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             static::getDatabase()->createCollection('global-timeouts');
             $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-            for ($i = 0 ; $i <= 5 ; $i++) {
+            for ($i = 0 ; $i <= 20 ; $i++) {
                 static::getDatabase()->createDocument('global-timeouts', new Document([
                     'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [
@@ -238,6 +240,7 @@ abstract class Base extends TestCase
             }
 
             $this->expectException(Timeout::class);
+
             static::getDatabase()->setTimeout(1);
 
             try {
@@ -250,9 +253,9 @@ abstract class Base extends TestCase
                 throw $ex;
             }
         }
+
         $this->expectNotToPerformAssertions();
     }
-
 
     /**
      * @depends testCreateExistsDelete
@@ -2675,33 +2678,6 @@ abstract class Base extends TestCase
             Query::offset(0),
             Query::cursorAfter($document)
         ]);
-    }
-
-    public function testTimeout(): void
-    {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            static::getDatabase()->createCollection('timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 5 ; $i++) {
-                static::getDatabase()->createDocument('timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(Timeout::class);
-
-            static::getDatabase()->find('timeouts', [
-                Query::notEqual('longtext', 'appwrite'),
-            ], 1);
-        }
-
-        $this->expectNotToPerformAssertions();
     }
 
     /**
@@ -12356,6 +12332,19 @@ abstract class Base extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testMetadata(): void
+    {
+        static::getDatabase()->setMetadata('key', 'value');
+
+        static::getDatabase()->createCollection('testers');
+
+        $this->assertEquals(['key' => 'value'], static::getDatabase()->getMetadata());
+
+        static::getDatabase()->resetMetadata();
+
+        $this->assertEquals([], static::getDatabase()->getMetadata());
+    }
+
     public function testEmptyOperatorValues(): void
     {
         try {
@@ -12437,6 +12426,31 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
+    }
+
+    public function testTransformations(): void
+    {
+        static::getDatabase()->createCollection('docs', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ]);
+
+        static::getDatabase()->createDocument('docs', new Document([
+            '$id' => 'doc1',
+            'name' => 'value1',
+        ]));
+
+        static::getDatabase()->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
+            return "SELECT 1";
+        });
+
+        $result = static::getDatabase()->getDocument('docs', 'doc1');
+
+        $this->assertTrue($result->isEmpty());
     }
 
     public function testEvents(): void

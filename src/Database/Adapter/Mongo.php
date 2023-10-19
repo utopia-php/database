@@ -1705,9 +1705,9 @@ class Mongo extends Adapter
 
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-		if (!$this->getSupportForTimeouts()) {
-			return;
-		}
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
         $this->timeout = $milliseconds;
     }
 

@@ -9,7 +9,7 @@ class Authorization extends Validator
     /**
      * @var array<string, bool>
      */
-    private static array $roles = [
+    private array $roles = [
         'any' => true
     ];
 
@@ -26,9 +26,20 @@ class Authorization extends Validator
     /**
      * @param string $action
      */
-    public function __construct(string $action)
+    public function __construct(string $action = '')
     {
         $this->action = $action;
+    }
+
+    /**
+     * @param string $action
+     * @return self
+     */
+    public function setAction(string $action): self
+    {
+        $this->action = $action;
+
+        return $this;
     }
 
     /**
@@ -54,7 +65,7 @@ class Authorization extends Validator
      */
     public function isValid($permissions): bool
     {
-        if (!self::$status) {
+        if (!$this->status) {
             return true;
         }
 
@@ -66,12 +77,12 @@ class Authorization extends Validator
         $permission = '-';
 
         foreach ($permissions as $permission) {
-            if (\array_key_exists($permission, self::$roles)) {
+            if (\array_key_exists($permission, $this->roles)) {
                 return true;
             }
         }
 
-        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only "'.\json_encode(self::getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
 
         return false;
     }
@@ -80,9 +91,9 @@ class Authorization extends Validator
      * @param string $role
      * @return void
      */
-    public static function setRole(string $role): void
+    public function setRole(string $role): void
     {
-        self::$roles[$role] = true;
+        $this->roles[$role] = true;
     }
 
     /**
@@ -90,25 +101,25 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public static function unsetRole(string $role): void
+    public function unsetRole(string $role): void
     {
-        unset(self::$roles[$role]);
+        unset($this->roles[$role]);
     }
 
     /**
      * @return array<string>
      */
-    public static function getRoles(): array
+    public function getRoles(): array
     {
-        return \array_keys(self::$roles);
+        return \array_keys($this->roles);
     }
 
     /**
      * @return void
      */
-    public static function cleanRoles(): void
+    public function cleanRoles(): void
     {
-        self::$roles = [];
+        $this->roles = [];
     }
 
     /**
@@ -116,15 +127,15 @@ class Authorization extends Validator
      *
      * @return bool
      */
-    public static function isRole(string $role): bool
+    public function isRole(string $role): bool
     {
-        return (\array_key_exists($role, self::$roles));
+        return (\array_key_exists($role, $this->roles));
     }
 
     /**
      * @var bool
      */
-    public static bool $status = true;
+    public bool $status = true;
 
     /**
      * Default value in case we need
@@ -132,20 +143,20 @@ class Authorization extends Validator
      *
      * @var bool
      */
-    public static bool $statusDefault = true;
+    public bool $statusDefault = true;
 
     /**
      * Change default status.
      * This will be used for the
-     *  value set on the self::reset() method
+     *  value set on the $this->reset() method
      *
      * @param bool $status
      * @return void
      */
-    public static function setDefaultStatus(bool $status): void
+    public function setDefaultStatus(bool $status): void
     {
-        self::$statusDefault = $status;
-        self::$status = $status;
+        $this->statusDefault = $status;
+        $this->status = $status;
     }
 
     /**
@@ -157,15 +168,15 @@ class Authorization extends Validator
      * @param callable(): T $callback
      * @return T
      */
-    public static function skip(callable $callback): mixed
+    public function skip(callable $callback): mixed
     {
-        $initialStatus = self::$status;
-        self::disable();
+        $initialStatus = $this->status;
+        $this->disable();
 
         try {
             return $callback();
         } finally {
-            self::$status = $initialStatus;
+            $this->status = $initialStatus;
         }
     }
 
@@ -174,9 +185,9 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public static function enable(): void
+    public function enable(): void
     {
-        self::$status = true;
+        $this->status = true;
     }
 
     /**
@@ -184,9 +195,9 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public static function disable(): void
+    public function disable(): void
     {
-        self::$status = false;
+        $this->status = false;
     }
 
     /**
@@ -194,9 +205,9 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public static function reset(): void
+    public function reset(): void
     {
-        self::$status = self::$statusDefault;
+        $this->status = $this->statusDefault;
     }
 
     /**

@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -23,6 +24,23 @@ abstract class Adapter
     protected array $debug = [];
 
     protected static ?int $timeout = null;
+
+    /**
+     * @var Authorization
+     */
+    protected Authorization $authorization;
+
+    /**
+     * @param Authorization $authorization
+     *
+     * @return $this
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
 
     /**
      * @param string $key

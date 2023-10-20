@@ -1852,17 +1852,17 @@ abstract class Base extends TestCase
 
         $this->assertEquals(4, count($documents));
 
-		$documents = static::getDatabase()->find('movies', [
-			Query::contains('genres', ['non-existent']),
-		]);
+        $documents = static::getDatabase()->find('movies', [
+            Query::contains('genres', ['non-existent']),
+        ]);
 
-		$this->assertEquals(0, count($documents));
+        $this->assertEquals(0, count($documents));
 
-		$this->expectException(DatabaseException::class);
+        $this->expectException(DatabaseException::class);
 
-		static::getDatabase()->find('movies', [
-			Query::contains('name', ['Frozen']),
-		]);
+        static::getDatabase()->find('movies', [
+            Query::contains('name', ['Frozen']),
+        ]);
     }
 
     public function testFindFulltext(): void

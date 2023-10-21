@@ -654,7 +654,11 @@ class MariaDB extends SQL
         $columns = '';
         $columnNames = '';
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /**
          * Insert Attributes
@@ -798,7 +802,11 @@ class MariaDB extends SQL
             return $carry;
         }, $initial);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /**
          * Get removed Permissions
@@ -1005,7 +1013,11 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         $sql = "
 		    DELETE FROM {$this->getSQLTable($name)} 

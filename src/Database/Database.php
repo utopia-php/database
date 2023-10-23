@@ -4181,6 +4181,8 @@ class Database
             }
         }
 
+        unset($query); // It is used previously as reference
+
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {

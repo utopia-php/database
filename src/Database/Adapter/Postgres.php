@@ -1039,13 +1039,10 @@ class Postgres extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)){
+            $where[] = $conditions;
         }
-
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
@@ -1157,10 +1154,11 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)){
+            $where[] = $conditions;
         }
-
+        
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }

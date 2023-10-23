@@ -311,4 +311,41 @@ class QueryTest extends TestCase
         $response = $validator->isValid([Query::isNull('price')]);
         $this->assertEquals(true, $response);
     }
+
+    /**
+     * @throws Exception
+     */
+    public function testOrQuery(): void
+    {
+        $validator = new Documents($this->attributes, []);
+
+        $this->assertFalse($validator->isValid(
+            [Query::or(
+                [Query::equal('title', [''])]
+            )]));
+
+        $this->assertEquals('Or query can not come first', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(
+            [
+                Query::equal('price', [0]),
+                Query::or(
+                [
+                    Query::equal('not_found', [''])
+                ]
+            )]));
+
+        $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(
+            [
+                Query::equal('price', [10]),
+                Query::or(
+                    [
+                        Query::limit(1)
+                    ]
+                )]));
+
+        $this->assertEquals('Invalid query: Or queries requires only filters', $validator->getDescription());
+    }
 }

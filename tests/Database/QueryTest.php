@@ -453,6 +453,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('isNotNull'));
         $this->assertTrue(Query::isMethod('between'));
         $this->assertTrue(Query::isMethod('select'));
+        $this->assertTrue(Query::isMethod('or'));
 
         $this->assertTrue(Query::isMethod(Query::TYPE_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_NOT_EQUAL));
@@ -472,6 +473,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
 
         /*
         Tests for aliases if we enable them:

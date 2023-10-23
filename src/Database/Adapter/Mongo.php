@@ -1252,6 +1252,11 @@ class Mongo extends Adapter
                 continue;
             }
 
+            if ($query->getMethod() === Query::TYPE_OR) {
+                $filters['$or'][] = $this->buildFilters($query->getValue());
+                continue;
+            }
+
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
             } elseif ($query->getAttribute() === '$internalId') {
@@ -1326,6 +1331,7 @@ class Mongo extends Adapter
             Query::TYPE_BETWEEN => 'between',
             Query::TYPE_STARTS_WITH,
             Query::TYPE_ENDS_WITH => '$regex',
+            Query::TYPE_OR => '$or',
             default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
         };
     }

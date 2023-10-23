@@ -20,8 +20,8 @@ class Query
     public const TYPE_BETWEEN = 'between';
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
-    public const TYPE_OR = 'or';
     public const TYPE_SELECT = 'select';
+    public const TYPE_OR = 'or';
 
     // Order methods
     public const TYPE_ORDERDESC = 'orderDesc';
@@ -178,6 +178,7 @@ class Query
             self::TYPE_BETWEEN,
             self::TYPE_STARTS_WITH,
             self::TYPE_ENDS_WITH,
+            self::TYPE_OR,
             self::TYPE_SELECT => true,
             default => false,
         };
@@ -192,6 +193,12 @@ class Query
      */
     public static function parse(string $filter): self
     {
+
+        if(substr($filter, 0, 3) === 'or('){
+            var_dump('Found or operation !!!!!!!!!!!');
+            var_dump($filter);
+        }
+
         // Init empty vars we fill later
         $method = '';
         $params = [];
@@ -361,6 +368,13 @@ class Query
                 if (count($parsedParams) > 0) {
                     return new self($method, values: [$parsedParams[0]]);
                 }
+                return new self($method);
+
+            case self::TYPE_OR:
+                var_dump($method);
+                var_dump($parsedParams);
+                var_dump('parsing end ........');
+                die;
                 return new self($method);
 
             default:
@@ -836,5 +850,21 @@ class Query
         }
 
         return $parsed;
+    }
+
+    /**
+     * Is isNested
+     *
+     * Function will return true if nested method
+     *
+     * @return bool
+     */
+    public function isNested(): bool
+    {
+        if($this->getMethod() === self::TYPE_OR){
+            return true;
+        }
+
+        return false;
     }
 }

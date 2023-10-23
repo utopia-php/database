@@ -1032,17 +1032,10 @@ class MariaDB extends SQL
             }
         }
 
-//        $filters = $this->getSQLConditions($queries);
-//        if(!empty($filters)){
-//            $where[] = $filters;
-//        }
-
-//        foreach ($queries as $query) {
-//            if ($query->getMethod() === Query::TYPE_SELECT) {
-//                continue;
-//            }
-//            $where[] = $this->getSQLCondition($query);
-//        }
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)){
+            $where[] = $conditions;
+        }
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
@@ -1062,9 +1055,6 @@ class MariaDB extends SQL
             {$sqlOrder}
             {$sqlLimit};
         ";
-
-        var_dump($sql);
-
 
         if ($timeout || static::$timeout) {
             $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
@@ -1157,8 +1147,9 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)){
+            $where[] = $conditions;
         }
 
         if (Authorization::$status) {

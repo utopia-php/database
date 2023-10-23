@@ -934,31 +934,29 @@ abstract class SQL extends Adapter
         return 768;
     }
 
-
-/**
- * @param $stmt
- * @param Query[] $queries
- * @return void
- */
-public function bindNestedConditionValue($stmt, array $queries = []){
-    /** @var PDOStatement $stmt */
-    foreach ($queries as $query) {
-        if(is_array($query)){
-            $this->bindNestedConditionValue($stmt, $query);
-        }
-        else {
-            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-            if ($query->getMethod() === Query::TYPE_OR){
-                $this->bindNestedConditionValue($stmt, $query->getValues()); // Nested $queries are in values
-            }else {
-                foreach ($query->getValues() as $key => $value) {
-                    $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-                    $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-                }
-            }
-        }
-    }}
-
+///**
+// * @param $stmt
+// * @param Query[] $queries
+// * @return void
+// */
+//public function bindNestedConditionValue($stmt, array $queries = []){
+//    /** @var PDOStatement $stmt */
+//    foreach ($queries as $query) {
+//        if(is_array($query)){
+//            $this->bindNestedConditionValue($stmt, $query);
+//        }
+//        else {
+//            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
+//            if ($query->getMethod() === Query::TYPE_OR){
+//                $this->bindNestedConditionValue($stmt, $query->getValues()); // Nested $queries are in values
+//            }else {
+//                foreach ($query->getValues() as $key => $value) {
+//                    $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+//                    $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+//                }
+//            }
+//        }
+//    }}
 
     public function getSQLConditions(array $queries = []): string
     {
@@ -974,42 +972,11 @@ public function bindNestedConditionValue($stmt, array $queries = []){
             if($query->getMethod() === Query::TYPE_OR){
                 $separator = 'or';
                 $conditions[] = $this->getSQLConditions($query->getValue());
-
-//                foreach ($query->getValue() as $queriesArray) {
-//                    var_dump($queriesArray);
-//
-//                    $conditions[] = $this->getSQLConditions($queriesArray);
-//                }
             }
             else $conditions[] = $this->getSQLCondition($query);
         }
 
         $tmp = implode(' ' . $separator . ' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
-    }
-
-    /**
-     * @param $stmt
-     * @param Query[] $queries
-     * @return void
-     */
-    public function bindNestedConditionValue2($stmt, array $queries = []){
-        /** @var PDOStatement $stmt */
-        foreach ($queries as $query) {
-            if(is_array($query)){
-                $this->bindNestedConditionValue($stmt, $query);
-            }
-            else {
-                if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-                if ($query->getMethod() === Query::TYPE_OR){
-                    $this->bindNestedConditionValue($stmt, $query->getValues()); // Nested $queries are in values
-                }else {
-                    foreach ($query->getValues() as $key => $value) {
-                        $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-                        $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-                    }
-                }
-            }
-        }
     }
 }

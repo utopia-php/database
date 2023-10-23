@@ -73,12 +73,6 @@ class IndexedQueries extends Queries
                 $query = Query::parse($query);
             }
 
-            if($query->getMethod() === Query::TYPE_OR){
-                if(!self::isValid($query->getValue())){
-                    return false;
-                }
-            }
-
             $queries[] = $query;
         }
 

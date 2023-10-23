@@ -2746,17 +2746,6 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testOr(){
-        $documents = static::getDatabase()->find('movies', [
-            Query::equal('director', ['TBD']),
-            Query::or([
-                Query::equal('director', ['Joe Johnston'])
-            ])
-        ]);
-
-        $this->assertEquals(3, count($documents));
-    }
-
     public function testOrFirstQuery(){
         try {
             static::getDatabase()->find('movies', [
@@ -2766,7 +2755,7 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch(Exception $e) {
-           // $this->assertEquals('Please throw exception', $e->getMessage());
+            $this->assertEquals('Or query can not come first', $e->getMessage());
         }
     }
 
@@ -2776,10 +2765,20 @@ abstract class Base extends TestCase
             Query::or([
                 Query::equal('director', ['TBD']),
                 Query::equal('year', [2026])
-            ])
+            ]),
         ]);
 
         $this->assertEquals(2, count($documents));
+
+        $count = static::getDatabase()->count('movies', [
+            Query::equal('director', ['Joe Johnston']),
+            Query::or([
+                Query::equal('director', ['TBD']),
+                Query::equal('year', [2026])
+            ])
+        ]);
+
+        $this->assertEquals(2, $count);
     }
 
     public function testOrNested(){
@@ -2794,10 +2793,21 @@ abstract class Base extends TestCase
             ])
         ]);
 
-        var_dump($documents);
-        $this->assertEquals(3, count($documents));
         $this->assertArrayNotHasKey('name', $documents[0]);
-        die;
+        $this->assertEquals(3, count($documents));
+
+        $count = static::getDatabase()->count('movies', [
+            Query::select(['director']),
+            Query::equal('director', ['Joe Johnston']),
+            Query::or([
+                Query::equal('name', ['Frozen']),
+                Query::or([
+                    Query::equal('name', ['Frozen II']),
+                ])
+            ])
+        ]);
+
+        $this->assertEquals(3, $count);
     }
 
     /**

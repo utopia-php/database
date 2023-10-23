@@ -93,4 +93,21 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::parse('greaterThan("attr", [])')));
         $this->assertEquals('GreaterThan queries require exactly one value.', $this->validator->getDescription());
     }
+
+    public function testOr(): void
+    {
+        // todo: How to parse or queries
+
+        $this->assertFalse(false);
+//
+//        $q = Query::parse('or([
+//            search("attr", ["American pie"])
+//        ])');
+//
+//        var_dump($q);
+//
+//        $this->assertFalse($this->validator->isValid($q));
+//        $this->assertTrue($this->validator->isValid($q));
+//        $this->assertEquals('NotEqual queries require exactly one value.', $this->validator->getDescription());
+    }
 }

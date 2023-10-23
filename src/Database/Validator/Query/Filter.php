@@ -173,22 +173,19 @@ class Filter extends Base
                 return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
             case Query::TYPE_OR:
-                var_dump($value);
+                $filters = Query::groupByType($value->getValue())['filters'];
 
-//                if (count($value->getValues()) != 2) {
-//                    $this->message = \ucfirst($method) . ' queries require exactly two values.';
-//                    return false;
-//                }
-//
-//                if (!is_array($value->getValues()[0]) || !is_array($value->getValues()[1])) {
-//                    $this->message = \ucfirst($method) . ' queries requires arrays';
-//                    return false;
-//                }
-//
-//                $queries = array_merge($value->getValues()[0], $value->getValues()[1]);
-//                var_dump($queries);
+                if(count($value->getValue()) !== count($filters)){
+                    $this->message = \ucfirst($method) . ' queries requires only filters';
+                    return false;
+                }
+
+                if(empty($filters)){
+                    $this->message = \ucfirst($method) . ' queries require at least one query';
+                    return false;
+                }
+
                 return true;
-                break;
 
             default:
                 return false;

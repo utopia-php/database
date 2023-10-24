@@ -2765,7 +2765,7 @@ abstract class Base extends TestCase
             Query::or([
                 Query::equal('director', ['TBD']),
                 Query::equal('year', [2026])
-            ]),
+            ])
         ]);
 
         $this->assertEquals(2, count($documents));

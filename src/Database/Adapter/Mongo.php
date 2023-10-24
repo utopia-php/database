@@ -933,7 +933,6 @@ class Mongo extends Adapter
 
         $filters = $this->recursiveReplace($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
-
         /**
          * @var array<Document>
          */

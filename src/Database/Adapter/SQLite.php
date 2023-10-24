@@ -110,7 +110,11 @@ class SQLite extends MariaDB
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
@@ -228,7 +232,11 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         $sql = "DROP TABLE `{$this->getNamespace()}_{$id}`";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
@@ -424,7 +432,11 @@ class SQLite extends MariaDB
         $columns = ['_uid'];
         $values = ['_uid'];
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /**
          * Insert Attributes
@@ -567,7 +579,11 @@ class SQLite extends MariaDB
             return $carry;
         }, $initial);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /**
          * Get removed Permissions

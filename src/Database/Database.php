@@ -4762,7 +4762,7 @@ class Database
     /**
      * Get instance filters
      *
-     * @return array
+     * @return array<string, array{encode: callable, decode: callable}>
      */
     public function getInstanceFilters(): array
     {

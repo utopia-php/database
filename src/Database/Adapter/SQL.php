@@ -958,9 +958,8 @@ abstract class SQL extends Adapter
 //        }
 //    }}
 
-    public function getSQLConditions(array $queries = []): string
+    public function getSQLConditions(array $queries = [], $separator = 'and'): string
     {
-        $separator = 'AND';
         $conditions = [];
         foreach ($queries as $query) {
 
@@ -970,13 +969,17 @@ abstract class SQL extends Adapter
 
             /* @var $query Query */
             if($query->getMethod() === Query::TYPE_OR){
-                $separator = 'or';
-                $conditions[] = $this->getSQLConditions($query->getValue());
+                $conditions[] = $this->getSQLConditions($query->getValue(), 'or');
+//                $tmp = [];
+//                foreach ($query->getValue() as $x){
+//                    $tmp[] = $this->getSQLConditions($x);
+//                }
+//                $conditions[] = implode(' OR ', $tmp);
             }
             else $conditions[] = $this->getSQLCondition($query);
         }
 
-        $tmp = implode(' ' . $separator . ' ', $conditions);
+        $tmp = implode(' '. $separator .' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
     }
 }

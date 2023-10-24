@@ -2745,69 +2745,74 @@ abstract class Base extends TestCase
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }
     }
+//
+//    public function testOrFirstPosition(){
+//        try {
+//            static::getDatabase()->find('movies', [
+//                Query::or([
+//                    Query::equal('director', ['Joe Johnston'])
+//                ])
+//            ]);
+//            $this->fail('Failed to throw exception');
+//        } catch(Exception $e) {
+//            $this->assertEquals('Or query can not come first', $e->getMessage());
+//        }
+//    }
 
-    public function testOrFirstQuery(){
+    public function testOrSingleQuery(){
         try {
             static::getDatabase()->find('movies', [
                 Query::or([
-                    Query::equal('director', ['Joe Johnston'])
+                    Query::equal('active', [true])
                 ])
             ]);
             $this->fail('Failed to throw exception');
         } catch(Exception $e) {
-            $this->assertEquals('Or query can not come first', $e->getMessage());
+            $this->assertEquals('Invalid query: Or queries require at least two queries', $e->getMessage());
         }
     }
 
     public function testOrMultipleQueries(){
-        $documents = static::getDatabase()->find('movies', [
-            Query::equal('director', ['Joe Johnston']),
-            Query::or([
-                Query::equal('director', ['TBD']),
-                Query::equal('year', [2026])
-            ])
+        $query = Query::or([
+                Query::equal('active', [true]),
+                Query::equal('name', ['Frozen II'])
         ]);
 
-        $this->assertEquals(2, count($documents));
+        $this->assertCount(4, static::getDatabase()->find('movies', [$query]));
+        $this->assertEquals(4, static::getDatabase()->count('movies', [$query]));
 
-        $count = static::getDatabase()->count('movies', [
-            Query::equal('director', ['Joe Johnston']),
+        $queries = [
+            Query::equal('active', [true]),
             Query::or([
-                Query::equal('director', ['TBD']),
-                Query::equal('year', [2026])
+                Query::equal('name', ['Frozen']),
+                Query::equal('name', ['Frozen II']),
+                Query::equal('director', ['Joe Johnston'])
             ])
-        ]);
+        ];
 
-        $this->assertEquals(2, $count);
+        $this->assertCount(3, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(3, static::getDatabase()->count('movies', $queries));
     }
 
     public function testOrNested(){
-        $documents = static::getDatabase()->find('movies', [
+        $queries = [
             Query::select(['director']),
             Query::equal('director', ['Joe Johnston']),
             Query::or([
                 Query::equal('name', ['Frozen']),
                 Query::or([
-                    Query::equal('name', ['Frozen II']),
+                    Query::equal('active', [true]),
+                    Query::equal('active', [false]),
                 ])
             ])
-        ]);
+        ];
 
+        $documents = static::getDatabase()->find('movies', $queries);
+        $this->assertCount(1, $documents);
         $this->assertArrayNotHasKey('name', $documents[0]);
-        $this->assertEquals(3, count($documents));
 
-        $count = static::getDatabase()->count('movies', [
-            Query::select(['director']),
-            Query::equal('director', ['Joe Johnston']),
-            Query::or([
-                Query::equal('name', ['Frozen']),
-                Query::or([
-                    Query::equal('name', ['Frozen II']),
-                ])
-            ])
-        ]);
-
-        $this->assertEquals(3, $count);
+        $count = static::getDatabase()->count('movies', $queries);
+        $this->assertEquals(1, $count);
     }
 
     /**

@@ -324,13 +324,13 @@ class QueryTest extends TestCase
                 [Query::equal('title', [''])]
             )]));
 
-        $this->assertEquals('Or query can not come first', $validator->getDescription());
+        $this->assertEquals('Invalid query: Or queries require at least two queries', $validator->getDescription());
 
         $this->assertFalse($validator->isValid(
             [
-                Query::equal('price', [0]),
                 Query::or(
                 [
+                    Query::equal('price', [0]),
                     Query::equal('not_found', [''])
                 ]
             )]));
@@ -342,6 +342,7 @@ class QueryTest extends TestCase
                 Query::equal('price', [10]),
                 Query::or(
                     [
+                        Query::select(['price']),
                         Query::limit(1)
                     ]
                 )]));

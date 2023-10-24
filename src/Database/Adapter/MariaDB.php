@@ -1059,7 +1059,7 @@ class MariaDB extends SQL
         if ($timeout || static::$timeout) {
             $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
         }
-
+var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);

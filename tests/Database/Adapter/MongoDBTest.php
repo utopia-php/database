@@ -5,6 +5,7 @@ namespace Utopia\Tests\Adapter;
 use Exception;
 use Redis;
 use Utopia\Cache\Cache;
+
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;

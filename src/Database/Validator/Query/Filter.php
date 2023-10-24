@@ -180,8 +180,8 @@ class Filter extends Base
                     return false;
                 }
 
-                if(empty($filters)){
-                    $this->message = \ucfirst($method) . ' queries require at least one query';
+                if(count($filters) < 2){
+                    $this->message = \ucfirst($method) . ' queries require at least two queries';
                     return false;
                 }
 

@@ -271,7 +271,7 @@ class Database
     /**
      * @var array<string, array{encode: callable, decode: callable}>
      */
-    private array $instanceFilters = [];
+    protected array $instanceFilters = [];
 
     /**
      * @var array<string, mixed>
@@ -4755,6 +4755,26 @@ class Database
     public function getAdapter(): Adapter
     {
         return $this->adapter;
+    }
+
+    /**
+     * Get Cache
+     *
+     * @return Cache
+     */
+    public function getCache(): Cache
+    {
+        return $this->cache;
+    }
+
+    /**
+     * Get instance filters
+     *
+     * @return array<string, array{encode: callable, decode: callable}>
+     */
+    public function getInstanceFilters(): array
+    {
+        return $this->instanceFilters;
     }
 
     /**

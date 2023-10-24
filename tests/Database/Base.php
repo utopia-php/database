@@ -3427,13 +3427,13 @@ abstract class Base extends TestCase
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
         ];
-        for ($i=1; $i < 6; $i++) {
+        for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permissions);
         }
 
         for ($i = 1; $i < 5; $i++) {
             $collectionId = $i;
-            $relatedCollectionId = $i+1;
+            $relatedCollectionId = $i + 1;
             static::getDatabase()->createRelationship(
                 collection: "level{$collectionId}",
                 relatedCollection: "level{$relatedCollectionId}",
@@ -3495,7 +3495,7 @@ abstract class Base extends TestCase
         $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);
         $this->assertEquals('updated value', $level1['level2']['level3']['name']);
 
-        for ($i=1; $i < 6; $i++) {
+        for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->deleteCollection("level{$i}");
         }
     }
@@ -3661,7 +3661,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
     {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit()> 0) {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
             $collection = static::getDatabase()->getCollection("widthLimit{$key}");
 
             // create same attribute in testExceptionWidthLimit
@@ -4116,7 +4116,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', default: 100);
         $collection = $database->getCollection('flowers');
@@ -4128,7 +4128,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
         $collection = $database->getCollection('flowers');
@@ -4140,7 +4140,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRangeNew', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: '');
         $collection = $database->getCollection('flowers');
@@ -4152,7 +4152,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: ['min' => 1, 'max' => 999]);
         $collection = $database->getCollection('flowers');
@@ -4164,7 +4164,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>999], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 999], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: []);
         $collection = $database->getCollection('flowers');

@@ -980,7 +980,7 @@ class Mongo extends Adapter
         foreach ($filters as $k => $v) {
             if ($k === '_createdAt' || $k == '_updatedAt') {
                 if (is_array($v)) {
-                    foreach ($v as $sk=>$sv) {
+                    foreach ($v as $sk => $sv) {
                         $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
                 } else {

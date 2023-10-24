@@ -50,6 +50,11 @@ class MySQLTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
+        //$pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+
+        //var_dump($pdo->getAttribute(PDO::ATTR_EMULATE_PREPARES));
+       // $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+       // var_dump($pdo->getAttribute(PDO::ATTR_EMULATE_PREPARES));
 
         $redis = new Redis();
         $redis->connect('redis', 6379);

@@ -23,7 +23,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Index;
-use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -123,10 +122,10 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index(static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
-        $this->assertFalse($validator->isValid($collection));
+        $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
@@ -150,7 +149,7 @@ abstract class Base extends TestCase
 
         if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
-            $this->assertFalse($validator->isValid($collection));
+            $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
 
             try {
@@ -190,8 +189,9 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
+        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
-        $this->assertFalse($validator->isValid($collection));
+        $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
@@ -221,13 +221,14 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
-    public function testQueryTimeoutUsingStaticTimeout(): void
+
+    public function testQueryTimeout(): void
     {
         if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             static::getDatabase()->createCollection('global-timeouts');
             $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-            for ($i = 0 ; $i <= 5 ; $i++) {
+            for ($i = 0 ; $i <= 20 ; $i++) {
                 static::getDatabase()->createDocument('global-timeouts', new Document([
                     'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [
@@ -239,6 +240,7 @@ abstract class Base extends TestCase
             }
 
             $this->expectException(Timeout::class);
+
             static::getDatabase()->setTimeout(1);
 
             try {
@@ -251,9 +253,9 @@ abstract class Base extends TestCase
                 throw $ex;
             }
         }
+
         $this->expectNotToPerformAssertions();
     }
-
 
     /**
      * @depends testCreateExistsDelete
@@ -934,6 +936,70 @@ abstract class Base extends TestCase
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
+        // Test create document with manual internal id
+        $manualIdDocument = static::getDatabase()->createDocument('documents', new Document([
+            '$id' => '56000',
+            '$internalId' => '56000',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user(ID::custom('1'))),
+                Permission::read(Role::user(ID::custom('2'))),
+                Permission::create(Role::any()),
+                Permission::create(Role::user(ID::custom('1x'))),
+                Permission::create(Role::user(ID::custom('2x'))),
+                Permission::update(Role::any()),
+                Permission::update(Role::user(ID::custom('1x'))),
+                Permission::update(Role::user(ID::custom('2x'))),
+                Permission::delete(Role::any()),
+                Permission::delete(Role::user(ID::custom('1x'))),
+                Permission::delete(Role::user(ID::custom('2x'))),
+            ],
+            'string' => 'text📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+            'float' => 5.55,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+            'empty' => [],
+            'with-dash' => 'Works',
+        ]));
+
+        $this->assertEquals('56000', $manualIdDocument->getInternalId());
+        $this->assertNotEmpty(true, $manualIdDocument->getId());
+        $this->assertIsString($manualIdDocument->getAttribute('string'));
+        $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
+        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
+        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
+        $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
+        $this->assertIsArray($manualIdDocument->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
+        $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
+        $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+
+        $manualIdDocument = static::getDatabase()->getDocument('documents', '56000');
+
+        $this->assertEquals('56000', $manualIdDocument->getInternalId());
+        $this->assertNotEmpty(true, $manualIdDocument->getId());
+        $this->assertIsString($manualIdDocument->getAttribute('string'));
+        $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
+        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
+        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
+        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
+        $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
+        $this->assertIsArray($manualIdDocument->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
+        $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
+        $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+
         return $document;
     }
 
@@ -1227,10 +1293,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testListDocumentSearch(Document $document): void
+    public function testListDocumentSearch(): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
         if (!$fulltextSupport) {
@@ -1263,6 +1326,30 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    public function testEmptySearch(): void
+    {
+        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        if (!$fulltextSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', ''),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '<>'),
+        ]);
+        $this->assertEquals(0, count($documents));
     }
 
     /**
@@ -1393,8 +1480,10 @@ abstract class Base extends TestCase
     }
 
 
-
-    public function testFind(): void
+    /**
+     * @return array<string, mixed>
+     */
+    public function testFind(): array
     {
         Authorization::setRole(Role::any()->toString());
         static::getDatabase()->createCollection('movies', permissions: [
@@ -1411,7 +1500,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
-        static::getDatabase()->createDocument('movies', new Document([
+        $document = static::getDatabase()->createDocument('movies', new Document([
             '$id' => ID::custom('frozen'),
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -1554,6 +1643,10 @@ abstract class Base extends TestCase
             'with-dash' => 'Works3',
             'nullable' => 'Not null'
         ]));
+
+        return [
+            '$internalId' => $document->getInternalId()
+        ];
     }
 
     public function testFindBasicChecks(): void
@@ -1894,6 +1987,25 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
+    }
+
+
+    /**
+     * @depends testFind
+     * @param array<string, mixed> $data
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
+    public function testFindByInternalID(array $data): void
+    {
+        /**
+         * Test that internal ID queries are handled correctly
+         */
+        $documents = static::getDatabase()->find('movies', [
+            Query::equal('$internalId', [$data['$internalId']]),
+        ]);
+
+        $this->assertEquals(1, count($documents));
     }
 
     public function testFindOrderBy(): void
@@ -2541,33 +2653,6 @@ abstract class Base extends TestCase
             Query::offset(0),
             Query::cursorAfter($document)
         ]);
-    }
-
-    public function testTimeout(): void
-    {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            static::getDatabase()->createCollection('timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 5 ; $i++) {
-                static::getDatabase()->createDocument('timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(Timeout::class);
-
-            static::getDatabase()->find('timeouts', [
-                Query::notEqual('longtext', 'appwrite'),
-            ], 1);
-        }
-
-        $this->expectNotToPerformAssertions();
     }
 
     /**
@@ -3342,13 +3427,13 @@ abstract class Base extends TestCase
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
         ];
-        for ($i=1; $i < 6; $i++) {
+        for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permissions);
         }
 
         for ($i = 1; $i < 5; $i++) {
             $collectionId = $i;
-            $relatedCollectionId = $i+1;
+            $relatedCollectionId = $i + 1;
             static::getDatabase()->createRelationship(
                 collection: "level{$collectionId}",
                 relatedCollection: "level{$relatedCollectionId}",
@@ -3410,7 +3495,7 @@ abstract class Base extends TestCase
         $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);
         $this->assertEquals('updated value', $level1['level2']['level3']['name']);
 
-        for ($i=1; $i < 6; $i++) {
+        for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->deleteCollection("level{$i}");
         }
     }
@@ -3576,7 +3661,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
     {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit()> 0) {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
             $collection = static::getDatabase()->getCollection("widthLimit{$key}");
 
             // create same attribute in testExceptionWidthLimit
@@ -3637,6 +3722,7 @@ abstract class Base extends TestCase
     public function testExceptionCaseInsensitiveDuplicate(Document $document): Document
     {
         $document->setAttribute('$id', 'caseSensitive');
+        $document->setAttribute('$internalId', '200');
         static::getDatabase()->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');
@@ -4030,7 +4116,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', default: 100);
         $collection = $database->getCollection('flowers');
@@ -4042,7 +4128,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
         $collection = $database->getCollection('flowers');
@@ -4054,7 +4140,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRangeNew', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: '');
         $collection = $database->getCollection('flowers');
@@ -4066,7 +4152,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: ['min' => 1, 'max' => 999]);
         $collection = $database->getCollection('flowers');
@@ -4078,7 +4164,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>999], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 999], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: []);
         $collection = $database->getCollection('flowers');
@@ -4413,6 +4499,76 @@ abstract class Base extends TestCase
         $this->assertCount(1, $docs);
         $this->assertEquals('cat', $docs[0]['$id']);
         $this->assertEquals('newCat', $docs[0]['type']);
+    }
+
+    public function testNoInvalidKeysWithRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('species');
+        static::getDatabase()->createCollection('creatures');
+        static::getDatabase()->createCollection('characterstics');
+
+        static::getDatabase()->createAttribute('species', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('creatures', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('characterstics', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'species',
+            relatedCollection: 'creatures',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'creature',
+            twoWayKey:'species'
+        );
+        static::getDatabase()->createRelationship(
+            collection: 'creatures',
+            relatedCollection: 'characterstics',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'characterstic',
+            twoWayKey:'creature'
+        );
+
+        $species = static::getDatabase()->createDocument('species', new Document([
+            '$id' => ID::custom('1'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Canine',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Dog',
+                'characterstic' => [
+                    '$id' => ID::custom('1'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'active',
+                ]
+            ]
+        ]));
+        static::getDatabase()->updateDocument('species', $species->getId(), new Document([
+            '$id' => ID::custom('1'),
+            '$collection' => 'species',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$collection' => 'creatures',
+                'characterstic' => [
+                    '$id' => ID::custom('1'),
+                    'name' => 'active',
+                    '$collection' => 'characterstics',
+                ]
+            ]
+        ]));
+        $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
+        $this->assertEquals($species, $updatedSpecies);
     }
 
     // Relationships
@@ -4913,12 +5069,12 @@ abstract class Base extends TestCase
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
         // Update a document with non existing related document. It should not get added to the list.
-        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'no-city'));
+        static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'no-city'));
 
         $country1Document = static::getDatabase()->getDocument('country', 'country1');
         // Assert document does not contain non existing relation document.
         $this->assertEquals(null, $country1Document->getAttribute('city'));
-        static::getDatabase()->updateDocument('country', 'country1', $doc->setAttribute('city', 'city1'));
+        static::getDatabase()->updateDocument('country', 'country1', (new Document($doc->getArrayCopy()))->setAttribute('city', 'city1'));
         try {
             static::getDatabase()->deleteDocument('country', 'country1');
             $this->fail('Failed to throw exception');
@@ -11246,18 +11402,17 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
         Authorization::setRole(Role::users()->toString());
 
-        $documents = static::getDatabase()->find(
-            $collection->getId()
-        );
+        $documents = static::getDatabase()->find($collection->getId());
         $this->assertNotEmpty($documents);
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::user('random')->toString());
 
-        $documents = static::getDatabase()->find(
-            $collection->getId()
-        );
-        $this->assertNotEmpty($documents);
+        try {
+            static::getDatabase()->find($collection->getId());
+            $this->fail('Failed to throw exception');
+        } catch (AuthorizationException) {
+        }
 
         return $data;
     }
@@ -11273,10 +11428,8 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
 
-        $documents = static::getDatabase()->find(
-            $collection->getId()
-        );
-        $this->assertEmpty($documents);
+        $this->expectException(AuthorizationException::class);
+        static::getDatabase()->find($collection->getId());
     }
 
     /**
@@ -11774,6 +11927,360 @@ abstract class Base extends TestCase
         ));
     }
 
+    public function testCreateRelationDocumentWithoutUpdatePermission(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::user('a')->toString());
+
+        static::getDatabase()->createCollection('parentRelationTest', [], [], [
+            Permission::read(Role::user('a')),
+            Permission::create(Role::user('a')),
+            Permission::update(Role::user('a')),
+            Permission::delete(Role::user('a'))
+        ]);
+        static::getDatabase()->createCollection('childRelationTest', [], [], [
+            Permission::create(Role::user('a')),
+            Permission::read(Role::user('a')),
+        ]);
+        static::getDatabase()->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
+        static::getDatabase()->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
+
+        static::getDatabase()->createRelationship(
+            collection: 'parentRelationTest',
+            relatedCollection: 'childRelationTest',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children'
+        );
+
+        // Create document with relationship with nested data
+        $parent = static::getDatabase()->createDocument('parentRelationTest', new Document([
+            '$id' => 'parent1',
+            'name' => 'Parent 1',
+            'children' => [
+                [
+                    '$id' => 'child1',
+                    'name' => 'Child 1',
+                ],
+            ],
+        ]));
+        $this->assertEquals('child1', $parent->getAttribute('children')[0]->getId());
+        $parent->setAttribute('children', [
+            [
+                '$id' => 'child2',
+            ],
+        ]);
+        $updatedParent = static::getDatabase()->updateDocument('parentRelationTest', 'parent1', $parent);
+
+        $this->assertEquals('child2', $updatedParent->getAttribute('children')[0]->getId());
+
+        static::getDatabase()->deleteCollection('parentRelationTest');
+        static::getDatabase()->deleteCollection('childRelationTest');
+    }
+
+    public function testUpdateDocumentWithRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('userProfiles', [
+            new Document([
+                '$id' => ID::custom('username'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('links', [
+            new Document([
+                '$id' => ID::custom('title'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('videos', [
+            new Document([
+                '$id' => ID::custom('title'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('products', [
+            new Document([
+                '$id' => ID::custom('title'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('settings', [
+            new Document([
+                '$id' => ID::custom('metaTitle'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('appearance', [
+            new Document([
+                '$id' => ID::custom('metaTitle'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('group', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('community', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 700,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'links',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'links'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'videos',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'videos'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'products',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'products',
+            twoWayKey: 'userProfile',
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'settings',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'settings'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'appearance',
+            type: Database::RELATION_ONE_TO_ONE,
+            id: 'appearance'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'group',
+            type: Database::RELATION_MANY_TO_ONE,
+            id: 'group'
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'userProfiles',
+            relatedCollection: 'community',
+            type: Database::RELATION_MANY_TO_ONE,
+            id: 'community'
+        );
+
+        $profile = static::getDatabase()->createDocument('userProfiles', new Document([
+            '$id' => '1',
+            'username' => 'user1',
+            'links' => [
+                [
+                    '$id' => 'link1',
+                    'title' => 'Link 1',
+                ],
+            ],
+            'videos' => [
+                [
+                    '$id' => 'video1',
+                    'title' => 'Video 1',
+                ],
+            ],
+            'products' => [
+                [
+                    '$id' => 'product1',
+                    'title' => 'Product 1',
+                ],
+            ],
+            'settings' => [
+                '$id' => 'settings1',
+                'metaTitle' => 'Meta Title',
+            ],
+            'appearance' => [
+                '$id' => 'appearance1',
+                'metaTitle' => 'Meta Title',
+            ],
+            'group' => [
+                '$id' => 'group1',
+                'name' => 'Group 1',
+            ],
+            'community' => [
+                '$id' => 'community1',
+                'name' => 'Community 1',
+            ],
+        ]));
+        $this->assertEquals('link1', $profile->getAttribute('links')[0]->getId());
+        $this->assertEquals('settings1', $profile->getAttribute('settings')->getId());
+        $this->assertEquals('group1', $profile->getAttribute('group')->getId());
+        $this->assertEquals('community1', $profile->getAttribute('community')->getId());
+        $this->assertEquals('video1', $profile->getAttribute('videos')[0]->getId());
+        $this->assertEquals('product1', $profile->getAttribute('products')[0]->getId());
+        $this->assertEquals('appearance1', $profile->getAttribute('appearance')->getId());
+
+        $profile->setAttribute('links', [
+            [
+                '$id' => 'link1',
+                'title' => 'New Link Value',
+            ],
+        ]);
+
+        $profile->setAttribute('settings', [
+            '$id' => 'settings1',
+            'metaTitle' => 'New Meta Title',
+        ]);
+
+        $profile->setAttribute('group', [
+            '$id' => 'group1',
+            'name' => 'New Group Name',
+        ]);
+
+        $updatedProfile = static::getDatabase()->updateDocument('userProfiles', '1', $profile);
+
+        $this->assertEquals('New Link Value', $updatedProfile->getAttribute('links')[0]->getAttribute('title'));
+        $this->assertEquals('New Meta Title', $updatedProfile->getAttribute('settings')->getAttribute('metaTitle'));
+        $this->assertEquals('New Group Name', $updatedProfile->getAttribute('group')->getAttribute('name'));
+
+        // This is the point of test, related documents should be present if they are not updated
+        $this->assertEquals('Video 1', $updatedProfile->getAttribute('videos')[0]->getAttribute('title'));
+        $this->assertEquals('Product 1', $updatedProfile->getAttribute('products')[0]->getAttribute('title'));
+        $this->assertEquals('Meta Title', $updatedProfile->getAttribute('appearance')->getAttribute('metaTitle'));
+        $this->assertEquals('Community 1', $updatedProfile->getAttribute('community')->getAttribute('name'));
+
+        // updating document using two way key in one to many relationship
+        $product = static::getDatabase()->getDocument('products', 'product1');
+        $product->setAttribute('userProfile', [
+            '$id' => '1',
+            'username' => 'updated user value',
+        ]);
+        $updatedProduct = static::getDatabase()->updateDocument('products', 'product1', $product);
+        $this->assertEquals('updated user value', $updatedProduct->getAttribute('userProfile')->getAttribute('username'));
+        $this->assertEquals('Product 1', $updatedProduct->getAttribute('title'));
+        $this->assertEquals('product1', $updatedProduct->getId());
+        $this->assertEquals('1', $updatedProduct->getAttribute('userProfile')->getId());
+
+        static::getDatabase()->deleteCollection('userProfiles');
+        static::getDatabase()->deleteCollection('links');
+        static::getDatabase()->deleteCollection('settings');
+        static::getDatabase()->deleteCollection('group');
+        static::getDatabase()->deleteCollection('community');
+        static::getDatabase()->deleteCollection('videos');
+        static::getDatabase()->deleteCollection('products');
+        static::getDatabase()->deleteCollection('appearance');
+    }
+
     public function testLabels(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection(
@@ -11798,6 +12305,19 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('labels_test');
 
         $this->assertCount(1, $documents);
+    }
+
+    public function testMetadata(): void
+    {
+        static::getDatabase()->setMetadata('key', 'value');
+
+        static::getDatabase()->createCollection('testers');
+
+        $this->assertEquals(['key' => 'value'], static::getDatabase()->getMetadata());
+
+        static::getDatabase()->resetMetadata();
+
+        $this->assertEquals([], static::getDatabase()->getMetadata());
     }
 
     public function testEmptyOperatorValues(): void
@@ -11881,6 +12401,31 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
+    }
+
+    public function testTransformations(): void
+    {
+        static::getDatabase()->createCollection('docs', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ]);
+
+        static::getDatabase()->createDocument('docs', new Document([
+            '$id' => 'doc1',
+            'name' => 'value1',
+        ]));
+
+        static::getDatabase()->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
+            return "SELECT 1";
+        });
+
+        $result = static::getDatabase()->getDocument('docs', 'doc1');
+
+        $this->assertTrue($result->isEmpty());
     }
 
     public function testEvents(): void

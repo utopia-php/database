@@ -42,6 +42,8 @@ class Mongo extends Adapter
 
     protected Client $client;
 
+    protected ?int $timeout = null;
+
     /**
      * Constructor.
      *
@@ -662,10 +664,16 @@ class Mongo extends Adapter
     public function createDocument(string $collection, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $internalId = $document->getInternalId();
         $document->removeAttribute('$internalId');
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
+
+        // Insert manual id if set
+        if (!empty($internalId)) {
+            $record['_id'] = $internalId;
+        }
 
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
         $result = $this->replaceChars('_', '$', $result);
@@ -806,13 +814,12 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -832,8 +839,8 @@ class Mongo extends Adapter
             $options['skip'] = $offset;
         }
 
-        if ($timeout || self::$timeout) {
-            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
         }
 
         $selections = $this->getAttributeSelections($queries);
@@ -851,9 +858,10 @@ class Mongo extends Adapter
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $attribute = $attribute == 'id' ? "_uid" : $attribute;
-            $attribute = $attribute == 'createdAt' ? "_createdAt" : $attribute;
-            $attribute = $attribute == 'updatedAt' ? "_updatedAt" : $attribute;
+            $attribute = $attribute == 'id' ? '_uid' : $attribute;
+            $attribute = $attribute == 'internalId' ? '_id' : $attribute;
+            $attribute = $attribute == 'createdAt' ? '_createdAt' : $attribute;
+            $attribute = $attribute == 'updatedAt' ? '_updatedAt' : $attribute;
 
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
@@ -972,7 +980,7 @@ class Mongo extends Adapter
         foreach ($filters as $k => $v) {
             if ($k === '_createdAt' || $k == '_updatedAt') {
                 if (is_array($v)) {
-                    foreach ($v as $sk=>$sv) {
+                    foreach ($v as $sk => $sv) {
                         $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
                 } else {
@@ -1069,7 +1077,7 @@ class Mongo extends Adapter
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1081,8 +1089,8 @@ class Mongo extends Adapter
             $options['limit'] = $max;
         }
 
-        if ($timeout || self::$timeout) {
-            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
         }
 
         // queries
@@ -1108,15 +1116,9 @@ class Mongo extends Adapter
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
-        // todo $collection is not used?
-
-        // todo add $timeout for aggregate in Mongo utopia client
-
-        $filters = [];
 
         // queries
         $filters = $this->buildFilters($queries);
@@ -1247,33 +1249,34 @@ class Mongo extends Adapter
 
             if ($query->getAttribute() === '$id') {
                 $query->setAttribute('_uid');
-            }
-
-            if ($query->getAttribute() === '$createdAt') {
+            } elseif ($query->getAttribute() === '$internalId') {
+                $query->setAttribute('_id');
+                $values = $query->getValues();
+                foreach ($values as &$value) {
+                    $value = new ObjectId($value);
+                }
+                $query->setValues($values);
+            } elseif ($query->getAttribute() === '$createdAt') {
                 $query->setAttribute('_createdAt');
-            }
-
-            if ($query->getAttribute() === '$updatedAt') {
+            } elseif ($query->getAttribute() === '$updatedAt') {
                 $query->setAttribute('_updatedAt');
             }
 
             $attribute = $query->getAttribute();
             $operator = $this->getQueryOperator($query->getMethod());
 
-            switch ($query->getMethod()) {
-                case Query::TYPE_IS_NULL:
-                case Query::TYPE_IS_NOT_NULL:
-                    $value = null;
-                    break;
-                default:
-                    $value = $this->getQueryValue(
-                        $query->getMethod(),
-                        count($query->getValues()) > 1
-                            ? $query->getValues()
-                            : $query->getValues()[0]
-                    );
-                    break;
-            }
+            unset($value);
+
+            $value = match ($query->getMethod()) {
+                Query::TYPE_IS_NULL,
+                Query::TYPE_IS_NOT_NULL => null,
+                default => $this->getQueryValue(
+                    $query->getMethod(),
+                    count($query->getValues()) > 1
+                        ? $query->getValues()
+                        : $query->getValues()[0]
+                ),
+            };
 
             if ($operator == '$eq' && \is_array($value)) {
                 $filters[$attribute]['$in'] = $value;
@@ -1698,5 +1701,20 @@ class Mongo extends Adapter
     public function getMaxIndexLength(): int
     {
         return 0;
+    }
+
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+        $this->timeout = $milliseconds;
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        parent::clearTimeout($event);
+
+        $this->timeout = null;
     }
 }

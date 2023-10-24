@@ -81,7 +81,11 @@ abstract class SQL extends Adapter
 
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($document)) {
+            $document = $document[0];
+        }
 
         return (($document[$select] ?? '') === $match) || // case insensitive check
             (($document[strtolower($select)] ?? '') === $match);
@@ -121,29 +125,32 @@ abstract class SQL extends Adapter
         $stmt->bindValue(':_uid', $id);
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         if (empty($document)) {
             return new Document([]);
         }
 
-        if (isset($document['_id'])) {
+        $document = $document[0];
+
+        if (\array_key_exists('_id', $document)) {
             $document['$internalId'] = $document['_id'];
             unset($document['_id']);
         }
-        if (isset($document['_uid'])) {
+        if (\array_key_exists('_uid', $document)) {
             $document['$id'] = $document['_uid'];
             unset($document['_uid']);
         }
-        if (isset($document['_createdAt'])) {
+        if (\array_key_exists('_createdAt', $document)) {
             $document['$createdAt'] = $document['_createdAt'];
             unset($document['_createdAt']);
         }
-        if (isset($document['_updatedAt'])) {
+        if (\array_key_exists('_updatedAt', $document)) {
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
         }
-        if (isset($document['_permissions'])) {
+        if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
             unset($document['_permissions']);
         }
@@ -724,6 +731,10 @@ abstract class SQL extends Adapter
         $value = str_replace(explode(',', $specialChars), ' ', $value);
         $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
         $value = trim($value);
+
+        if (empty($value)) {
+            return '';
+        }
 
         if ($exact) {
             $value = '"' . $value . '"';

@@ -87,7 +87,7 @@ class IndexedQueriesTest extends TestCase
         );
 
         $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id'=>'asdf']))]), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::equal('name', ['value'])]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid(['limit(10)']), $validator->getDescription());

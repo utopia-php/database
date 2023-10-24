@@ -10,13 +10,16 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Database\Validator\Queries\Document as DocumentValidator;
+use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Structure;
@@ -112,6 +115,10 @@ class Database
     public const EVENT_DOCUMENT_SUM = 'document_sum';
     public const EVENT_DOCUMENT_INCREASE = 'document_increase';
     public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
+
+    public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
+    public const EVENT_PERMISSIONS_READ = 'permissions_read';
+    public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -390,6 +397,7 @@ class Database
      * Add listener to events
      *
      * @param string $event
+     * @param string $name
      * @param callable $callback
      * @return self
      */
@@ -399,6 +407,22 @@ class Database
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][$name] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Add a transformation to be applied to a query string before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param callable $callback
+     * @return $this
+     */
+    public function before(string $event, string $name, callable $callback): self
+    {
+        $this->adapter->before($event, $name, $callback);
+
         return $this;
     }
 
@@ -466,14 +490,14 @@ class Database
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
 
         foreach (($this->listeners[$event] ?? []) as $name => $callback) {
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
     }
 
@@ -555,6 +579,64 @@ class Database
     public function getDefaultDatabase(): string
     {
         return $this->adapter->getDefaultDatabase();
+    }
+
+    /**
+     * Set a metadata value to be printed in the query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return self
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->adapter->setMetadata($key, $value);
+
+        return $this;
+    }
+
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->adapter->getMetadata();
+    }
+
+    /**
+     * Clear metadata
+     *
+     * @return void
+     */
+    public function resetMetadata(): void
+    {
+        $this->adapter->resetMetadata();
+    }
+
+    /**
+     * Set maximum query execution time
+     *
+     * @param int $milliseconds
+     * @param string $event
+     * @return void
+     * @throws Exception
+     */
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        $this->adapter->setTimeout($milliseconds, $event);
+    }
+
+    /**
+     * Clear maximum query execution time
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event = Database::EVENT_ALL): void
+    {
+        $this->adapter->clearTimeout($event);
     }
 
     /**
@@ -688,9 +770,14 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
+        $validator = new IndexValidator(
+            $attributes,
+            $this->adapter->getMaxIndexLength()
+        );
+        foreach ($indexes as $index) {
+            if (!$validator->isValid($index)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
@@ -2045,11 +2132,6 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
-        }
-
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -2087,17 +2169,23 @@ class Database
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
-        $collection->setAttribute('indexes', new Document([
+        $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
             'lengths' => $lengths,
             'orders' => $orders,
-        ]), Document::SET_TYPE_APPEND);
+        ]);
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+
+        $validator = new IndexValidator(
+            $collection->getAttribute('attributes', []),
+            $this->adapter->getMaxIndexLength()
+        );
+
+        if (!$validator->isValid($index)) {
             throw new DatabaseException($validator->getDescription());
         }
 
@@ -2176,6 +2264,17 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $validator = new DocumentValidator($attributes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -2920,6 +3019,10 @@ class Database
 
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
+        $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+        $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -3094,6 +3197,14 @@ class Database
             $side = (string) $relationship['options']['side'];
 
             if ($oldValue == $value) {
+                if (
+                    ($relationType === Database::RELATION_ONE_TO_ONE  ||
+                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                    $value instanceof Document
+                ) {
+                    $document->setAttribute($key, $value->getId());
+                    continue;
+                }
                 $document->removeAttribute($key);
                 continue;
             }
@@ -3240,16 +3351,16 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $relation = $this->skipRelationships(fn () => $this->getDocument(
+                                $relation = Authorization::skip(fn () => $this->skipRelationships(fn () => $this->getDocument(
                                     $relatedCollection->getId(),
                                     $relation
-                                ));
+                                )));
 
-                                $this->skipRelationships(fn () => $this->updateDocument(
+                                Authorization::skip(fn () => $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation->getId(),
                                     $relation->setAttribute($twoWayKey, null)
-                                ));
+                                )));
                             }
 
                             foreach ($value as $relation) {
@@ -3363,7 +3474,7 @@ class Database
                             ]);
 
                             foreach ($junctions as $junction) {
-                                $this->deleteDocument($junction->getCollection(), $junction->getId());
+                                Authorization::skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
                             }
                         }
 
@@ -4018,17 +4129,14 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $timeout = null): array
+    public function find(string $collection, array $queries = []): array
     {
-        if (!\is_null($timeout) && $timeout <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-
         $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4039,13 +4147,18 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new Documents($attributes, $indexes);
+        $validator = new DocumentsValidator($attributes, $indexes);
         if (!$validator->isValid($queries)) {
-            throw new Exception($validator->getDescription());
+            throw new QueryException($validator->getDescription());
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getRead());
+
+        if (!$skipAuth && !$documentSecurity) {
+            throw new AuthorizationException($validator->getDescription());
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -4075,7 +4188,6 @@ class Database
 
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
-        $nestedQueries = [];
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
@@ -4112,7 +4224,6 @@ class Database
                     break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {
-                        $nestedQueries[] = $query;
                         unset($queries[$index]);
                     }
                     break;
@@ -4120,6 +4231,7 @@ class Database
         }
 
         $queries = \array_values($queries);
+
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -4128,19 +4240,12 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
-            $timeout
+            $cursorDirection ?? Database::CURSOR_AFTER
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $relationships = $this->resolveRelationships
-            ? \array_filter($attributes, fn (Document $attribute) =>  $attribute->getAttribute('type') === self::VAR_RELATIONSHIP)
-            : [];
-
-        foreach ($results as $index => &$node) {
+        foreach ($results as  &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -4151,8 +4256,6 @@ class Database
                 $node->setAttribute('$collection', $collection->getId());
             }
         }
-
-        $results = $this->applyNestedQueries($results, $nestedQueries, $relationships);
 
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
@@ -4174,112 +4277,6 @@ class Database
     }
 
     /**
-     * @param array<Document> $results
-     * @param array<Query> $queries
-     * @param array<Document> $relationships
-     * @return array<Document>
-     */
-    private function applyNestedQueries(array $results, array $queries, array $relationships): array
-    {
-        foreach ($results as $index => &$node) {
-            foreach ($queries as $query) {
-                $path = \explode('.', $query->getAttribute());
-
-                if (\count($path) == 1) {
-                    continue;
-                }
-
-                $matched = false;
-                foreach ($relationships as $relationship) {
-                    if ($relationship->getId() === $path[0]) {
-                        $matched = true;
-                        break;
-                    }
-                }
-
-                if (!$matched) {
-                    continue;
-                }
-
-                $value = $node->getAttribute($path[0]);
-
-                $levels = \count($path);
-                for ($i = 1; $i < $levels; $i++) {
-                    if ($value instanceof Document) {
-                        $value = $value->getAttribute($path[$i]);
-                    }
-                }
-
-                if (\is_array($value)) {
-                    $values = \array_map(function ($value) use ($path, $levels) {
-                        return $value[$path[$levels - 1]];
-                    }, $value);
-                } else {
-                    $values = [$value];
-                }
-
-                $matched = false;
-                foreach ($values as $value) {
-                    switch ($query->getMethod()) {
-                        case Query::TYPE_EQUAL:
-                            foreach ($query->getValues() as $queryValue) {
-                                if ($value === $queryValue) {
-                                    $matched = true;
-                                    break 2;
-                                }
-                            }
-                            break;
-                        case Query::TYPE_NOT_EQUAL:
-                            $matched = $value !== $query->getValue();
-                            break;
-                        case Query::TYPE_GREATER:
-                            $matched = $value > $query->getValue();
-                            break;
-                        case Query::TYPE_GREATER_EQUAL:
-                            $matched = $value >= $query->getValue();
-                            break;
-                        case Query::TYPE_LESSER:
-                            $matched = $value < $query->getValue();
-                            break;
-                        case Query::TYPE_LESSER_EQUAL:
-                            $matched = $value <= $query->getValue();
-                            break;
-                        case Query::TYPE_CONTAINS:
-                            $matched = \in_array($query->getValue(), $value);
-                            break;
-                        case Query::TYPE_SEARCH:
-                            $matched = \str_contains($value, $query->getValue());
-                            break;
-                        case Query::TYPE_IS_NULL:
-                            $matched = $value === null;
-                            break;
-                        case Query::TYPE_IS_NOT_NULL:
-                            $matched = $value !== null;
-                            break;
-                        case Query::TYPE_BETWEEN:
-                            $matched = $value >= $query->getValues()[0] && $value <= $query->getValues()[1];
-                            break;
-                        case Query::TYPE_STARTS_WITH:
-                            $matched = \str_starts_with($value, $query->getValue());
-                            break;
-                        case Query::TYPE_ENDS_WITH:
-                            $matched = \str_ends_with($value, $query->getValue());
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                if (!$matched) {
-                    unset($results[$index]);
-                }
-            }
-        }
-
-        return \array_values($results);
-    }
-
-    /**
      * @param string $collection
      * @param array<Query> $queries
      * @return bool|Document
@@ -4287,7 +4284,10 @@ class Database
      */
     public function findOne(string $collection, array $queries = []): bool|Document
     {
-        $results = $this->silent(fn () => $this->find($collection, \array_merge([Query::limit(1)], $queries)));
+        $results = $this->silent(fn () => $this->find($collection, \array_merge([
+            Query::limit(1)
+        ], $queries)));
+
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
@@ -4313,6 +4313,14 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new DatabaseException("Collection not found");
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4352,7 +4360,16 @@ class Database
             throw new DatabaseException("Collection not found");
         }
 
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        $validator = new DocumentsValidator($attributes, $indexes);
+        if (!$validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+
         $queries = self::convertQueries($collection, $queries);
+
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
@@ -4360,15 +4377,6 @@ class Database
         return $sum;
     }
 
-    public function setTimeout(int $milliseconds): void
-    {
-        $this->adapter->setTimeout($milliseconds);
-    }
-
-    public function clearTimeout(): void
-    {
-        $this->adapter->clearTimeout();
-    }
     /**
      * Add Attribute Filter
      *

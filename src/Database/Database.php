@@ -876,14 +876,10 @@ class Database
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
-        Authorization::disable();
-
         $result = $this->silent(fn () => $this->find(self::METADATA, [
             Query::limit($limit),
             Query::offset($offset)
         ]));
-
-        Authorization::reset();
 
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 

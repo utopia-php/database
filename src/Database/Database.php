@@ -1622,7 +1622,8 @@ class Database
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            if (
+                $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
                 && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {
@@ -3050,15 +3051,16 @@ class Database
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
 
-                    switch($relationType) {
+                    switch ($relationType) {
                         case Database::RELATION_ONE_TO_ONE:
                             $oldValue = $old->getAttribute($key) instanceof Document
                                 ? $old->getAttribute($key)->getId()
                                 : $old->getAttribute($key);
 
                             if ((\is_null($value) !== \is_null($oldValue))
-                            || (\is_string($value) && $value !== $oldValue)
-                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document && $value->getId() !== $oldValue)
+                            ) {
                                 $shouldUpdate = true;
                             }
                             break;
@@ -3074,15 +3076,17 @@ class Database
                                     : $old->getAttribute($key);
 
                                 if ((\is_null($value) !== \is_null($oldValue))
-                                || (\is_string($value) && $value !== $oldValue)
-                                || ($value instanceof Document &&  $value->getId() !== $oldValue)) {
+                                    || (\is_string($value) && $value !== $oldValue)
+                                    || ($value instanceof Document &&  $value->getId() !== $oldValue)
+                                ) {
                                     $shouldUpdate = true;
                                 }
                                 break;
                             }
 
                             if ((\is_null($old->getAttribute($key)) !== \is_null($value))
-                            || \count($old->getAttribute($key)) !== \count($value)) {
+                                || \count($old->getAttribute($key)) !== \count($value)
+                            ) {
                                 $shouldUpdate = true;
                                 break;
                             }
@@ -3092,7 +3096,8 @@ class Database
                                     : $old->getAttribute($key)[$index];
 
                                 if ((\is_string($relation) && $relation !== $oldValue)
-                                || ($relation instanceof Document && $relation->getId() !== $oldValue)) {
+                                    || ($relation instanceof Document && $relation->getId() !== $oldValue)
+                                ) {
                                     $shouldUpdate = true;
                                     break;
                                 }
@@ -3199,7 +3204,7 @@ class Database
             if ($oldValue == $value) {
                 if (
                     ($relationType === Database::RELATION_ONE_TO_ONE  ||
-                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -3796,8 +3801,8 @@ class Database
                         // collection as an existing relationship, but a different two-way key (the third condition),
                         // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                         $transitive = (($existingKey === $twoWayKey
-                                && $existingCollection === $relatedCollection->getId()
-                                && $existingSide !== $side)
+                            && $existingCollection === $relatedCollection->getId()
+                            && $existingSide !== $side)
                             || ($existingTwoWayKey === $key
                                 && $existingRelatedCollection === $collection->getId()
                                 && $existingSide !== $side)
@@ -4141,7 +4146,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection "'. $originalName .'" not found');
+            throw new DatabaseException('Collection "' . $originalName . '" not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -4279,10 +4284,10 @@ class Database
     /**
      * @param string $collection
      * @param array<Query> $queries
-     * @return bool|Document
+     * @return false|Document
      * @throws DatabaseException
      */
-    public function findOne(string $collection, array $queries = []): bool|Document
+    public function findOne(string $collection, array $queries = []): false|Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
             Query::limit(1)

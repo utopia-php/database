@@ -130,9 +130,9 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes, [
-				Permission::read(Role::any()),
-				Permission::create(Role::any()),
-			]);
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
@@ -266,26 +266,26 @@ abstract class Base extends TestCase
     public function testCreateListExistsDeleteCollection(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors', permissions: [
-			Permission::create(Role::any()),
-			Permission::read(Role::any()),
-		]));
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
         $this->assertCount(1, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2', permissions: [
-			Permission::create(Role::any()),
-			Permission::read(Role::any()),
-		]));
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
         $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors2'));
         $collection = static::getDatabase()->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument(
-			$collection->getCollection(),
-			$collection->getId(),
-			$collection
-		));
+            $collection->getCollection(),
+            $collection->getId(),
+            $collection
+        ));
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
         $this->assertCount(1, static::getDatabase()->listCollections());
 

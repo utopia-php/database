@@ -1312,8 +1312,6 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        $permissions = (Authorization::$status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
-
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
         }
@@ -1322,11 +1320,15 @@ class Postgres extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
         $sql = "
 			SELECT SUM({$attribute}) as sum FROM (
 				SELECT {$attribute}
 				FROM {$this->getSQLTable($name)} table_main
-				WHERE {$permissions} AND " . implode(' AND ', $where) . "
+				{$sqlWhere}
 				{$limit}
 			) table_count
         ";

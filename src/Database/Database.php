@@ -4152,8 +4152,8 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getRead());
 
-        if (!$skipAuth && !$documentSecurity) {
-            throw new AuthorizationException($validator->getDescription());
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
         }
 
         $relationships = \array_filter(

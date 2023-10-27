@@ -4,12 +4,16 @@ services:
 
   tests:
     container_name: tests
+    image: database-dev
     build:
       context: .
     networks:
       - database
     volumes:
-      - ./:/usr/src/code
+      - ./bin:/usr/src/code/bin
+      - ./src:/usr/src/code/src
+      - ./tests:/usr/src/code/tests
+      - ./phpunit.xml:/usr/src/code/phpunit.xml
     ports:
       - "8708:8708"
 
@@ -34,7 +38,7 @@ services:
       POSTGRES_PASSWORD: password
 
   mariadb:
-    image: mariadb:10.5
+    image: mariadb:10.7
     container_name: utopia-mariadb
     networks:
       - database
@@ -55,7 +59,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
 
   mysql:
-    image: mysql:8.0.28-oracle
+    image: mysql:8.0.31
     container_name: utopia-mysql
     networks:
       - database

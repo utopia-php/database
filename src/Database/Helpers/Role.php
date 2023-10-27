@@ -8,8 +8,7 @@ class Role
         private string $role,
         private string $identifier = '',
         private string $dimension = '',
-    )
-    {
+    ) {
     }
 
     /**
@@ -76,17 +75,17 @@ class Role
             return new self($role, $identifier);
         }
 
-        if (!$hasIdentifier && $hasDimension) {
+        if (!$hasIdentifier) {
             $dimensionParts = \explode('/', $role);
             if (\count($dimensionParts) !== 2) {
-                throw new \Exception('Only one dimension can be provided.');
+                throw new \Exception('Only one dimension can be provided');
             }
 
             $role = $dimensionParts[0];
             $dimension = $dimensionParts[1];
 
             if (empty($dimension)) {
-                throw new \Exception('Dimension must not be empty.');
+                throw new \Exception('Dimension must not be empty');
             }
             return new self($role, '', $dimension);
         }
@@ -94,14 +93,14 @@ class Role
         // Has both identifier and dimension
         $dimensionParts = \explode('/', $roleParts[1]);
         if (\count($dimensionParts) !== 2) {
-            throw new \Exception('Only one dimension can be provided.');
+            throw new \Exception('Only one dimension can be provided');
         }
 
         $identifier = $dimensionParts[0];
         $dimension = $dimensionParts[1];
 
         if (empty($dimension)) {
-            throw new \Exception('Dimension must not be empty.');
+            throw new \Exception('Dimension must not be empty');
         }
         return new self($role, $identifier, $dimension);
     }
@@ -113,7 +112,7 @@ class Role
      * @param string $status
      * @return Role
      */
-    public static function user(string $identifier, string $status = '')
+    public static function user(string $identifier, string $status = ''): Role
     {
         return new self('user', $identifier, $status);
     }
@@ -142,6 +141,17 @@ class Role
     }
 
     /**
+     * Create a label role from the given ID
+     *
+     * @param string $identifier
+     * @return Role
+     */
+    public static function label(string $identifier): self
+    {
+        return new self('label', $identifier, '');
+    }
+
+    /**
      * Create an any satisfy role
      *
      * @return Role
@@ -165,5 +175,4 @@ class Role
     {
         return new self('member', $identifier);
     }
-
 }

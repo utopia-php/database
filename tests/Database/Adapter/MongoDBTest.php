@@ -13,12 +13,7 @@ use Utopia\Tests\Base;
 
 class MongoDBTest extends Base
 {
-    static $pool = null;
-
-    /**
-     * @var Database
-     */
-    static $database = null;
+    public static ?Database $database = null;
 
 
     /**
@@ -26,7 +21,7 @@ class MongoDBTest extends Base
      *
      * @return string
      */
-    static function getAdapterName(): string
+    public static function getAdapterName(): string
     {
         return "mongodb";
     }
@@ -35,7 +30,7 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    static function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -52,14 +47,19 @@ class MongoDBTest extends Base
             'mongo',
             27017,
             'root',
-            'example'
-            , false
+            'example',
+            false
         );
 
         $database = new Database(new Mongo($client), $cache);
         $database->setDefaultDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
 
+        if ($database->exists('utopiaTests')) {
+            $database->delete('utopiaTests');
+        }
+
+        $database->create();
 
         return self::$database = $database;
     }
@@ -67,32 +67,31 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
-    public function testCreateExistsDelete()
+    public function testCreateExistsDelete(): void
     {
-        // Mongo creates databases on the fly, so exists would always pass. So we
-        // overide this test to remove the exists check.
-        $this->assertNotNull(static::getDatabase()->create($this->testDatabase));
+        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
+        $this->assertNotNull(static::getDatabase()->create());
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create());
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
     }
 
-    public function testRenameAttribute()
+    public function testRenameAttribute(): void
     {
         $this->assertTrue(true);
     }
 
-    public function testRenameAttributeExisting()
+    public function testRenameAttributeExisting(): void
     {
         $this->assertTrue(true);
     }
 
-    public function testUpdateAttributeStructure()
+    public function testUpdateAttributeStructure(): void
     {
         $this->assertTrue(true);
     }
 
-    public function testKeywords()
+    public function testKeywords(): void
     {
         $this->assertTrue(true);
     }

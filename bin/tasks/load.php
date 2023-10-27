@@ -10,6 +10,7 @@ use Faker\Generator;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
@@ -36,7 +37,6 @@ $cli
     ->param('limit', '', new Numeric(), 'Total number of records to add to database', false)
     ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
     ->action(function ($adapter, $limit, $name) {
-
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
@@ -46,7 +46,7 @@ $cli
         Swoole\Runtime::enableCoroutine();
         switch ($adapter) {
             case 'mariadb':
-                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mariadb';
                     $dbPort = '3306';
@@ -79,12 +79,13 @@ $cli
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
+                            ->withPassword('password'),
+                        128
+                    );
 
                     // A coroutine is assigned per 1000 documents
-                    for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache, $namespace) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
+                        go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
@@ -92,7 +93,7 @@ $cli
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 addArticle($database, $faker);
                             }
 
@@ -101,12 +102,11 @@ $cli
                             $database = null;
                         });
                     }
-
                 });
                 break;
 
-            case 'mysql': 
-                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
+            case 'mysql':
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
                     // can't use PDO pool to act above the database level e.g. creating schemas
                     $dbHost = 'mysql';
                     $dbPort = '3307';
@@ -140,12 +140,13 @@ $cli
                             ->withDbName($name)
                             ->withCharset('utf8mb4')
                             ->withUsername('root')
-                            ->withPassword('password')
-                    , 128);
+                            ->withPassword('password'),
+                        128
+                    );
 
                     // A coroutine is assigned per 1000 documents
-                    for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($pool, $faker, $name, $cache, $namespace) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
+                        go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MySQL($pdo), $cache);
@@ -153,7 +154,7 @@ $cli
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 addArticle($database, $faker);
                             }
 
@@ -162,12 +163,11 @@ $cli
                             $database = null;
                         });
                     }
-
                 });
                 break;
 
             case 'mongodb':
-                Co\run(function() use (&$start, $limit, $name, $namespace, $cache) {
+                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
                     $client = new Client(
                         $name,
                         'mongo',
@@ -175,8 +175,8 @@ $cli
                         'root',
                         'example',
                         false
-                     );
-  
+                    );
+
                     $database = new Database(new Mongo($client), $cache);
                     $database->setDefaultDatabase($name);
                     $database->setNamespace($namespace);
@@ -189,14 +189,14 @@ $cli
 
                     $start = microtime(true);
 
-                    for ($i=0; $i < $limit/1000; $i++) {
-                        go(function() use ($client, $faker, $name, $namespace, $cache) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
+                        go(function () use ($client, $faker, $name, $namespace, $cache) {
                             $database = new Database(new Mongo($client), $cache);
                             $database->setDefaultDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 addArticle($database, $faker);
                             }
 
@@ -225,12 +225,19 @@ $cli
     });
 
 
-function createSchema(Database $database) {
-    if($database->exists($database->getDefaultDatabase())){
+function createSchema(Database $database): void
+{
+    if ($database->exists($database->getDefaultDatabase())) {
         $database->delete($database->getDefaultDatabase());
     }
     $database->create();
-    $database->createCollection('articles');
+
+    Authorization::setRole(Role::any()->toString());
+    $database->createCollection('articles', permissions: [
+        Permission::create(Role::any()),
+        Permission::read(Role::any()),
+    ]);
+
     $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, null, false, false, null, [], ['datetime']);
     $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
@@ -239,26 +246,27 @@ function createSchema(Database $database) {
     $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
 }
 
-function addArticle($database, Generator $faker) {
+function addArticle($database, Generator $faker): void
+{
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
         // Three random users out of 10,000 get mutate access
 
         '$permissions' => [
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::any()),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
         ],
         'author' => $faker->name(),
         'created' => \Utopia\Database\DateTime::format($faker->dateTime()),
@@ -267,4 +275,3 @@ function addArticle($database, Generator $faker) {
         'views' => $faker->randomNumber(6)
     ]));
 }
-

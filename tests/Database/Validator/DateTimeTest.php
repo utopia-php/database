@@ -4,23 +4,20 @@ namespace Utopia\Tests\Validator;
 
 use Utopia\Database\DateTime;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Validator\DatetimeValidator;
-use Utopia\Validator;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 
 class DateTimeTest extends TestCase
 {
     public function setUp(): void
     {
-
     }
 
     public function tearDown(): void
     {
     }
 
-    public function testCreateDatetime()
+    public function testCreateDatetime(): void
     {
-
         $dateValidator = new DatetimeValidator();
 
         $this->assertGreaterThan(DateTime::addSeconds(new \DateTime(), -3), DateTime::now());
@@ -53,5 +50,19 @@ class DateTimeTest extends TestCase
          * Test for Failure
          */
         $this->assertEquals(false, $dateValidator->isValid("2022-13-04 11:31:52.680"));
+    }
+
+    public function testPastDateValidation(): void
+    {
+        $dateValidator = new DatetimeValidator(requireDateInFuture: true);
+
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
+
+
+        $dateValidator = new DatetimeValidator(requireDateInFuture: false);
+
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
     }
 }

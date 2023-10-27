@@ -23,6 +23,7 @@ RUN \
   apk update \
   && apk add --no-cache postgresql-libs postgresql-dev make automake autoconf gcc g++ git brotli-dev \
   && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+  && apk del postgresql-dev \
   && rm -rf /var/cache/apk/*
 
 # Redis Extension
@@ -53,6 +54,15 @@ RUN \
   && ./configure \
   && make && make install
 
+## PCOV Extension
+FROM compile AS pcov
+RUN \
+   git clone https://github.com/krakjoe/pcov.git \
+   && cd pcov \
+   && phpize \
+   && ./configure --enable-pcov \
+   && make && make install
+
 FROM compile as final
 
 LABEL maintainer="team@appwrite.io"
@@ -62,6 +72,7 @@ WORKDIR /usr/src/code
 RUN echo extension=redis.so >> /usr/local/etc/php/conf.d/redis.ini
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 RUN echo extension=mongodb.so >> /usr/local/etc/php/conf.d/mongodb.ini
+RUN echo extension=pcov.so >> /usr/local/etc/php/conf.d/pcov.ini
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
@@ -73,8 +84,10 @@ COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
 COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20200930/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 COPY --from=mongodb /usr/local/lib/php/extensions/no-debug-non-zts-20200930/mongodb.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
+COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20200930/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 
 # Add Source Code
-COPY . /usr/src/code
+COPY ./bin /usr/src/code/bin
+COPY ./src /usr/src/code/src
 
 CMD [ "tail", "-f", "/dev/null" ]

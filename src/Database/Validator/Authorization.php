@@ -7,9 +7,9 @@ use Utopia\Validator;
 class Authorization extends Validator
 {
     /**
-     * @var array
+     * @var array<string, bool>
      */
-    static array $roles = [
+    private static array $roles = [
         'any' => true
     ];
 
@@ -58,7 +58,7 @@ class Authorization extends Validator
             return true;
         }
 
-        if(empty($permissions)) {
+        if (empty($permissions)) {
             $this->message = 'No permissions provided for action \''.$this->action.'\'';
             return false;
         }
@@ -66,9 +66,9 @@ class Authorization extends Validator
         $permission = '-';
 
         foreach ($permissions as $permission) {
-          if (\array_key_exists($permission, self::$roles)) {
-              return true;
-            } 
+            if (\array_key_exists($permission, self::$roles)) {
+                return true;
+            }
         }
 
         $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only "'.\json_encode(self::getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
@@ -96,7 +96,7 @@ class Authorization extends Validator
     }
 
     /**
-     * @return array
+     * @return array<string>
      */
     public static function getRoles(): array
     {
@@ -113,7 +113,7 @@ class Authorization extends Validator
 
     /**
      * @param string $role
-     * 
+     *
      * @return bool
      */
     public static function isRole(string $role): bool
@@ -125,7 +125,7 @@ class Authorization extends Validator
      * @var bool
      */
     public static bool $status = true;
-    
+
     /**
      * Default value in case we need
      *  to reset Authorization status
@@ -138,7 +138,7 @@ class Authorization extends Validator
      * Change default status.
      * This will be used for the
      *  value set on the self::reset() method
-     * 
+     *
      * @param bool $status
      * @return void
      */
@@ -153,25 +153,25 @@ class Authorization extends Validator
      *
      * Skips authorization for the code to be executed inside the callback
      *
-     * @param callable $callback
-     * @return mixed
+     * @template T
+     * @param callable(): T $callback
+     * @return T
      */
     public static function skip(callable $callback): mixed
     {
         $initialStatus = self::$status;
-
         self::disable();
 
-        $result = $callback();
-
-        self::$status = $initialStatus;
-
-        return $result;
+        try {
+            return $callback();
+        } finally {
+            self::$status = $initialStatus;
+        }
     }
 
     /**
      * Enable Authorization checks
-     * 
+     *
      * @return void
      */
     public static function enable(): void
@@ -181,7 +181,7 @@ class Authorization extends Validator
 
     /**
      * Disable Authorization checks
-     * 
+     *
      * @return void
      */
     public static function disable(): void
@@ -191,7 +191,7 @@ class Authorization extends Validator
 
     /**
      * Disable Authorization checks
-     * 
+     *
      * @return void
      */
     public static function reset(): void

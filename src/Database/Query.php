@@ -2,36 +2,36 @@
 
 namespace Utopia\Database;
 
-use Exception;
+use Utopia\Database\Exception\Query as QueryException;
 
 class Query
 {
     // Filter methods
-    const TYPE_EQUAL = 'equal';
-    const TYPE_NOTEQUAL = 'notEqual';
-    const TYPE_LESSER = 'lessThan';
-    const TYPE_LESSEREQUAL = 'lessThanEqual';
-    const TYPE_GREATER = 'greaterThan';
-    const TYPE_GREATEREQUAL = 'greaterThanEqual';
-    const TYPE_CONTAINS = 'contains';
-    const TYPE_SEARCH = 'search';
-    const TYPE_IS_NULL = 'isNull';
-    const TYPE_IS_NOT_NULL = 'isNotNull';
-    const TYPE_BETWEEN = 'between';
-    const TYPE_STARTS_WITH = 'startsWith';
-    const TYPE_ENDS_WITH = 'endsWith';
+    public const TYPE_EQUAL = 'equal';
+    public const TYPE_NOT_EQUAL = 'notEqual';
+    public const TYPE_LESSER = 'lessThan';
+    public const TYPE_LESSER_EQUAL = 'lessThanEqual';
+    public const TYPE_GREATER = 'greaterThan';
+    public const TYPE_GREATER_EQUAL = 'greaterThanEqual';
+    public const TYPE_CONTAINS = 'contains';
+    public const TYPE_SEARCH = 'search';
+    public const TYPE_IS_NULL = 'isNull';
+    public const TYPE_IS_NOT_NULL = 'isNotNull';
+    public const TYPE_BETWEEN = 'between';
+    public const TYPE_STARTS_WITH = 'startsWith';
+    public const TYPE_ENDS_WITH = 'endsWith';
 
-    const TYPE_SELECT = 'select';
+    public const TYPE_SELECT = 'select';
 
     // Order methods
-    const TYPE_ORDERDESC = 'orderDesc';
-    const TYPE_ORDERASC = 'orderAsc';
+    public const TYPE_ORDERDESC = 'orderDesc';
+    public const TYPE_ORDERASC = 'orderAsc';
 
     // Pagination methods
-    const TYPE_LIMIT = 'limit';
-    const TYPE_OFFSET = 'offset';
-    const TYPE_CURSORAFTER = 'cursorAfter';
-    const TYPE_CURSORBEFORE = 'cursorBefore';
+    public const TYPE_LIMIT = 'limit';
+    public const TYPE_OFFSET = 'offset';
+    public const TYPE_CURSORAFTER = 'cursorAfter';
+    public const TYPE_CURSORBEFORE = 'cursorBefore';
 
     protected const CHAR_SINGLE_QUOTE = '\'';
     protected const CHAR_DOUBLE_QUOTE = '"';
@@ -45,11 +45,19 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+
+    /**
+     * @var array<mixed>
+     */
     protected array $values = [];
 
 
     /**
      * Construct a new query object
+     *
+     * @param string $method
+     * @param string $attribute
+     * @param array<mixed> $values
      */
     public function __construct(string $method, string $attribute = '', array $values = [])
     {
@@ -58,28 +66,42 @@ class Query
         $this->values = $values;
     }
 
+    /**
+     * @return string
+     */
     public function getMethod(): string
     {
         return $this->method;
     }
 
+    /**
+     * @return string
+     */
     public function getAttribute(): string
     {
         return $this->attribute;
     }
 
+    /**
+     * @return array<mixed>
+     */
     public function getValues(): array
     {
         return $this->values;
     }
 
-    public function getValue($default = null)
+    /**
+     * @param mixed $default
+     * @return mixed
+     */
+    public function getValue(mixed $default = null): mixed
     {
         return $this->values[0] ?? $default;
     }
 
     /**
-     * Sets Method.
+     * Sets method
+     *
      * @param string $method
      * @return self
      */
@@ -91,7 +113,8 @@ class Query
     }
 
     /**
-     * Sets Attribute.
+     * Sets attribute
+     *
      * @param string $attribute
      * @return self
      */
@@ -103,8 +126,9 @@ class Query
     }
 
     /**
-     * Sets Values.
-     * @param array $values
+     * Sets values
+     *
+     * @param array<mixed> $values
      * @return self
      */
     public function setValues(array $values): self
@@ -115,11 +139,11 @@ class Query
     }
 
     /**
-     * Sets Value.
-     * @param $value
+     * Sets value
+     * @param mixed $value
      * @return self
      */
-    public function setValue($value): self
+    public function setValue(mixed $value): self
     {
         $this->values = [$value];
 
@@ -136,11 +160,11 @@ class Query
     {
         return match (static::getMethodFromAlias($value)) {
             self::TYPE_EQUAL,
-            self::TYPE_NOTEQUAL,
+            self::TYPE_NOT_EQUAL,
             self::TYPE_LESSER,
-            self::TYPE_LESSEREQUAL,
+            self::TYPE_LESSER_EQUAL,
             self::TYPE_GREATER,
-            self::TYPE_GREATEREQUAL,
+            self::TYPE_GREATER_EQUAL,
             self::TYPE_CONTAINS,
             self::TYPE_SEARCH,
             self::TYPE_ORDERASC,
@@ -157,7 +181,6 @@ class Query
             self::TYPE_SELECT => true,
             default => false,
         };
-
     }
 
     /**
@@ -165,7 +188,7 @@ class Query
      *
      * @param string $filter
      * @return self
-     * @throws \Exception
+     * @throws Exception
      */
     public static function parse(string $filter): self
     {
@@ -175,6 +198,11 @@ class Query
 
         // Separate method from filter
         $paramsStart = mb_strpos($filter, static::CHAR_PARENTHESES_START);
+
+        if ($paramsStart === false) {
+            throw new QueryException('Invalid query');
+        }
+
         $method = mb_substr($filter, 0, $paramsStart);
 
         // Separate params from filter
@@ -183,7 +211,7 @@ class Query
 
         // Check for deprecated query syntax
         if (\str_contains($method, '.')) {
-            throw new \Exception("Invalid query method");
+            throw new QueryException('Invalid query method');
         }
 
         $currentParam = ""; // We build param here before pushing when it's ended
@@ -241,7 +269,7 @@ class Query
                     $stack[] = $char;
                     $stackCount++;
                     continue;
-                } else if ($char === static::CHAR_BRACKET_END) {
+                } elseif ($char === static::CHAR_BRACKET_END) {
                     // End of array
                     \array_pop($stack);
                     $stackCount--;
@@ -255,7 +283,7 @@ class Query
                     $currentParam = "";
 
                     continue;
-                } else if ($char === static::CHAR_COMMA) { // Params separation support
+                } elseif ($char === static::CHAR_COMMA) { // Params separation support
                     // If in array stack, dont merge yet, just mark it in array param builder
                     if ($isArrayStack) {
                         $currentArrayParam[] = $currentParam;
@@ -301,16 +329,15 @@ class Query
         $method = static::getMethodFromAlias($method);
         switch ($method) {
             case self::TYPE_EQUAL:
-            case self::TYPE_NOTEQUAL:
+            case self::TYPE_NOT_EQUAL:
             case self::TYPE_LESSER:
-            case self::TYPE_LESSEREQUAL:
+            case self::TYPE_LESSER_EQUAL:
             case self::TYPE_GREATER:
-            case self::TYPE_GREATEREQUAL:
+            case self::TYPE_GREATER_EQUAL:
             case self::TYPE_CONTAINS:
             case self::TYPE_SEARCH:
             case self::TYPE_IS_NULL:
             case self::TYPE_IS_NOT_NULL:
-            case self::TYPE_BETWEEN:
             case self::TYPE_STARTS_WITH:
             case self::TYPE_ENDS_WITH:
                 $attribute = $parsedParams[0] ?? '';
@@ -319,6 +346,8 @@ class Query
                 }
                 return new self($method, $attribute, \is_array($parsedParams[1]) ? $parsedParams[1] : [$parsedParams[1]]);
 
+            case self::TYPE_BETWEEN:
+                return new self($method, $parsedParams[0], [$parsedParams[1], $parsedParams[2]]);
             case self::TYPE_SELECT:
                 return new self($method, values: $parsedParams[0]);
             case self::TYPE_ORDERASC:
@@ -342,7 +371,7 @@ class Query
     /**
      * Utility method to only append symbol if relevant.
      *
-     * @param array $stack
+     * @param bool $isStringStack
      * @param string $char
      * @param int $index
      * @param string $filter
@@ -356,7 +385,7 @@ class Query
 
         if ($char === static::CHAR_SPACE) {
             $canBeIgnored = true;
-        } else if ($char === static::CHAR_COMMA) {
+        } elseif ($char === static::CHAR_COMMA) {
             $canBeIgnored = true;
         }
 
@@ -369,28 +398,28 @@ class Query
         }
     }
 
-    protected static function isQuote(string $char)
+    protected static function isQuote(string $char): bool
     {
         if ($char === self::CHAR_SINGLE_QUOTE) {
             return true;
-        } else if ($char === self::CHAR_DOUBLE_QUOTE) {
+        } elseif ($char === self::CHAR_DOUBLE_QUOTE) {
             return true;
         }
 
         return false;
     }
 
-    protected static function isSpecialChar(string $char)
+    protected static function isSpecialChar(string $char): bool
     {
         if ($char === static::CHAR_COMMA) {
             return true;
-        } else if ($char === static::CHAR_BRACKET_END) {
+        } elseif ($char === static::CHAR_BRACKET_END) {
             return true;
-        } else if ($char === static::CHAR_BRACKET_START) {
+        } elseif ($char === static::CHAR_BRACKET_START) {
             return true;
-        } else if ($char === static::CHAR_DOUBLE_QUOTE) {
+        } elseif ($char === static::CHAR_DOUBLE_QUOTE) {
             return true;
-        } else if ($char === static::CHAR_SINGLE_QUOTE) {
+        } elseif ($char === static::CHAR_SINGLE_QUOTE) {
             return true;
         }
 
@@ -409,14 +438,14 @@ class Query
 
         if ($value === 'false') { // Boolean value
             return false;
-        } else if ($value === 'true') {
+        } elseif ($value === 'true') {
             return true;
-        } else if ($value === 'null') { // Null value
+        } elseif ($value === 'null') { // Null value
             return null;
-        } else if (\is_numeric($value)) { // Numeric value
+        } elseif (\is_numeric($value)) { // Numeric value
             // Cast to number
             return $value + 0;
-        } else if (\str_starts_with($value, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($value, static::CHAR_SINGLE_QUOTE)) { // String param
+        } elseif (\str_starts_with($value, static::CHAR_DOUBLE_QUOTE) || \str_starts_with($value, static::CHAR_SINGLE_QUOTE)) { // String param
             $value = \substr($value, 1, -1); // Remove '' or ""
             return $value;
         }
@@ -431,7 +460,7 @@ class Query
      * @param string $method
      * @return string
      */
-    static protected function getMethodFromAlias(string $method): string
+    protected static function getMethodFromAlias(string $method): string
     {
         return $method;
         /*
@@ -449,6 +478,10 @@ class Query
 
     /**
      * Helper method to create Query with equal method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
      */
     public static function equal(string $attribute, array $values): self
     {
@@ -457,46 +490,70 @@ class Query
 
     /**
      * Helper method to create Query with notEqual method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function notEqual(string $attribute, $value): self
+    public static function notEqual(string $attribute, mixed $value): self
     {
-        return new self(self::TYPE_NOTEQUAL, $attribute, [$value]);
+        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with lessThan method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function lessThan(string $attribute, $value): self
+    public static function lessThan(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_LESSER, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with lessThanEqual method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function lessThanEqual(string $attribute, $value): self
+    public static function lessThanEqual(string $attribute, mixed $value): self
     {
-        return new self(self::TYPE_LESSEREQUAL, $attribute, [$value]);
+        return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with greaterThan method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function greaterThan(string $attribute, $value): self
+    public static function greaterThan(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_GREATER, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with greaterThanEqual method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function greaterThanEqual(string $attribute, $value): self
+    public static function greaterThanEqual(string $attribute, mixed$value): self
     {
-        return new self(self::TYPE_GREATEREQUAL, $attribute, [$value]);
+        return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value]);
     }
 
     /**
      * Helper method to create Query with contains method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
      */
     public static function contains(string $attribute, array $values): self
     {
@@ -505,6 +562,11 @@ class Query
 
     /**
      * Helper method to create Query with between method
+     *
+     * @param string $attribute
+     * @param mixed $start
+     * @param mixed $end
+     * @return Query
      */
     public static function between(string $attribute, mixed $start, mixed $end): self
     {
@@ -513,12 +575,22 @@ class Query
 
     /**
      * Helper method to create Query with search method
+     *
+     * @param string $attribute
+     * @param mixed $value
+     * @return Query
      */
-    public static function search(string $attribute, $value): self
+    public static function search(string $attribute, mixed $value): self
     {
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }
 
+    /**
+     * Helper method to create Query with select method
+     *
+     * @param array<string> $attributes
+     * @return Query
+     */
     public static function select(array $attributes): self
     {
         return new self(self::TYPE_SELECT, values: $attributes);
@@ -526,6 +598,9 @@ class Query
 
     /**
      * Helper method to create Query with orderDesc method
+     *
+     * @param string $attribute
+     * @return Query
      */
     public static function orderDesc(string $attribute): self
     {
@@ -534,6 +609,9 @@ class Query
 
     /**
      * Helper method to create Query with orderAsc method
+     *
+     * @param string $attribute
+     * @return Query
      */
     public static function orderAsc(string $attribute): self
     {
@@ -542,6 +620,9 @@ class Query
 
     /**
      * Helper method to create Query with limit method
+     *
+     * @param int $value
+     * @return Query
      */
     public static function limit(int $value): self
     {
@@ -550,6 +631,9 @@ class Query
 
     /**
      * Helper method to create Query with offset method
+     *
+     * @param int $value
+     * @return Query
      */
     public static function offset(int $value): self
     {
@@ -558,6 +642,9 @@ class Query
 
     /**
      * Helper method to create Query with cursorAfter method
+     *
+     * @param Document $value
+     * @return Query
      */
     public static function cursorAfter(Document $value): self
     {
@@ -566,17 +653,32 @@ class Query
 
     /**
      * Helper method to create Query with cursorBefore method
+     *
+     * @param Document $value
+     * @return Query
      */
     public static function cursorBefore(Document $value): self
     {
         return new self(self::TYPE_CURSORBEFORE, values: [$value]);
     }
 
+    /**
+     * Helper method to create Query with isNull method
+     *
+     * @param string $attribute
+     * @return Query
+     */
     public static function isNull(string $attribute): self
     {
         return new self(self::TYPE_IS_NULL, $attribute);
     }
 
+    /**
+     * Helper method to create Query with isNotNull method
+     *
+     * @param string $attribute
+     * @return Query
+     */
     public static function isNotNull(string $attribute): self
     {
         return new self(self::TYPE_IS_NOT_NULL, $attribute);
@@ -595,17 +697,16 @@ class Query
     /**
      * Filters $queries for $types
      *
-     * @param Query[] $queries
-     * @param string[] $types
-     *
-     * @return Query[]
+     * @param array<Query> $queries
+     * @param array<string> $types
+     * @return array<Query>
      */
-    public static function getByType(array $queries, string ...$types): array
+    public static function getByType(array $queries, array $types): array
     {
         $filtered = [];
         foreach ($queries as $query) {
             if (in_array($query->getMethod(), $types, true)) {
-                $filtered[] = $query;
+                $filtered[] = clone $query;
             }
         }
 
@@ -613,21 +714,19 @@ class Query
     }
 
     /**
-     * Iterates through $queries and returns an array with:
-     * - filters: array of filter queries
-     * - limit: int
-     * - offset: int
-     * - orderAttributes: array of attribute keys
-     * - orderTypes: array of Database::ORDER_ASC or Database::ORDER_DESC
-     * - cursor: Document
-     * - cursorDirection: Database::CURSOR_BEFORE or Database::CURSOR_AFTER
-     * 
-     * @param array $queries
-     * @param int $defaultLimit
-     * @param int $defaultOffset
-     * @param string $defaultCursorDirection
-     * 
-     * @return array
+     * Iterates through queries are groups them by type
+     *
+     * @param array<Query> $queries
+     * @return array{
+     *     filters: array<Query>,
+     *     selections: array<Query>,
+     *     limit: int|null,
+     *     offset: int|null,
+     *     orderAttributes: array<string>,
+     *     orderTypes: array<string>,
+     *     cursor: Document|null,
+     *     cursorDirection: string|null
+     * }
      */
     public static function groupByType(array $queries): array
     {
@@ -640,7 +739,9 @@ class Query
         $cursor = null;
         $cursorDirection = null;
         foreach ($queries as $query) {
-            if (!$query instanceof Query) continue;
+            if (!$query instanceof Query) {
+                continue;
+            }
 
             $method = $query->getMethod();
             $attribute = $query->getAttribute();
@@ -657,14 +758,18 @@ class Query
 
                 case Query::TYPE_LIMIT:
                     // keep the 1st limit encountered and ignore the rest
-                    if ($limit !== null) break;
+                    if ($limit !== null) {
+                        break;
+                    }
 
                     $limit = $values[0] ?? $limit;
                     break;
 
                 case Query::TYPE_OFFSET:
                     // keep the 1st offset encountered and ignore the rest
-                    if ($offset !== null) break;
+                    if ($offset !== null) {
+                        break;
+                    }
 
                     $offset = $values[0] ?? $limit;
                     break;
@@ -672,18 +777,20 @@ class Query
                 case Query::TYPE_CURSORAFTER:
                 case Query::TYPE_CURSORBEFORE:
                     // keep the 1st cursor encountered and ignore the rest
-                    if ($cursor !== null) break;
+                    if ($cursor !== null) {
+                        break;
+                    }
 
                     $cursor = $values[0] ?? $limit;
                     $cursorDirection = $method === Query::TYPE_CURSORAFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
                     break;
 
                 case Query::TYPE_SELECT:
-                    $selections[] = $query;
+                    $selections[] = clone $query;
                     break;
 
                 default:
-                    $filters[] = $query;
+                    $filters[] = clone $query;
                     break;
             }
         }
@@ -702,10 +809,11 @@ class Query
 
     /**
      * Iterate over $queries attempting to parse each
-     * 
-     * @param string[] $queries
-     * 
-     * @return Query[]
+     *
+     * @param array<string> $queries
+     *
+     * @return array<Query>
+     * @throws Exception
      */
     public static function parseQueries(array $queries): array
     {
@@ -714,7 +822,7 @@ class Query
             try {
                 $parsed[] = Query::parse($query);
             } catch (\Throwable $th) {
-                throw new Exception("Invalid query: ${query}", previous: $th);
+                throw new QueryException("Invalid query: ${query}", previous: $th);
             }
         }
 

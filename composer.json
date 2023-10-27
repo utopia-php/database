@@ -1,6 +1,6 @@
 {
     "name": "utopia-php/database",
-    "description": "A simple library to manage application persistency using multiple database adapters",
+    "description": "A simple library to manage application persistence using multiple database adapters",
     "type": "library",
     "keywords": ["php","framework", "upf", "utopia", "database"],
     "license": "MIT",
@@ -11,21 +11,41 @@
     "autoload-dev": {
         "psr-4": {"Utopia\\Tests\\": "tests/Database"}
     },
+    "scripts": {
+        "build": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose build"
+        ],
+        "start": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose up -d"
+        ],
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
+        ],
+        "lint": "./vendor/bin/pint --test",
+        "format": "./vendor/bin/pint",
+        "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M",
+        "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
+    },
     "require": {
+        "ext-pdo": "*",
+        "ext-mbstring": "*",
         "php": ">=8.0",
         "utopia-php/framework": "0.*.*",
         "utopia-php/cache": "0.8.*",
         "utopia-php/mongo": "0.3.*"
     },
     "require-dev": {
-        "ext-redis": "*",
-        "ext-mongodb": "*",
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
-        "mongodb/mongodb": "1.8.0",
+        "pcov/clobber": "^2.0",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.14.0",
-        "vimeo/psalm": "4.0.1"
+        "laravel/pint": "1.13.*",
+        "phpstan/phpstan": "1.10.*",
+        "rregeer/phpunit-coverage-check": "^0.3.1"
     },
     "suggests": {
         "ext-mongodb": "Needed to support MongoDB Database Adapter",

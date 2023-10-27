@@ -1016,7 +1016,10 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testCreateDocuments()
+    /**
+     * @return array<Document>
+     */
+    public function testCreateDocuments(): array
     {
         $count = 3;
         $collection = 'testCreateDocuments';
@@ -1473,8 +1476,9 @@ abstract class Base extends TestCase
 
     /**
      * @depends testCreateDocuments
+     * @param array<Document> $documents
      */
-    public function testUpdateDocuments(array $documents)
+    public function testUpdateDocuments(array $documents): void
     {
         $collection  = 'testCreateDocuments';
 

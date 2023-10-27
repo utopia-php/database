@@ -755,7 +755,7 @@ class MariaDB extends SQL
     }
 
     /**
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -767,7 +767,7 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, $batchSize);
+            $batches = \array_chunk($documents, max(1, $batchSize));
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -843,7 +843,7 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1057,7 +1057,7 @@ class MariaDB extends SQL
     }
 
     /**
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1069,7 +1069,7 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, $batchSize);
+            $batches = \array_chunk($documents, max(1, $batchSize));
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -1257,7 +1257,7 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }

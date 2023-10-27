@@ -769,7 +769,7 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, $batchSize);
+            $batches = \array_chunk($documents, max(1, $batchSize));
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -1060,7 +1060,7 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, $batchSize);
+            $batches = \array_chunk($documents, max(1, $batchSize));
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;

@@ -2726,13 +2726,14 @@ class Database
      * Create Documents in a batch
      *
      * @param string $collection
-     * @param Document $document
+     * @param array<Document> $documents
+     * @param int $batchSize
      *
-     * @return Document
+     * @return array<Document>
      *
      * @throws AuthorizationException
      * @throws StructureException
-     * @throws Exception|Throwable
+     * @throws Exception
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
     {
@@ -3214,11 +3215,19 @@ class Database
     }
 
     /**
+     * Update Documents in a batch
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     * 
      * @throws AuthorizationException
-     * @throws Throwable
+     * @throws Exception
      * @throws StructureException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
     {
         if (empty($documents)) {
             return [];

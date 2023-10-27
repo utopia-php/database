@@ -4275,10 +4275,10 @@ class Database
     /**
      * @param string $collection
      * @param array<Query> $queries
-     * @return bool|Document
+     * @return false|Document
      * @throws DatabaseException
      */
-    public function findOne(string $collection, array $queries = []): bool|Document
+    public function findOne(string $collection, array $queries = []): false|Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
             Query::limit(1)

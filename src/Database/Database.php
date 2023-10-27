@@ -3222,7 +3222,7 @@ class Database
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws AuthorizationException
      * @throws Exception
      * @throws StructureException

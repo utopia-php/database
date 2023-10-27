@@ -822,12 +822,12 @@ class SQLite extends MariaDB
                                 _document = :uid_{$index}
                                 AND _type = '{$type}'
                                 AND _permission IN (" . implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
-                                    $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
-                                    $removeBindKeys[] = ':' . $bindKey;
-                                    $removeBindValues[$bindKey] = $permissionsToRemove[$i];
+                                $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
+                                $removeBindKeys[] = ':' . $bindKey;
+                                $removeBindValues[$bindKey] = $permissionsToRemove[$i];
 
-                                    return ':' . $bindKey;
-                                }, \array_keys($permissionsToRemove))) .
+                                return ':' . $bindKey;
+                            }, \array_keys($permissionsToRemove))) .
                                 ")
                             )";
 

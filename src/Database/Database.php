@@ -2740,7 +2740,7 @@ class Database
             return [];
         }
 
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $time = DateTime::now();
 
@@ -2771,7 +2771,7 @@ class Database
 
         return $documents;
     }
-    
+
     /**
      * @param Document $collection
      * @param Document $document
@@ -3225,7 +3225,7 @@ class Database
         }
 
         $time = DateTime::now();
-        $collection = $this->silent(fn() => $this->getCollection($collection));
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         foreach ($documents as $document) {
             if (!$document->getId()) {
@@ -3235,9 +3235,11 @@ class Database
             $document->setAttribute('$updatedAt', $time);
             $document = $this->encode($collection, $document);
 
-            $old = Authorization::skip(fn() => $this->silent(fn() => $this->getDocument(
-                $collection->getId(),
-                $document->getId())
+            $old = Authorization::skip(fn () => $this->silent(
+                fn () => $this->getDocument(
+                    $collection->getId(),
+                    $document->getId()
+                )
             ));
 
             $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -3254,13 +3256,13 @@ class Database
 
         $documents = $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
 
-         foreach ($documents as $key => $document) {
-             $documents[$key] = $this->decode($collection, $document);
+        foreach ($documents as $key => $document) {
+            $documents[$key] = $this->decode($collection, $document);
 
-             $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
-         }
+            $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
+        }
 
-         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
+        $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
 
         return $documents;
     }

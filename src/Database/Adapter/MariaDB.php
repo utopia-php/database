@@ -811,7 +811,8 @@ class MariaDB extends SQL
                     }
                 }
 
-                $stmt = $this->getPDO()->prepare("
+                $stmt = $this->getPDO()->prepare(
+                    "
                     INSERT INTO {$this->getSQLTable($name)} {$columns}
                     VALUES " . \implode(', ', $batchKeys)
                 );
@@ -823,7 +824,8 @@ class MariaDB extends SQL
                 $stmt->execute();
 
                 if (!empty($permissions)) {
-                    $stmtPermissions = $this->getPDO()->prepare("
+                    $stmtPermissions = $this->getPDO()->prepare(
+                        "
                         INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
                         VALUES " . \implode(', ', $permissions)
                     );
@@ -1146,12 +1148,12 @@ class MariaDB extends SQL
                                 _document = :uid_{$index}
                                 AND _type = '{$type}'
                                 AND _permission IN (" . implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
-                                    $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
-                                    $removeBindKeys[] = ':' . $bindKey;
-                                    $removeBindValues[$bindKey] = $permissionsToRemove[$i];
+                                $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
+                                $removeBindKeys[] = ':' . $bindKey;
+                                $removeBindValues[$bindKey] = $permissionsToRemove[$i];
 
-                                    return ':' . $bindKey;
-                                }, \array_keys($permissionsToRemove))) .
+                                return ':' . $bindKey;
+                            }, \array_keys($permissionsToRemove))) .
                                 ")
                             )";
 

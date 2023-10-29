@@ -1452,8 +1452,7 @@ class MariaDB extends SQL
                 foreach ($query->getValue() as $q){
                     $conditions[] = $this->getSQLCondition($q);
                 }
-
-                return empty($condition) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';
+                return empty($conditions) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';;
 
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
@@ -1470,8 +1469,7 @@ class MariaDB extends SQL
                 foreach ($query->getValues() as $key => $value) {
                     $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
                 }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
+                return empty($conditions)? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }
 

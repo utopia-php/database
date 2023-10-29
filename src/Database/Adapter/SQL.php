@@ -934,30 +934,6 @@ abstract class SQL extends Adapter
         return 768;
     }
 
-///**
-// * @param $stmt
-// * @param Query[] $queries
-// * @return void
-// */
-//public function bindNestedConditionValue($stmt, array $queries = []){
-//    /** @var PDOStatement $stmt */
-//    foreach ($queries as $query) {
-//        if(is_array($query)){
-//            $this->bindNestedConditionValue($stmt, $query);
-//        }
-//        else {
-//            if ($query->getMethod() === Query::TYPE_SEARCH) continue;
-//            if ($query->getMethod() === Query::TYPE_OR){
-//                $this->bindNestedConditionValue($stmt, $query->getValues()); // Nested $queries are in values
-//            }else {
-//                foreach ($query->getValues() as $key => $value) {
-//                    $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-//                    $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-//                }
-//            }
-//        }
-//    }}
-
     public function getSQLConditions(array $queries = [], $separator = 'and'): string
     {
         $conditions = [];
@@ -970,11 +946,6 @@ abstract class SQL extends Adapter
             /* @var $query Query */
             if($query->getMethod() === Query::TYPE_OR){
                 $conditions[] = $this->getSQLConditions($query->getValue(), 'or');
-//                $tmp = [];
-//                foreach ($query->getValue() as $x){
-//                    $tmp[] = $this->getSQLConditions($x);
-//                }
-//                $conditions[] = implode(' OR ', $tmp);
             }
             else $conditions[] = $this->getSQLCondition($query);
         }

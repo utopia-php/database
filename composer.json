@@ -43,7 +43,7 @@
         "pcov/clobber": "^2.0",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.14.0",
-        "laravel/pint": "1.4.*",
+        "laravel/pint": "1.13.*",
         "phpstan/phpstan": "1.10.*",
         "rregeer/phpunit-coverage-check": "^0.3.1"
     },

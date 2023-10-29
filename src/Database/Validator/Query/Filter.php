@@ -196,10 +196,4 @@ class Filter extends Base
     {
         return self::METHOD_TYPE_FILTER;
     }
-
-
-    public function nested($queries): string
-    {
-
-    }
 }

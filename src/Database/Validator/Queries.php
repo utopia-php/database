@@ -51,8 +51,6 @@ class Queries extends Validator
             return false;
         }
 
-        $queries = [];
-
         foreach ($value as $query) {
             if (!$query instanceof Query) {
                 try {
@@ -68,8 +66,6 @@ class Queries extends Validator
                     return false;
                 }
             }
-
-           // $queries[] = $query;
 
             $method = $query->getMethod();
             $methodType = match ($method) {
@@ -115,17 +111,6 @@ class Queries extends Validator
                 return false;
             }
         }
-
-//        // todo: Is there a better way to assure or does not come first?
-//        // todo: what to do about and nested later on when comes first?
-//        $grouped = Query::groupByType($queries);
-//        $filters = $grouped['filters'];
-//        if(isset($filters[0])){
-//            if ($filters[0]->getMethod() === Query::TYPE_OR) {
-//                $this->message = \ucfirst($filters[0]->getMethod()) . ' query can not come first';
-//                return false;
-//            }
-//        }
 
         return true;
     }

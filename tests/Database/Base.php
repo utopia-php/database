@@ -2777,7 +2777,6 @@ abstract class Base extends TestCase
                 Query::equal('active', [true]),
                 Query::equal('name', ['Frozen II'])
         ]);
-
         $this->assertCount(4, static::getDatabase()->find('movies', [$query]));
         $this->assertEquals(4, static::getDatabase()->count('movies', [$query]));
 

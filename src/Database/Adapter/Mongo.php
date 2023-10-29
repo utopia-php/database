@@ -911,7 +911,7 @@ class Mongo extends Adapter
                 $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
             }
 
-            $filter_ext = [
+            $cursorFilters = [
                 [
                     $attribute => [
                         $this->getQueryOperator($orderOperator) => $cursor[$attribute]
@@ -922,16 +922,15 @@ class Mongo extends Adapter
                     '_id' => [
                         $this->getQueryOperator($orderOperatorInternalId) => new ObjectId($cursor['$internalId'])
                     ]
-
                 ],
             ];
 
             $filters = [
-                '$and' => [$filters, ['$or' => $filter_ext]]
+                '$and' => [$filters, ['$or' => $cursorFilters]]
             ];
         }
 
-        $filters = $this->recursiveReplace($filters, '$', '_', $this->operators);
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
         /**
          * @var array<Document>
@@ -1047,7 +1046,7 @@ class Mongo extends Adapter
      * @param array<string> $exclude
      * @return array<string, mixed>
      */
-    private function recursiveReplace(array $array, string $from, string $to, array $exclude = []): array
+    private function replaceInternalIdsKeys(array $array, string $from, string $to, array $exclude = []): array
     {
         $result = [];
 
@@ -1057,7 +1056,7 @@ class Mongo extends Adapter
             }
 
             $result[$key] = is_array($value)
-                ? $this->recursiveReplace($value, $from, $to, $exclude)
+                ? $this->replaceInternalIdsKeys($value, $from, $to, $exclude)
                 : $value;
         }
 
@@ -1235,75 +1234,82 @@ class Mongo extends Adapter
     }
 
     /**
-     * Build mongo filters from array of $queries
-     *
-     * @param array<Query> $queries
-     *
-     * @return array<string, mixed>
+     * @param array $queries
+     * @param string $separator
+     * @return array
      * @throws Exception
      */
-    protected function buildFilters(array $queries): array
+    protected function buildFilters(array $queries, string $separator = '$and'): array
     {
         $filters = [];
-
+        $queries = Query::groupByType($queries)['filters'];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
+            /* @var $query Query */
+            if($query->getMethod() === Query::TYPE_OR){
+                $filters[$separator][] = $this->buildFilters($query->getValue(), '$or');
             }
-
-            if ($query->getMethod() === Query::TYPE_OR) {
-                $filters['$or'][] = $this->buildFilters($query->getValue());
-                continue;
-            }
-
-            if ($query->getAttribute() === '$id') {
-                $query->setAttribute('_uid');
-            } elseif ($query->getAttribute() === '$internalId') {
-                $query->setAttribute('_id');
-                $values = $query->getValues();
-                foreach ($values as &$value) {
-                    $value = new ObjectId($value);
-                }
-                $query->setValues($values);
-            } elseif ($query->getAttribute() === '$createdAt') {
-                $query->setAttribute('_createdAt');
-            } elseif ($query->getAttribute() === '$updatedAt') {
-                $query->setAttribute('_updatedAt');
-            }
-
-            $attribute = $query->getAttribute();
-            $operator = $this->getQueryOperator($query->getMethod());
-
-            unset($value);
-
-            $value = match ($query->getMethod()) {
-                Query::TYPE_IS_NULL,
-                Query::TYPE_IS_NOT_NULL => null,
-                default => $this->getQueryValue(
-                    $query->getMethod(),
-                    count($query->getValues()) > 1
-                        ? $query->getValues()
-                        : $query->getValues()[0]
-                ),
-            };
-
-            if ($operator == '$eq' && \is_array($value)) {
-                $filters[$attribute]['$in'] = $value;
-            } elseif ($operator == '$ne' && \is_array($value)) {
-                $filters[$attribute]['$nin'] = $value;
-            } elseif ($operator == '$in') {
-                $filters[$attribute]['$in'] = $query->getValues();
-            } elseif ($operator == '$search') {
-                $filters['$text'][$operator] = $value;
-            } elseif ($operator === Query::TYPE_BETWEEN) {
-                $filters[$attribute]['$lte'] = $value[1];
-                $filters[$attribute]['$gte'] = $value[0];
-            } else {
-                $filters[$attribute][$operator] = $value;
-            }
+            else $filters[$separator][] = $this->buildFilter($query);
         }
 
         return $filters;
+    }
+
+    /**
+     * @param Query $query
+     * @return array
+     * @throws Exception
+     */
+    protected function buildFilter(Query $query): array
+    {
+        if ($query->getAttribute() === '$id') {
+            $query->setAttribute('_uid');
+        } elseif ($query->getAttribute() === '$internalId') {
+            $query->setAttribute('_id');
+            $values = $query->getValues();
+            foreach ($values as &$value) {
+                $value = new ObjectId($value);
+            }
+            $query->setValues($values);
+        } elseif ($query->getAttribute() === '$createdAt') {
+            $query->setAttribute('_createdAt');
+        } elseif ($query->getAttribute() === '$updatedAt') {
+            $query->setAttribute('_updatedAt');
+        }
+
+        $attribute = $query->getAttribute();
+        $operator = $this->getQueryOperator($query->getMethod());
+        unset($value);
+
+        $value = match ($query->getMethod()) {
+            Query::TYPE_IS_NULL,
+            Query::TYPE_IS_NOT_NULL => null,
+            default => $this->getQueryValue(
+                $query->getMethod(),
+                count($query->getValues()) > 1
+                    ? $query->getValues()
+                    : $query->getValues()[0]
+            ),
+        };
+
+        $filter = [];
+
+        if ($operator == '$eq' && \is_array($value)) {
+            $filter[$attribute]['$in'] = $value;
+        } elseif ($operator == '$ne' && \is_array($value)) {
+            $filter[$attribute]['$nin'] = $value;
+        } elseif ($operator == '$in') {
+            $filter[$attribute]['$in'] = $query->getValues();
+        } elseif ($operator == '$search') {
+            $filter['$text'][$operator] = $value;
+        } elseif ($operator === Query::TYPE_BETWEEN) {
+            $filter[$attribute]['$lte'] = $value[1];
+            $filter[$attribute]['$gte'] = $value[0];
+        }
+        else {
+            $filter[$attribute][$operator] = $value;
+        }
+
+        return $filter;
     }
 
     /**

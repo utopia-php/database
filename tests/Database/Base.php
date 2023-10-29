@@ -129,7 +129,10 @@ abstract class Base extends TestCase
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
-            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes, [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
@@ -221,13 +224,14 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
-    public function testQueryTimeoutUsingStaticTimeout(): void
+
+    public function testQueryTimeout(): void
     {
         if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             static::getDatabase()->createCollection('global-timeouts');
             $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-            for ($i = 0 ; $i <= 5 ; $i++) {
+            for ($i = 0 ; $i <= 20 ; $i++) {
                 static::getDatabase()->createDocument('global-timeouts', new Document([
                     'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
                     '$permissions' => [
@@ -239,6 +243,7 @@ abstract class Base extends TestCase
             }
 
             $this->expectException(Timeout::class);
+
             static::getDatabase()->setTimeout(1);
 
             try {
@@ -251,28 +256,38 @@ abstract class Base extends TestCase
                 throw $ex;
             }
         }
+
         $this->expectNotToPerformAssertions();
     }
-
 
     /**
      * @depends testCreateExistsDelete
      */
     public function testCreateListExistsDeleteCollection(): void
     {
-        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
-        $this->assertCount(2, static::getDatabase()->listCollections());
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $this->assertCount(1, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
-        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2'));
-        $this->assertCount(3, static::getDatabase()->listCollections());
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors2', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $this->assertCount(2, static::getDatabase()->listCollections());
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors2'));
         $collection = static::getDatabase()->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
-        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument($collection->getCollection(), $collection->getId(), $collection));
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->updateDocument(
+            $collection->getCollection(),
+            $collection->getId(),
+            $collection
+        ));
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors2')); // Delete collection when finished
-        $this->assertCount(2, static::getDatabase()->listCollections());
+        $this->assertCount(1, static::getDatabase()->listCollections());
 
         $this->assertEquals(false, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
@@ -2653,33 +2668,6 @@ abstract class Base extends TestCase
         ]);
     }
 
-    public function testTimeout(): void
-    {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            static::getDatabase()->createCollection('timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 5 ; $i++) {
-                static::getDatabase()->createDocument('timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(Timeout::class);
-
-            static::getDatabase()->find('timeouts', [
-                Query::notEqual('longtext', 'appwrite'),
-            ], 1);
-        }
-
-        $this->expectNotToPerformAssertions();
-    }
-
     /**
      * @depends testUpdateDocument
      */
@@ -3520,13 +3508,13 @@ abstract class Base extends TestCase
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
         ];
-        for ($i=1; $i < 6; $i++) {
+        for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permissions);
         }
 
         for ($i = 1; $i < 5; $i++) {
             $collectionId = $i;
-            $relatedCollectionId = $i+1;
+            $relatedCollectionId = $i + 1;
             static::getDatabase()->createRelationship(
                 collection: "level{$collectionId}",
                 relatedCollection: "level{$relatedCollectionId}",
@@ -3588,7 +3576,7 @@ abstract class Base extends TestCase
         $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);
         $this->assertEquals('updated value', $level1['level2']['level3']['name']);
 
-        for ($i=1; $i < 6; $i++) {
+        for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->deleteCollection("level{$i}");
         }
     }
@@ -3754,7 +3742,7 @@ abstract class Base extends TestCase
      */
     public function testCheckAttributeWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
     {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit()> 0) {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
             $collection = static::getDatabase()->getCollection("widthLimit{$key}");
 
             // create same attribute in testExceptionWidthLimit
@@ -4209,7 +4197,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', default: 100);
         $collection = $database->getCollection('flowers');
@@ -4221,7 +4209,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRange', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: 'priceRangeNew');
         $collection = $database->getCollection('flowers');
@@ -4233,7 +4221,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('priceRangeNew', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', format: '');
         $collection = $database->getCollection('flowers');
@@ -4245,7 +4233,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>10000], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 10000], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: ['min' => 1, 'max' => 999]);
         $collection = $database->getCollection('flowers');
@@ -4257,7 +4245,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $attribute['array']);
         $this->assertEquals(false, $attribute['required']);
         $this->assertEquals('', $attribute['format']);
-        $this->assertEquals(['min'=>1, 'max'=>999], $attribute['formatOptions']);
+        $this->assertEquals(['min' => 1, 'max' => 999], $attribute['formatOptions']);
 
         $database->updateAttribute('flowers', 'price', formatOptions: []);
         $collection = $database->getCollection('flowers');
@@ -12400,6 +12388,19 @@ abstract class Base extends TestCase
         $this->assertCount(1, $documents);
     }
 
+    public function testMetadata(): void
+    {
+        static::getDatabase()->setMetadata('key', 'value');
+
+        static::getDatabase()->createCollection('testers');
+
+        $this->assertEquals(['key' => 'value'], static::getDatabase()->getMetadata());
+
+        static::getDatabase()->resetMetadata();
+
+        $this->assertEquals([], static::getDatabase()->getMetadata());
+    }
+
     public function testEmptyOperatorValues(): void
     {
         try {
@@ -12481,6 +12482,31 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
+    }
+
+    public function testTransformations(): void
+    {
+        static::getDatabase()->createCollection('docs', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ]);
+
+        static::getDatabase()->createDocument('docs', new Document([
+            '$id' => 'doc1',
+            'name' => 'value1',
+        ]));
+
+        static::getDatabase()->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
+            return "SELECT 1";
+        });
+
+        $result = static::getDatabase()->getDocument('docs', 'doc1');
+
+        $this->assertTrue($result->isEmpty());
     }
 
     public function testEvents(): void

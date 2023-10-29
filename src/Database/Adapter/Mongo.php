@@ -42,6 +42,8 @@ class Mongo extends Adapter
 
     protected Client $client;
 
+    protected ?int $timeout = null;
+
     /**
      * Constructor.
      *
@@ -812,13 +814,12 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -838,8 +839,8 @@ class Mongo extends Adapter
             $options['skip'] = $offset;
         }
 
-        if ($timeout || self::$timeout) {
-            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
         }
 
         $selections = $this->getAttributeSelections($queries);
@@ -977,7 +978,7 @@ class Mongo extends Adapter
         foreach ($filters as $k => $v) {
             if ($k === '_createdAt' || $k == '_updatedAt') {
                 if (is_array($v)) {
-                    foreach ($v as $sk=>$sv) {
+                    foreach ($v as $sk => $sv) {
                         $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
                 } else {
@@ -1074,7 +1075,7 @@ class Mongo extends Adapter
      * @return int
      * @throws Exception
      */
-    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1086,8 +1087,8 @@ class Mongo extends Adapter
             $options['limit'] = $max;
         }
 
-        if ($timeout || self::$timeout) {
-            $options['maxTimeMS'] = $timeout ? $timeout : self::$timeout;
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
         }
 
         // queries
@@ -1113,15 +1114,9 @@ class Mongo extends Adapter
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $collection = $this->getDatabase()->selectCollection($name);
-        // todo $collection is not used?
-
-        // todo add $timeout for aggregate in Mongo utopia client
-
-        $filters = [];
 
         // queries
         $filters = $this->buildFilters($queries);
@@ -1717,5 +1712,20 @@ class Mongo extends Adapter
     public function getMaxIndexLength(): int
     {
         return 0;
+    }
+
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+        $this->timeout = $milliseconds;
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        parent::clearTimeout($event);
+
+        $this->timeout = null;
     }
 }

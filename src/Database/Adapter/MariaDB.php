@@ -5,11 +5,11 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -27,8 +27,12 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
+        $sql = "CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
+
+        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
+
         return $this->getPDO()
-            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -44,8 +48,12 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
+        $sql = "DROP DATABASE `{$name}`;";
+
+        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("DROP DATABASE `{$name}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -103,33 +111,45 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
         }
 
+        $sql = "
+			CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
+				`_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+				`_uid` VARCHAR(255) NOT NULL,
+				`_createdAt` datetime(3) DEFAULT NULL,
+				`_updatedAt` datetime(3) DEFAULT NULL,
+				`_permissions` MEDIUMTEXT DEFAULT NULL,
+				" . \implode(' ', $attributeStrings) . "
+				PRIMARY KEY (`_id`),
+				" . \implode(' ', $indexStrings) . "
+				UNIQUE KEY `_uid` (`_uid`),
+				KEY `_created_at` (`_createdAt`),
+				KEY `_updated_at` (`_updatedAt`)
+			)
+		";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+
         try {
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_uid` VARCHAR(255) NOT NULL,
-                        `_createdAt` datetime(3) DEFAULT NULL,
-                        `_updatedAt` datetime(3) DEFAULT NULL,
-                        `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributeStrings) . "
-                        PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexStrings) . "
-                        UNIQUE KEY `_uid` (`_uid`),
-                        KEY `_created_at` (`_createdAt`),
-                        KEY `_updated_at` (`_updatedAt`)
-                    )")
+                ->prepare($sql)
                 ->execute();
 
+            $sql = "
+				CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
+					`_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+					`_type` VARCHAR(12) NOT NULL,
+					`_permission` VARCHAR(255) NOT NULL,
+					`_document` VARCHAR(255) NOT NULL,
+					PRIMARY KEY (`_id`),
+					UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
+					INDEX `_permission` (`_permission`,`_type`,`_document`)
+				)
+			";
+
+            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_type` VARCHAR(12) NOT NULL,
-                        `_permission` VARCHAR(255) NOT NULL,
-                        `_document` VARCHAR(255) NOT NULL,
-                        PRIMARY KEY (`_id`),
-                        UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`,`_type`,`_document`)
-                    )")
+                ->prepare($sql)
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
@@ -138,7 +158,6 @@ class MariaDB extends SQL
             throw $th;
         }
 
-        // Update $this->getCountOfIndexes when adding another default index
         return true;
     }
 
@@ -193,8 +212,12 @@ class MariaDB extends SQL
     {
         $id = $this->filter($id);
 
+        $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -221,8 +244,11 @@ class MariaDB extends SQL
             $type = 'LONGTEXT';
         }
 
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -249,8 +275,12 @@ class MariaDB extends SQL
             $type = 'LONGTEXT';
         }
 
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -269,8 +299,12 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -290,8 +324,12 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -340,6 +378,8 @@ class MariaDB extends SQL
             default:
                 throw new DatabaseException('Invalid relationship type');
         }
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         return $this->getPDO()
             ->prepare($sql)
@@ -424,6 +464,8 @@ class MariaDB extends SQL
             return true;
         }
 
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
@@ -490,6 +532,8 @@ class MariaDB extends SQL
             return true;
         }
 
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
@@ -510,8 +554,12 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;";
+
+        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -553,8 +601,12 @@ class MariaDB extends SQL
             $attributes[$key] = "`{$attribute}`{$length} {$order}";
         }
 
+        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+
+        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
+
         return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+            ->prepare($sql)
             ->execute();
     }
 
@@ -572,8 +624,12 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;";
+
+        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -585,7 +641,7 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -598,7 +654,11 @@ class MariaDB extends SQL
         $columns = '';
         $columnNames = '';
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /**
          * Insert Attributes
@@ -619,9 +679,14 @@ class MariaDB extends SQL
             $columnNames .= ':' . $bindKey . ', ';
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getSQLTable($name)}
-                ({$columns}_uid) VALUES ({$columnNames}:_uid)");
+        $sql = "
+			INSERT INTO {$this->getSQLTable($name)}({$columns} _uid)
+			VALUES ({$columnNames} :_uid)
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
@@ -652,8 +717,14 @@ class MariaDB extends SQL
         }
 
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+            $strPermissions = \implode(', ', $permissions);
+
+            $sqlPermissions = "
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
+				VALUES {$strPermissions}
+			";
+            $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
+            $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
         }
 
         try {
@@ -669,7 +740,7 @@ class MariaDB extends SQL
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
 
                 default:
                     throw $e;
@@ -691,7 +762,7 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -703,18 +774,22 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $columns = '';
 
+        $sql = "
+			SELECT _type, _permission
+			FROM {$this->getSQLTable($name . '_perms')} p
+			WHERE p._document = :_uid
+		";
+
+        $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+
         /**
          * Get current permissions from the database
          */
-        $permissionsStmt = $this->getPDO()->prepare("
-                SELECT _type, _permission
-                FROM {$this->getSQLTable($name . '_perms')} p
-                WHERE p._document = :_uid
-        ");
-        $permissionsStmt->bindValue(':_uid', $document->getId());
-        $permissionsStmt->execute();
-        $permissions = $permissionsStmt->fetchAll();
-        $permissionsStmt->closeCursor();
+        $sqlPermissions = $this->getPDO()->prepare($sql);
+        $sqlPermissions->bindValue(':_uid', $document->getId());
+        $sqlPermissions->execute();
+        $permissions = $sqlPermissions->fetchAll();
+        $sqlPermissions->closeCursor();
 
         $initial = [];
         foreach (Database::PERMISSIONS as $type) {
@@ -727,7 +802,11 @@ class MariaDB extends SQL
             return $carry;
         }, $initial);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
         /**
          * Get removed Permissions
@@ -769,14 +848,17 @@ class MariaDB extends SQL
         }
         if (!empty($removeQuery)) {
             $removeQuery .= ')';
-            $stmtRemovePermissions = $this->getPDO()
-                ->prepare("
-                DELETE
+            $removeQuery = "
+				DELETE
                 FROM {$this->getSQLTable($name . '_perms')}
                 WHERE
                     _document = :_uid
                     {$removeQuery}
-            ");
+			";
+
+            $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
+
+            $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
             foreach ($removals as $type => $permissions) {
@@ -797,12 +879,14 @@ class MariaDB extends SQL
                 }
             }
 
-            $stmtAddPermissions = $this->getPDO()
-                ->prepare(
-                    "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')}
-                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
-                );
+            $sql = "
+				INSERT INTO {$this->getSQLTable($name . '_perms')}
+				(_document, _type, _permission) VALUES " . \implode(', ', $values)
+            ;
+
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
+
+            $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
             foreach ($additions as $type => $permissions) {
@@ -824,9 +908,15 @@ class MariaDB extends SQL
             $bindIndex++;
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+        $sql = "
+			UPDATE {$this->getSQLTable($name)}
+			SET {$columns} _uid = :_uid 
+			WHERE _uid = :_uid
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $document->getId());
 
@@ -845,6 +935,7 @@ class MariaDB extends SQL
 
         try {
             $stmt->execute();
+
             if (isset($stmtRemovePermissions)) {
                 $stmtRemovePermissions->execute();
             }
@@ -856,7 +947,7 @@ class MariaDB extends SQL
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
 
                 default:
                     throw $e;
@@ -887,10 +978,20 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? " AND `{$attribute}` <= {$max}" : "";
-        $sqlMin = $min ? " AND `{$attribute}` >= {$min}" : "";
+        $sqlMax = $max ? " AND `{$attribute}` <= {$max}" : '';
+        $sqlMin = $min ? " AND `{$attribute}` >= {$min}" : '';
 
-        $sql = "UPDATE {$this->getSQLTable($name)} SET `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
+        $sql = "
+			UPDATE {$this->getSQLTable($name)} 
+			SET `{$attribute}` = `{$attribute}` + :val 
+			WHERE 
+			    _uid = :_uid 
+				{$sqlMax}
+				{$sqlMin}	
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
@@ -912,17 +1013,40 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
 
-        $this->getPDO()->beginTransaction();
+        try {
+            $this->getPDO()->beginTransaction();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+        }
 
-        $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name)} WHERE _uid = :_uid");
+        $sql = "
+		    DELETE FROM {$this->getSQLTable($name)} 
+		    WHERE _uid = :_uid
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
         $stmt->bindValue(':_uid', $id);
 
-        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid");
+        $sql = "
+			DELETE FROM {$this->getSQLTable($name . '_perms')} 
+		    WHERE _document = :_uid
+		";
+
+        $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+
+        $stmtPermissions = $this->getPDO()->prepare($sql);
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
-            $stmt->execute() || throw new DatabaseException('Failed to delete document');
-            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
+            if (!$stmt->execute()) {
+                throw new DatabaseException('Failed to delete document');
+            }
+            if (!$stmtPermissions->execute()) {
+                throw new DatabaseException('Failed to clean permissions');
+            }
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
             throw new DatabaseException($th->getMessage());
@@ -946,12 +1070,11 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      * @return array<Document>
      * @throws DatabaseException
-     * @throws Timeout
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1056,11 +1179,10 @@ class MariaDB extends SQL
             {$sqlLimit};
         ";
 
-        if ($timeout || static::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : static::$timeout);
-        }
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
+
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
@@ -1076,7 +1198,7 @@ class MariaDB extends SQL
                 default => $attribute
             };
 
-            if (is_null($cursor[$attribute] ?? null)) {
+            if (\is_null($cursor[$attribute] ?? null)) {
                 throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
@@ -1124,7 +1246,7 @@ class MariaDB extends SQL
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results);
+            $results = \array_reverse($results);
         }
 
         return $results;
@@ -1140,7 +1262,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1156,21 +1278,23 @@ class MariaDB extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        $sql = "SELECT COUNT(1) as sum
-            FROM
-                (
-                    SELECT 1
-                    FROM {$this->getSQLTable($name)} table_main
-                    " . $sqlWhere . "
-                    {$limit}
-                ) table_count
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT COUNT(1) as sum FROM (
+				SELECT 1
+				FROM {$this->getSQLTable($name)} table_main
+				" . $sqlWhere . "
+				{$limit}
+			) table_count
         ";
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
-        }
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
+
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
@@ -1201,7 +1325,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): int|float
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1216,19 +1340,20 @@ class MariaDB extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
-        $sql = "SELECT SUM({$attribute}) as sum
-            FROM 
-                (
-                    SELECT {$attribute}
-                    FROM {$this->getSQLTable($name)} table_main
-                    " . $sqlWhere . "
-                    {$limit}
-                ) table_count
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT SUM({$attribute}) as sum FROM (
+				SELECT {$attribute}
+				FROM {$this->getSQLTable($name)} table_main
+				{$sqlWhere}
+				{$limit}
+			) table_count
         ";
-        if ($timeout || self::$timeout) {
-            $sql = $this->setTimeoutForQuery($sql, $timeout ? $timeout : self::$timeout);
-        }
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -1466,35 +1591,42 @@ class MariaDB extends SQL
     }
 
     /**
-     * Returns Max Execution Time
-     * @param string $sql
+     * Set max execution time
      * @param int $milliseconds
-     * @return string
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
      */
-    protected function setTimeoutForQuery(string $sql, int $milliseconds): string
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
-            return $sql;
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
         }
 
         $seconds = $milliseconds / 1000;
-        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+
+        $this->before($event, 'timeout', function ($sql) use ($seconds) {
+            return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+        });
     }
 
     /**
      * @param PDOException $e
-     * @throws Timeout
+     * @throws TimeoutException
      */
     protected function processException(PDOException $e): void
     {
         // Regular PDO
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         throw $e;

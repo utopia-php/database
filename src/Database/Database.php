@@ -10,9 +10,10 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -114,6 +115,10 @@ class Database
     public const EVENT_DOCUMENT_SUM = 'document_sum';
     public const EVENT_DOCUMENT_INCREASE = 'document_increase';
     public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
+
+    public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
+    public const EVENT_PERMISSIONS_READ = 'permissions_read';
+    public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -266,7 +271,7 @@ class Database
     /**
      * @var array<string, array{encode: callable, decode: callable}>
      */
-    private array $instanceFilters = [];
+    protected array $instanceFilters = [];
 
     /**
      * @var array<string, mixed>
@@ -392,6 +397,7 @@ class Database
      * Add listener to events
      *
      * @param string $event
+     * @param string $name
      * @param callable $callback
      * @return self
      */
@@ -401,6 +407,22 @@ class Database
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][$name] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Add a transformation to be applied to a query string before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param callable $callback
+     * @return $this
+     */
+    public function before(string $event, string $name, callable $callback): self
+    {
+        $this->adapter->before($event, $name, $callback);
+
         return $this;
     }
 
@@ -468,14 +490,14 @@ class Database
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
 
         foreach (($this->listeners[$event] ?? []) as $name => $callback) {
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
     }
 
@@ -557,6 +579,64 @@ class Database
     public function getDefaultDatabase(): string
     {
         return $this->adapter->getDefaultDatabase();
+    }
+
+    /**
+     * Set a metadata value to be printed in the query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return self
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->adapter->setMetadata($key, $value);
+
+        return $this;
+    }
+
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->adapter->getMetadata();
+    }
+
+    /**
+     * Clear metadata
+     *
+     * @return void
+     */
+    public function resetMetadata(): void
+    {
+        $this->adapter->resetMetadata();
+    }
+
+    /**
+     * Set maximum query execution time
+     *
+     * @param int $milliseconds
+     * @param string $event
+     * @return void
+     * @throws Exception
+     */
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        $this->adapter->setTimeout($milliseconds, $event);
+    }
+
+    /**
+     * Clear maximum query execution time
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event = Database::EVENT_ALL): void
+    {
+        $this->adapter->clearTimeout($event);
     }
 
     /**
@@ -796,14 +876,10 @@ class Database
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
-        Authorization::disable();
-
         $result = $this->silent(fn () => $this->find(self::METADATA, [
             Query::limit($limit),
             Query::offset($offset)
         ]));
-
-        Authorization::reset();
 
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
@@ -4049,17 +4125,14 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $timeout = null): array
+    public function find(string $collection, array $queries = []): array
     {
-        if (!\is_null($timeout) && $timeout <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-
         $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4079,8 +4152,8 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getRead());
 
-        if (!$skipAuth && !$documentSecurity) {
-            throw new AuthorizationException($validator->getDescription());
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
         }
 
         $relationships = \array_filter(
@@ -4163,8 +4236,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
-            $timeout
+            $cursorDirection ?? Database::CURSOR_AFTER
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
@@ -4205,10 +4277,10 @@ class Database
     /**
      * @param string $collection
      * @param array<Query> $queries
-     * @return bool|Document
+     * @return false|Document
      * @throws DatabaseException
      */
-    public function findOne(string $collection, array $queries = []): bool|Document
+    public function findOne(string $collection, array $queries = []): false|Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
             Query::limit(1)
@@ -4303,15 +4375,6 @@ class Database
         return $sum;
     }
 
-    public function setTimeout(int $milliseconds): void
-    {
-        $this->adapter->setTimeout($milliseconds);
-    }
-
-    public function clearTimeout(): void
-    {
-        $this->adapter->clearTimeout();
-    }
     /**
      * Add Attribute Filter
      *
@@ -4690,6 +4753,26 @@ class Database
     public function getAdapter(): Adapter
     {
         return $this->adapter;
+    }
+
+    /**
+     * Get Cache
+     *
+     * @return Cache
+     */
+    public function getCache(): Cache
+    {
+        return $this->cache;
+    }
+
+    /**
+     * Get instance filters
+     *
+     * @return array<string, array{encode: callable, decode: callable}>
+     */
+    public function getInstanceFilters(): array
+    {
+        return $this->instanceFilters;
     }
 
     /**

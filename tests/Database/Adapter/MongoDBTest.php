@@ -54,6 +54,11 @@ class MongoDBTest extends Base
         $database = new Database(new Mongo($client), $cache);
         $database->setDefaultDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
+
+        if ($database->exists('utopiaTests')) {
+            $database->delete('utopiaTests');
+        }
+
         $database->create();
 
         return self::$database = $database;

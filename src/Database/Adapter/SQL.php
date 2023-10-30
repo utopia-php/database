@@ -934,7 +934,20 @@ abstract class SQL extends Adapter
         return 768;
     }
 
-    public function getSQLConditions(array $queries = [], $separator = 'and'): string
+    /**
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    abstract protected function getSQLCondition(Query $query): string;
+
+    /**
+     * @param array<Query> $queries
+     * @param string $separator
+     * @return string
+     * @throws Exception
+     */
+    public function getSQLConditions(array $queries = [], string $separator = 'and'): string
     {
         $conditions = [];
         foreach ($queries as $query) {

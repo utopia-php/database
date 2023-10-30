@@ -1229,9 +1229,9 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param array $queries
+     * @param array<Query> $queries
      * @param string $separator
-     * @return array
+     * @return array<mixed>
      * @throws Exception
      */
     protected function buildFilters(array $queries, string $separator = '$and'): array
@@ -1252,7 +1252,7 @@ class Mongo extends Adapter
 
     /**
      * @param Query $query
-     * @return array
+     * @return array<mixed>
      * @throws Exception
      */
     protected function buildFilter(Query $query): array
@@ -1262,8 +1262,8 @@ class Mongo extends Adapter
         } elseif ($query->getAttribute() === '$internalId') {
             $query->setAttribute('_id');
             $values = $query->getValues();
-            foreach ($values as &$value) {
-                $value = new ObjectId($value);
+            foreach ($values as $k => $v) {
+                $values[$k] = new ObjectId($v);
             }
             $query->setValues($values);
         } elseif ($query->getAttribute() === '$createdAt') {
@@ -1274,7 +1274,6 @@ class Mongo extends Adapter
 
         $attribute = $query->getAttribute();
         $operator = $this->getQueryOperator($query->getMethod());
-        unset($value);
 
         $value = match ($query->getMethod()) {
             Query::TYPE_IS_NULL,

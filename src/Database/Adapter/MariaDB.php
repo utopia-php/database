@@ -1453,7 +1453,6 @@ class MariaDB extends SQL
                     $conditions[] = $this->getSQLCondition($q);
                 }
                 return empty($conditions) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';
-                ;
 
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";

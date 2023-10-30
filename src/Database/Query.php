@@ -193,11 +193,6 @@ class Query
      */
     public static function parse(string $filter): self
     {
-        if(substr($filter, 0, 3) === 'or(') {
-            var_dump('Found or operation !!!!!!!!!!!');
-            var_dump($filter);
-        }
-
         // Init empty vars we fill later
         $method = '';
         $params = [];
@@ -370,6 +365,12 @@ class Query
                 return new self($method);
 
             case self::TYPE_OR:
+
+                if(substr($filter, 0, 3) === 'or(') {
+                    var_dump('Found or operation !!!!!!!!!!!');
+                    var_dump($filter);
+                }
+
                 var_dump('src/Database/Query.php');
                 var_dump($method);
                 var_dump($parsedParams);

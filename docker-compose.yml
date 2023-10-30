@@ -14,7 +14,7 @@ services:
       - ./src:/usr/src/code/src
       - ./tests:/usr/src/code/tests
       - ./phpunit.xml:/usr/src/code/phpunit.xml
-      - ./vendor/utopia-php/mongo:/usr/src/code/vendor/utopia-php/mongo
+      #- ./vendor/utopia-php/mongo:/usr/src/code/vendor/utopia-php/mongo
     ports:
       - "8708:8708"
 

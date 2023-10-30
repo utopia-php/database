@@ -98,10 +98,7 @@ class FilterTest extends TestCase
     {
         // todo: How to parse or queries
 
-        $q = Query::parse('or([
-            search("attr", ["American pie"]),
-            equal("attr", [])
-        ])');
+        $q = Query::parse('or([search("attr", ["American pie"]), equal("attr", [])])');
 
         var_dump($q);
 

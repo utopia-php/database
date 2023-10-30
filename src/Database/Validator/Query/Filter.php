@@ -175,12 +175,12 @@ class Filter extends Base
             case Query::TYPE_OR:
                 $filters = Query::groupByType($value->getValue())['filters'];
 
-                if(count($value->getValue()) !== count($filters)){
+                if(count($value->getValue()) !== count($filters)) {
                     $this->message = \ucfirst($method) . ' queries requires only filters';
                     return false;
                 }
 
-                if(count($filters) < 2){
+                if(count($filters) < 2) {
                     $this->message = \ucfirst($method) . ' queries require at least two queries';
                     return false;
                 }

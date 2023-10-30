@@ -1140,7 +1140,7 @@ class Postgres extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)){
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1254,10 +1254,10 @@ class Postgres extends SQL
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)){
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
-        
+
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }

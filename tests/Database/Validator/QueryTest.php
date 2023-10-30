@@ -322,18 +322,20 @@ class QueryTest extends TestCase
         $this->assertFalse($validator->isValid(
             [Query::or(
                 [Query::equal('title', [''])]
-            )]));
+            )]
+        ));
 
         $this->assertEquals('Invalid query: Or queries require at least two queries', $validator->getDescription());
 
         $this->assertFalse($validator->isValid(
             [
                 Query::or(
-                [
+                    [
                     Query::equal('price', [0]),
                     Query::equal('not_found', [''])
                 ]
-            )]));
+                )]
+        ));
 
         $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
 
@@ -345,7 +347,8 @@ class QueryTest extends TestCase
                         Query::select(['price']),
                         Query::limit(1)
                     ]
-                )]));
+                )]
+        ));
 
         $this->assertEquals('Invalid query: Or queries requires only filters', $validator->getDescription());
     }

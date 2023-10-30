@@ -194,7 +194,7 @@ class Query
     public static function parse(string $filter): self
     {
 
-        if(substr($filter, 0, 3) === 'or('){
+        if(substr($filter, 0, 3) === 'or(') {
             var_dump('Found or operation !!!!!!!!!!!');
             var_dump($filter);
         }
@@ -861,7 +861,7 @@ class Query
      */
     public function isNested(): bool
     {
-        if($this->getMethod() === self::TYPE_OR){
+        if($this->getMethod() === self::TYPE_OR) {
             return true;
         }
 

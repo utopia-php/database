@@ -1156,7 +1156,7 @@ class MariaDB extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)){
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1270,7 +1270,7 @@ class MariaDB extends SQL
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)){
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1449,10 +1449,11 @@ class MariaDB extends SQL
             case Query::TYPE_OR:
                 $conditions = [];
                 /* @var $q Query */
-                foreach ($query->getValue() as $q){
+                foreach ($query->getValue() as $q) {
                     $conditions[] = $this->getSQLCondition($q);
                 }
-                return empty($conditions) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';;
+                return empty($conditions) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';
+                ;
 
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
@@ -1469,7 +1470,7 @@ class MariaDB extends SQL
                 foreach ($query->getValues() as $key => $value) {
                     $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
                 }
-                return empty($conditions)? '' : '(' . implode(' OR ', $conditions) . ')';
+                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }
 

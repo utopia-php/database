@@ -2733,21 +2733,22 @@ abstract class Base extends TestCase
             $this->assertEquals($value, $documents[0]->getAttribute('value'));
         }
     }
-//
-//    public function testOrFirstPosition(){
-//        try {
-//            static::getDatabase()->find('movies', [
-//                Query::or([
-//                    Query::equal('director', ['Joe Johnston'])
-//                ])
-//            ]);
-//            $this->fail('Failed to throw exception');
-//        } catch(Exception $e) {
-//            $this->assertEquals('Or query can not come first', $e->getMessage());
-//        }
-//    }
+    //
+    //    public function testOrFirstPosition(){
+    //        try {
+    //            static::getDatabase()->find('movies', [
+    //                Query::or([
+    //                    Query::equal('director', ['Joe Johnston'])
+    //                ])
+    //            ]);
+    //            $this->fail('Failed to throw exception');
+    //        } catch(Exception $e) {
+    //            $this->assertEquals('Or query can not come first', $e->getMessage());
+    //        }
+    //    }
 
-    public function testOrSingleQuery(){
+    public function testOrSingleQuery()
+    {
         try {
             static::getDatabase()->find('movies', [
                 Query::or([
@@ -2760,7 +2761,8 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testOrMultipleQueries(){
+    public function testOrMultipleQueries()
+    {
         $query = Query::or([
                 Query::equal('active', [true]),
                 Query::equal('name', ['Frozen II'])
@@ -2781,7 +2783,8 @@ abstract class Base extends TestCase
         $this->assertEquals(3, static::getDatabase()->count('movies', $queries));
     }
 
-    public function testOrNested(){
+    public function testOrNested()
+    {
         $queries = [
             Query::select(['director']),
             Query::equal('director', ['Joe Johnston']),

@@ -1240,10 +1240,11 @@ class Mongo extends Adapter
         $queries = Query::groupByType($queries)['filters'];
         foreach ($queries as $query) {
             /* @var $query Query */
-            if($query->getMethod() === Query::TYPE_OR){
+            if($query->getMethod() === Query::TYPE_OR) {
                 $filters[$separator][] = $this->buildFilters($query->getValue(), '$or');
+            } else {
+                $filters[$separator][] = $this->buildFilter($query);
             }
-            else $filters[$separator][] = $this->buildFilter($query);
         }
 
         return $filters;
@@ -1299,8 +1300,7 @@ class Mongo extends Adapter
         } elseif ($operator === Query::TYPE_BETWEEN) {
             $filter[$attribute]['$lte'] = $value[1];
             $filter[$attribute]['$gte'] = $value[0];
-        }
-        else {
+        } else {
             $filter[$attribute][$operator] = $value;
         }
 

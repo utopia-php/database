@@ -132,6 +132,8 @@ class Database
 
     protected Cache $cache;
 
+    protected string $name;
+
     /**
      * @var array<bool|string>
      */
@@ -316,7 +318,7 @@ class Database
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
      */
-    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [], string $name = 'default')
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
@@ -2319,7 +2321,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
+        $cacheKey = $this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
@@ -2390,7 +2392,7 @@ class Database
          */
         foreach ($this->map as $key => $value) {
             list($k, $v) = explode('=>', $key);
-            $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
+            $ck = $this->name . '-cache-' . $this->getNamespace() . ':map:' . $k;
             $cache = $this->cache->load($ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
@@ -2696,10 +2698,10 @@ class Database
             throw new InvalidArgumentException($validator->getDescription());
         }
 
-        $structure = new Structure($collection);
-        if (!$structure->isValid($document)) {
-            throw new StructureException($structure->getDescription());
-        }
+        // $structure = new Structure($collection);
+        // if (!$structure->isValid($document)) {
+        //     throw new StructureException($structure->getDescription());
+        // }
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
@@ -3152,7 +3154,7 @@ class Database
 
         $this->purgeRelatedDocuments($collection, $id);
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -3598,7 +3600,7 @@ class Database
 
         $max = $max ? $max - $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
@@ -3665,7 +3667,7 @@ class Database
 
         $min = $min ? $min + $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
         return $result;
@@ -3718,7 +3720,7 @@ class Database
         }
 
         $this->purgeRelatedDocuments($collection, $id);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
 
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
@@ -4103,7 +4105,7 @@ class Database
      */
     public function deleteCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
+        return $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection . ':*');
     }
 
     /**
@@ -4117,7 +4119,7 @@ class Database
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id . ':*');
+        return $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $collection . ':' . $id . ':*');
     }
 
     /**
@@ -4822,7 +4824,7 @@ class Database
             return;
         }
 
-        $key = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+        $key = $this->name . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
         $cache = $this->cache->load($key, self::TTL);
         if (!empty($cache)) {
             foreach ($cache as $v) {

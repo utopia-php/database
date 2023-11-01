@@ -2757,10 +2757,10 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $validator = new Structure($collection);
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
-            }
+            // $validator = new Structure($collection);
+            // if (!$validator->isValid($document)) {
+            //     throw new StructureException($validator->getDescription());
+            // }
 
             $documents[$key] = $document;
         }

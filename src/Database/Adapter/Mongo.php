@@ -682,6 +682,17 @@ class Mongo extends Adapter
         return new Document($result);
     }
 
+    /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     * 
+     * @throws Duplicate
+     */
     public function createDocuments(string $collection, array $documents, int $batchSize): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
@@ -759,6 +770,17 @@ class Mongo extends Adapter
         return $document;
     }
 
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     * 
+     * @throws Duplicate
+     */
     public function updateDocuments(string $collection, array $documents, int $batchSize): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);

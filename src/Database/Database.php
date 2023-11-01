@@ -1616,7 +1616,7 @@ class Database
         $twoWayKey ??= $collection->getId();
 
         $attributes = $collection->getAttribute('attributes', []);
-        /** @var Document[] $attributes */
+        /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');

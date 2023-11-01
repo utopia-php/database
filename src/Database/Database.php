@@ -323,6 +323,7 @@ class Database
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
+        $this->name = $name;
 
         self::addFilter(
             'json',

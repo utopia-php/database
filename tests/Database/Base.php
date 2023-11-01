@@ -1016,6 +1016,54 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    /**
+     * @return array<Document>
+     */
+    public function testCreateDocuments(): array
+    {
+        $count = 3;
+        $collection = 'testCreateDocuments';
+
+        static::getDatabase()->createCollection($collection);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true));
+
+        // Create an array of documents with random attributes. Don't use the createDocument function
+        $documents = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $documents[] = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => 8589934592, // 2^33
+            ]);
+        }
+
+        $documents = static::getDatabase()->createDocuments($collection, $documents, 3);
+
+        $this->assertEquals($count, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
+        }
+
+        return $documents;
+    }
+
     public function testRespectNulls(): Document
     {
         static::getDatabase()->createCollection('documents_nulls');
@@ -1424,6 +1472,53 @@ abstract class Base extends TestCase
         $this->assertNotContains('guests', $new->getDelete());
 
         return $document;
+    }
+
+    /**
+     * @depends testCreateDocuments
+     * @param array<Document> $documents
+     */
+    public function testUpdateDocuments(array $documents): void
+    {
+        $collection  = 'testCreateDocuments';
+
+        foreach ($documents as $document) {
+            $document
+                ->setAttribute('string', 'text📝 updated')
+                ->setAttribute('integer', 6)
+                ->setAttribute('$permissions', [
+                    Permission::read(Role::users()),
+                    Permission::create(Role::users()),
+                    Permission::update(Role::users()),
+                    Permission::delete(Role::users()),
+                ]);
+        }
+
+        $documents = static::getDatabase()->updateDocuments(
+            $collection,
+            $documents,
+            \count($documents)
+        );
+
+        foreach ($documents as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertEquals(6, $document->getAttribute('integer'));
+        }
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::limit(\count($documents))
+        ]);
+
+        foreach ($documents as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertEquals(6, $document->getAttribute('integer'));
+            $this->assertEquals([
+                Permission::read(Role::users()),
+                Permission::create(Role::users()),
+                Permission::update(Role::users()),
+                Permission::delete(Role::users()),
+            ], $document->getAttribute('$permissions'));
+        }
     }
 
     /**

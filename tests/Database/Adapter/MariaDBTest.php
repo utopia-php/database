@@ -48,7 +48,7 @@ class MariaDBTest extends Base
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setNamespace('myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {
             $database->delete('utopiaTests');

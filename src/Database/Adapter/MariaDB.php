@@ -762,7 +762,7 @@ class MariaDB extends SQL
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws DuplicateException
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
@@ -1072,7 +1072,7 @@ class MariaDB extends SQL
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws DuplicateException
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array

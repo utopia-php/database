@@ -764,7 +764,7 @@ class Postgres extends SQL
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws Duplicate
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
@@ -1063,7 +1063,7 @@ class Postgres extends SQL
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws Duplicate
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array

@@ -690,7 +690,7 @@ class Mongo extends Adapter
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws Duplicate
      */
     public function createDocuments(string $collection, array $documents, int $batchSize): array
@@ -778,7 +778,7 @@ class Mongo extends Adapter
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws Duplicate
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize): array

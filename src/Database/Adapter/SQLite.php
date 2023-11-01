@@ -738,7 +738,7 @@ class SQLite extends MariaDB
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws Duplicate
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array

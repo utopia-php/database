@@ -436,7 +436,7 @@ abstract class Adapter
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws DuplicateException
      */
     abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
@@ -459,7 +459,7 @@ abstract class Adapter
      * @param int $batchSize
      *
      * @return array<Document>
-     * 
+     *
      * @throws DuplicateException
      */
     abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;

@@ -7,7 +7,7 @@ services:
     image: database-80
     build:
       context: .
-      dockerfile: Dockerfile8.0
+      dockerfile: Dockerfile-8.0
     networks:
       - database
     volumes:
@@ -23,7 +23,7 @@ services:
     image: database-81
     build:
       context: .
-      dockerfile: Dockerfile8.1
+      dockerfile: Dockerfile-8.1
     networks:
       - database
     volumes:
@@ -39,7 +39,7 @@ services:
     image: database-82
     build:
       context: .
-      dockerfile: Dockerfile8.2
+      dockerfile: Dockerfile-8.2
     networks:
       - database
     volumes:

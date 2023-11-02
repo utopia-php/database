@@ -55,7 +55,7 @@ class Document extends ArrayObject
      */
     public function getId(): string
     {
-        return $this->getAttribute('$id', '');
+        return $this->getAttribute('$id', '') ?? '';
     }
 
     /**
@@ -63,7 +63,7 @@ class Document extends ArrayObject
      */
     public function getInternalId(): string
     {
-        return $this->getAttribute('$internalId', '');
+        return $this->getAttribute('$internalId', '') ?? '';
     }
 
     /**
@@ -71,7 +71,7 @@ class Document extends ArrayObject
      */
     public function getCollection(): string
     {
-        return $this->getAttribute('$collection', '');
+        return $this->getAttribute('$collection', '') ?? '';
     }
 
     /**

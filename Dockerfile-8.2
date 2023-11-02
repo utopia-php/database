@@ -11,7 +11,7 @@ COPY composer.json /usr/local/src/
 RUN composer install --ignore-platform-reqs --optimize-autoloader \
     --no-plugins --no-scripts --prefer-dist
     
-FROM php:8.2-cli-alpine as compile
+FROM php:8.2-cli-alpine3.18 as compile
 
 ENV PHP_REDIS_VERSION=5.3.4 \
     PHP_SWOOLE_VERSION=v4.8.0 \
@@ -21,6 +21,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN \
   apk update \
+  linux-headers \
   && apk add --no-cache postgresql-libs postgresql-dev make automake autoconf gcc g++ git brotli-dev \
   && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
   && apk del postgresql-dev \

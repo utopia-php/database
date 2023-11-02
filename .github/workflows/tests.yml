@@ -22,7 +22,7 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         context: .
-        file: ./Dockerfile.8.0
+        file: ./Dockerfile-8.0
         push: false
         tags: database-80
         load: true
@@ -33,7 +33,7 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         context: .
-        file: ./Dockerfile.8.1
+        file: ./Dockerfile-8.1
         push: false
         tags: database-81
         load: true
@@ -44,7 +44,7 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         context: .
-        file: ./Dockerfile.8.2
+        file: ./Dockerfile-8.2
         push: false
         tags: database-82
         load: true

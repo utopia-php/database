@@ -1,16 +1,10 @@
 name: "Tests"
 
 on: [pull_request]
-
 jobs:
   tests:
-    name: Unit & E2E (PHP ${{ matrix.php_version }})
+    name: Unit & E2E
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        php_version: ['8.0', '8.1', '8.2']
-      fail-fast: false  # this makes sure all versions are tested even if one fails
 
     steps:
     - name: Checkout repository
@@ -29,23 +23,24 @@ jobs:
       with:
         context: .
         push: false
-        tags: database-dev-${{ matrix.php_version }}
+        tags: database-dev
         load: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    # Assuming you have Dockerfiles named like Dockerfile-7.4, Dockerfile-8.0, etc.
-    # This step chooses the correct Dockerfile based on PHP version
-    - name: Choose Dockerfile
-      run: echo "DOCKERFILE=Dockerfile-${{ matrix.php_version }}" >> $GITHUB_ENV
-
     - name: Start Databases
       run:  |
-        docker compose -f $DOCKERFILE up -d
+        docker compose up -d
         sleep 10
 
-    - name: Run Tests
-      run: docker compose exec -T tests vendor/bin/phpunit --configuration phpunit.xml
+    - name: Run Tests (PHP 8.0)
+      run: docker compose exec -T tests80 vendor/bin/phpunit --configuration phpunit.xml
+
+    - name: Run Tests (PHP 8.1)
+      run: docker compose exec -T tests81 vendor/bin/phpunit --configuration phpunit.xml
+
+    - name: Run Tests (PHP 8.2)
+      run: docker compose exec -T tests82 vendor/bin/phpunit --configuration phpunit.xml
 
     - name: Check Coverage
       run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 90

@@ -2,11 +2,44 @@ version: '3.1'
 
 services:
 
-  tests:
-    container_name: tests
-    image: database-dev
+  tests80:
+    container_name: tests80
+    image: database-80
     build:
       context: .
+      dockerfile: Dockerfile8.0
+    networks:
+      - database
+    volumes:
+      - ./bin:/usr/src/code/bin
+      - ./src:/usr/src/code/src
+      - ./tests:/usr/src/code/tests
+      - ./phpunit.xml:/usr/src/code/phpunit.xml
+    ports:
+      - "8708:8708"
+
+  tests81:
+    container_name: tests81
+    image: database-81
+    build:
+      context: .
+      dockerfile: Dockerfile8.1
+    networks:
+      - database
+    volumes:
+      - ./bin:/usr/src/code/bin
+      - ./src:/usr/src/code/src
+      - ./tests:/usr/src/code/tests
+      - ./phpunit.xml:/usr/src/code/phpunit.xml
+    ports:
+      - "8708:8708"
+
+  tests82:
+    container_name: tests82
+    image: database-82
+    build:
+      context: .
+      dockerfile: Dockerfile8.2
     networks:
       - database
     volumes:

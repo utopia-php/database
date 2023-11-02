@@ -2322,7 +2322,7 @@ class Database
         $queries = \array_values($queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $documentSecurity = $collection->getAttribute('documentSecurity', true);
         $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
@@ -3084,7 +3084,7 @@ class Database
         $shouldUpdate = false;
 
         if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            $documentSecurity = $collection->getAttribute('documentSecurity', true);
 
             foreach ($relationships as $relationship) {
                 $relationships[$relationship->getAttribute('key')] = $relationship;
@@ -3682,7 +3682,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            $documentSecurity = $collection->getAttribute('documentSecurity', true);
             if (!$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $document->getUpdate() : [])
@@ -3749,7 +3749,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            $documentSecurity = $collection->getAttribute('documentSecurity', true);
             if (!$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $document->getUpdate() : [])
@@ -3810,7 +3810,7 @@ class Database
         $validator = new Authorization(self::PERMISSION_DELETE);
 
         if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            $documentSecurity = $collection->getAttribute('documentSecurity', true);
             if (!$validator->isValid([
                 ...$collection->getDelete(),
                 ...($documentSecurity ? $document->getDelete() : [])
@@ -4266,7 +4266,7 @@ class Database
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $documentSecurity = $collection->getAttribute('documentSecurity', true);
         $skipAuth = $authorization->isValid($collection->getRead());
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {

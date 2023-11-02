@@ -1,10 +1,16 @@
 name: "Linter"
 
 on: [ pull_request ]
+
 jobs:
   lint:
-    name: Linter
+    name: Linter (PHP ${{ matrix.php_version }})
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        php_version: ['7.4', '8.0', '8.1']
+      fail-fast: false  # this ensures all versions are tested even if one fails
 
     steps:
       - name: Checkout repository
@@ -16,5 +22,5 @@ jobs:
 
       - name: Run Linter
         run: |
-          docker run --rm -v $PWD:/app composer sh -c \
+          docker run --rm -v $PWD:/app php:${{ matrix.php_version }}-cli sh -c \
           "composer install --profile --ignore-platform-reqs && composer lint"

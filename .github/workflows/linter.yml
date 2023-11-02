@@ -4,23 +4,27 @@ on: [ pull_request ]
 
 jobs:
   lint:
-    name: Linter (PHP ${{ matrix.php_version }})
+    name: Run Linter on PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        php_version: ['8.0', '8.1', '8.2']
-      fail-fast: false  # this ensures all versions are tested even if one fails
+        php: ['8.0', '8.1', '8.2']
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php }}
 
-      - run: git checkout HEAD^2
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 2
 
-      - name: Run Linter
-        run: |
-          docker run --rm -v $PWD:/app php:${{ matrix.php_version }}-cli sh -c \
-          "composer install --profile --ignore-platform-reqs && composer lint"
+    - run: git checkout HEAD^2
+
+    - name: Install dependencies
+      run: composer update --ignore-platform-reqs --optimize-autoloader --no-plugins --no-scripts --prefer-dist
+
+    - run: composer lint

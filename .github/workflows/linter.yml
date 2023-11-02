@@ -22,5 +22,5 @@ jobs:
 
       - name: Run Linter
         run: |
-          docker run --rm -v $PWD:/app php:${{ matrix.php_version }}-cli-alpine3.18 sh -c \
+          docker run --rm -v $PWD:/app php:${{ matrix.php_version }}-cli sh -c \
           "composer install --profile --ignore-platform-reqs && composer lint"

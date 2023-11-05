@@ -3550,6 +3550,10 @@ class Database
                             $document->setAttribute($key, $value->getId());
                         } elseif (\is_null($value)) {
                             break;
+                        } elseif(empty($value)){
+                           var_dump('I am an empty array Is I think it is ok to throw an exeption');
+                           throw new DatabaseException('Invalid value for relationship');
+
                         } else {
                             throw new DatabaseException('Invalid value for relationship');
                         }

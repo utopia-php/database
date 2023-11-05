@@ -6799,6 +6799,24 @@ abstract class Base extends TestCase
         $review5 = static::getDatabase()->getDocument('review', 'review5');
         $this->assertEquals('Movie 5', $review5->getAttribute('movie')->getAttribute('name'));
 
+
+        // Todo: fix this is failing
+        static::getDatabase()->updateDocument('review', $review5->getId(), new Document([
+            '$id' => 'review5',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Review 5',
+            'movie' => [], //
+        ]));
+
+
+        $this->assertEquals(true, false);
+
+
+
         // Update document with new related document
         static::getDatabase()->updateDocument(
             'review',

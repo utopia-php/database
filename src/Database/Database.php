@@ -3834,10 +3834,10 @@ class Database
             $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
         }
 
+        $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
+
         $this->purgeRelatedDocuments($collection, $id);
         $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
-
-        $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 

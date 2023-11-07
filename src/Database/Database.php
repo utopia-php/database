@@ -334,11 +334,11 @@ class Database
             function (mixed $value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
-                if (!is_array($value) && !$value instanceof \stdClass) {
+                if (!\is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
 
-                return json_encode($value);
+                return \json_encode($value);
             },
             /**
              * @param mixed $value
@@ -346,17 +346,17 @@ class Database
              * @throws Exception
              */
             function (mixed $value) {
-                if (!is_string($value)) {
+                if (!\is_string($value)) {
                     return $value;
                 }
 
-                $value = json_decode($value, true) ?? [];
+                $value = \json_decode($value, true) ?? [];
 
-                if (array_key_exists('$id', $value)) {
+                if (\array_key_exists('$id', $value)) {
                     return new Document($value);
                 } else {
-                    $value = array_map(function ($item) {
-                        if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
+                    $value = \array_map(function ($item) {
+                        if (\is_array($item) && \array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
                             return new Document($item);
                         }
                         return $item;
@@ -375,7 +375,7 @@ class Database
              * @throws Exception
              */
             function (?string $value) {
-                if (is_null($value)) {
+                if (\is_null($value)) {
                     return null;
                 }
                 try {
@@ -441,7 +441,7 @@ class Database
     {
         $previous = $this->silentListeners;
 
-        if (is_null($listeners)) {
+        if (\is_null($listeners)) {
             $this->silentListeners = null;
         } else {
             $silentListeners = [];
@@ -575,9 +575,9 @@ class Database
      *
      * Get Database from current scope
      *
+     * @return string
      * @throws Exception
      *
-     * @return string
      */
     public function getDefaultDatabase(): string
     {

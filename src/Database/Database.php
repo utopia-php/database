@@ -213,6 +213,21 @@ class Database
     ];
 
     /**
+     * Each database resource is created within its own schema.
+     */
+    public const ISOLATION_MODE_SCHEMA = 'schema';
+
+    /**
+     * Each database resource is created within a shared schema
+     */
+    public const ISOLATION_MODE_SHARED = 'shared';
+
+    /**
+     * Each database resource is created within shared tables in a shared schema.
+     */
+    public const ISOLATION_MODE_TABLE = 'table';
+
+    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
@@ -295,25 +310,27 @@ class Database
 
     protected ?\DateTime $timestamp = null;
 
+    protected string $isolationMode = self::ISOLATION_MODE_SHARED;
+
     protected bool $resolveRelationships = true;
 
-    private int $relationshipFetchDepth = 1;
+    protected int $relationshipFetchDepth = 1;
 
     /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
      */
-    private array $relationshipWriteStack = [];
+    protected array $relationshipWriteStack = [];
 
     /**
      * @var array<Document>
      */
-    private array $relationshipFetchStack = [];
+    protected array $relationshipFetchStack = [];
 
     /**
      * @var array<Document>
      */
-    private array $relationshipDeleteStack = [];
+    protected array $relationshipDeleteStack = [];
 
     /**
      * @param Adapter $adapter
@@ -624,12 +641,14 @@ class Database
      *
      * @param int $milliseconds
      * @param string $event
-     * @return void
+     * @return self
      * @throws Exception
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): self
     {
         $this->adapter->setTimeout($milliseconds, $event);
+
+        return $this;
     }
 
     /**
@@ -641,6 +660,24 @@ class Database
     public function clearTimeout(string $event = Database::EVENT_ALL): void
     {
         $this->adapter->clearTimeout($event);
+    }
+
+    public function setIsolationMode(string $mode): self
+    {
+        if (!\in_array($mode, [
+			self::ISOLATION_MODE_SCHEMA,
+			self::ISOLATION_MODE_SHARED,
+			self::ISOLATION_MODE_TABLE
+		])) {
+            throw new DatabaseException('Invalid isolation mode');
+        }
+
+        return $this;
+    }
+
+    public function getIsolationMode(): string
+    {
+        return $this->isolationMode;
     }
 
     /**
@@ -3550,9 +3587,8 @@ class Database
                             $document->setAttribute($key, $value->getId());
                         } elseif (\is_null($value)) {
                             break;
-                        } elseif(empty($value)){
-                           var_dump('I am an empty array Is I think it is ok to throw an exeption');
-                           throw new DatabaseException('Invalid value for relationship');
+                        } elseif(empty($value)) {
+                            throw new DatabaseException('Invalid value for relationship');
 
                         } else {
                             throw new DatabaseException('Invalid value for relationship');

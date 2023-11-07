@@ -336,7 +336,7 @@ class SQLite extends MariaDB
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexes = json_decode($collectionDocument['indexes'], true);
+        $indexes = \json_decode($collectionDocument['indexes'], true);
         $index = null;
 
         foreach ($indexes as $node) {
@@ -426,7 +426,7 @@ class SQLite extends MariaDB
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = ['_uid'];
@@ -473,8 +473,8 @@ class SQLite extends MariaDB
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (\is_array($value)) { // arrays & objects should be saved as strings
+                $value = \json_encode($value);
             }
 
             $bindKey = 'value_' . $attributeIndex;
@@ -545,7 +545,7 @@ class SQLite extends MariaDB
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -573,7 +573,7 @@ class SQLite extends MariaDB
             $initial[$type] = [];
         }
 
-        $permissions = array_reduce($permissions, function (array $carry, array $item) {
+        $permissions = \array_reduce($permissions, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
 
             return $carry;
@@ -695,8 +695,8 @@ class SQLite extends MariaDB
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (\is_array($value)) { // arrays & objects should be saved as strings
+                $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
@@ -769,7 +769,7 @@ class SQLite extends MariaDB
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = json_encode($document->getPermissions());
+                    $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                     $columns = \array_map(function ($attribute) {
                         return "`" . $this->filter($attribute) . "`";
@@ -779,7 +779,7 @@ class SQLite extends MariaDB
 
                     foreach ($attributes as $value) {
                         if (\is_array($value)) {
-                            $value = json_encode($value);
+                            $value = \json_encode($value);
                         }
                         $value = (is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
@@ -813,7 +813,7 @@ class SQLite extends MariaDB
                     // Get removed Permissions
                     $removals = [];
                     foreach (Database::PERMISSIONS as $type) {
-                        $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
+                        $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
                         if (!empty($diff)) {
                             $removals[$type] = $diff;
                         }
@@ -1069,7 +1069,7 @@ class SQLite extends MariaDB
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
-        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
+        $roles = \array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (
                     SELECT distinct(_document)
                     FROM `{$this->getNamespace()}_{$collection}_perms`

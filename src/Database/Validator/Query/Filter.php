@@ -114,7 +114,7 @@ class Filter extends Base
             return true;
         }
 
-        if (is_array($values[0]) && count($values[0]) === 0) {
+        if (\is_array($values[0]) && count($values[0]) === 0) {
             return true;
         }
 

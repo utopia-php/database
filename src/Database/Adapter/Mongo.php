@@ -573,7 +573,7 @@ class Mongo extends Adapter
         $collectionDocument = $this->getDocument(Database::METADATA, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexes = json_decode($collectionDocument['indexes'], true);
+        $indexes = \json_decode($collectionDocument['indexes'], true);
         $index = null;
 
         foreach ($indexes as $node) {
@@ -943,7 +943,7 @@ class Mongo extends Adapter
                     ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
                     : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
-                $filters = array_merge($filters, [
+                $filters = \array_merge($filters, [
                     '_id' => [
                         $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$internalId'])
                     ]
@@ -960,10 +960,10 @@ class Mongo extends Adapter
             }
         }
 
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (!empty($cursor) && !empty($orderAttributes) && \array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
 
-            if (is_null($cursor[$attribute] ?? null)) {
+            if (\is_null($cursor[$attribute] ?? null)) {
                 throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
 
@@ -1023,7 +1023,7 @@ class Mongo extends Adapter
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $found = array_reverse($found);
+            $found = \array_reverse($found);
         }
 
         return $found;
@@ -1044,7 +1044,7 @@ class Mongo extends Adapter
 
         foreach ($filters as $k => $v) {
             if ($k === '_createdAt' || $k == '_updatedAt') {
-                if (is_array($v)) {
+                if (\is_array($v)) {
                     foreach ($v as $sk => $sv) {
                         $results[$k][$sk] = $this->toMongoDatetime($sv);
                     }
@@ -1052,7 +1052,7 @@ class Mongo extends Adapter
                     $results[$k] = $this->toMongoDatetime($v);
                 }
             } else {
-                if (is_array($v)) {
+                if (\is_array($v)) {
                     $results[$k] = $this->timeFilter($v);
                 }
             }
@@ -1119,11 +1119,11 @@ class Mongo extends Adapter
         $result = [];
 
         foreach ($array as $key => $value) {
-            if (!in_array($key, $exclude)) {
-                $key = str_replace($from, $to, $key);
+            if (!\in_array($key, $exclude)) {
+                $key = \str_replace($from, $to, $key);
             }
 
-            $result[$key] = is_array($value)
+            $result[$key] = \is_array($value)
                 ? $this->recursiveReplace($value, $from, $to, $exclude)
                 : $value;
         }
@@ -1260,32 +1260,32 @@ class Mongo extends Adapter
 
         $result = [];
         foreach ($array as $k => $v) {
-            $clean_key = str_replace($from, "", $k);
-            $key = in_array($clean_key, $filter) ? str_replace($from, $to, $k) : $k;
+            $clean_key = \str_replace($from, "", $k);
+            $key = \in_array($clean_key, $filter) ? \str_replace($from, $to, $k) : $k;
 
-            $result[$key] = is_array($v) ? $this->replaceChars($from, $to, $v) : $v;
+            $result[$key] = \is_array($v) ? $this->replaceChars($from, $to, $v) : $v;
         }
 
         if ($from === '_') {
-            if (array_key_exists('_id', $array)) {
+            if (\array_key_exists('_id', $array)) {
                 $result['$internalId'] = (string)$array['_id'];
 
                 unset($result['_id']);
             }
 
-            if (array_key_exists('_uid', $array)) {
+            if (\array_key_exists('_uid', $array)) {
                 $result['$id'] = $array['_uid'];
 
                 unset($result['_uid']);
             }
         } elseif ($from === '$') {
-            if (array_key_exists('$id', $array)) {
+            if (\array_key_exists('$id', $array)) {
                 $result['_uid'] = $array['$id'];
 
                 unset($result['$id']);
             }
 
-            if (array_key_exists('$internalId', $array)) {
+            if (\array_key_exists('$internalId', $array)) {
                 $result['_id'] = new ObjectId($array['$internalId']);
 
                 unset($result['$internalId']);
@@ -1707,7 +1707,7 @@ class Mongo extends Adapter
      */
     protected function flattenArray(mixed $list): array
     {
-        if (!is_array($list)) {
+        if (!\is_array($list)) {
             // make sure the input is an array
             return array($list);
         }
@@ -1715,7 +1715,7 @@ class Mongo extends Adapter
         $newArray = [];
 
         foreach ($list as $value) {
-            $newArray = array_merge($newArray, $this->flattenArray($value));
+            $newArray = \array_merge($newArray, $this->flattenArray($value));
         }
 
         return $newArray;

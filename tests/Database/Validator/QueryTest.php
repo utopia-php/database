@@ -276,7 +276,7 @@ class QueryTest extends TestCase
         $queries = Query::getByType($queries, [Query::TYPE_CURSORAFTER, Query::TYPE_CURSORBEFORE]);
         $this->assertCount(2, $queries);
         foreach ($queries as $query) {
-            $this->assertEquals(true, in_array($query->getMethod(), [Query::TYPE_CURSORAFTER, Query::TYPE_CURSORBEFORE]));
+            $this->assertEquals(true, \in_array($query->getMethod(), [Query::TYPE_CURSORAFTER, Query::TYPE_CURSORBEFORE]));
         }
     }
 

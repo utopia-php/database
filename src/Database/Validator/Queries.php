@@ -46,7 +46,7 @@ class Queries extends Validator
      */
     public function isValid($value): bool
     {
-        if (!is_array($value)) {
+        if (!\is_array($value)) {
             $this->message = 'Queries must be an array';
             return false;
         }

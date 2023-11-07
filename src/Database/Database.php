@@ -285,7 +285,7 @@ class Database
     ];
 
     /**
-     * Array in which the keys are the names of databse listeners that
+     * Array in which the keys are the names of database listeners that
      * should be skipped when dispatching events. null $silentListeners
      * will skip all listeners.
      *
@@ -669,7 +669,7 @@ class Database
          * Create array of attribute documents
          * @var array<Document> $attributes
          */
-        $attributes = array_map(function ($attribute) {
+        $attributes = \array_map(function ($attribute) {
             return new Document([
                 '$id' => ID::custom($attribute[0]),
                 'type' => $attribute[1],
@@ -678,8 +678,8 @@ class Database
             ]);
         }, [ // Array of [$id, $type, $size, $required]
             ['name', self::VAR_STRING, 512, true],
-            ['attributes', self::VAR_STRING, 1000000, false],
-            ['indexes', self::VAR_STRING, 1000000, false],
+            ['attributes', self::VAR_STRING, 1_000_000, false],
+            ['indexes', self::VAR_STRING, 1_000_000, false],
             ['documentSecurity', self::VAR_BOOLEAN, 0, false],
         ]);
 
@@ -745,7 +745,6 @@ class Database
      * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
-     * @throws InvalidArgumentException
      * @throws LimitException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
@@ -756,7 +755,7 @@ class Database
 
         $validator = new Permissions();
         if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -827,16 +826,14 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws InvalidArgumentException
      * @throws ConflictException
      * @throws DatabaseException
-     * @throws InvalidArgumentException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
         $validator = new Permissions();
         if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -890,13 +887,14 @@ class Database
         return $result;
     }
 
-    /**
-     * Get Collection Size
-     *
-     * @param string $collection
-     *
-     * @return int
-     */
+	/**
+	 * Get Collection Size
+	 *
+	 * @param string $collection
+	 *
+	 * @return int
+	 * @throws Exception
+	 */
     public function getSizeOfCollection(string $collection): int
     {
         return $this->adapter->getSizeOfCollection($collection);
@@ -974,7 +972,7 @@ class Database
 
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(array_diff($requiredFilters, $filters))) {
+        if (!empty(\array_diff($requiredFilters, $filters))) {
             throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
@@ -1358,7 +1356,7 @@ class Database
 
             /** Ensure required filters for the attribute are passed */
             $requiredFilters = $this->getRequiredFilters($type);
-            if (!empty(array_diff($requiredFilters, $filters))) {
+            if (!empty(\array_diff($requiredFilters, $filters))) {
                 throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
             }
 
@@ -2399,7 +2397,7 @@ class Database
             if (empty($cache)) {
                 $cache = [];
             }
-            if (!in_array($v, $cache)) {
+            if (!\in_array($v, $cache)) {
                 $cache[] = $v;
                 $this->cache->save($ck, $cache);
             }
@@ -2417,7 +2415,7 @@ class Database
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
-                    if (!in_array($internalAttribute, $values)) {
+                    if (!\in_array($internalAttribute, $values)) {
                         $document->removeAttribute($internalAttribute);
                     }
                 }
@@ -2697,7 +2695,7 @@ class Database
 
         $validator = new Permissions();
         if (!$validator->isValid($document->getPermissions())) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $structure = new Structure($collection);
@@ -3181,7 +3179,7 @@ class Database
 
         // Check if document was updated after the request timestamp
         $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+        if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
             throw new ConflictException('Document was updated after the request timestamp');
         }
 
@@ -3709,7 +3707,7 @@ class Database
          * @var Document $attr
          */
         $attr = end($attr);
-        if (!in_array($attr->getAttribute('type'), $whiteList)) {
+        if (!\in_array($attr->getAttribute('type'), $whiteList)) {
             throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
@@ -3776,7 +3774,7 @@ class Database
          * @var Document $attr
          */
         $attr = end($attr);
-        if (!in_array($attr->getAttribute('type'), $whiteList)) {
+        if (!\in_array($attr->getAttribute('type'), $whiteList)) {
             throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
@@ -3830,7 +3828,7 @@ class Database
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+        if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
             throw new ConflictException('Document was updated after the request timestamp');
         }
 
@@ -4536,7 +4534,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -4545,14 +4543,14 @@ class Database
             $value = $document->getAttribute($key);
 
             // continue on optional param with no default
-            if (is_null($value) && is_null($default)) {
+            if (\is_null($value) && \is_null($default)) {
                 continue;
             }
 
             // assign default only if no value provided
-            // False positive "Call to function is_null() with mixed will always evaluate to false"
+            // False positive "Call to function \is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
-            if (is_null($value) && !is_null($default)) {
+            if (\is_null($value) && !\is_null($default)) {
                 $value = ($array) ? $default : [$default];
             } else {
                 $value = ($array) ? $value : [$value];
@@ -4576,15 +4574,16 @@ class Database
         return $document;
     }
 
-    /**
-     * Decode Document
-     *
-     * @param Document $collection
-     * @param Document $document
-     * @param array<string> $selections
-     * @return Document
-     * @throws DatabaseException
-     */
+	/**
+	 * Decode Document
+	 *
+	 * @param Document $collection
+	 * @param Document $document
+	 * @param array<string> $selections
+	 * @return Document
+	 * @throws DatabaseException
+	 * @throws Exception
+	 */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
         $attributes = \array_filter(
@@ -4613,7 +4612,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -4630,10 +4629,10 @@ class Database
             }
 
             $value = ($array) ? $value : [$value];
-            $value = (is_null($value)) ? [] : $value;
+            $value = (\is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
-                foreach (array_reverse($filters) as $filter) {
+                foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }
@@ -4679,14 +4678,14 @@ class Database
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
-            if (is_null($value)) {
+            if (\is_null($value)) {
                 continue;
             }
 
             if ($array) {
-                $value = !is_string($value)
+                $value = !\is_string($value)
                     ? $value
-                    : json_decode($value, true);
+                    : \json_decode($value, true);
             } else {
                 $value = [$value];
             }
@@ -4728,12 +4727,12 @@ class Database
      */
     protected function encodeAttribute(string $name, $value, Document $document): mixed
     {
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
+        if (!\array_key_exists($name, self::$filters) && !\array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException("Filter: {$name} not found");
         }
 
         try {
-            if (array_key_exists($name, $this->instanceFilters)) {
+            if (\array_key_exists($name, $this->instanceFilters)) {
                 $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
             } else {
                 $value = self::$filters[$name]['encode']($value, $document, $this);
@@ -4760,11 +4759,11 @@ class Database
      */
     protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
     {
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
+        if (!\array_key_exists($name, self::$filters) && !\array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException('Filter not found');
         }
 
-        if (array_key_exists($name, $this->instanceFilters)) {
+        if (\array_key_exists($name, $this->instanceFilters)) {
             $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
         } else {
             $value = self::$filters[$name]['decode']($value, $document, $this);
@@ -4805,7 +4804,7 @@ class Database
         $keys = [];
 
         // Allow querying internal attributes
-        $keys = array_merge($keys, self::INTERNAL_ATTRIBUTES);
+        $keys = \array_merge($keys, self::INTERNAL_ATTRIBUTES);
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {

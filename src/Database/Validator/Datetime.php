@@ -18,7 +18,7 @@ class Datetime extends Validator
 
     public function __construct(?bool $requireDateInFuture = null)
     {
-        if (!is_null($requireDateInFuture)) {
+        if (!\is_null($requireDateInFuture)) {
             $this->requireDateInFuture = $requireDateInFuture;
         }
     }

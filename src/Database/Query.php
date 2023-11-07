@@ -705,7 +705,7 @@ class Query
     {
         $filtered = [];
         foreach ($queries as $query) {
-            if (in_array($query->getMethod(), $types, true)) {
+            if (\in_array($query->getMethod(), $types, true)) {
                 $filtered[] = clone $query;
             }
         }

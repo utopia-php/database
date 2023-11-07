@@ -72,7 +72,7 @@ class DateTime
      */
     public static function formatTz(?string $dbFormat): ?string
     {
-        if (is_null($dbFormat)) {
+        if (\is_null($dbFormat)) {
             return null;
         }
 

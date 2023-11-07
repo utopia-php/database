@@ -151,7 +151,7 @@ abstract class SQL extends Adapter
             unset($document['_updatedAt']);
         }
         if (\array_key_exists('_permissions', $document)) {
-            $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+            $document['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
             unset($document['_permissions']);
         }
 
@@ -724,11 +724,11 @@ abstract class SQL extends Adapter
      */
     protected function getFulltextValue(string $value): string
     {
-        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+        $exact = \str_ends_with($value, '"') && \str_starts_with($value, '"');
 
         /** Replace reserved chars with space. */
         $specialChars = '@,+,-,*,),(,<,>,~,"';
-        $value = str_replace(explode(',', $specialChars), ' ', $value);
+        $value = \str_replace(explode(',', $specialChars), ' ', $value);
         $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
         $value = trim($value);
 
@@ -842,7 +842,7 @@ abstract class SQL extends Adapter
      */
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
-        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
+        $roles = \array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (
                     SELECT distinct(_document)
                     FROM {$this->getSQLTable($collection . '_perms')}

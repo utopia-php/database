@@ -28,7 +28,7 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
-        if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
+        if (isset($input['$permissions']) && !\is_array($input['$permissions'])) {
             throw new DatabaseException('$permissions must be of type array');
         }
 
@@ -282,7 +282,7 @@ class Document extends ArrayObject
         $subject = $this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
-        if (is_array($subject)) {
+        if (\is_array($subject)) {
             foreach ($subject as $i => $value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     return $value;
@@ -314,7 +314,7 @@ class Document extends ArrayObject
         $subject = &$this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
-        if (is_array($subject)) {
+        if (\is_array($subject)) {
             foreach ($subject as $i => &$value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     $value = $replace;
@@ -347,7 +347,7 @@ class Document extends ArrayObject
         $subject = &$this[$subject] ?? null;
         $subject = (empty($subject)) ? $this : $subject;
 
-        if (is_array($subject)) {
+        if (\is_array($subject)) {
             foreach ($subject as $i => &$value) {
                 if (isset($value[$key]) && $value[$key] === $find) {
                     unset($subject[$i]);

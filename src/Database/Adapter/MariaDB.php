@@ -648,7 +648,7 @@ class MariaDB extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -697,13 +697,13 @@ class MariaDB extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (\is_array($value)) { // arrays & objects should be saved as strings
+                $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
             $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
+            $value = (\is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -872,7 +872,7 @@ class MariaDB extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -899,7 +899,7 @@ class MariaDB extends SQL
             $initial[$type] = [];
         }
 
-        $permissions = array_reduce($permissions, function (array $carry, array $item) {
+        $permissions = \array_reduce($permissions, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
 
             return $carry;
@@ -1025,8 +1025,8 @@ class MariaDB extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (\is_array($value)) { // arrays & objects should be saved as strings
+                $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
@@ -1103,7 +1103,7 @@ class MariaDB extends SQL
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = json_encode($document->getPermissions());
+                    $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                     $columns = \array_map(function ($attribute) {
                         return "`" . $this->filter($attribute) . "`";
@@ -1113,7 +1113,7 @@ class MariaDB extends SQL
 
                     foreach ($attributes as $value) {
                         if (\is_array($value)) {
-                            $value = json_encode($value);
+                            $value = \json_encode($value);
                         }
                         $value = (is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
@@ -1147,7 +1147,7 @@ class MariaDB extends SQL
                     // Get removed Permissions
                     $removals = [];
                     foreach (Database::PERMISSIONS as $type) {
-                        $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
+                        $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
                         if (!empty($diff)) {
                             $removals[$type] = $diff;
                         }
@@ -1508,7 +1508,7 @@ class MariaDB extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (!empty($cursor) && !empty($orderAttributes) && \array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
 
             $attribute = match ($attribute) {

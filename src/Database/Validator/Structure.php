@@ -229,7 +229,7 @@ class Structure extends Validator
         }
 
         foreach ($structure as $key => $value) {
-            if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
+            if (!\array_key_exists($key, $keys)) { // Check no unknown attributes are set
                 $this->message = 'Unknown attribute: "'.$key.'"';
                 return false;
             }
@@ -240,7 +240,7 @@ class Structure extends Validator
             $format = $attribute['format'] ?? '';
             $required = $attribute['required'] ?? false;
 
-            if ($required === false && is_null($value)) { // Allow null value to optional params
+            if ($required === false && \is_null($value)) { // Allow null value to optional params
                 continue;
             }
 
@@ -283,16 +283,16 @@ class Structure extends Validator
             }
 
             if ($array) { // Validate attribute type for arrays - format for arrays handled separately
-                if ($required == false && ((is_array($value) && empty($value)) || is_null($value))) { // Allow both null and [] for optional arrays
+                if ($required == false && ((\is_array($value) && empty($value)) || \is_null($value))) { // Allow both null and [] for optional arrays
                     continue;
                 }
-                if (!is_array($value)) {
+                if (!\is_array($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
                     return false;
                 }
 
                 foreach ($value as $x => $child) {
-                    if ($required == false && is_null($child)) { // Allow null value to optional params
+                    if ($required == false && \is_null($child)) { // Allow null value to optional params
                         continue;
                     }
 

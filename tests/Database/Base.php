@@ -2142,7 +2142,7 @@ abstract class Base extends TestCase
         /**
          * ORDER BY natural
          */
-        $base = array_reverse(static::getDatabase()->find('movies', [
+        $base = \array_reverse(static::getDatabase()->find('movies', [
             Query::limit(25),
             Query::offset(0),
         ]));
@@ -2285,7 +2285,7 @@ abstract class Base extends TestCase
         /**
          * ORDER BY - After by natural order
          */
-        $movies = array_reverse(static::getDatabase()->find('movies', [
+        $movies = \array_reverse(static::getDatabase()->find('movies', [
             Query::limit(25),
             Query::offset(0),
         ]));
@@ -5720,7 +5720,7 @@ abstract class Base extends TestCase
         ]));
 
         $documents = static::getDatabase()->find('parent', []);
-        $document  = array_pop($documents);
+        $document  = \array_pop($documents);
         $this->assertArrayHasKey('child1', $document);
         $this->assertEquals('foo', $document->getAttribute('child1')->getId());
         $this->assertArrayHasKey('children', $document);
@@ -12585,7 +12585,7 @@ abstract class Base extends TestCase
             ];
 
             $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
-                $shifted = array_shift($events);
+                $shifted = \array_shift($events);
 
                 $this->assertEquals($shifted, $event);
             });
@@ -12594,7 +12594,7 @@ abstract class Base extends TestCase
                 $database->setDefaultDatabase('hellodb');
                 $database->create();
             } else {
-                array_shift($events);
+                \array_shift($events);
             }
 
             $database->list();

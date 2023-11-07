@@ -654,7 +654,7 @@ class Postgres extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -700,8 +700,8 @@ class Postgres extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (\is_array($value)) { // arrays & objects should be saved as strings
+                $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
@@ -872,7 +872,7 @@ class Postgres extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -899,7 +899,7 @@ class Postgres extends SQL
             $initial[$type] = [];
         }
 
-        $permissions = array_reduce($permissions, function (array $carry, array $item) {
+        $permissions = \array_reduce($permissions, function (array $carry, array $item) {
             $carry[$item['_type']][] = $item['_permission'];
 
             return $carry;
@@ -1017,8 +1017,8 @@ class Postgres extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (\is_array($value)) { // arrays & objects should be saved as strings
+                $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
@@ -1094,7 +1094,7 @@ class Postgres extends SQL
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = json_encode($document->getPermissions());
+                    $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                     $columns = \array_map(function ($attribute) {
                         return '"' . $this->filter($attribute) . '"';
@@ -1104,7 +1104,7 @@ class Postgres extends SQL
 
                     foreach ($attributes as $value) {
                         if (\is_array($value)) {
-                            $value = json_encode($value);
+                            $value = \json_encode($value);
                         }
                         $value = (is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
@@ -1138,7 +1138,7 @@ class Postgres extends SQL
                     // Get removed Permissions
                     $removals = [];
                     foreach (Database::PERMISSIONS as $type) {
-                        $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
+                        $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
                         if (!empty($diff)) {
                             $removals[$type] = $diff;
                         }
@@ -1491,7 +1491,7 @@ class Postgres extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (!empty($cursor) && !empty($orderAttributes) && \array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
 
             $attribute = match ($attribute) {
@@ -1550,7 +1550,7 @@ class Postgres extends SQL
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results);
+            $results = \array_reverse($results);
         }
 
         return $results;
@@ -1767,13 +1767,13 @@ class Postgres extends SQL
      */
     protected function getFulltextValue(string $value): string
     {
-        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
+        $exact = \str_ends_with($value, '"') && \str_starts_with($value, '"');
+        $value = \str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
         $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
         $value = trim($value);
 
         if (!$exact) {
-            $value = str_replace(' ', ' or ', $value);
+            $value = \str_replace(' ', ' or ', $value);
         }
 
         return "'" . $value . "'";
@@ -1922,7 +1922,7 @@ class Postgres extends SQL
         }
 
         foreach ($value as &$item) {
-            $item = '"' . str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
+            $item = '"' . \str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item) . '"';
         }
 
         return '{' . implode(",", $value) . '}';

@@ -126,7 +126,7 @@ $cli
 
         $time = time();
         $f = fopen("bin/view/results/{$adapter}_{$name}_{$limit}_{$time}.json", 'w');
-        fwrite($f, json_encode($report));
+        fwrite($f, \json_encode($report));
         fclose($f);
     });
 
@@ -184,7 +184,7 @@ function addRoles($faker, $count)
 
 function runQuery(array $query, Database $database)
 {
-    $info = array_map(function ($q) {
+    $info = \array_map(function ($q) {
         /** @var $q Query */
         return $q->getAttribute() . ' : ' . $q->getMethod() . ' : ' . implode(',', $q->getValues());
     }, $query);

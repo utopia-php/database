@@ -709,7 +709,7 @@ abstract class Adapter
      *
      * @param string $value
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function filter(string $value): string
     {

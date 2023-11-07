@@ -29,7 +29,7 @@ class PostgresTest extends Base
      */
     public static function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (!\is_null(self::$database)) {
             return self::$database;
         }
 

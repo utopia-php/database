@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use InvalidArgumentException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -887,14 +886,14 @@ class Database
         return $result;
     }
 
-	/**
-	 * Get Collection Size
-	 *
-	 * @param string $collection
-	 *
-	 * @return int
-	 * @throws Exception
-	 */
+    /**
+     * Get Collection Size
+     *
+     * @param string $collection
+     *
+     * @return int
+     * @throws Exception
+     */
     public function getSizeOfCollection(string $collection): int
     {
         return $this->adapter->getSizeOfCollection($collection);
@@ -3548,9 +3547,8 @@ class Database
                             $document->setAttribute($key, $value->getId());
                         } elseif (\is_null($value)) {
                             break;
-                        } elseif(empty($value)){
-                           var_dump('I am an empty array Is I think it is ok to throw an exeption');
-                           throw new DatabaseException('Invalid value for relationship');
+                        } elseif(empty($value)) {
+                            throw new DatabaseException('Invalid value for relationship');
 
                         } else {
                             throw new DatabaseException('Invalid value for relationship');
@@ -4574,16 +4572,16 @@ class Database
         return $document;
     }
 
-	/**
-	 * Decode Document
-	 *
-	 * @param Document $collection
-	 * @param Document $document
-	 * @param array<string> $selections
-	 * @return Document
-	 * @throws DatabaseException
-	 * @throws Exception
-	 */
+    /**
+     * Decode Document
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param array<string> $selections
+     * @return Document
+     * @throws DatabaseException
+     * @throws Exception
+     */
     public function decode(Document $collection, Document $document, array $selections = []): Document
     {
         $attributes = \array_filter(

@@ -3880,8 +3880,6 @@ class Database
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
-                    var_dump("inininininininininini   RELATION_MUTATE_SET_NULL   ninininininininininininininininin");
-                    var_dump($value);
                     $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_CASCADE:

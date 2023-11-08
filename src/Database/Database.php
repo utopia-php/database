@@ -3880,6 +3880,8 @@ class Database
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
+                    var_dump("inininininininininini   RELATION_MUTATE_SET_NULL   ninininininininininininininininin");
+                    var_dump($value);
                     $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
@@ -4038,6 +4040,9 @@ class Database
                             Query::equal($twoWayKey, [$document->getId()])
                         ]);
                     } else {
+                        if(empty($value)) {
+                            return;
+                        }
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
                     }
 

@@ -31,7 +31,7 @@ class MariaDB extends SQL
             return true;
         }
 
-        $sql = "CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
+        $sql = "CREATE DATABASE `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
 
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 

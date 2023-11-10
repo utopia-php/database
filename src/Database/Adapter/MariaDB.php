@@ -749,7 +749,7 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                '1062', '23000' => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -854,7 +854,7 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                '1062', '23000' => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1051,7 +1051,7 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                '1062', '23000' => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1268,7 +1268,7 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($th->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
+                '1062', '23000' => new DuplicateException('Duplicated document: ' . $th->getMessage()),
                 default => $th,
             };
         }

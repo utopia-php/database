@@ -661,9 +661,7 @@ class MariaDB extends SQL
         $columnNames = '';
 
         try {
-            if (!$this->getPDO()->beginTransaction()) {
-                throw new DatabaseException('Failed to begin transaction');
-            }
+            $this->getPDO()->beginTransaction();
 
             /**
              * Insert Attributes
@@ -745,16 +743,14 @@ class MariaDB extends SQL
                 $stmtPermissions->execute();
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-        } catch (Throwable $th) {
-            if (!$this->getPDO()->rollBack()) {
-                throw new DatabaseException('Failed to rollBack transaction');
-            }
-            throw match ($th->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
-                default => $th,
+            $this->getPDO()->commit();
+
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+
+            throw match ($e->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                default => $e,
             };
         }
 
@@ -781,9 +777,7 @@ class MariaDB extends SQL
         }
 
         try {
-            if (!$this->getPDO()->beginTransaction()) {
-                throw new DatabaseException('Failed to begin transaction');
-            }
+            $this->getPDO()->beginTransaction();
 
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
@@ -852,20 +846,16 @@ class MariaDB extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
+            $this->getPDO()->commit();
 
             return $documents;
 
-        } catch (Throwable $th) {
-            if (!$this->getPDO()->rollBack()) {
-                throw new DatabaseException('Failed to rollBack transaction');
-            }
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
 
-            throw match ($th->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
-                default => $th,
+            throw match ($e->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                default => $e,
             };
         }
     }
@@ -892,9 +882,7 @@ class MariaDB extends SQL
         $columns = '';
 
         try {
-            if (!$this->getPDO()->beginTransaction()) {
-                throw new DatabaseException('Failed to begin transaction');
-            }
+            $this->getPDO()->beginTransaction();
 
             $sql = "
                 SELECT _type, _permission
@@ -1058,16 +1046,13 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-        } catch (Throwable $th) {
-            if (!$this->getPDO()->rollBack()) {
-                throw new DatabaseException('Failed to rollBack transaction');
-            }
-            throw match ($th->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
-                default => $th,
+            $this->getPDO()->commit();
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+
+            throw match ($e->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                default => $e,
             };
         }
 
@@ -1094,9 +1079,7 @@ class MariaDB extends SQL
         }
 
         try {
-            if (!$this->getPDO()->beginTransaction()) {
-                throw new DatabaseException('Failed to begin transaction');
-            }
+            $this->getPDO()->beginTransaction();
 
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
@@ -1278,15 +1261,11 @@ class MariaDB extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
+            $this->getPDO()->commit();
 
             return $documents;
-        } catch (Throwable $th) {
-            if (!$this->getPDO()->rollBack()) {
-                throw new DatabaseException('Failed to rollBack transaction');
-            }
+        } catch (PDOException $th) {
+            $this->getPDO()->rollBack();
 
             throw match ($th->getCode()) {
                 1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
@@ -1348,9 +1327,7 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
 
         try {
-            if (!$this->getPDO()->beginTransaction()) {
-                throw new DatabaseException('Failed to begin transaction');
-            }
+            $this->getPDO()->beginTransaction();
 
             $sql = "
                 DELETE FROM {$this->getSQLTable($name)} 
@@ -1374,20 +1351,18 @@ class MariaDB extends SQL
             $stmtPermissions->bindValue(':_uid', $id);
 
             if (!$stmt->execute()) {
-                throw new DatabaseException('Failed to delete document');
+                throw new PDOException('Failed to delete document');
             }
             if (!$stmtPermissions->execute()) {
-                throw new DatabaseException('Failed to clean permissions');
+                throw new PDOException('Failed to clean permissions');
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-        } catch (Throwable $th) {
-            if (!$this->getPDO()->rollBack()) {
-                throw new DatabaseException('Failed to rollBack transaction');
-            }
-            throw new DatabaseException($th->getMessage());
+            $this->getPDO()->commit();
+
+        } catch (PDOException $e) {
+            $this->getPDO()->rollBack();
+
+            throw $e;
         }
 
         return true;

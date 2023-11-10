@@ -659,88 +659,97 @@ class MariaDB extends SQL
         $columnNames = '';
 
         try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
-        /**
-         * Insert Attributes
-         */
-        $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) { // Parse statement
-            $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`, ";
-            $columnNames .= ':' . $bindKey . ', ';
-            $bindIndex++;
-        }
-
-        // Insert manual id if set
-        if (!empty($document->getInternalId())) {
-            $bindKey = '_id';
-            $columns .= "_id, ";
-            $columnNames .= ':' . $bindKey . ', ';
-        }
-
-        $sql = "
-			INSERT INTO {$this->getSQLTable($name)}({$columns} _uid)
-			VALUES ({$columnNames} :_uid)
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
-
-        // Bind manual internal id if set
-        if (!empty($document->getInternalId())) {
-            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
-        }
-
-        $attributeIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            if (!$this->getPDO()->beginTransaction()) {
+                throw new Exception('Failed to begin transaction');
             }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
-        }
-
-        $permissions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+            /**
+             * Insert Attributes
+             */
+            $bindIndex = 0;
+            foreach ($attributes as $attribute => $value) { // Parse statement
+                $column = $this->filter($attribute);
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "`{$column}`, ";
+                $columnNames .= ':' . $bindKey . ', ';
+                $bindIndex++;
             }
-        }
 
-        if (!empty($permissions)) {
-            $strPermissions = \implode(', ', $permissions);
+            // Insert manual id if set
+            if (!empty($document->getInternalId())) {
+                $bindKey = '_id';
+                $columns .= "_id, ";
+                $columnNames .= ':' . $bindKey . ', ';
+            }
 
-            $sqlPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
-				VALUES {$strPermissions}
-			";
-            $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
-            $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
-        }
+            $sql = "
+                INSERT INTO {$this->getSQLTable($name)}({$columns} _uid)
+                VALUES ({$columnNames} :_uid)
+            ";
 
-        try {
+            $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
+
+            $stmt = $this->getPDO()->prepare($sql);
+
+            $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+
+            // Bind manual internal id if set
+            if (!empty($document->getInternalId())) {
+                $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+            }
+
+            $attributeIndex = 0;
+            foreach ($attributes as $attribute => $value) {
+                if (is_array($value)) { // arrays & objects should be saved as strings
+                    $value = json_encode($value);
+                }
+
+                $bindKey = 'key_' . $attributeIndex;
+                $attribute = $this->filter($attribute);
+                $value = (is_bool($value)) ? (int)$value : $value;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
+            }
+
+            $permissions = [];
+            foreach (Database::PERMISSIONS as $type) {
+                foreach ($document->getPermissionsByType($type) as $permission) {
+                    $permission = \str_replace('"', '', $permission);
+                    $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+                }
+            }
+
+            if (!empty($permissions)) {
+                $strPermissions = \implode(', ', $permissions);
+
+                $sqlPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
+                    VALUES {$strPermissions}
+                ";
+                $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+            }
+
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+            if(empty($document->getInternalId())) {
+                $statement = $this->getPDO()->prepare("select last_insert_id() as id");
+                $statement->execute();
+                $last = $statement->fetch();
+                $document['$internalId'] = $last['id'];
+            }
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
+
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
+            if (!$this->getPDO()->rollBack()) {
+                throw new DatabaseException('Failed to rollBack transaction');
+            }
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
@@ -749,10 +758,6 @@ class MariaDB extends SQL
                 default:
                     throw $e;
             }
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -768,6 +773,7 @@ class MariaDB extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws Exception
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -775,9 +781,11 @@ class MariaDB extends SQL
             return $documents;
         }
 
-        $this->getPDO()->beginTransaction();
-
         try {
+            if (!$this->getPDO()->beginTransaction()) {
+                throw new Exception('Failed to begin transaction');
+            }
+
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -852,7 +860,9 @@ class MariaDB extends SQL
             return $documents;
 
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
+            if (!$this->getPDO()->rollBack()) {
+                throw new DatabaseException('Failed to rollBack transaction');
+            }
 
             throw match ($e->getCode()) {
                 1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
@@ -881,166 +891,164 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $columns = '';
 
-        $sql = "
-			SELECT _type, _permission
-			FROM {$this->getSQLTable($name . '_perms')} p
-			WHERE p._document = :_uid
-		";
-
-        $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
-
-        /**
-         * Get current permissions from the database
-         */
-        $sqlPermissions = $this->getPDO()->prepare($sql);
-        $sqlPermissions->bindValue(':_uid', $document->getId());
-        $sqlPermissions->execute();
-        $permissions = $sqlPermissions->fetchAll();
-        $sqlPermissions->closeCursor();
-
-        $initial = [];
-        foreach (Database::PERMISSIONS as $type) {
-            $initial[$type] = [];
-        }
-
-        $permissions = array_reduce($permissions, function (array $carry, array $item) {
-            $carry[$item['_type']][] = $item['_permission'];
-
-            return $carry;
-        }, $initial);
-
         try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
-        /**
-         * Get removed Permissions
-         */
-        $removals = [];
-        foreach (Database::PERMISSIONS as $type) {
-            $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
-            if (!empty($diff)) {
-                $removals[$type] = $diff;
-            }
-        }
-
-        /**
-         * Get added Permissions
-         */
-        $additions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-            if (!empty($diff)) {
-                $additions[$type] = $diff;
-            }
-        }
-
-        /**
-         * Query to remove permissions
-         */
-        $removeQuery = '';
-        if (!empty($removals)) {
-            $removeQuery = 'AND (';
-            foreach ($removals as $type => $permissions) {
-                $removeQuery .= "(
-                    _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
-                )";
-                if ($type !== \array_key_last($removals)) {
-                    $removeQuery .= ' OR ';
-                }
-            }
-        }
-        if (!empty($removeQuery)) {
-            $removeQuery .= ')';
-            $removeQuery = "
-				DELETE
-                FROM {$this->getSQLTable($name . '_perms')}
-                WHERE
-                    _document = :_uid
-                    {$removeQuery}
-			";
-
-            $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
-
-            $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
-            $stmtRemovePermissions->bindValue(':_uid', $document->getId());
-
-            foreach ($removals as $type => $permissions) {
-                foreach ($permissions as $i => $permission) {
-                    $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
-                }
-            }
-        }
-
-        /**
-         * Query to add permissions
-         */
-        if (!empty($additions)) {
-            $values = [];
-            foreach ($additions as $type => $permissions) {
-                foreach ($permissions as $i => $_) {
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
-                }
+            if (!$this->getPDO()->beginTransaction()) {
+                throw new Exception('Failed to begin transaction');
             }
 
             $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')}
-				(_document, _type, _permission) VALUES " . \implode(', ', $values)
-            ;
+                SELECT _type, _permission
+                FROM {$this->getSQLTable($name . '_perms')} p
+                WHERE p._document = :_uid FOR UPDATE
+            ";
 
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
-            $stmtAddPermissions = $this->getPDO()->prepare($sql);
+            /**
+             * Get current permissions from the database
+             */
+            $sqlPermissions = $this->getPDO()->prepare($sql);
+            $sqlPermissions->bindValue(':_uid', $document->getId());
+            $sqlPermissions->execute();
+            $permissions = $sqlPermissions->fetchAll();
+            $sqlPermissions->closeCursor();
 
-            $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            foreach ($additions as $type => $permissions) {
-                foreach ($permissions as $i => $permission) {
-                    $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
+            $initial = [];
+            foreach (Database::PERMISSIONS as $type) {
+                $initial[$type] = [];
+            }
+
+            $permissions = array_reduce($permissions, function (array $carry, array $item) {
+                $carry[$item['_type']][] = $item['_permission'];
+
+                return $carry;
+            }, $initial);
+
+            /**
+             * Get removed Permissions
+             */
+            $removals = [];
+            foreach (Database::PERMISSIONS as $type) {
+                $diff = \array_diff($permissions[$type], $document->getPermissionsByType($type));
+                if (!empty($diff)) {
+                    $removals[$type] = $diff;
                 }
             }
-        }
 
-        /**
-         * Update Attributes
-         */
-
-        $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
-            $bindIndex++;
-        }
-
-        $sql = "
-			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_uid 
-			WHERE _uid = :_uid
-		";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        $stmt->bindValue(':_uid', $document->getId());
-
-        $attributeIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
-                $value = json_encode($value);
+            /**
+             * Get added Permissions
+             */
+            $additions = [];
+            foreach (Database::PERMISSIONS as $type) {
+                $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
+                if (!empty($diff)) {
+                    $additions[$type] = $diff;
+                }
             }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
-        }
+            /**
+             * Query to remove permissions
+             */
+            $removeQuery = '';
+            if (!empty($removals)) {
+                $removeQuery = 'AND (';
+                foreach ($removals as $type => $permissions) {
+                    $removeQuery .= "(
+                        _type = '{$type}'
+                        AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                    )";
+                    if ($type !== \array_key_last($removals)) {
+                        $removeQuery .= ' OR ';
+                    }
+                }
+            }
+            if (!empty($removeQuery)) {
+                $removeQuery .= ')';
+                $removeQuery = "
+                    DELETE
+                    FROM {$this->getSQLTable($name . '_perms')}
+                    WHERE
+                        _document = :_uid
+                        {$removeQuery}
+                ";
 
-        try {
+                $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
+
+                $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
+                $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+
+                foreach ($removals as $type => $permissions) {
+                    foreach ($permissions as $i => $permission) {
+                        $stmtRemovePermissions->bindValue(":_remove_{$type}_{$i}", $permission);
+                    }
+                }
+            }
+
+            /**
+             * Query to add permissions
+             */
+            if (!empty($additions)) {
+                $values = [];
+                foreach ($additions as $type => $permissions) {
+                    foreach ($permissions as $i => $_) {
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                    }
+                }
+
+                $sql = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')}
+                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
+                ;
+
+                $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
+
+                $stmtAddPermissions = $this->getPDO()->prepare($sql);
+
+                $stmtAddPermissions->bindValue(":_uid", $document->getId());
+                foreach ($additions as $type => $permissions) {
+                    foreach ($permissions as $i => $permission) {
+                        $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
+                    }
+                }
+            }
+
+            /**
+             * Update Attributes
+             */
+
+            $bindIndex = 0;
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                $bindIndex++;
+            }
+
+            $sql = "
+                UPDATE {$this->getSQLTable($name)}
+                SET {$columns} _uid = :_uid 
+                WHERE _uid = :_uid
+            ";
+
+            $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+
+            $stmt = $this->getPDO()->prepare($sql);
+
+            $stmt->bindValue(':_uid', $document->getId());
+
+            $attributeIndex = 0;
+            foreach ($attributes as $attribute => $value) {
+                if (is_array($value)) { // arrays & objects should be saved as strings
+                    $value = json_encode($value);
+                }
+
+                $bindKey = 'key_' . $attributeIndex;
+                $attribute = $this->filter($attribute);
+                $value = (is_bool($value)) ? (int)$value : $value;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
+            }
+
             $stmt->execute();
 
             if (isset($stmtRemovePermissions)) {
@@ -1049,8 +1057,14 @@ class MariaDB extends SQL
             if (isset($stmtAddPermissions)) {
                 $stmtAddPermissions->execute();
             }
+
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
+            if (!$this->getPDO()->rollBack()) {
+                throw new DatabaseException('Failed to rollBack transaction');
+            }
             switch ($e->getCode()) {
                 case 1062:
                 case 23000:
@@ -1059,10 +1073,6 @@ class MariaDB extends SQL
                 default:
                     throw $e;
             }
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -1078,6 +1088,7 @@ class MariaDB extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws Exception
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1085,9 +1096,11 @@ class MariaDB extends SQL
             return $documents;
         }
 
-        $this->getPDO()->beginTransaction();
-
         try {
+            if (!$this->getPDO()->beginTransaction()) {
+                throw new Exception('Failed to begin transaction');
+            }
+
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -1274,7 +1287,9 @@ class MariaDB extends SQL
 
             return $documents;
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
+            if (!$this->getPDO()->rollBack()) {
+                throw new DatabaseException('Failed to rollBack transaction');
+            }
 
             throw match ($e->getCode()) {
                 1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
@@ -1336,46 +1351,46 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
 
         try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
+            if (!$this->getPDO()->beginTransaction()) {
+                throw new Exception('Failed to begin transaction');
+            }
 
-        $sql = "
-		    DELETE FROM {$this->getSQLTable($name)} 
-		    WHERE _uid = :_uid
-		";
+            $sql = "
+                DELETE FROM {$this->getSQLTable($name)} 
+                WHERE _uid = :_uid
+            ";
 
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+            $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
+            $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_uid', $id);
+            $stmt->bindValue(':_uid', $id);
 
-        $sql = "
-			DELETE FROM {$this->getSQLTable($name . '_perms')} 
-		    WHERE _document = :_uid
-		";
+            $sql = "
+                DELETE FROM {$this->getSQLTable($name . '_perms')} 
+                WHERE _document = :_uid
+            ";
 
-        $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
-        $stmtPermissions = $this->getPDO()->prepare($sql);
-        $stmtPermissions->bindValue(':_uid', $id);
+            $stmtPermissions = $this->getPDO()->prepare($sql);
+            $stmtPermissions->bindValue(':_uid', $id);
 
-        try {
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to clean permissions');
             }
-        } catch (\Throwable $th) {
-            $this->getPDO()->rollBack();
-            throw new DatabaseException($th->getMessage());
-        }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
+        } catch (\Throwable $th) {
+            if (!$this->getPDO()->rollBack()) {
+                throw new DatabaseException('Failed to rollBack transaction');
+            }
+            throw new DatabaseException($th->getMessage());
         }
 
         return true;

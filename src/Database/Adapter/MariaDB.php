@@ -69,8 +69,6 @@ class MariaDB extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $database = $this->getDefaultDatabase();
-        $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
         /** @var array<string> $attributeStrings */
@@ -112,9 +110,10 @@ class MariaDB extends SQL
         }
 
         $sql = "
-			CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
+			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
 				`_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
 				`_uid` VARCHAR(255) NOT NULL,
+				`_tenant` CHAR(36) NOT NULL,
 				`_createdAt` datetime(3) DEFAULT NULL,
 				`_updatedAt` datetime(3) DEFAULT NULL,
 				`_permissions` MEDIUMTEXT DEFAULT NULL,
@@ -122,8 +121,10 @@ class MariaDB extends SQL
 				PRIMARY KEY (`_id`),
 				" . \implode(' ', $indexStrings) . "
 				UNIQUE KEY `_uid` (`_uid`),
-				KEY `_created_at` (`_createdAt`),
-				KEY `_updated_at` (`_updatedAt`)
+				KEY `_tenant` (`_tenant`),
+				KEY `_created_at` (`_createdAt`, `_tenant`),
+				KEY `_updated_at` (`_updatedAt`, `_tenant`),
+				KEY `_uid_tenant` (`_uid`, `_tenant`)
 			)
 		";
 
@@ -135,14 +136,15 @@ class MariaDB extends SQL
                 ->execute();
 
             $sql = "
-				CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
+				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
 					`_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+					`_tenant` CHAR(36) NOT NULL,
 					`_type` VARCHAR(12) NOT NULL,
 					`_permission` VARCHAR(255) NOT NULL,
 					`_document` VARCHAR(255) NOT NULL,
 					PRIMARY KEY (`_id`),
-					UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-					INDEX `_permission` (`_permission`,`_type`,`_document`)
+					UNIQUE INDEX `_index1` (`_document`, `_tenant`, `_type`,`_permission`),
+					INDEX `_permission` (`_permission`, `_type`, `_tenant`, `_document`)
 				)
 			";
 
@@ -162,7 +164,8 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get Collection Size
+     * Get collection size
+     *
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -171,7 +174,7 @@ class MariaDB extends SQL
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;
-        $database = $this->getDefaultDatabase();
+        $database = $this->getDatabase();
         $name = $database . '/' . $collection;
         $permissions = $database . '/' . $collection . '_perms';
 
@@ -202,7 +205,8 @@ class MariaDB extends SQL
     }
 
     /**
-     * Delete Collection
+     * Delete collection
+     *
      * @param string $id
      * @return bool
      * @throws Exception
@@ -341,7 +345,7 @@ class MariaDB extends SQL
      * @param bool $twoWay
      * @param string $twoWayKey
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function createRelationship(
         string $collection,
@@ -471,6 +475,17 @@ class MariaDB extends SQL
             ->execute();
     }
 
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws DatabaseException
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,
@@ -646,9 +661,10 @@ class MariaDB extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+        $attributes['_tenant'] = $document->getAttribute('$tenant');
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
         $columns = '';
@@ -660,11 +676,8 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
         }
 
-        /**
-         * Insert Attributes
-         */
         $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) { // Parse statement
+        foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
             $columns .= "`{$column}`, ";
@@ -672,7 +685,7 @@ class MariaDB extends SQL
             $bindIndex++;
         }
 
-        // Insert manual id if set
+        // Insert internal ID if set
         if (!empty($document->getInternalId())) {
             $bindKey = '_id';
             $columns .= "_id, ";
@@ -690,19 +703,17 @@ class MariaDB extends SQL
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
-        // Bind manual internal id if set
         if (!empty($document->getInternalId())) {
             $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
         }
 
         $attributeIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
+        foreach ($attributes as $value) {
+            if (is_array($value)) {
                 $value = json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
@@ -712,7 +723,7 @@ class MariaDB extends SQL
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', '{$document->getAttribute('$tenant')}')";
             }
         }
 
@@ -720,7 +731,7 @@ class MariaDB extends SQL
             $strPermissions = \implode(', ', $permissions);
 
             $sqlPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) 
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
 				VALUES {$strPermissions}
 			";
             $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
@@ -737,14 +748,11 @@ class MariaDB extends SQL
             }
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-
-                default:
-                    throw $e;
-            }
+            throw match ($e->getCode()) {
+                1062,
+                23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                default => $e,
+            };
         }
 
         if (!$this->getPDO()->commit()) {
@@ -842,7 +850,7 @@ class MariaDB extends SQL
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;
@@ -1002,7 +1010,6 @@ class MariaDB extends SQL
         /**
          * Update Attributes
          */
-
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
@@ -1025,7 +1032,7 @@ class MariaDB extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
+            if (is_array($value)) {
                 $value = json_encode($value);
             }
 
@@ -1047,14 +1054,11 @@ class MariaDB extends SQL
             }
         } catch (PDOException $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-
-                default:
-                    throw $e;
-            }
+            throw match ($e->getCode()) {
+                1062,
+                23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                default => $e,
+            };
         }
 
         if (!$this->getPDO()->commit()) {
@@ -1265,7 +1269,7 @@ class MariaDB extends SQL
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;
@@ -1273,7 +1277,8 @@ class MariaDB extends SQL
             $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
+                1062,
+                23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1757,6 +1762,7 @@ class MariaDB extends SQL
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',
             '$internalId' => '_id',
+            '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $query->getAttribute()
@@ -1861,7 +1867,9 @@ class MariaDB extends SQL
             default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
         };
 
-        return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
+        $attributes = \implode(', ', $attributes);
+
+        return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ({$attributes}, _tenant)";
     }
 
     /**

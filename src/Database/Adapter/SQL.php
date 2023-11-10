@@ -68,10 +68,11 @@ abstract class SQL extends Adapter
             $match = $database;
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("SELECT {$select}
-                FROM {$from}
-                WHERE {$where};");
+        $stmt = $this->getPDO()->prepare("
+			SELECT {$select}
+			FROM {$from}
+			WHERE {$where}
+		");
 
         $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
 
@@ -83,11 +84,12 @@ abstract class SQL extends Adapter
 
         $document = $stmt->fetchAll();
         $stmt->closeCursor();
+
         if (!empty($document)) {
             $document = $document[0];
         }
 
-        return (($document[$select] ?? '') === $match) || // case insensitive check
+        return (($document[$select] ?? '') === $match) || // case-insensitive check
             (($document[strtolower($select)] ?? '') === $match);
     }
 
@@ -113,16 +115,32 @@ abstract class SQL extends Adapter
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
-
         $selections = $this->getAttributeSelections($queries);
+        $filters = Query::groupByType($queries)['filters'];
+
+        $tenantQuery = null;
+        $tenantWhere = '';
+
+        foreach ($filters as $query) {
+            if ($query->getAttribute() === '$tenant') {
+                $tenantQuery = $query;
+                $tenantWhere = 'AND _tenant = :_tenant';
+            }
+        }
 
         $stmt = $this->getPDO()->prepare("
             SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid;
+            WHERE _uid = :_uid 
+            {$tenantWhere}
         ");
 
         $stmt->bindValue(':_uid', $id);
+
+        if (!empty($tenantQuery)) {
+            $stmt->bindValue(':_tenant', $tenantQuery->getValue());
+        }
+
         $stmt->execute();
 
         $document = $stmt->fetchAll();
@@ -852,20 +870,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Get SQL schema
-     *
-     * @return string
-     */
-    protected function getSQLSchema(): string
-    {
-        if (!$this->getSupportForSchemas()) {
-            return '';
-        }
-
-        return "`{$this->getDefaultDatabase()}`.";
-    }
-
-    /**
      * Get SQL table
      *
      * @param string $name
@@ -873,7 +877,7 @@ abstract class SQL extends Adapter
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
+        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$name}`";
     }
 
     /**

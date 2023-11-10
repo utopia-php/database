@@ -78,10 +78,6 @@ abstract class Adapter
      */
     public function setNamespace(string $namespace): bool
     {
-        if (empty($namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
         $this->namespace = $this->filter($namespace);
 
         return true;
@@ -98,10 +94,6 @@ abstract class Adapter
      */
     public function getNamespace(): string
     {
-        if (empty($this->namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
         return $this->namespace;
     }
 
@@ -111,18 +103,13 @@ abstract class Adapter
      * Set database to use for current scope
      *
      * @param string $name
-     * @param bool $reset
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    public function setDatabase(string $name): bool
     {
-        if (empty($name) && $reset === false) {
-            throw new DatabaseException('Missing database');
-        }
-
-        $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
+        $this->defaultDatabase = $this->filter($name);
 
         return true;
     }
@@ -133,10 +120,10 @@ abstract class Adapter
      * Get Database from current scope
      *
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
-    public function getDefaultDatabase(): string
+    public function getDatabase(): string
     {
         if (empty($this->defaultDatabase)) {
             throw new DatabaseException('Missing default database');
@@ -709,7 +696,7 @@ abstract class Adapter
      *
      * @param string $value
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function filter(string $value): string
     {

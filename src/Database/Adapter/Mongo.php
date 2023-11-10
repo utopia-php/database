@@ -612,8 +612,7 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
-        $collection = $this->getDatabase();
-        $collection->dropIndexes($name, [$id]);
+        $this->getClient()->dropIndexes($name, [$id]);
 
         return true;
     }
@@ -1220,17 +1219,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param string|null $name
-     * @return Client
-     *
-     * @throws Exception
-     */
-    protected function getDatabase(string $name = null): Client
-    {
-        return $this->getClient()->selectDatabase();
-    }
-
-    /**
      * @return Client
      *
      * @throws Exception
@@ -1648,58 +1636,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * Return set namespace.
-     *
-     * @return string
-     * @throws Exception
-     */
-    public function getNamespace(): string
-    {
-        if (empty($this->namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
-        return $this->namespace;
-    }
-
-    /**
-     * Set's default database.
-     *
-     * @param string $name
-     * @param bool $reset
-     * @return bool
-     * @throws Exception
-     */
-    public function setDefaultDatabase(string $name, bool $reset = false): bool
-    {
-        if (empty($name) && $reset === false) {
-            throw new DatabaseException('Missing database');
-        }
-
-        $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
-
-        return true;
-    }
-
-    /**
-     * Set's the namespace.
-     *
-     * @param string $namespace
-     * @return bool
-     * @throws Exception
-     */
-    public function setNamespace(string $namespace): bool
-    {
-        if (empty($namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
-        $this->namespace = $this->filter($namespace);
-
-        return true;
-    }
-
-    /**
      * Flattens the array.
      *
      * @param mixed $list
@@ -1773,6 +1709,7 @@ class Mongo extends Adapter
         if (!$this->getSupportForTimeouts()) {
             return;
         }
+
         $this->timeout = $milliseconds;
     }
 

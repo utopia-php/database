@@ -45,7 +45,7 @@ class PostgresTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new Postgres($pdo), $cache);
-        $database->setDefaultDatabase('utopiaTests');
+        $database->setDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
         if ($database->exists('utopiaTests')) {

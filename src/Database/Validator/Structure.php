@@ -53,6 +53,16 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
+            '$id' => '$tenant',
+            'type' => Database::VAR_STRING,
+            'size' => 36,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
             '$id' => '$permissions',
             'type' => Database::VAR_STRING,
             'size' => 67000, // medium text

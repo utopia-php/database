@@ -4,8 +4,6 @@ namespace Utopia\Database;
 
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 
 /**
  * @extends ArrayObject<string, mixed>
@@ -169,14 +167,7 @@ class Document extends ArrayObject
         $attributes = [];
 
         foreach ($this as $attribute => $value) {
-            if (\array_key_exists($attribute, [
-                '$id' => true,
-                '$internalId' => true,
-                '$collection' => true,
-                '$permissions' => [Permission::read(Role::any())],
-                '$createdAt' => true,
-                '$updatedAt' => true,
-            ])) {
+            if (\in_array($attribute, Database::INTERNAL_ATTRIBUTES)) {
                 continue;
             }
 

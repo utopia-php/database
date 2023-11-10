@@ -931,7 +931,7 @@ class SQLite extends MariaDB
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;

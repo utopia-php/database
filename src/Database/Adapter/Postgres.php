@@ -74,7 +74,6 @@ class Postgres extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
@@ -98,6 +97,7 @@ class Postgres extends SQL
             CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 \"_id\" SERIAL NOT NULL,
                 \"_uid\" VARCHAR(255) NOT NULL,
+                \"_tenant\" SERIAL NOT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_permissions\" TEXT DEFAULT NULL,
@@ -120,6 +120,7 @@ class Postgres extends SQL
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
 					\"_id\" SERIAL NOT NULL,
+					\"_tenant\" SERIAL NOT NULL,
 					\"_type\" VARCHAR(12) NOT NULL,
 					\"_permission\" VARCHAR(255) NOT NULL,
 					\"_document\" VARCHAR(255) NOT NULL,
@@ -604,7 +605,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $schemaName = $this->getDefaultDatabase();
+        $schemaName = $this->getDatabase();
 
         $sql = "DROP INDEX IF EXISTS \"{$schemaName}\".{$id}";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
@@ -844,7 +845,7 @@ class Postgres extends SQL
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;
@@ -1256,7 +1257,7 @@ class Postgres extends SQL
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;
@@ -1858,7 +1859,7 @@ class Postgres extends SQL
             return '';
         }
 
-        return "\"{$this->getDefaultDatabase()}\".";
+        return "\"{$this->getDatabase()}\".";
     }
 
     /**
@@ -1869,7 +1870,7 @@ class Postgres extends SQL
      */
     protected function getSQLTable(string $name): string
     {
-        return "\"{$this->getDefaultDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
+        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
     }
 
     /**

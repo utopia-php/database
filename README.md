@@ -244,10 +244,10 @@ $database->setNamespace(
 );
 
 // Get default database
-$database->getDefaultDatabase();
+$database->getDatabase();
 
 // Sets default database
-$database->setDefaultDatabase(
+$database->setDatabase(
     name: 'dbName'
 );
 

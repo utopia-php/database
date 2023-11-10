@@ -52,7 +52,7 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
-        $database->setDefaultDatabase($schema);
+        $database->setDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {
@@ -73,7 +73,7 @@ class MongoDBTest extends Base
         $this->assertNotNull(static::getDatabase()->create());
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
-        $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->setDatabase($this->testDatabase));
     }
 
     public function testRenameAttribute(): void

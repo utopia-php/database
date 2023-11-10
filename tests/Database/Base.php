@@ -60,7 +60,7 @@ abstract class Base extends TestCase
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
         if (!$schemaSupport) {
-            $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+            $this->assertEquals(true, static::getDatabase()->setDatabase($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->create());
             return;
         }
@@ -71,7 +71,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->setDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
@@ -12529,6 +12529,83 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testIsolationModes(): void
+    {
+        /**
+         * Default mode already tested, we'll test 'schema' and 'table' isolation here
+         */
+        $database = static::getDatabase();
+
+        /**
+         * Schema
+         */
+        $database
+            ->setIsolationMode(Database::ISOLATION_MODE_SCHEMA) // Do we even need this for schema?
+            ->setDatabase('schema1')
+            ->setNamespace('')
+            ->create();
+
+        $this->assertEquals(true, $database->exists('schema1'));
+
+        $database
+            ->setIsolationMode(Database::ISOLATION_MODE_SCHEMA) // Do we even need this for schema?
+            ->setDatabase('schema2')
+            ->setNamespace('')
+            ->create();
+
+        $this->assertEquals(true, $database->exists('schema2'));
+
+        /**
+         * Table
+         */
+
+        $tenant1 = ID::unique();
+        $tenant2 = ID::unique();
+
+        $database
+            ->setIsolationMode(Database::ISOLATION_MODE_TABLE)
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setTenant($tenant1)
+            ->create();
+
+        $this->assertEquals(true, $database->exists('sharedTables'));
+
+        $database->createCollection('people', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => true,
+            ])
+        ]);
+
+        $docId = ID::unique();
+
+        $database->createDocument('people', new Document([
+            '$id' => $docId,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => $tenant1,
+        ]));
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals($tenant1, $doc['name']);
+
+        $docs = $database->find('people');
+        $this->assertEquals(1, \count($docs));
+
+        $database->setTenant($tenant2);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEmpty($doc);
+
+        $docs = $database->find('people');
+        $this->assertEquals(0, \count($docs));
+
+    }
+
     public function testTransformations(): void
     {
         static::getDatabase()->createCollection('docs', attributes: [
@@ -12591,7 +12668,7 @@ abstract class Base extends TestCase
             });
 
             if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
-                $database->setDefaultDatabase('hellodb');
+                $database->setDatabase('hellodb');
                 $database->create();
             } else {
                 array_shift($events);
@@ -12599,7 +12676,7 @@ abstract class Base extends TestCase
 
             $database->list();
 
-            $database->setDefaultDatabase($this->testDatabase);
+            $database->setDatabase($this->testDatabase);
 
             $collectionId = ID::unique();
             $database->createCollection($collectionId);

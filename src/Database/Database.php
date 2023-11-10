@@ -142,20 +142,11 @@ class Database
     protected array $map = [];
 
     /**
-     * @var array<string, bool>
-     */
-    protected array $primitives = [
-        self::VAR_STRING => true,
-        self::VAR_INTEGER => true,
-        self::VAR_FLOAT => true,
-        self::VAR_BOOLEAN => true,
-    ];
-
-    /**
-     * List of Internal Ids
+     * List of Internal attributes
+     *
      * @var array<array<string, mixed>>
      */
-    protected static array $attributes = [
+    protected const ATTRIBUTES = [
         [
             '$id' => '$id',
             'type' => self::VAR_STRING,
@@ -170,6 +161,16 @@ class Database
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$tenant',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => false,
+            'default' => null,
             'signed' => true,
             'array' => false,
             'filters' => [],
@@ -195,7 +196,7 @@ class Database
             'default' => null,
             'array' => false,
             'filters' => ['datetime']
-        ]
+        ],
     ];
 
     /**
@@ -206,10 +207,11 @@ class Database
     public const INTERNAL_ATTRIBUTES = [
         '$id',
         '$internalId',
+        '$collection',
+        '$tenant',
         '$createdAt',
         '$updatedAt',
         '$permissions',
-        '$collection',
     ];
 
     /**
@@ -311,6 +313,8 @@ class Database
     protected ?\DateTime $timestamp = null;
 
     protected string $isolationMode = self::ISOLATION_MODE_SHARED;
+
+    protected string $tenant = '';
 
     protected bool $resolveRelationships = true;
 
@@ -578,14 +582,15 @@ class Database
      * Set database to use for current scope
      *
      * @param string $name
-     * @param bool $reset
      *
-     * @return bool
+     * @return self
      * @throws Exception
      */
-    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    public function setDatabase(string $name): self
     {
-        return $this->adapter->setDefaultDatabase($name, $reset);
+        $this->adapter->setDatabase($name);
+
+        return $this;
     }
 
     /**
@@ -597,9 +602,9 @@ class Database
      *
      * @return string
      */
-    public function getDefaultDatabase(): string
+    public function getDatabase(): string
     {
-        return $this->adapter->getDefaultDatabase();
+        return $this->adapter->getDatabase();
     }
 
     /**
@@ -662,22 +667,33 @@ class Database
         $this->adapter->clearTimeout($event);
     }
 
+    /**
+     * Set the isolation mode used when creating a new database resource
+     *
+     * @param string $mode
+     * @return $this
+     * @throws DatabaseException
+     */
     public function setIsolationMode(string $mode): self
     {
         if (!\in_array($mode, [
-			self::ISOLATION_MODE_SCHEMA,
-			self::ISOLATION_MODE_SHARED,
-			self::ISOLATION_MODE_TABLE
-		])) {
+            self::ISOLATION_MODE_SCHEMA,
+            self::ISOLATION_MODE_SHARED,
+            self::ISOLATION_MODE_TABLE
+        ])) {
             throw new DatabaseException('Invalid isolation mode');
         }
+
+        $this->isolationMode = $mode;
 
         return $this;
     }
 
-    public function getIsolationMode(): string
+    public function setTenant(string $tenant): self
     {
-        return $this->isolationMode;
+        $this->tenant = $tenant;
+
+        return $this;
     }
 
     /**
@@ -699,7 +715,7 @@ class Database
      */
     public function create(): bool
     {
-        $name = $this->adapter->getDefaultDatabase();
+        $name = $this->adapter->getDatabase();
         $this->adapter->create($name);
 
         /**
@@ -2288,6 +2304,13 @@ class Database
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
+        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if (empty($this->tenant)) {
+                throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
+            }
+            $queries[] = Query::equal('$tenant', [$this->tenant]);
+        }
+
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document($this->collection);
         }
@@ -2713,6 +2736,13 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if (empty($this->tenant)) {
+                throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
+            }
+            $document->setAttribute('$tenant', $this->tenant);
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
@@ -2783,6 +2813,12 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
+            if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+                if (empty($document->getAttribute('$tenant'))) {
+                    throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+                }
+            }
+
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
@@ -3101,6 +3137,12 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
+        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if (empty($document->getAttribute('$tenant'))) {
+                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+            }
+        }
+
         if (!$document->getId() || !$id) {
             throw new DatabaseException('Must define $id attribute');
         }
@@ -3109,6 +3151,7 @@ class Database
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
         $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
+        $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
         $document = new Document($document);
 
@@ -3274,12 +3317,15 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         foreach ($documents as $document) {
-            if (!$document->getId()) {
-                throw new Exception('Must define $id attribute for each document');
+            if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+                if (empty($document->getAttribute('$tenant'))) {
+                    throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+                }
             }
 
-            $document->setAttribute('$updatedAt', $time);
-            $document = $this->encode($collection, $document);
+            if (!$document->getId()) {
+                throw new DatabaseException('Must define $id attribute for each document');
+            }
 
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument(
@@ -3287,6 +3333,9 @@ class Database
                     $document->getId()
                 )
             ));
+
+            $document->setAttribute('$updatedAt', $time);
+            $document = $this->encode($collection, $document);
 
             $validator = new Authorization(self::PERMISSION_UPDATE);
             if ($collection->getId() !== self::METADATA
@@ -3844,7 +3893,14 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
+
+        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if (empty($document->getAttribute('$tenant'))) {
+                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+            }
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_DELETE);
@@ -4290,6 +4346,13 @@ class Database
      */
     public function find(string $collection, array $queries = []): array
     {
+        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if (empty($this->tenant)) {
+                throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
+            }
+            $queries[] = Query::equal('$tenant', [$this->tenant]);
+        }
+
         $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4554,7 +4617,7 @@ class Database
     public static function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach (self::$attributes as $internal) {
+        foreach (Database::ATTRIBUTES as $internal) {
             $attributes[] = new Document($internal);
         }
         return $attributes;

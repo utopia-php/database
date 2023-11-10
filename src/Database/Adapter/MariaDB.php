@@ -662,7 +662,7 @@ class MariaDB extends SQL
 
         try {
             if (!$this->getPDO()->beginTransaction()) {
-                throw new Exception('Failed to begin transaction');
+                throw new DatabaseException('Failed to begin transaction');
             }
 
             /**
@@ -782,7 +782,7 @@ class MariaDB extends SQL
 
         try {
             if (!$this->getPDO()->beginTransaction()) {
-                throw new Exception('Failed to begin transaction');
+                throw new DatabaseException('Failed to begin transaction');
             }
 
             $name = $this->filter($collection);
@@ -853,7 +853,7 @@ class MariaDB extends SQL
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;
@@ -893,7 +893,7 @@ class MariaDB extends SQL
 
         try {
             if (!$this->getPDO()->beginTransaction()) {
-                throw new Exception('Failed to begin transaction');
+                throw new DatabaseException('Failed to begin transaction');
             }
 
             $sql = "
@@ -1095,7 +1095,7 @@ class MariaDB extends SQL
 
         try {
             if (!$this->getPDO()->beginTransaction()) {
-                throw new Exception('Failed to begin transaction');
+                throw new DatabaseException('Failed to begin transaction');
             }
 
             $name = $this->filter($collection);
@@ -1279,7 +1279,7 @@ class MariaDB extends SQL
             }
 
             if (!$this->getPDO()->commit()) {
-                throw new Exception('Failed to commit transaction');
+                throw new DatabaseException('Failed to commit transaction');
             }
 
             return $documents;
@@ -1349,7 +1349,7 @@ class MariaDB extends SQL
 
         try {
             if (!$this->getPDO()->beginTransaction()) {
-                throw new Exception('Failed to begin transaction');
+                throw new DatabaseException('Failed to begin transaction');
             }
 
             $sql = "

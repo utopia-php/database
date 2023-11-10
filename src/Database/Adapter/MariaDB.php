@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -646,6 +647,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
+     * @throws Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -746,18 +748,14 @@ class MariaDB extends SQL
             if (!$this->getPDO()->commit()) {
                 throw new DatabaseException('Failed to commit transaction');
             }
-        } catch (PDOException $e) {
+        } catch (Throwable $th) {
             if (!$this->getPDO()->rollBack()) {
                 throw new DatabaseException('Failed to rollBack transaction');
             }
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-
-                default:
-                    throw $e;
-            }
+            throw match ($th->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
+                default => $th,
+            };
         }
 
         return $document;
@@ -774,6 +772,7 @@ class MariaDB extends SQL
      *
      * @throws DuplicateException
      * @throws Exception
+     * @throws Throwable
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -859,14 +858,14 @@ class MariaDB extends SQL
 
             return $documents;
 
-        } catch (PDOException $e) {
+        } catch (Throwable $th) {
             if (!$this->getPDO()->rollBack()) {
                 throw new DatabaseException('Failed to rollBack transaction');
             }
 
-            throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
+            throw match ($th->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
+                default => $th,
             };
         }
     }
@@ -880,6 +879,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
+     * @throws Throwable
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -1061,18 +1061,14 @@ class MariaDB extends SQL
             if (!$this->getPDO()->commit()) {
                 throw new DatabaseException('Failed to commit transaction');
             }
-        } catch (PDOException $e) {
+        } catch (Throwable $th) {
             if (!$this->getPDO()->rollBack()) {
                 throw new DatabaseException('Failed to rollBack transaction');
             }
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-
-                default:
-                    throw $e;
-            }
+            throw match ($th->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
+                default => $th,
+            };
         }
 
         return $document;
@@ -1089,6 +1085,7 @@ class MariaDB extends SQL
      *
      * @throws DuplicateException
      * @throws Exception
+     * @throws Throwable
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1286,14 +1283,14 @@ class MariaDB extends SQL
             }
 
             return $documents;
-        } catch (PDOException $e) {
+        } catch (Throwable $th) {
             if (!$this->getPDO()->rollBack()) {
                 throw new DatabaseException('Failed to rollBack transaction');
             }
 
-            throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
+            throw match ($th->getCode()) {
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $th->getMessage()),
+                default => $th,
             };
         }
     }
@@ -1386,7 +1383,7 @@ class MariaDB extends SQL
             if (!$this->getPDO()->commit()) {
                 throw new DatabaseException('Failed to commit transaction');
             }
-        } catch (\Throwable $th) {
+        } catch (Throwable $th) {
             if (!$this->getPDO()->rollBack()) {
                 throw new DatabaseException('Failed to rollBack transaction');
             }

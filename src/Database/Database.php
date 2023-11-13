@@ -712,10 +712,10 @@ class Database
      *
      * @return bool
      */
-    public function create(): bool
+    public function create(?string $database = null): bool
     {
-        $name = $this->adapter->getDatabase();
-        $this->adapter->create($name);
+        $database = $database ?? $this->adapter->getDatabase();
+        $this->adapter->create($database);
 
         /**
          * Create array of attribute documents
@@ -737,7 +737,7 @@ class Database
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
-        $this->trigger(self::EVENT_DATABASE_CREATE, $name);
+        $this->trigger(self::EVENT_DATABASE_CREATE, $database);
 
         return true;
     }
@@ -746,13 +746,15 @@ class Database
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
+     * @param string|null $database (optional) database name
      * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
-    public function exists(string $database, string $collection = null): bool
+    public function exists(?string $database = null, ?string $collection = null): bool
     {
+        $database = $database ?? $this->adapter->getDatabase();
+
         return $this->adapter->exists($database, $collection);
     }
 
@@ -773,15 +775,19 @@ class Database
     /**
      * Delete Database
      *
-     * @param string $name
-     *
+     * @param string|null $database
      * @return bool
      */
-    public function delete(string $name): bool
+    public function delete(?string $database = null): bool
     {
-        $deleted = $this->adapter->delete($name);
+        $database = $database ?? $this->adapter->getDatabase();
 
-        $this->trigger(self::EVENT_DATABASE_DELETE, ['name' => $name, 'deleted' => $deleted]);
+        $deleted = $this->adapter->delete($database);
+
+        $this->trigger(self::EVENT_DATABASE_DELETE, [
+            'name' => $database,
+            'deleted' => $deleted
+        ]);
 
         return $deleted;
     }

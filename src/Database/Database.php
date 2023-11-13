@@ -593,14 +593,14 @@ class Database
         return $this;
     }
 
-	/**
-	 * Get Database.
-	 *
-	 * Get Database from current scope
-	 *
-	 * @return string
-	 * @throws DatabaseException
-	 */
+    /**
+     * Get Database.
+     *
+     * Get Database from current scope
+     *
+     * @return string
+     * @throws DatabaseException
+     */
     public function getDatabase(): string
     {
         return $this->adapter->getDatabase();

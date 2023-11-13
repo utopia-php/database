@@ -12532,16 +12532,16 @@ abstract class Base extends TestCase
         }
     }
 
-	/**
-	 * @throws AuthorizationException
-	 * @throws DatabaseException
-	 * @throws DuplicateException
-	 * @throws LimitException
-	 * @throws QueryException
-	 * @throws StructureException
-	 * @throws TimeoutException
-	 */
-	public function testIsolationModes(): void
+    /**
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws QueryException
+     * @throws StructureException
+     * @throws TimeoutException
+     */
+    public function testIsolationModes(): void
     {
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
@@ -12616,9 +12616,9 @@ abstract class Base extends TestCase
         $docs = $database->find('people');
         $this->assertEquals(0, \count($docs));
 
-		$database->setDatabase('schema1')->delete();
-		$database->setDatabase('schema2')->delete();
-		$database->setDatabase('sharedTables')->delete();
+        $database->setDatabase('schema1')->delete();
+        $database->setDatabase('schema2')->delete();
+        $database->setDatabase('sharedTables')->delete();
     }
 
     public function testTransformations(): void

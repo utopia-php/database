@@ -7,7 +7,7 @@ use Utopia\Database\Exception as DatabaseException;
 
 abstract class Adapter
 {
-	protected string $database = '';
+    protected string $database = '';
 
     protected string $namespace = '';
 

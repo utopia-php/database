@@ -64,6 +64,12 @@ class SQLiteTest extends Base
         $database->setDatabase('utopiaTests');
         $database->setNamespace('myapp_'.uniqid());
 
+		if ($database->exists()) {
+			$database->delete();
+		}
+
+		$database->create();
+
         return self::$database = $database;
     }
 }

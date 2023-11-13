@@ -555,7 +555,7 @@ class Database
      *
      * @return $this
      *
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function setNamespace(string $namespace): self
     {
@@ -584,7 +584,7 @@ class Database
      * @param string $name
      *
      * @return self
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function setDatabase(string $name): self
     {
@@ -593,15 +593,14 @@ class Database
         return $this;
     }
 
-    /**
-     * Get Database.
-     *
-     * Get Database from current scope
-     *
-     * @throws Exception
-     *
-     * @return string
-     */
+	/**
+	 * Get Database.
+	 *
+	 * Get Database from current scope
+	 *
+	 * @return string
+	 * @throws DatabaseException
+	 */
     public function getDatabase(): string
     {
         return $this->adapter->getDatabase();
@@ -707,9 +706,9 @@ class Database
     }
 
     /**
-     * Create the Default Database
+     * Create the database
      *
-     * @throws Exception
+     * @throws DatabaseException
      *
      * @return bool
      */

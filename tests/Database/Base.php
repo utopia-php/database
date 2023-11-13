@@ -10,11 +10,15 @@ use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Exception\Timeout;
@@ -25,7 +29,6 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
-use Utopia\Database\Exception\Structure as StructureException;
 
 abstract class Base extends TestCase
 {
@@ -12529,7 +12532,16 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testIsolationModes(): void
+	/**
+	 * @throws AuthorizationException
+	 * @throws DatabaseException
+	 * @throws DuplicateException
+	 * @throws LimitException
+	 * @throws QueryException
+	 * @throws StructureException
+	 * @throws TimeoutException
+	 */
+	public function testIsolationModes(): void
     {
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
@@ -12604,6 +12616,9 @@ abstract class Base extends TestCase
         $docs = $database->find('people');
         $this->assertEquals(0, \count($docs));
 
+		$database->setDatabase('schema1')->delete();
+		$database->setDatabase('schema2')->delete();
+		$database->setDatabase('sharedTables')->delete();
     }
 
     public function testTransformations(): void

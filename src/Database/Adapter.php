@@ -7,15 +7,9 @@ use Utopia\Database\Exception as DatabaseException;
 
 abstract class Adapter
 {
-    /**
-     * @var string
-     */
-    protected string $namespace = '';
+	protected string $database = '';
 
-    /**
-     * @var string
-     */
-    protected string $defaultDatabase = '';
+    protected string $namespace = '';
 
     /**
      * @var array<string, mixed>
@@ -73,7 +67,7 @@ abstract class Adapter
      * @param string $namespace
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
     public function setNamespace(string $namespace): bool
@@ -89,7 +83,6 @@ abstract class Adapter
      * Get namespace of current set scope
      *
      * @return string
-     * @throws DatabaseException
      *
      */
     public function getNamespace(): string
@@ -109,7 +102,7 @@ abstract class Adapter
      */
     public function setDatabase(string $name): bool
     {
-        $this->defaultDatabase = $this->filter($name);
+        $this->database = $this->filter($name);
 
         return true;
     }
@@ -125,11 +118,11 @@ abstract class Adapter
      */
     public function getDatabase(): string
     {
-        if (empty($this->defaultDatabase)) {
-            throw new DatabaseException('Missing default database');
+        if (empty($this->database)) {
+            throw new DatabaseException('Missing database. Database must be set before use.');
         }
 
-        return $this->defaultDatabase;
+        return $this->database;
     }
 
     /**

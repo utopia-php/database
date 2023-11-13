@@ -188,7 +188,7 @@ class Query
      *
      * @param string $filter
      * @return self
-     * @throws Exception
+     * @throws QueryException
      */
     public static function parse(string $filter): self
     {

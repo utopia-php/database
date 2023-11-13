@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use InvalidArgumentException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -40,7 +39,6 @@ class Database
     public const INDEX_KEY = 'key';
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
-    public const INDEX_SPATIAL = 'spatial';
     public const INDEX_ARRAY = 'array';
 
     // Relation Types
@@ -285,7 +283,7 @@ class Database
     ];
 
     /**
-     * Array in which the keys are the names of databse listeners that
+     * Array in which the keys are the names of database listeners that
      * should be skipped when dispatching events. null $silentListeners
      * will skip all listeners.
      *
@@ -383,7 +381,7 @@ class Database
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                     return DateTime::format($value);
-                } catch (\Throwable $th) {
+                } catch (\Throwable) {
                     return $value;
                 }
             },
@@ -549,8 +547,6 @@ class Database
      * Get namespace of current set scope
      *
      * @return string
-     *
-     * @throws DatabaseException
      */
     public function getNamespace(): string
     {
@@ -659,6 +655,9 @@ class Database
      * @throws Exception
      *
      * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
      */
     public function create(): bool
     {
@@ -698,6 +697,7 @@ class Database
      * @param string|null $collection (optional) collection name
      *
      * @return bool
+     * @throws Exception
      */
     public function exists(string $database, string $collection = null): bool
     {
@@ -724,6 +724,7 @@ class Database
      * @param string $name
      *
      * @return bool
+     * @throws DatabaseException
      */
     public function delete(string $name): bool
     {
@@ -743,10 +744,11 @@ class Database
      * @param array<string> $permissions
      * @param bool $documentSecurity
      * @return Document
+     * @throws ConflictException
      * @throws DatabaseException
      * @throws DuplicateException
-     * @throws InvalidArgumentException
      * @throws LimitException
+     * @throws TimeoutException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
@@ -756,7 +758,7 @@ class Database
 
         $validator = new Permissions();
         if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -827,16 +829,16 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws InvalidArgumentException
      * @throws ConflictException
      * @throws DatabaseException
-     * @throws InvalidArgumentException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
         $validator = new Permissions();
         if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -859,6 +861,7 @@ class Database
      *
      * @return Document
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function getCollection(string $id): Document
     {
@@ -896,6 +899,7 @@ class Database
      * @param string $collection
      *
      * @return int
+     * @throws DatabaseException
      */
     public function getSizeOfCollection(string $collection): int
     {
@@ -908,6 +912,12 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws StructureException
+     * @throws TimeoutException
      */
     public function deleteCollection(string $id): bool
     {
@@ -953,7 +963,9 @@ class Database
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
+     * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -1081,7 +1093,7 @@ class Database
      * @param string $type Type of the attribute
      * @param mixed $default Default value of the attribute
      *
-     * @throws Exception
+     * @throws DatabaseException
      * @return void
      */
     protected function validateDefaultTypes(string $type, mixed $default): void
@@ -1129,8 +1141,10 @@ class Database
      * @return Document
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
-    private function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
+    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() === self::METADATA) {
@@ -1167,6 +1181,8 @@ class Database
      * @return Document
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
@@ -1186,7 +1202,7 @@ class Database
         $updateCallback($attributes[$index], $collection, $index);
 
         // Save
-        $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+        $collection->setAttribute('attributes', $attributes);
 
         $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
@@ -1455,6 +1471,8 @@ class Database
      * @return bool
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
@@ -1521,7 +1539,9 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
@@ -1588,7 +1608,9 @@ class Database
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
+     * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     public function createRelationship(
         string $collection,
@@ -1777,6 +1799,8 @@ class Database
      * @return bool
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     public function updateRelationship(
         string  $collection,
@@ -1947,7 +1971,9 @@ class Database
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
+     * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
@@ -2064,6 +2090,8 @@ class Database
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws StructureException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
@@ -2211,6 +2239,8 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      * @throws StructureException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     public function deleteIndex(string $collection, string $id): bool
     {
@@ -2248,6 +2278,7 @@ class Database
      *
      * @return Document
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
@@ -2435,6 +2466,7 @@ class Database
      * @param array<Query> $queries
      * @return Document
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
     {
@@ -2671,8 +2703,10 @@ class Database
      * @return Document
      *
      * @throws AuthorizationException
+     * @throws ConflictException
      * @throws DatabaseException
      * @throws StructureException
+     * @throws TimeoutException
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -2697,7 +2731,7 @@ class Database
 
         $validator = new Permissions();
         if (!$validator->isValid($document->getPermissions())) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $structure = new Structure($collection);
@@ -2777,7 +2811,11 @@ class Database
      * @param Document $collection
      * @param Document $document
      * @return Document
+     * @throws AuthorizationException
+     * @throws ConflictException
      * @throws DatabaseException
+     * @throws StructureException
+     * @throws TimeoutException
      */
     private function createDocumentRelationships(Document $collection, Document $document): Document
     {
@@ -2791,7 +2829,7 @@ class Database
 
         $stackCount = count($this->relationshipWriteStack);
 
-        foreach ($relationships as $index => $relationship) {
+        foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
@@ -3061,6 +3099,8 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      * @throws StructureException
+     * @throws RestrictedException
+     * @throws TimeoutException
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
@@ -3180,7 +3220,12 @@ class Database
         }
 
         // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+        try {
+            $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+        } catch (\Exception $e) {
+            throw new DatabaseException('Invalid $updatedAt attribute', previous: $e);
+        }
+
         if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
             throw new ConflictException('Document was updated after the request timestamp');
         }
@@ -3286,7 +3331,9 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     private function updateDocumentRelationships(Document $collection, Document $old, Document $document): Document
     {
@@ -3298,7 +3345,7 @@ class Database
 
         $stackCount = count($this->relationshipWriteStack);
 
-        foreach ($relationships as $index => $relationship) {
+        foreach ($relationships as $relationship) {
             /** @var string $key */
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
@@ -3668,6 +3715,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
@@ -3735,6 +3783,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
     {
@@ -3801,6 +3850,7 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     public function deleteDocument(string $collection, string $id): bool
     {
@@ -3853,6 +3903,7 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     private function deleteDocumentRelationships(Document $collection, Document $document): Document
     {
@@ -3948,6 +3999,7 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     private function deleteRestrict(
         Document $relatedCollection,
@@ -4022,6 +4074,7 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
@@ -4127,6 +4180,7 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      * @throws StructureException
+     * @throws TimeoutException
      */
     private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, string $relationType, string $twoWayKey, string $side, Document $relationship): void
     {
@@ -4216,7 +4270,6 @@ class Database
      * @param string $collection
      *
      * @return bool
-     * @throws DatabaseException
      */
     public function deleteCachedCollection(string $collection): bool
     {
@@ -4230,7 +4283,6 @@ class Database
      * @param string $id
      *
      * @return bool
-     * @throws DatabaseException
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
@@ -4370,6 +4422,9 @@ class Database
             }
         }
 
+        // $query still references the array value previously used in foreach
+        unset($query);
+
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
@@ -4394,6 +4449,7 @@ class Database
      * @param array<Query> $queries
      * @return false|Document
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function findOne(string $collection, array $queries = []): false|Document
     {
@@ -4419,6 +4475,7 @@ class Database
      *
      * @return int
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
@@ -4464,6 +4521,7 @@ class Database
      *
      * @return int|float
      * @throws DatabaseException
+     * @throws TimeoutException
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
@@ -4674,7 +4732,7 @@ class Database
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
-            $value = $document->getAttribute($key, null);
+            $value = $document->getAttribute($key);
             if (is_null($value)) {
                 continue;
             }
@@ -4722,7 +4780,7 @@ class Database
      * @return mixed
      * @throws DatabaseException
      */
-    protected function encodeAttribute(string $name, $value, Document $document): mixed
+    protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException("Filter: {$name} not found");
@@ -4921,7 +4979,6 @@ class Database
      * @param Document $collection
      * @param string $id
      * @return void
-     * @throws DatabaseException
      */
     private function purgeRelatedDocuments(Document $collection, string $id): void
     {

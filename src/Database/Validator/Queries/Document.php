@@ -2,8 +2,8 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Exception;
 use Utopia\Database\Database;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Select;
 
@@ -11,7 +11,7 @@ class Document extends Queries
 {
     /**
      * @param array<mixed> $attributes
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function __construct(array $attributes)
     {

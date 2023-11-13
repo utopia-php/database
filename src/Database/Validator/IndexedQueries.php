@@ -2,9 +2,10 @@
 
 namespace Utopia\Database\Validator;
 
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 
@@ -28,7 +29,7 @@ class IndexedQueries extends Queries
      * @param array<Document> $attributes
      * @param array<Document> $indexes
      * @param array<Base> $validators
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function __construct(array $attributes = [], array $indexes = [], array $validators = [])
     {
@@ -59,7 +60,7 @@ class IndexedQueries extends Queries
     /**
      * @param mixed $value
      * @return bool
-     * @throws Exception
+     * @throws QueryException
      */
     public function isValid($value): bool
     {

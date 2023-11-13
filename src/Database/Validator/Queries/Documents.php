@@ -2,9 +2,9 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
@@ -20,7 +20,7 @@ class Documents extends IndexedQueries
      *
      * @param array<mixed> $attributes
      * @param array<mixed> $indexes
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function __construct(array $attributes, array $indexes)
     {

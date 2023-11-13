@@ -759,7 +759,7 @@ abstract class Adapter
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool;
 

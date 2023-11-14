@@ -1047,8 +1047,7 @@ class MariaDB extends SQL
             }
 
             $this->getPDO()->commit();
-        }
-        catch (\Throwable $e) {
+        } catch (\Throwable $e) {
             $this->getPDO()->rollBack();
 
             if($e instanceof PDOException) {

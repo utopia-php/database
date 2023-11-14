@@ -312,7 +312,7 @@ class Database
 
     protected ?\DateTime $timestamp = null;
 
-    protected string $isolationMode = self::ISOLATION_MODE_SHARED;
+    protected bool $shareTables = false;
 
     protected string $tenant = '';
 
@@ -667,23 +667,14 @@ class Database
     }
 
     /**
-     * Set the isolation mode used when creating a new database resource
+     * Should tables be shared between users, segmented by tenant.
      *
-     * @param string $mode
-     * @return $this
-     * @throws DatabaseException
+     * @param bool $enabled
+     * @return self
      */
-    public function setIsolationMode(string $mode): self
+    public function setShareTables(bool $enabled): self
     {
-        if (!\in_array($mode, [
-            self::ISOLATION_MODE_SCHEMA,
-            self::ISOLATION_MODE_SHARED,
-            self::ISOLATION_MODE_TABLE
-        ])) {
-            throw new DatabaseException('Invalid isolation mode');
-        }
-
-        $this->isolationMode = $mode;
+        $this->shareTables = $enabled;
 
         return $this;
     }
@@ -2309,7 +2300,7 @@ class Database
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+        if ($this->shareTables) {
             if (empty($this->tenant)) {
                 throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
             }
@@ -2741,7 +2732,7 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+        if ($this->shareTables) {
             if (empty($this->tenant)) {
                 throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
             }
@@ -2818,7 +2809,7 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
-            if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if ($this->shareTables) {
                 if (empty($document->getAttribute('$tenant'))) {
                     throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
                 }
@@ -3142,7 +3133,7 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+        if ($this->shareTables) {
             if (empty($document->getAttribute('$tenant'))) {
                 throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
             }
@@ -3322,7 +3313,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         foreach ($documents as $document) {
-            if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+            if ($this->shareTables) {
                 if (empty($document->getAttribute('$tenant'))) {
                     throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
                 }
@@ -3900,7 +3891,7 @@ class Database
     {
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
 
-        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+        if ($this->shareTables) {
             if (empty($document->getAttribute('$tenant'))) {
                 throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
             }
@@ -4351,7 +4342,7 @@ class Database
      */
     public function find(string $collection, array $queries = []): array
     {
-        if ($this->isolationMode === self::ISOLATION_MODE_TABLE) {
+        if ($this->shareTables) {
             if (empty($this->tenant)) {
                 throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
             }

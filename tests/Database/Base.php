@@ -12548,11 +12548,20 @@ abstract class Base extends TestCase
          */
         $database = static::getDatabase();
 
+        if ($database->exists('schema1')) {
+            $database->setDatabase('schema1')->delete();
+        }
+        if ($database->exists('schema2')) {
+            $database->setDatabase('schema2')->delete();
+        }
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
         /**
          * Schema
          */
         $database
-            ->setIsolationMode(Database::ISOLATION_MODE_SCHEMA) // Do we even need this for schema?
             ->setDatabase('schema1')
             ->setNamespace('')
             ->create();
@@ -12560,7 +12569,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $database->exists('schema1'));
 
         $database
-            ->setIsolationMode(Database::ISOLATION_MODE_SCHEMA) // Do we even need this for schema?
             ->setDatabase('schema2')
             ->setNamespace('')
             ->create();
@@ -12575,9 +12583,9 @@ abstract class Base extends TestCase
         $tenant2 = ID::unique();
 
         $database
-            ->setIsolationMode(Database::ISOLATION_MODE_TABLE)
             ->setDatabase('sharedTables')
             ->setNamespace('')
+            ->setShareTables(true)
             ->setTenant($tenant1)
             ->create();
 
@@ -12615,10 +12623,6 @@ abstract class Base extends TestCase
 
         $docs = $database->find('people');
         $this->assertEquals(0, \count($docs));
-
-        $database->setDatabase('schema1')->delete();
-        $database->setDatabase('schema2')->delete();
-        $database->setDatabase('sharedTables')->delete();
     }
 
     public function testTransformations(): void

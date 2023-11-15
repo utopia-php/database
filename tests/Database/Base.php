@@ -7386,6 +7386,7 @@ abstract class Base extends TestCase
 
         // Check metadata for collection
         $collection = static::getDatabase()->getCollection('playlist');
+
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {
@@ -7398,6 +7399,21 @@ abstract class Base extends TestCase
                 $this->assertEquals(false, $attribute['options']['twoWay']);
                 $this->assertEquals('playlist', $attribute['options']['twoWayKey']);
             }
+        }
+
+        // Currently, we can create only a single ManyToMany
+        try {
+            static::getDatabase()->createRelationship(
+                collection: 'playlist',
+                relatedCollection: 'song',
+                type: Database::RELATION_MANY_TO_MANY,
+                twoWay: true,
+                id: 'songs2',
+                twoWayKey: 'playlist2'
+            );
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Cannot create more than one ManyToMany relation.', $e->getMessage());
         }
 
         // Create document with relationship with nested data

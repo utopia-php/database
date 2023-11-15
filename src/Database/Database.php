@@ -1589,6 +1589,7 @@ class Database
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
+     * @throws RestrictedException
      */
     public function createRelationship(
         string $collection,
@@ -1610,7 +1611,6 @@ class Database
         if ($relatedCollection->isEmpty()) {
             throw new DatabaseException('Related collection not found');
         }
-
         $id ??= $relatedCollection->getId();
 
         $twoWayKey ??= $collection->getId();
@@ -1682,6 +1682,11 @@ class Database
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
         if ($type === self::RELATION_MANY_TO_MANY) {
+            $junction = $this->getCollection('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+            if(!$junction->isEmpty()){
+                throw new RestrictedException('Cannot create more than one ManyToMany relation.');
+            }
+
             $this->silent(fn () => $this->createCollection('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId(), [
                 new Document([
                     '$id' => $id,

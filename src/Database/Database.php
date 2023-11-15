@@ -2379,7 +2379,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
+        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $this->tenant . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
@@ -2449,13 +2449,13 @@ class Database
          * @phpstan-ignore-next-line
          */
         foreach ($this->map as $key => $value) {
-            list($k, $v) = explode('=>', $key);
+            [$k, $v] = \explode('=>', $key);
             $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
             $cache = $this->cache->load($ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
             }
-            if (!in_array($v, $cache)) {
+            if (!\in_array($v, $cache)) {
                 $cache[] = $v;
                 $this->cache->save($ck, $cache);
             }

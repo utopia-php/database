@@ -111,11 +111,11 @@ class MariaDB extends SQL
 
         $sql = "
 			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
-				`_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+				`_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				`_uid` VARCHAR(255) NOT NULL,
 				`_tenant` CHAR(36) NOT NULL,
-				`_createdAt` datetime(3) DEFAULT NULL,
-				`_updatedAt` datetime(3) DEFAULT NULL,
+				`_createdAt` DATETIME(3) DEFAULT NULL,
+				`_updatedAt` DATETIME(3) DEFAULT NULL,
 				`_permissions` MEDIUMTEXT DEFAULT NULL,
 				" . \implode(' ', $attributeStrings) . "
 				PRIMARY KEY (`_id`),
@@ -794,6 +794,7 @@ class MariaDB extends SQL
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
+					$attributes['_tenant'] = $document->getAttribute('$tenant');
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
@@ -878,6 +879,7 @@ class MariaDB extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
+		$attributes['_tenant'] = $document->getAttribute('$tenant');
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
@@ -1105,6 +1107,7 @@ class MariaDB extends SQL
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
+					$attributes['_tenant'] = $document->getAttribute('$tenant');
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
@@ -1555,6 +1558,10 @@ class MariaDB extends SQL
                 $results[$index]['$internalId'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
+			if (\array_key_exists('_tenant', $document)) {
+				$results[$index]['$tenant'] = $document['_tenant'];
+				unset($results[$index]['_tenant']);
+			}
             if (\array_key_exists('_createdAt', $document)) {
                 $results[$index]['$createdAt'] = $document['_createdAt'];
                 unset($results[$index]['_createdAt']);

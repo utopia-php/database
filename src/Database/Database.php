@@ -2302,7 +2302,7 @@ class Database
     {
         if ($this->shareTables) {
             if (empty($this->tenant)) {
-                throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
+                throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
             }
             $queries[] = Query::equal('$tenant', [$this->tenant]);
         }
@@ -2734,7 +2734,7 @@ class Database
     {
         if ($this->shareTables) {
             if (empty($this->tenant)) {
-                throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
+                throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
             }
             $document->setAttribute('$tenant', $this->tenant);
         }
@@ -4344,7 +4344,7 @@ class Database
     {
         if ($this->shareTables) {
             if (empty($this->tenant)) {
-                throw new DatabaseException('Missing tenant. Tenant must be set when isolation mode is set to "table".');
+                throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
             }
             $queries[] = Query::equal('$tenant', [$this->tenant]);
         }
@@ -4353,7 +4353,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection "'. $originalName .'" not found');
+            throw new DatabaseException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);

@@ -154,7 +154,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-        $this->assertEquals('Invalid document structure: Collection "" not found', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Collection not found', $validator->getDescription());
     }
 
     public function testRequiredKeys(): void

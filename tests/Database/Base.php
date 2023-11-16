@@ -526,7 +526,7 @@ abstract class Base extends TestCase
             static::getDatabase()->find('not_exist', []);
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
-            $this->assertEquals('Collection "not_exist" not found', $e->getMessage());
+            $this->assertEquals('Collection not found', $e->getMessage());
         }
     }
 
@@ -12616,13 +12616,31 @@ abstract class Base extends TestCase
         $docs = $database->find('people');
         $this->assertEquals(1, \count($docs));
 
+		// Swap to tenant 2, no access
         $database->setTenant($tenant2);
 
-        $doc = $database->getDocument('people', $docId);
-        $this->assertEmpty($doc);
+		try {
+			$database->getDocument('people', $docId);
+			$this->fail('Failed to throw exception');
+		} catch (Exception $e) {
+			$this->assertEquals('Collection not found', $e->getMessage());
+		}
 
-        $docs = $database->find('people');
-        $this->assertEquals(0, \count($docs));
+		try {
+			$database->find('people');
+			$this->fail('Failed to throw exception');
+		} catch (Exception $e) {
+			$this->assertEquals('Collection not found', $e->getMessage());
+		}
+
+		// Swap back to tenant 1, allowed
+		$database->setTenant($tenant1);
+
+		$doc = $database->getDocument('people', $docId);
+		$this->assertEquals($tenant1, $doc['name']);
+
+		$docs = $database->find('people');
+		$this->assertEquals(1, \count($docs));
     }
 
     public function testTransformations(): void

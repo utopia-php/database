@@ -218,7 +218,7 @@ class Structure extends Validator
         }
 
         if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
-            $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
+            $this->message = 'Collection not found';
             return false;
         }
 

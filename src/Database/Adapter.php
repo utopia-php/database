@@ -11,6 +11,10 @@ abstract class Adapter
 
     protected string $namespace = '';
 
+    protected bool $shareTables = false;
+
+    protected ?string $tenant = null;
+
     /**
      * @var array<string, mixed>
      */
@@ -123,6 +127,62 @@ abstract class Adapter
         }
 
         return $this->database;
+    }
+
+    /**
+     * Set Share Tables.
+     *
+     * Set whether to share tables between tenants
+     *
+     * @param bool $shareTables
+     *
+     * @return bool
+     */
+    public function setShareTables(bool $shareTables): bool
+    {
+        $this->shareTables = $shareTables;
+
+        return true;
+    }
+
+    /**
+     * Get Share Tables.
+     *
+     * Get whether to share tables between tenants
+     *
+     * @return bool
+     */
+    public function getShareTables(): bool
+    {
+        return $this->shareTables;
+    }
+
+    /**
+     * Set Tenant.
+     *
+     * Set tenant to use for current scope
+     *
+     * @param string $tenant
+     *
+     * @return bool
+     */
+    public function setTenant(string $tenant): bool
+    {
+        $this->tenant = $tenant;
+
+        return true;
+    }
+
+    /**
+     * Get Tenant.
+     *
+     * Get Tenant from current scope
+     *
+     * @return string
+     */
+    public function getTenant(): ?string
+    {
+        return $this->tenant;
     }
 
     /**

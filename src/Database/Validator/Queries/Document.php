@@ -5,7 +5,6 @@ namespace Utopia\Database\Validator\Queries;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Queries;
-use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Select;
 
 class Document extends Queries
@@ -23,12 +22,6 @@ class Document extends Queries
             'array' => false,
         ]);
         $attributes[] = new \Utopia\Database\Document([
-            '$id' => '$tenant',
-            'key' => '$tenant',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
-        $attributes[] = new \Utopia\Database\Document([
             '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
@@ -43,7 +36,6 @@ class Document extends Queries
 
         $validators = [
             new Select($attributes),
-            new Filter($attributes)
         ];
 
         parent::__construct($validators);

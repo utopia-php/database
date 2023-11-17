@@ -37,12 +37,6 @@ class Documents extends IndexedQueries
             'array' => false,
         ]);
         $attributes[] = new Document([
-            '$id' => '$tenant',
-            'key' => '$tenant',
-            'type' => Database::VAR_STRING,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
             '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,

@@ -9,8 +9,12 @@
     processIsolation="false"
     stopOnFailure="true">
     <testsuites>
-        <testsuite name="Application Test Suite">
-            <directory>./tests/</directory>
+        <testsuite name="unit">
+            <directory>./tests/unit</directory>
+        </testsuite>
+        <testsuite name="e2e">
+            <file>./tests/e2e/Client.php</file>
+            <directory>./tests/e2e/Adapter</directory>
         </testsuite>
     </testsuites>
     <coverage processUncoveredFiles="true">

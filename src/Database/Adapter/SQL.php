@@ -108,29 +108,23 @@ abstract class SQL extends Adapter
     {
         $name = $this->filter($collection);
         $selections = $this->getAttributeSelections($queries);
-        $filters = Query::groupByType($queries)['filters'];
 
-        $tenantQuery = null;
-        $tenantWhere = '';
-
-        foreach ($filters as $query) {
-            if ($query->getAttribute() === '$tenant') {
-                $tenantQuery = $query;
-                $tenantWhere = 'AND _tenant = :_tenant';
-            }
-        }
-
-        $stmt = $this->getPDO()->prepare("
-            SELECT {$this->getAttributeProjection($selections)} 
+        $sql = "
+			SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid 
-            {$tenantWhere}
-        ");
+		";
+
+        if ($this->shareTables) {
+            $sql .= "AND _tenant = :_tenant";
+        }
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
 
-        if (!empty($tenantQuery)) {
-            $stmt->bindValue(':_tenant', $tenantQuery->getValue());
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->getTenant());
         }
 
         $stmt->execute();
@@ -151,6 +145,10 @@ abstract class SQL extends Adapter
         if (\array_key_exists('_uid', $document)) {
             $document['$id'] = $document['_uid'];
             unset($document['_uid']);
+        }
+        if (\array_key_exists('_tenant', $document)) {
+            $document['$tenant'] = $document['_tenant'];
+            unset($document['_tenant']);
         }
         if (\array_key_exists('_createdAt', $document)) {
             $document['$createdAt'] = $document['_createdAt'];
@@ -284,7 +282,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultAttributes(): int
     {
-        return 4;
+        return 5;
     }
 
     /**
@@ -294,7 +292,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultIndexes(): int
     {
-        return 5;
+        return 6;
     }
 
     /**
@@ -329,34 +327,13 @@ abstract class SQL extends Adapter
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
-                    switch (true) {
-                        case ($attribute['size'] > 16777215):
-                            // 8 bytes length + 4 bytes for LONGTEXT
-                            $total += 12;
-                            break;
-
-                        case ($attribute['size'] > 65535):
-                            // 8 bytes length + 3 bytes for MEDIUMTEXT
-                            $total += 11;
-                            break;
-
-                        case ($attribute['size'] > $this->getMaxVarcharLength()):
-                            // 8 bytes length + 2 bytes for TEXT
-                            $total += 10;
-                            break;
-
-                        case ($attribute['size'] > 255):
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += ($attribute['size'] * 4) + 2;
-                            break;
-
-                        default:
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += ($attribute['size'] * 4) + 1;
-                            break;
-                    }
+                    $total += match (true) {
+                        $attribute['size'] > 16777215 => 12,
+                        $attribute['size'] > 65535 => 11,
+                        $attribute['size'] > $this->getMaxVarcharLength() => 10,
+                        $attribute['size'] > 255 => ($attribute['size'] * 4) + 2,
+                        default => ($attribute['size'] * 4) + 1,
+                    };
                     break;
 
                 case Database::VAR_INTEGER:
@@ -853,11 +830,18 @@ abstract class SQL extends Adapter
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
+
+        $tenantQuery = '';
+        if ($this->shareTables) {
+            $tenantQuery = 'AND _tenant = :_tenant';
+        }
+
         return "table_main._uid IN (
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = 'read'
+                      AND _type = 'read'
+                      {$tenantQuery}
                 )";
     }
 

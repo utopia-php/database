@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use InvalidArgumentException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -311,10 +310,6 @@ class Database
     protected ?array $silentListeners = [];
 
     protected ?\DateTime $timestamp = null;
-
-    protected bool $shareTables = false;
-
-    protected string $tenant = '';
 
     protected bool $resolveRelationships = true;
 
@@ -669,19 +664,19 @@ class Database
     /**
      * Should tables be shared between users, segmented by tenant.
      *
-     * @param bool $enabled
+     * @param bool $share
      * @return self
      */
-    public function setShareTables(bool $enabled): self
+    public function setShareTables(bool $share): self
     {
-        $this->shareTables = $enabled;
+        $this->adapter->setShareTables($share);
 
         return $this;
     }
 
     public function setTenant(string $tenant): self
     {
-        $this->tenant = $tenant;
+        $this->adapter->setTenant($tenant);
 
         return $this;
     }
@@ -705,6 +700,10 @@ class Database
      */
     public function create(?string $database = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $database = $database ?? $this->adapter->getDatabase();
         $this->adapter->create($database);
 
@@ -744,6 +743,10 @@ class Database
      */
     public function exists(?string $database = null, ?string $collection = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $database = $database ?? $this->adapter->getDatabase();
 
         return $this->adapter->exists($database, $collection);
@@ -756,6 +759,10 @@ class Database
      */
     public function list(): array
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $databases = $this->adapter->list();
 
         $this->trigger(self::EVENT_DATABASE_LIST, $databases);
@@ -771,6 +778,10 @@ class Database
      */
     public function delete(?string $database = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $database = $database ?? $this->adapter->getDatabase();
 
         $deleted = $this->adapter->delete($database);
@@ -794,18 +805,21 @@ class Database
      * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
-     * @throws InvalidArgumentException
      * @throws LimitException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
 
         $validator = new Permissions();
         if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -876,19 +890,29 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws InvalidArgumentException
      * @throws ConflictException
      * @throws DatabaseException
-     * @throws InvalidArgumentException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $validator = new Permissions();
         if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
 
         $collection
             ->setAttribute('$permissions', $permissions)
@@ -911,7 +935,17 @@ class Database
      */
     public function getCollection(string $id): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+        if ($id !== self::METADATA
+            && $this->adapter->getShareTables()
+            && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+            return new Document();
+        }
 
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
 
@@ -929,10 +963,20 @@ class Database
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $result = $this->silent(fn () => $this->find(self::METADATA, [
             Query::limit($limit),
             Query::offset($offset)
         ]));
+
+        if ($this->adapter->getShareTables()) {
+            $result = \array_filter($result, function ($collection) {
+                return $collection->getAttribute('$tenant') === $this->adapter->getTenant();
+            });
+        }
 
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
@@ -948,7 +992,21 @@ class Database
      */
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->adapter->getSizeOfCollection($collection);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        return $this->adapter->getSizeOfCollection($collection->getId());
     }
 
     /**
@@ -960,7 +1018,19 @@ class Database
      */
     public function deleteCollection(string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes'),
@@ -1006,9 +1076,17 @@ class Database
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -1179,11 +1257,16 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      */
-    private function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
+    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
         if ($collection->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata attributes');
+            throw new DatabaseException('Cannot update metadata indexes');
         }
 
         $indexes = $collection->getAttribute('indexes', []);
@@ -1217,9 +1300,14 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      */
-    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
+    protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
         if ($collection->getId() === self::METADATA) {
             throw new DatabaseException('Cannot update metadata attributes');
         }
@@ -1474,6 +1562,10 @@ class Database
      */
     public function checkAttribute(Document $collection, Document $attribute): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = clone $collection;
 
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
@@ -1507,6 +1599,10 @@ class Database
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
@@ -1574,6 +1670,10 @@ class Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
@@ -1648,6 +1748,10 @@ class Database
         ?string $twoWayKey = null,
         string $onDelete = Database::RELATION_MUTATE_RESTRICT
     ): bool {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -1835,6 +1939,10 @@ class Database
         ?bool $twoWay = null,
         ?string $onDelete = null
     ): bool {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (
             \is_null($newKey)
             && \is_null($newTwoWayKey)
@@ -2000,6 +2108,10 @@ class Database
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
@@ -2116,6 +2228,10 @@ class Database
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
@@ -2175,6 +2291,10 @@ class Database
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (empty($attributes)) {
             throw new DatabaseException('Missing attributes');
         }
@@ -2263,6 +2383,10 @@ class Database
      */
     public function deleteIndex(string $collection, string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
@@ -2300,11 +2424,8 @@ class Database
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        if ($this->shareTables) {
-            if (empty($this->tenant)) {
-                throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-            }
-            $queries[] = Query::equal('$tenant', [$this->tenant]);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         if ($collection === self::METADATA && $id === self::METADATA) {
@@ -2379,7 +2500,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $this->tenant . ':' . $collection->getId() . ':' . $id;
+        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
@@ -2732,11 +2853,8 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        if ($this->shareTables) {
-            if (empty($this->tenant)) {
-                throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-            }
-            $document->setAttribute('$tenant', $this->tenant);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -2760,7 +2878,7 @@ class Database
 
         $validator = new Permissions();
         if (!$validator->isValid($document->getPermissions())) {
-            throw new InvalidArgumentException($validator->getDescription());
+            throw new DatabaseException($validator->getDescription());
         }
 
         $structure = new Structure($collection);
@@ -2800,6 +2918,10 @@ class Database
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (empty($documents)) {
             return [];
         }
@@ -2809,7 +2931,7 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
-            if ($this->shareTables) {
+            if ($this->adapter->getShareTables()) {
                 if (empty($document->getAttribute('$tenant'))) {
                     throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
                 }
@@ -3133,10 +3255,8 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if ($this->shareTables) {
-            if (empty($document->getAttribute('$tenant'))) {
-                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
-            }
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         if (!$document->getId() || !$id) {
@@ -3146,12 +3266,13 @@ class Database
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
+        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
         $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
         $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
         $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
@@ -3283,7 +3404,7 @@ class Database
 
         $this->purgeRelatedDocuments($collection, $id);
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->deleteCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -3305,6 +3426,10 @@ class Database
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (empty($documents)) {
             return [];
         }
@@ -3313,10 +3438,8 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         foreach ($documents as $document) {
-            if ($this->shareTables) {
-                if (empty($document->getAttribute('$tenant'))) {
-                    throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
-                }
+            if ($this->adapter->getShareTables() && empty($document->getAttribute('$tenant'))) {
+                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
             }
 
             if (!$document->getId()) {
@@ -3350,7 +3473,7 @@ class Database
         foreach ($documents as $key => $document) {
             $documents[$key] = $this->decode($collection, $document);
 
-            $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $document->getId() . ':*');
+            $this->deleteCachedDocument($collection->getId(), $document->getId());
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
@@ -3756,6 +3879,10 @@ class Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
@@ -3800,7 +3927,8 @@ class Database
 
         $max = $max ? $max - $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $this->deleteCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
@@ -3823,6 +3951,10 @@ class Database
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
@@ -3867,7 +3999,7 @@ class Database
 
         $min = $min ? $min + $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->deleteCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
         return $result;
@@ -3889,13 +4021,11 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
-
-        if ($this->shareTables) {
-            if (empty($document->getAttribute('$tenant'))) {
-                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
-            }
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
+
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -3929,7 +4059,7 @@ class Database
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
         $this->purgeRelatedDocuments($collection, $id);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->deleteCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -4312,7 +4442,7 @@ class Database
      */
     public function deleteCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
     }
 
     /**
@@ -4326,7 +4456,7 @@ class Database
      */
     public function deleteCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id . ':*');
+        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
     }
 
     /**
@@ -4342,14 +4472,10 @@ class Database
      */
     public function find(string $collection, array $queries = []): array
     {
-        if ($this->shareTables) {
-            if (empty($this->tenant)) {
-                throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-            }
-            $queries[] = Query::equal('$tenant', [$this->tenant]);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -4469,6 +4595,8 @@ class Database
             }
         }
 
+        unset($query);
+
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
@@ -4521,12 +4649,11 @@ class Database
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new DatabaseException("Collection not found");
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -4566,12 +4693,11 @@ class Database
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new DatabaseException("Collection not found");
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 

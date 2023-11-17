@@ -1128,7 +1128,7 @@ class Postgres extends SQL
                     ");
                     $permissionsStmt->bindValue(':_uid', $document->getId());
                     $permissionsStmt->execute();
-                    $permissions = $permissionsStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $permissions = $permissionsStmt->fetchAll();
 
                     $initial = [];
                     foreach (Database::PERMISSIONS as $type) {

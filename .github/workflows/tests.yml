@@ -61,7 +61,7 @@ jobs:
           sleep 10
 
       - name: Run Unit Tests
-        run: docker compose exec appwrite test /usr/src/code/tests/unit
+        run: docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/unit
 
   adapter_test:
     name: Adapter Tests

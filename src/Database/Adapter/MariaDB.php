@@ -27,7 +27,11 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
-        $sql = "CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
+        if ($this->exists($name)) {
+            return true;
+        }
+
+        $sql = "CREATE DATABASE `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
 
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
@@ -657,6 +661,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -670,12 +675,9 @@ class MariaDB extends SQL
         $columns = '';
         $columnNames = '';
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
+        /**
+         * Insert Attributes
+         */
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
@@ -739,6 +741,7 @@ class MariaDB extends SQL
         }
 
         try {
+            $this->getPDO()->beginTransaction();
             $stmt->execute();
 
             $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
@@ -746,17 +749,20 @@ class MariaDB extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-            throw match ($e->getCode()) {
-                1062,
-                23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
-        }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
+            $this->getPDO()->rollBack();
+
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
+            }
+
+            throw $e;
         }
 
         return $document;
@@ -772,6 +778,7 @@ class MariaDB extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -779,9 +786,9 @@ class MariaDB extends SQL
             return $documents;
         }
 
-        $this->getPDO()->beginTransaction();
-
         try {
+            $this->getPDO()->beginTransaction();
+
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -850,20 +857,22 @@ class MariaDB extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
-            return $documents;
-
-        } catch (PDOException $e) {
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
             $this->getPDO()->rollBack();
 
-            throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
+            }
+
+            throw $e;
         }
+
+        return $documents;
     }
 
     /**
@@ -875,6 +884,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -914,12 +924,6 @@ class MariaDB extends SQL
 
             return $carry;
         }, $initial);
-
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
 
         /**
          * Get removed Permissions
@@ -1046,6 +1050,8 @@ class MariaDB extends SQL
         }
 
         try {
+            $this->getPDO()->beginTransaction();
+
             $stmt->execute();
 
             if (isset($stmtRemovePermissions)) {
@@ -1054,17 +1060,20 @@ class MariaDB extends SQL
             if (isset($stmtAddPermissions)) {
                 $stmtAddPermissions->execute();
             }
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-            throw match ($e->getCode()) {
-                1062,
-                23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
-        }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
+            $this->getPDO()->rollBack();
+
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
+            }
+
+            throw $e;
         }
 
         return $document;
@@ -1080,6 +1089,7 @@ class MariaDB extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1087,9 +1097,9 @@ class MariaDB extends SQL
             return $documents;
         }
 
-        $this->getPDO()->beginTransaction();
-
         try {
+            $this->getPDO()->beginTransaction();
+
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -1271,20 +1281,22 @@ class MariaDB extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
-            return $documents;
-        } catch (PDOException $e) {
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
             $this->getPDO()->rollBack();
 
-            throw match ($e->getCode()) {
-                1062,
-                23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
+            }
+
+            throw $e;
         }
+
+        return $documents;
     }
 
     /**
@@ -1339,12 +1351,6 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
         $sql = "
 		    DELETE FROM {$this->getSQLTable($name)} 
 		    WHERE _uid = :_uid
@@ -1367,19 +1373,19 @@ class MariaDB extends SQL
         $stmtPermissions->bindValue(':_uid', $id);
 
         try {
+            $this->getPDO()->beginTransaction();
+
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to clean permissions');
             }
+
+            $this->getPDO()->commit();
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
             throw new DatabaseException($th->getMessage());
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;

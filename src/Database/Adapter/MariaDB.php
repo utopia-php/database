@@ -801,7 +801,7 @@ class MariaDB extends SQL
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
-					$attributes['_tenant'] = $document->getAttribute('$tenant');
+                    $attributes['_tenant'] = $document->getAttribute('$tenant');
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
@@ -889,7 +889,7 @@ class MariaDB extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-		$attributes['_tenant'] = $document->getAttribute('$tenant');
+        $attributes['_tenant'] = $document->getAttribute('$tenant');
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
@@ -1117,7 +1117,7 @@ class MariaDB extends SQL
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
-					$attributes['_tenant'] = $document->getAttribute('$tenant');
+                    $attributes['_tenant'] = $document->getAttribute('$tenant');
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
@@ -1564,10 +1564,10 @@ class MariaDB extends SQL
                 $results[$index]['$internalId'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
-			if (\array_key_exists('_tenant', $document)) {
-				$results[$index]['$tenant'] = $document['_tenant'];
-				unset($results[$index]['_tenant']);
-			}
+            if (\array_key_exists('_tenant', $document)) {
+                $results[$index]['$tenant'] = $document['_tenant'];
+                unset($results[$index]['_tenant']);
+            }
             if (\array_key_exists('_createdAt', $document)) {
                 $results[$index]['$createdAt'] = $document['_createdAt'];
                 unset($results[$index]['_createdAt']);

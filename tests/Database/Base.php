@@ -12616,31 +12616,31 @@ abstract class Base extends TestCase
         $docs = $database->find('people');
         $this->assertEquals(1, \count($docs));
 
-		// Swap to tenant 2, no access
+        // Swap to tenant 2, no access
         $database->setTenant($tenant2);
 
-		try {
-			$database->getDocument('people', $docId);
-			$this->fail('Failed to throw exception');
-		} catch (Exception $e) {
-			$this->assertEquals('Collection not found', $e->getMessage());
-		}
+        try {
+            $database->getDocument('people', $docId);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
 
-		try {
-			$database->find('people');
-			$this->fail('Failed to throw exception');
-		} catch (Exception $e) {
-			$this->assertEquals('Collection not found', $e->getMessage());
-		}
+        try {
+            $database->find('people');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
 
-		// Swap back to tenant 1, allowed
-		$database->setTenant($tenant1);
+        // Swap back to tenant 1, allowed
+        $database->setTenant($tenant1);
 
-		$doc = $database->getDocument('people', $docId);
-		$this->assertEquals($tenant1, $doc['name']);
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals($tenant1, $doc['name']);
 
-		$docs = $database->find('people');
-		$this->assertEquals(1, \count($docs));
+        $docs = $database->find('people');
+        $this->assertEquals(1, \count($docs));
     }
 
     public function testTransformations(): void

@@ -117,7 +117,7 @@ class MariaDB extends SQL
 			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
 				`_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				`_uid` VARCHAR(255) NOT NULL,
-				`_tenant` CHAR(36) NOT NULL,
+				`_tenant` CHAR(36) DEFAULT NULL,
 				`_createdAt` DATETIME(3) DEFAULT NULL,
 				`_updatedAt` DATETIME(3) DEFAULT NULL,
 				`_permissions` MEDIUMTEXT DEFAULT NULL,
@@ -142,7 +142,7 @@ class MariaDB extends SQL
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
 					`_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-					`_tenant` CHAR(36) NOT NULL,
+					`_tenant` CHAR(36) DEFAULT NULL,
 					`_type` VARCHAR(12) NOT NULL,
 					`_permission` VARCHAR(255) NOT NULL,
 					`_document` VARCHAR(255) NOT NULL,

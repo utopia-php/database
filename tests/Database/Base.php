@@ -5596,6 +5596,15 @@ abstract class Base extends TestCase
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
 
+        static::getDatabase()->updateDocument('city', 'city1', new Document(['newCountry' => null, '$id' => 'city1']));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertNull($city1->getAttribute('newCountry'));
+
+        // Check Delete TwoWay TRUE && RELATION_MUTATE_SET_NULL && related value NULL
+        $this->assertTrue(static::getDatabase()->deleteDocument('city', 'city1'));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertTrue($city1->isEmpty());
+
         // Delete parent, will set child relationship to null for two-way
         static::getDatabase()->deleteDocument('country', 'country1');
 

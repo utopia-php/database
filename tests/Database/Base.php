@@ -2116,6 +2116,31 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    /**
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
+    public function testSelectInternalID(): void
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['$internalId', '$id']),
+            Query::orderAsc(''),
+            Query::limit(1),
+        ]);
+
+        $document = $documents[0];
+
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertCount(2, $document);
+
+        $document = static::getDatabase()->getDocument('movies', $document->getId(), [
+            Query::select(['$internalId']),
+        ]);
+
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertCount(1, $document);
+    }
+
     public function testFindOrderBy(): void
     {
         /**

@@ -63,7 +63,7 @@ abstract class Base extends TestCase
     {
         $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
         if (!$schemaSupport) {
-            $this->assertEquals(true, static::getDatabase()->setDatabase($this->testDatabase));
+            $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
             $this->assertEquals(true, static::getDatabase()->create());
             return;
         }

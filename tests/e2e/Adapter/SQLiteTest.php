@@ -43,18 +43,18 @@ class SQLiteTest extends Base
             return self::$database;
         }
 
-        $sqliteDir = __DIR__."/database.sql";
+        $db = __DIR__."/database.sql";
 
-        if (file_exists($sqliteDir)) {
-            unlink($sqliteDir);
+        if (file_exists($db)) {
+            unlink($db);
         }
 
-        $dsn = $sqliteDir;
-        $dsn = 'memory'; // Overwrite for fast tests
+        $dsn = $db;
+        //$dsn = 'memory'; // Overwrite for fast tests
         $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
-        $redis->connect('redis', 6379);
+        $redis->connect('redis');
         $redis->flushAll();
 
         $cache = new Cache(new RedisAdapter($redis));

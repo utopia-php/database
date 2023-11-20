@@ -214,21 +214,6 @@ class Database
     ];
 
     /**
-     * Each database resource is created within its own schema.
-     */
-    public const ISOLATION_MODE_SCHEMA = 'schema';
-
-    /**
-     * Each database resource is created within a shared schema
-     */
-    public const ISOLATION_MODE_SHARED = 'shared';
-
-    /**
-     * Each database resource is created within shared tables in a shared schema.
-     */
-    public const ISOLATION_MODE_TABLE = 'table';
-
-    /**
      * Parent Collection
      * Defines the structure for both system and custom collections
      *
@@ -565,8 +550,6 @@ class Database
      * Get namespace of current set scope
      *
      * @return string
-     *
-     * @throws DatabaseException
      */
     public function getNamespace(): string
     {
@@ -662,7 +645,9 @@ class Database
     }
 
     /**
-     * Should tables be shared between users, segmented by tenant.
+     * Set Share Tables
+     *
+     * Set whether to share tables between tenants
      *
      * @param bool $share
      * @return self
@@ -674,6 +659,14 @@ class Database
         return $this;
     }
 
+    /**
+     * Set Tenant
+     *
+     * Set tenant to use if tables are shared
+     *
+     * @param string $tenant
+     * @return self
+     */
     public function setTenant(string $tenant): self
     {
         $this->adapter->setTenant($tenant);
@@ -858,7 +851,7 @@ class Database
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
 
-        // check attribute limits, if given
+        // Check attribute limits, if given
         if ($attributes) {
             if (
                 $this->adapter->getLimitForAttributes() > 0 &&
@@ -3755,7 +3748,7 @@ class Database
                             $document->setAttribute($key, $value->getId());
                         } elseif (\is_null($value)) {
                             break;
-                        } elseif(empty($value)) {
+                        } elseif (empty($value)) {
                             throw new DatabaseException('Invalid value for relationship');
 
                         } else {

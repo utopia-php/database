@@ -48,7 +48,7 @@ abstract class SQL extends Adapter
      * @param string $database
      * @param string|null $collection
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function exists(string $database, ?string $collection = null): bool
     {

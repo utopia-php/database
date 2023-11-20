@@ -160,7 +160,7 @@ abstract class Adapter
     /**
      * Set Tenant.
      *
-     * Set tenant to use for current scope
+     * Set tenant to use if tables are shared
      *
      * @param string $tenant
      *
@@ -176,7 +176,7 @@ abstract class Adapter
     /**
      * Get Tenant.
      *
-     * Get Tenant from current scope
+     * Get tenant to use for shared tables
      *
      * @return string
      */

@@ -6809,7 +6809,7 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'name' => 'Review 5',
-            'movie' => [], //
+            'movie' => null, // To unset use NULL not empty array!!!!
         ]));
 
 

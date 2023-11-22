@@ -129,8 +129,8 @@ class SQLite extends MariaDB
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
-        $sql = "	
-			CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}` (
+        $sql = "
+			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}` (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				`_uid` VARCHAR(36) NOT NULL,
 				`_tenant` VARCHAR(36) DEFAULT NULL,
@@ -162,9 +162,9 @@ class SQLite extends MariaDB
         }
 
         $sql = "
-			CREATE TABLE IF NOT EXISTS `{$namespace}_{$id}_perms` (
+			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}_perms` (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-				`_uid` VARCHAR(36) DEFAULT NULL,
+				`_tenant` VARCHAR(36) DEFAULT NULL,
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
 				`_document` VARCHAR(255) NOT NULL
@@ -243,14 +243,14 @@ class SQLite extends MariaDB
             $this->getPDO()->rollBack();
         }
 
-        $sql = "DROP TABLE `{$this->getNamespace()}_{$id}`";
+        $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}`";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
             ->prepare($sql)
             ->execute();
 
-        $sql = "DROP TABLE `{$this->getNamespace()}_{$id}_perms`";
+        $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}_perms`";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
@@ -384,6 +384,21 @@ class SQLite extends MariaDB
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+
+
+		// Workaround for no support for CREATE INDEX IF NOT EXISTS
+		$stmt = $this->getPDO()->prepare("
+			SELECT name 
+			FROM sqlite_master 
+			WHERE type='index' 
+			  AND name=:_index;
+		");
+		$stmt->bindValue(':_index', "{$this->getNamespace()}_{$name}_{$id}");
+		$stmt->execute();
+		$index = $stmt->fetch();
+		if (!empty($index)) {
+			return true;
+		}
 
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
 
@@ -982,7 +997,7 @@ class SQLite extends MariaDB
 
                 if (!empty($addQuery)) {
                     $stmtAddPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`)
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
                         VALUES {$addQuery}
                     ");
 
@@ -1141,6 +1156,17 @@ class SQLite extends MariaDB
                     AND _type = 'read'
                 )";
     }
+
+	/**
+	 * Get SQL table
+	 *
+	 * @param string $name
+	 * @return string
+	 */
+	protected function getSQLTable(string $name): string
+	{
+		return "{$this->getNamespace()}_{$name}";
+	}
 
     /**
      * Get list of keywords that cannot be used

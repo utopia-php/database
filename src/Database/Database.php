@@ -4253,6 +4253,9 @@ class Database
                             Query::equal($twoWayKey, [$document->getId()])
                         ]);
                     } else {
+                        if(empty($value)) {
+                            return;
+                        }
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
                     }
 

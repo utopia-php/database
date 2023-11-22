@@ -745,7 +745,7 @@ class MariaDB extends SQL
             $this->getPDO()->beginTransaction();
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+            $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

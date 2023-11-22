@@ -386,19 +386,19 @@ class SQLite extends MariaDB
         $id = $this->filter($id);
 
 
-		// Workaround for no support for CREATE INDEX IF NOT EXISTS
-		$stmt = $this->getPDO()->prepare("
+        // Workaround for no support for CREATE INDEX IF NOT EXISTS
+        $stmt = $this->getPDO()->prepare("
 			SELECT name 
 			FROM sqlite_master 
 			WHERE type='index' 
 			  AND name=:_index;
 		");
-		$stmt->bindValue(':_index', "{$this->getNamespace()}_{$name}_{$id}");
-		$stmt->execute();
-		$index = $stmt->fetch();
-		if (!empty($index)) {
-			return true;
-		}
+        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$name}_{$id}");
+        $stmt->execute();
+        $index = $stmt->fetch();
+        if (!empty($index)) {
+            return true;
+        }
 
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
 
@@ -1157,16 +1157,16 @@ class SQLite extends MariaDB
                 )";
     }
 
-	/**
-	 * Get SQL table
-	 *
-	 * @param string $name
-	 * @return string
-	 */
-	protected function getSQLTable(string $name): string
-	{
-		return "{$this->getNamespace()}_{$name}";
-	}
+    /**
+     * Get SQL table
+     *
+     * @param string $name
+     * @return string
+     */
+    protected function getSQLTable(string $name): string
+    {
+        return "{$this->getNamespace()}_{$name}";
+    }
 
     /**
      * Get list of keywords that cannot be used

@@ -168,21 +168,18 @@ class Mongo extends Adapter
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        $indexesCreated = $this->client->createIndexes($id, [
-            [
-                'key' => ['_uid' => $this->getOrder(Database::ORDER_DESC)],
-                'name' => '_uid',
-                'unique' => true,
-                'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
-                    'locale' => 'en',
-                    'strength' => 1,
-                ]
-            ],
-            [
-                'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
-                'name' => '_permissions',
+        $indexesCreated = $this->client->createIndexes($id, [[
+            'key' => ['_uid' => $this->getOrder(Database::ORDER_DESC)],
+            'name' => '_uid',
+            'unique' => true,
+            'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
+                'locale' => 'en',
+                'strength' => 1,
             ]
-        ]);
+        ], [
+            'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
+            'name' => '_permissions',
+        ]]);
 
         if (!$indexesCreated) {
             return false;
@@ -631,6 +628,11 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $filters = ['_uid' => $id];
+
+        if ($this->shareTables) {
+            $filters['_tenant'] = $this->getTenant();
+        }
+
         $options = [];
 
         $selections = $this->getAttributeSelections($queries);
@@ -664,7 +666,10 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $internalId = $document->getInternalId();
-        $document->removeAttribute('$internalId');
+
+        $document
+            ->removeAttribute('$internalId')
+            ->setAttribute('$tenant', $this->getTenant());
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
@@ -698,7 +703,9 @@ class Mongo extends Adapter
 
         $records = [];
         foreach ($documents as $document) {
-            $document->removeAttribute('$internalId');
+            $document
+                ->removeAttribute('$internalId')
+                ->setAttribute('$tenant', $this->getTenant());
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);
@@ -731,9 +738,15 @@ class Mongo extends Adapter
         try {
             $this->client->insert($name, $document);
 
+            $filters = [];
+            $filters['_uid'] = $document['_uid'];
+            if ($this->shareTables) {
+                $filters['_tenant'] = $this->getTenant();
+            }
+
             $result = $this->client->find(
                 $name,
-                ['_uid' => $document['_uid']],
+                $filters,
                 ['limit' => 1]
             )->cursor->firstBatch[0];
 
@@ -760,8 +773,14 @@ class Mongo extends Adapter
         $record = $this->replaceChars('$', '_', $record);
         $record = $this->timeToMongo($record);
 
+        $filters = [];
+        $filters['_uid'] = $document->getId();
+        if ($this->shareTables) {
+            $filters['_tenant'] = $this->getTenant();
+        }
+
         try {
-            $this->client->update($name, ['_uid' => $document->getId()], $record);
+            $this->client->update($name, $filters, $record);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }
@@ -789,7 +808,13 @@ class Mongo extends Adapter
             $document = $this->replaceChars('$', '_', $document);
             $document = $this->timeToMongo($document);
 
-            $this->client->update($name, ['_uid' => $document['_uid']], $document);
+            $filters = [];
+            $filters['_uid'] = $document['_uid'];
+            if ($this->shareTables) {
+                $filters['_tenant'] = $this->getTenant();
+            }
+
+            $this->client->update($name, $filters, $document);
 
             $documents[$index] = new Document($document);
         }
@@ -812,19 +837,23 @@ class Mongo extends Adapter
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
     {
         $attribute = $this->filter($attribute);
-        $where = ['_uid' => $id];
+        $filters = ['_uid' => $id];
+
+        if ($this->shareTables) {
+            $filters['_tenant'] = $this->getTenant();
+        }
 
         if ($max) {
-            $where[$attribute] = ['$lte' => $max];
+            $filters[$attribute] = ['$lte' => $max];
         }
 
         if ($min) {
-            $where[$attribute] = ['$gte' => $min];
+            $filters[$attribute] = ['$gte' => $min];
         }
 
         $this->client->update(
             $this->getNamespace() . '_' . $this->filter($collection),
-            $where,
+            $filters,
             ['$inc' => [$attribute => $value]],
         );
 
@@ -844,7 +873,13 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $result = $this->client->delete($name, ['_uid' => $id]);
+        $filters = [];
+        $filters['_uid'] = $id;
+        if ($this->shareTables) {
+            $filters['_tenant'] = $this->getTenant();
+        }
+
+        $result = $this->client->delete($name, $filters);
 
         return (!!$result);
     }
@@ -888,6 +923,10 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $filters = $this->buildFilters($queries);
+
+        if ($this->shareTables) {
+            $filters['_tenant'] = $this->getTenant();
+        }
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -1257,26 +1296,28 @@ class Mongo extends Adapter
         if ($from === '_') {
             if (array_key_exists('_id', $array)) {
                 $result['$internalId'] = (string)$array['_id'];
-
                 unset($result['_id']);
             }
-
             if (array_key_exists('_uid', $array)) {
                 $result['$id'] = $array['_uid'];
-
                 unset($result['_uid']);
+            }
+            if (array_key_exists('_tenant', $array)) {
+                $result['$tenant'] = $array['_tenant'];
+                unset($result['_tenant']);
             }
         } elseif ($from === '$') {
             if (array_key_exists('$id', $array)) {
                 $result['_uid'] = $array['$id'];
-
                 unset($result['$id']);
             }
-
             if (array_key_exists('$internalId', $array)) {
                 $result['_id'] = new ObjectId($array['$internalId']);
-
                 unset($result['$internalId']);
+            }
+            if (array_key_exists('$tenant', $array)) {
+                $result['_tenant'] = $array['$tenant'];
+                unset($result['$tenant']);
             }
         }
 
@@ -1597,7 +1638,7 @@ class Mongo extends Adapter
      */
     public static function getCountOfDefaultIndexes(): int
     {
-        return 5;
+        return 6;
     }
 
     /**

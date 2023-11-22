@@ -72,7 +72,7 @@ class MongoDBTest extends Base
         $this->assertNotNull(static::getDatabase()->create());
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
-        $this->assertEquals(true, static::getDatabase()->setDatabase($this->testDatabase));
+        $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
     }
 
     public function testRenameAttribute(): void

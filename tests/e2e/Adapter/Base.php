@@ -12548,18 +12548,18 @@ abstract class Base extends TestCase
             ->setNamespace('')
             ->create();
 
-		if ($database->getAdapter()->getSupportForSchemas()) {
-			$this->assertEquals(true, $database->exists('schema1'));
-		}
+        if ($database->getAdapter()->getSupportForSchemas()) {
+            $this->assertEquals(true, $database->exists('schema1'));
+        }
 
         $database
             ->setDatabase('schema2')
             ->setNamespace('')
             ->create();
 
-		if ($database->getAdapter()->getSupportForSchemas()) {
-			$this->assertEquals(true, $database->exists('schema2'));
-		}
+        if ($database->getAdapter()->getSupportForSchemas()) {
+            $this->assertEquals(true, $database->exists('schema2'));
+        }
 
         /**
          * Table
@@ -12575,9 +12575,9 @@ abstract class Base extends TestCase
             ->setTenant($tenant1)
             ->create();
 
-		if ($database->getAdapter()->getSupportForSchemas()) {
-			$this->assertEquals(true, $database->exists('sharedTables'));
-		}
+        if ($database->getAdapter()->getSupportForSchemas()) {
+            $this->assertEquals(true, $database->exists('sharedTables'));
+        }
 
         $database->createCollection('people', [
             new Document([

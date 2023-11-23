@@ -75,6 +75,97 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    public function testPreserveDatesUpdate(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->createCollection('preserve_update_dates');
+
+        static::getDatabase()->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $doc1 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'attr1' => 'value1',
+        ]));
+
+        $doc2 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc2',
+            '$permissions' => [],
+            'attr1' => 'value2',
+        ]));
+
+        $doc3 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc3',
+            '$permissions' => [],
+            'attr1' => 'value3',
+        ]));
+
+        $newDate = '2000-01-01T10:00:00.000+00:00';
+
+        $doc1->setAttribute('$updatedAt', $newDate);
+        static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1, true);
+        $doc1 = static::getDatabase()->getDocument('preserve_update_dates', 'doc1');
+        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
+
+        $doc2->setAttribute('$updatedAt', $newDate);
+        $doc3->setAttribute('$updatedAt', $newDate);
+        static::getDatabase()->updateDocuments('preserve_update_dates', [$doc2, $doc3], 2, true);
+
+        $doc2 = static::getDatabase()->getDocument('preserve_update_dates', 'doc2');
+        $doc3 = static::getDatabase()->getDocument('preserve_update_dates', 'doc3');
+        $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
+        $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
+
+        static::getDatabase()->deleteCollection('preserve_update_dates');
+
+        Authorization::reset();
+    }
+
+    public function testPreserveDatesCreate(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->createCollection('preserve_create_dates');
+
+        static::getDatabase()->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $date = '2000-01-01T10:00:00.000+00:00';
+
+        static::getDatabase()->createDocument('preserve_create_dates', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'attr1' => 'value1',
+            '$createdAt' => $date
+        ]), true);
+
+        static::getDatabase()->createDocuments('preserve_create_dates', [
+            new Document([
+                '$id' => 'doc2',
+                '$permissions' => [],
+                'attr1' => 'value2',
+                '$createdAt' => $date
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => [],
+                'attr1' => 'value3',
+                '$createdAt' => $date
+            ]),
+        ], 2, true);
+
+        $doc1 = static::getDatabase()->getDocument('preserve_create_dates', 'doc1');
+        $doc2 = static::getDatabase()->getDocument('preserve_create_dates', 'doc2');
+        $doc3 = static::getDatabase()->getDocument('preserve_create_dates', 'doc3');
+        $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
+        $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
+        $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
+
+        static::getDatabase()->deleteCollection('preserve_create_dates');
+
+        Authorization::reset();
+    }
+
     /**
      * @throws Exception|Throwable
      */
@@ -2114,6 +2205,31 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    /**
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
+    public function testSelectInternalID(): void
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['$internalId', '$id']),
+            Query::orderAsc(''),
+            Query::limit(1),
+        ]);
+
+        $document = $documents[0];
+
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertCount(2, $document);
+
+        $document = static::getDatabase()->getDocument('movies', $document->getId(), [
+            Query::select(['$internalId']),
+        ]);
+
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertCount(1, $document);
     }
 
     public function testFindOrderBy(): void
@@ -5570,6 +5686,15 @@ abstract class Base extends TestCase
             id: 'newCity',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
+
+        static::getDatabase()->updateDocument('city', 'city1', new Document(['newCountry' => null, '$id' => 'city1']));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertNull($city1->getAttribute('newCountry'));
+
+        // Check Delete TwoWay TRUE && RELATION_MUTATE_SET_NULL && related value NULL
+        $this->assertTrue(static::getDatabase()->deleteDocument('city', 'city1'));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertTrue($city1->isEmpty());
 
         // Delete parent, will set child relationship to null for two-way
         static::getDatabase()->deleteDocument('country', 'country1');

@@ -32,12 +32,11 @@ class SQLite extends MariaDB
      * Optionally check if collection exists in Database
      *
      * @param string $database
-     * @param string $collection
+     * @param string|null $collection
      * @return bool
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
      */
-    public function exists(string $database, ?string $collection): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
 

@@ -2667,6 +2667,7 @@ class Database
      *
      * @param string $collection
      * @param Document $document
+     * @param bool $preserveDates If true, createdAt and updatedAt will not be overwritten
      *
      * @return Document
      *
@@ -2674,7 +2675,7 @@ class Database
      * @throws DatabaseException
      * @throws StructureException
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(string $collection, Document $document, bool $preserveDates = false): Document
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -2687,11 +2688,14 @@ class Database
 
         $time = DateTime::now();
 
+        $createdAt = $document->getCreatedAt();
+        $updatedAt = $document->getUpdatedAt();
+
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', $time)
-            ->setAttribute('$updatedAt', $time);
+            ->setAttribute('$createdAt', empty($createdAt) || !$preserveDates ? $time : $createdAt)
+            ->setAttribute('$updatedAt', empty($updatedAt) || !$preserveDates ? $time : $updatedAt);
 
         $document = $this->encode($collection, $document);
 
@@ -2728,6 +2732,7 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
+     * @param bool $preserveDates If true, createdAt and updatedAt will not be overwritten
      *
      * @return array<Document>
      *
@@ -2735,7 +2740,7 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE, bool $preserveDates = false): array
     {
         if (empty($documents)) {
             return [];
@@ -2746,11 +2751,14 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', $time)
-                ->setAttribute('$updatedAt', $time);
+                ->setAttribute('$createdAt', empty($createdAt) || !$preserveDates ? $time : $createdAt)
+                ->setAttribute('$updatedAt', empty($updatedAt) || !$preserveDates ? $time : $updatedAt);
 
             $document = $this->encode($collection, $document);
 
@@ -3055,6 +3063,7 @@ class Database
      * @param string $collection
      * @param string $id
      * @param Document $document
+     * @param bool $preserveDates If true, updatedAt will not be overwritten
      * @return Document
      *
      * @throws AuthorizationException
@@ -3062,7 +3071,7 @@ class Database
      * @throws DatabaseException
      * @throws StructureException
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $preserveDates = false): Document
     {
         if (!$document->getId() || !$id) {
             throw new DatabaseException('Must define $id attribute');
@@ -3176,7 +3185,8 @@ class Database
         }
 
         if ($shouldUpdate) {
-            $document->setAttribute('$updatedAt', $time);
+            $updatedAt = $document->getUpdatedAt();
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$preserveDates ? $time : $updatedAt);
         }
 
         // Check if document was updated after the request timestamp
@@ -3220,6 +3230,7 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
+     * @param bool $preserveDates If true, updatedAt will not be overwritten
      *
      * @return array<Document>
      *
@@ -3227,7 +3238,7 @@ class Database
      * @throws Exception
      * @throws StructureException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE, bool $preserveDates = false): array
     {
         if (empty($documents)) {
             return [];
@@ -3241,7 +3252,8 @@ class Database
                 throw new Exception('Must define $id attribute for each document');
             }
 
-            $document->setAttribute('$updatedAt', $time);
+            $updatedAt = $document->getUpdatedAt();
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$preserveDates ? $time : $updatedAt);
             $document = $this->encode($collection, $document);
 
             $old = Authorization::skip(fn () => $this->silent(

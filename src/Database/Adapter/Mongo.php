@@ -630,7 +630,7 @@ class Mongo extends Adapter
         $filters = ['_uid' => $id];
 
         if ($this->shareTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
         $options = [];
@@ -669,7 +669,7 @@ class Mongo extends Adapter
 
         $document
             ->removeAttribute('$internalId')
-            ->setAttribute('$tenant', $this->getTenant());
+            ->setAttribute('$tenant', (string)$this->getTenant());
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
@@ -705,7 +705,7 @@ class Mongo extends Adapter
         foreach ($documents as $document) {
             $document
                 ->removeAttribute('$internalId')
-                ->setAttribute('$tenant', $this->getTenant());
+                ->setAttribute('$tenant', (string)$this->getTenant());
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);
@@ -741,7 +741,7 @@ class Mongo extends Adapter
             $filters = [];
             $filters['_uid'] = $document['_uid'];
             if ($this->shareTables) {
-                $filters['_tenant'] = $this->getTenant();
+                $filters['_tenant'] = (string)$this->getTenant();
             }
 
             $result = $this->client->find(
@@ -776,7 +776,7 @@ class Mongo extends Adapter
         $filters = [];
         $filters['_uid'] = $document->getId();
         if ($this->shareTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
         try {
@@ -811,7 +811,7 @@ class Mongo extends Adapter
             $filters = [];
             $filters['_uid'] = $document['_uid'];
             if ($this->shareTables) {
-                $filters['_tenant'] = $this->getTenant();
+                $filters['_tenant'] = (string)$this->getTenant();
             }
 
             $this->client->update($name, $filters, $document);
@@ -840,7 +840,7 @@ class Mongo extends Adapter
         $filters = ['_uid' => $id];
 
         if ($this->shareTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
         if ($max) {
@@ -876,7 +876,7 @@ class Mongo extends Adapter
         $filters = [];
         $filters['_uid'] = $id;
         if ($this->shareTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
         $result = $this->client->delete($name, $filters);
@@ -925,7 +925,7 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         if ($this->shareTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
         // permissions

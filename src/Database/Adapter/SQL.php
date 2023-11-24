@@ -110,7 +110,7 @@ abstract class SQL extends Adapter
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-			SELECT {$this->getAttributeProjection($selections)} 
+		    SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid 
 		";

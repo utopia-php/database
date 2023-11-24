@@ -4734,19 +4734,6 @@ class Database
     }
 
     /**
-     * @return array<Document>
-     * @throws DatabaseException
-     */
-    public static function getInternalAttributes(): array
-    {
-        $attributes = [];
-        foreach (Database::INTERNAL_ATTRIBUTES as $internal) {
-            $attributes[] = new Document($internal);
-        }
-        return $attributes;
-    }
-
-    /**
      * Encode Document
      *
      * @param Document $collection
@@ -4758,7 +4745,14 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+
+		$internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
+			// We don't want to encode permissions into a JSON string
+			return $attribute['$id'] !== '$permissions';
+		});
+
+        $attributes = \array_merge($attributes, $internalAttributes);
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -4835,7 +4829,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';

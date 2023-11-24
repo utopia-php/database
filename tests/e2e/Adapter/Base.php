@@ -3946,7 +3946,7 @@ abstract class Base extends TestCase
 
     public function testGetIndexLimit(): void
     {
-        $this->assertEquals(58, $this->getDatabase()->getLimitForIndexes());
+        $this->assertEquals(57, $this->getDatabase()->getLimitForIndexes());
     }
 
     public function testGetId(): void

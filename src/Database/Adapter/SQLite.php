@@ -120,7 +120,12 @@ class SQLite extends MariaDB
 
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
+
+            $attrType = $this->getSQLType(
+				$attribute->getAttribute('type'),
+				$attribute->getAttribute('size', 0),
+				$attribute->getAttribute('signed', true)
+			);
 
             if ($attribute->getAttribute('array')) {
                 $attrType = 'LONGTEXT';
@@ -143,13 +148,11 @@ class SQLite extends MariaDB
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
-        $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        $this->getPDO()->prepare($sql)->execute();
 
-        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid', '_tenant'], [], []);
-        $this->createIndex($id, '_created_at', Database::INDEX_KEY, ['_createdAt', '_tenant'], [], []);
-        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, ['_updatedAt', '_tenant'], [], []);
+		$this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
+		$this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
+		$this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
         foreach ($indexes as $index) {
             $indexId = $this->filter($index->getId());
@@ -393,7 +396,7 @@ class SQLite extends MariaDB
 			WHERE type='index' 
 			  AND name=:_index;
 		");
-        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$name}_{$id}");
+        $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
         $stmt->execute();
         $index = $stmt->fetch();
         if (!empty($index)) {
@@ -423,7 +426,7 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        $sql = "DROP INDEX `{$this->getNamespace()}_{$name}_{$id}`";
+        $sql = "DROP INDEX `{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}`";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
         return $this->getPDO()
@@ -966,13 +969,21 @@ class SQLite extends MariaDB
                     $updateClause .= "{$column} = excluded.{$column}";
                 }
 
-                $stmt = $this->getPDO()->prepare("
+				$sql = "
                     INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
                     VALUES " . \implode(', ', $batchKeys) . "
-                    ON CONFLICT(_uid, _tenant) DO UPDATE SET $updateClause
-                ");
 
-                foreach ($bindValues as $key => $value) {
+                ";
+
+				if ($this->shareTables) {
+					$sql .= "ON CONFLICT (_tenant, _uid) DO UPDATE SET $updateClause";
+				} else {
+					$sql .= "ON CONFLICT (_uid) DO UPDATE SET $updateClause";
+				}
+
+				$stmt = $this->getPDO()->prepare($sql);
+
+				foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
                 }
 
@@ -1113,7 +1124,7 @@ class SQLite extends MariaDB
 
             case Database::INDEX_UNIQUE:
                 $type = 'UNIQUE INDEX';
-                $postfix = ' COLLATE NOCASE';
+                $postfix = 'COLLATE NOCASE';
 
                 break;
 
@@ -1129,13 +1140,20 @@ class SQLite extends MariaDB
         }, $attributes);
 
         foreach ($attributes as $key => $attribute) {
-            $order = '';
             $attribute = $this->filter($attribute);
 
-            $attributes[$key] = "`$attribute`$postfix $order";
+            $attributes[$key] = "`{$attribute}` {$postfix}";
         }
 
-        return "CREATE {$type} `{$this->getNamespace()}_{$collection}_{$id}` ON `{$this->getNamespace()}_{$collection}` ( " . implode(', ', $attributes) . ")";
+		$key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
+		$attributes = implode(', ', $attributes);
+
+		if ($this->shareTables) {
+			$key = "`{$this->getNamespace()}_{$collection}_{$id}`";
+			$attributes = "_tenant {$postfix}, {$attributes}";
+		}
+
+        return "CREATE {$type} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
     }
 
     /**

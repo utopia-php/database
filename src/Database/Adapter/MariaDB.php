@@ -115,22 +115,33 @@ class MariaDB extends SQL
 
         $sql = "
 			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
-				`_id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-				`_uid` VARCHAR(255) NOT NULL,
-				`_tenant` VARCHAR(36) DEFAULT NULL,
-				`_createdAt` DATETIME(3) DEFAULT NULL,
-				`_updatedAt` DATETIME(3) DEFAULT NULL,
-				`_permissions` MEDIUMTEXT DEFAULT NULL,
+				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+				_uid VARCHAR(255) NOT NULL,
+				_tenant VARCHAR(36) DEFAULT NULL,
+				_createdAt DATETIME(3) DEFAULT NULL,
+				_updatedAt DATETIME(3) DEFAULT NULL,
+				_permissions MEDIUMTEXT DEFAULT NULL,
+				PRIMARY KEY (_id),
 				" . \implode(' ', $attributeStrings) . "
-				PRIMARY KEY (`_id`),
 				" . \implode(' ', $indexStrings) . "
-				UNIQUE KEY `_uid` (`_uid`),
-				KEY `_tenant` (`_tenant`),
-				KEY `_created_at` (`_createdAt`, `_tenant`),
-				KEY `_updated_at` (`_updatedAt`, `_tenant`),
-				KEY `_uid_tenant` (`_uid`, `_tenant`)
-			)
 		";
+
+        if ($this->shareTables) {
+            $sql .= "
+				UNIQUE KEY _uid_tenant (_tenant,_uid),
+				KEY _tenant (_tenant),
+				KEY _created_at (_tenant, _createdAt),
+				KEY _updated_at (_tenant, _updatedAt)
+			";
+        } else {
+            $sql .= "
+				UNIQUE KEY _uid (_uid),
+				KEY _created_at (_createdAt),
+				KEY _updated_at (_updatedAt)
+			";
+        }
+
+        $sql .= ")";
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
@@ -141,16 +152,27 @@ class MariaDB extends SQL
 
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-					`_id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					`_tenant` VARCHAR(36) DEFAULT NULL,
-					`_type` VARCHAR(12) NOT NULL,
-					`_permission` VARCHAR(255) NOT NULL,
-					`_document` VARCHAR(255) NOT NULL,
-					PRIMARY KEY (`_id`),
-					UNIQUE INDEX `_index1` (`_document`, `_tenant`, `_type`,`_permission`),
-					INDEX `_permission` (`_permission`, `_type`, `_tenant`, `_document`)
-				)
+					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+					_tenant VARCHAR(36) DEFAULT NULL,
+					_type VARCHAR(12) NOT NULL,
+					_permission VARCHAR(255) NOT NULL,
+					_document VARCHAR(255) NOT NULL,
+					PRIMARY KEY (_id),
 			";
+
+            if ($this->shareTables) {
+                $sql .= "
+					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+					INDEX _permission (_permission, _type, _document, _tenant)
+				";
+            } else {
+                $sql .= "
+					UNIQUE INDEX _index1 (_document, _type, _permission),
+					INDEX _permission (_permission, _type, _document)
+				";
+            }
+
+            $sql .= ")";
 
             $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
@@ -1976,6 +1998,11 @@ class MariaDB extends SQL
         };
 
         $attributes = \implode(', ', $attributes);
+
+        if ($this->shareTables) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
 
         return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ({$attributes})";
     }

@@ -100,20 +100,30 @@ class Postgres extends SQL
          */
         $sql = "
             CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
-                \"_id\" SERIAL NOT NULL,
-                \"_uid\" VARCHAR(255) NOT NULL,
-                \"_tenant\" VARCHAR(36) DEFAULT NULL,
+                _id SERIAL NOT NULL,
+                _uid VARCHAR(255) NOT NULL,
+                _tenant VARCHAR(36) DEFAULT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
-                \"_permissions\" TEXT DEFAULT NULL,
+                _permissions TEXT DEFAULT NULL,
                 " . \implode(' ', $attributes) . "
-                PRIMARY KEY (\"_id\")
+                PRIMARY KEY (_id)
             );
-            
-			CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(\"_uid\"), \"_tenant\");
-            CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\", \"_tenant\");
-            CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\", \"_tenant\");
         ";
+
+		if ($this->shareTables) {
+			$sql .= "
+				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (_tenant, LOWER(_uid));
+            	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
+            	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
+			";
+		} else {
+			$sql .= "
+				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid));
+            	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
+            	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+			";
+		}
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
@@ -124,18 +134,30 @@ class Postgres extends SQL
 
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-					\"_id\" SERIAL NOT NULL,
-					\"_tenant\" VARCHAR(36) DEFAULT NULL,
-					\"_type\" VARCHAR(12) NOT NULL,
-					\"_permission\" VARCHAR(255) NOT NULL,
-					\"_document\" VARCHAR(255) NOT NULL,
-					PRIMARY KEY (\"_id\")
-				);
-				CREATE UNIQUE INDEX \"index_{$namespace}_{$id}_ukey\" 
-				    ON {$this->getSQLTable($id. '_perms')} USING btree (\"_document\",\"_tenant\",\"_type\",\"_permission\");
-				CREATE INDEX \"index_{$namespace}_{$id}_permission\" 
-				    ON {$this->getSQLTable($id. '_perms')} USING btree (\"_permission\",\"_type\",\"_tenant\",\"_document\");    
+					_id SERIAL NOT NULL,
+					_tenant VARCHAR(36) DEFAULT NULL,
+					_type VARCHAR(12) NOT NULL,
+					_permission VARCHAR(255) NOT NULL,
+					_document VARCHAR(255) NOT NULL,
+					PRIMARY KEY (_id)
+				);   
 			";
+
+			if ($this->shareTables) {
+				$sql .= "
+					CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
+				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
+					CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_permission\" 
+				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_permission,_type,_document,_tenant); 
+				";
+			} else {
+				$sql .= "
+					CREATE UNIQUE INDEX \"{$namespace}_{$id}_ukey\" 
+				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_document,_type,_permission);
+					CREATE INDEX \"{$namespace}_{$id}_permission\" 
+				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_permission,_type,_document); 
+				";
+			}
 
             $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
@@ -612,7 +634,9 @@ class Postgres extends SQL
         $id = $this->filter($id);
         $schemaName = $this->getDatabase();
 
-        $sql = "DROP INDEX IF EXISTS \"{$schemaName}\".{$id}";
+		$key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
+
+        $sql = "DROP INDEX IF EXISTS \"{$schemaName}\".{$key}";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
         return $this->getPDO()
@@ -636,8 +660,8 @@ class Postgres extends SQL
         $namespace = $this->getNamespace();
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $oldIndexName = $collection . "_" . $old;
-        $newIndexName = $namespace . $collection . "_" . $new;
+        $oldIndexName = "{$this->tenant}_{$collection}_{$old}";
+        $newIndexName = "{$namespace}_{$this->tenant}_{$collection}_{$new}";
 
         $sql = "ALTER INDEX {$this->getSQLTable($oldIndexName)} RENAME TO \"{$newIndexName}\"";
         $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
@@ -1274,11 +1298,18 @@ class Postgres extends SQL
                     $updateClause .= "{$column} = excluded.{$column}";
                 }
 
-                $stmt = $this->getPDO()->prepare("
+				$sql = "
                     INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
                     VALUES " . \implode(', ', $batchKeys) . "
-                    ON CONFLICT (LOWER(_uid), _tenant) DO UPDATE SET $updateClause
-                ");
+                ";
+
+				if ($this->shareTables) {
+					$sql .= "ON CONFLICT (_tenant, LOWER(_uid)) DO UPDATE SET $updateClause";
+				} else {
+					$sql .= "ON CONFLICT (LOWER(_uid)) DO UPDATE SET $updateClause";
+				}
+
+                $stmt = $this->getPDO()->prepare($sql);
 
                 foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
@@ -1955,7 +1986,15 @@ class Postgres extends SQL
             default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
         };
 
-        return 'CREATE ' . $type . ' "' . $this->getNamespace() . '_' . $collection . '_' . $id . '" ON ' . $this->getSQLTable($collection) . ' ( ' . implode(', ', $attributes) . ' );';
+		$key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
+		$attributes = \implode(', ', $attributes);
+
+		if ($this->shareTables) {
+			// Add tenant as first index column for best performance
+			$attributes = "_tenant, {$attributes}";
+		}
+
+		return "CREATE {$type} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
     }
 
     /**

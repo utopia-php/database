@@ -12599,8 +12599,8 @@ abstract class Base extends TestCase
          * Table
          */
 
-        $tenant1 = ID::unique();
-        $tenant2 = ID::unique();
+        $tenant1 = 1;
+        $tenant2 = 2;
 
         $database
             ->setDatabase('sharedTables')
@@ -12629,11 +12629,11 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
-            'name' => $tenant1,
+            'name' => 'Spiderman',
         ]));
 
         $doc = $database->getDocument('people', $docId);
-        $this->assertEquals($tenant1, $doc['name']);
+        $this->assertEquals('Spiderman', $doc['name']);
 
         $docs = $database->find('people');
         $this->assertEquals(1, \count($docs));
@@ -12659,8 +12659,7 @@ abstract class Base extends TestCase
         $database->setTenant($tenant1);
 
         $doc = $database->getDocument('people', $docId);
-        $this->assertEquals($tenant1, $doc['name']);
-
+        $this->assertEquals('Spiderman', $doc['name']);
         $docs = $database->find('people');
         $this->assertEquals(1, \count($docs));
 

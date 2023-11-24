@@ -102,7 +102,7 @@ class Postgres extends SQL
             CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
-                _tenant VARCHAR(36) DEFAULT NULL,
+                _tenant INTEGER DEFAULT NULL,
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
@@ -135,7 +135,7 @@ class Postgres extends SQL
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
 					_id SERIAL NOT NULL,
-					_tenant VARCHAR(36) DEFAULT NULL,
+					_tenant INTEGER DEFAULT NULL,
 					_type VARCHAR(12) NOT NULL,
 					_permission VARCHAR(255) NOT NULL,
 					_document VARCHAR(255) NOT NULL,

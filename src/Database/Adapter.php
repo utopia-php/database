@@ -13,7 +13,7 @@ abstract class Adapter
 
     protected bool $shareTables = false;
 
-    protected ?string $tenant = null;
+    protected ?int $tenant = null;
 
     /**
      * @var array<string, mixed>
@@ -162,11 +162,11 @@ abstract class Adapter
      *
      * Set tenant to use if tables are shared
      *
-     * @param string $tenant
+     * @param int $tenant
      *
      * @return bool
      */
-    public function setTenant(string $tenant): bool
+    public function setTenant(int $tenant): bool
     {
         $this->tenant = $tenant;
 
@@ -178,9 +178,9 @@ abstract class Adapter
      *
      * Get tenant to use for shared tables
      *
-     * @return string
+     * @return ?int
      */
-    public function getTenant(): ?string
+    public function getTenant(): ?int
     {
         return $this->tenant;
     }

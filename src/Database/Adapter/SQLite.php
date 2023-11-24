@@ -122,10 +122,10 @@ class SQLite extends MariaDB
             $attrId = $this->filter($attribute->getId());
 
             $attrType = $this->getSQLType(
-				$attribute->getAttribute('type'),
-				$attribute->getAttribute('size', 0),
-				$attribute->getAttribute('signed', true)
-			);
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true)
+            );
 
             if ($attribute->getAttribute('array')) {
                 $attrType = 'LONGTEXT';
@@ -150,9 +150,9 @@ class SQLite extends MariaDB
 
         $this->getPDO()->prepare($sql)->execute();
 
-		$this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
-		$this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
-		$this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
+        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
+        $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
+        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
         foreach ($indexes as $index) {
             $indexId = $this->filter($index->getId());
@@ -969,21 +969,21 @@ class SQLite extends MariaDB
                     $updateClause .= "{$column} = excluded.{$column}";
                 }
 
-				$sql = "
+                $sql = "
                     INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
                     VALUES " . \implode(', ', $batchKeys) . "
 
                 ";
 
-				if ($this->shareTables) {
-					$sql .= "ON CONFLICT (_tenant, _uid) DO UPDATE SET $updateClause";
-				} else {
-					$sql .= "ON CONFLICT (_uid) DO UPDATE SET $updateClause";
-				}
+                if ($this->shareTables) {
+                    $sql .= "ON CONFLICT (_tenant, _uid) DO UPDATE SET $updateClause";
+                } else {
+                    $sql .= "ON CONFLICT (_uid) DO UPDATE SET $updateClause";
+                }
 
-				$stmt = $this->getPDO()->prepare($sql);
+                $stmt = $this->getPDO()->prepare($sql);
 
-				foreach ($bindValues as $key => $value) {
+                foreach ($bindValues as $key => $value) {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
                 }
 
@@ -1145,13 +1145,13 @@ class SQLite extends MariaDB
             $attributes[$key] = "`{$attribute}` {$postfix}";
         }
 
-		$key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
-		$attributes = implode(', ', $attributes);
+        $key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
+        $attributes = implode(', ', $attributes);
 
-		if ($this->shareTables) {
-			$key = "`{$this->getNamespace()}_{$collection}_{$id}`";
-			$attributes = "_tenant {$postfix}, {$attributes}";
-		}
+        if ($this->shareTables) {
+            $key = "`{$this->getNamespace()}_{$collection}_{$id}`";
+            $attributes = "_tenant {$postfix}, {$attributes}";
+        }
 
         return "CREATE {$type} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
     }

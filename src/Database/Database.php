@@ -175,8 +175,8 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => self::VAR_STRING,
-            'size' => Database::LENGTH_KEY,
+            'type' => self::VAR_INTEGER,
+            'size' => 0,
             'required' => false,
             'default' => null,
             'signed' => true,
@@ -907,7 +907,8 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+        if ($this->adapter->getShareTables()
+            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -940,7 +941,7 @@ class Database
 
         if ($id !== self::METADATA
             && $this->adapter->getShareTables()
-            && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             return new Document();
         }
 
@@ -999,7 +1000,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -1025,7 +1026,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -1083,7 +1084,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') !== $this->adapter->getTenant()) {
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -4746,10 +4747,10 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-		$internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-			// We don't want to encode permissions into a JSON string
-			return $attribute['$id'] !== '$permissions';
-		});
+        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
+            // We don't want to encode permissions into a JSON string
+            return $attribute['$id'] !== '$permissions';
+        });
 
         $attributes = \array_merge($attributes, $internalAttributes);
 

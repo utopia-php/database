@@ -328,17 +328,17 @@ abstract class SQL extends Adapter
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
                     $total += match (true) {
-						// 8 bytes length + 4 bytes for LONGTEXT
+                        // 8 bytes length + 4 bytes for LONGTEXT
                         $attribute['size'] > 16777215 => 12,
-						// 8 bytes length + 3 bytes for MEDIUMTEXT
+                        // 8 bytes length + 3 bytes for MEDIUMTEXT
                         $attribute['size'] > 65535 => 11,
-						// 8 bytes length + 2 bytes for TEXT
+                        // 8 bytes length + 2 bytes for TEXT
                         $attribute['size'] > $this->getMaxVarcharLength() => 10,
-						// $size = $size * 4; // utf8mb4 up to 4 bytes per char
-						// 8 bytes length + 2 bytes for VARCHAR(>255)
+                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
+                        // 8 bytes length + 2 bytes for VARCHAR(>255)
                         $attribute['size'] > 255 => ($attribute['size'] * 4) + 2,
-						// $size = $size * 4; // utf8mb4 up to 4 bytes per char
-						// 8 bytes length + 1 bytes for VARCHAR(<=255)
+                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
+                        // 8 bytes length + 1 bytes for VARCHAR(<=255)
                         default => ($attribute['size'] * 4) + 1,
                     };
                     break;

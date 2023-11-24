@@ -402,7 +402,7 @@ $database->deleteCollection(
 );
 
 // Delete cached documents of a collection
-$database->deleteCachedCollection(
+$database->purgeCachedCollection(
     collection: 'users'
 );
 ```
@@ -836,7 +836,7 @@ $database->deleteDocument(
 
 // Delete a cached document
 Note: Cached Documents or Collections are automatically deleted when a document or collection is updated or deleted 
-$database->deleteCachedDocument(
+$database->purgeCachedDocument(
     collection: 'movies', 
     id: $document->getId()
 );

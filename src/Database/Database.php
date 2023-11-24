@@ -1535,10 +1535,10 @@ class Database
                     throw new DatabaseException('Failed to update attribute');
                 }
 
-                $this->deleteCachedCollection($collection);
+                $this->purgeCachedCollection($collection);
             }
 
-            $this->deleteCachedDocument(self::METADATA, $collection);
+            $this->purgeCachedDocument(self::METADATA, $collection);
         });
     }
 
@@ -2014,7 +2014,7 @@ class Database
                     $junctionAttribute->setAttribute('key', $newTwoWayKey);
                 });
 
-                $this->deleteCachedCollection($junction);
+                $this->purgeCachedCollection($junction);
             }
 
             if ($altering) {
@@ -2034,8 +2034,8 @@ class Database
                 }
             }
 
-            $this->deleteCachedCollection($collection->getId());
-            $this->deleteCachedCollection($relatedCollection->getId());
+            $this->purgeCachedCollection($collection->getId());
+            $this->purgeCachedCollection($relatedCollection->getId());
 
             $renameIndex = function (string $collection, string $key, string $newKey) {
                 $this->updateIndexMeta(
@@ -2197,8 +2197,8 @@ class Database
             throw new DatabaseException('Failed to delete relationship');
         }
 
-        $this->deleteCachedCollection($collection->getId());
-        $this->deleteCachedCollection($relatedCollection->getId());
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedCollection($relatedCollection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
 
@@ -3216,7 +3216,7 @@ class Database
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $this->deleteCachedDocument($relatedCollection->getId(), $relationId);
+                $this->purgeCachedDocument($relatedCollection->getId(), $relationId);
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
@@ -3397,7 +3397,7 @@ class Database
 
         $this->purgeRelatedDocuments($collection, $id);
 
-        $this->deleteCachedDocument($collection->getId(), $id);
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -3466,7 +3466,7 @@ class Database
         foreach ($documents as $key => $document) {
             $documents[$key] = $this->decode($collection, $document);
 
-            $this->deleteCachedDocument($collection->getId(), $document->getId());
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
@@ -3724,7 +3724,7 @@ class Database
                                 // For many-one we need to update the related key to null if no relation exists
                                 $document->setAttribute($key, null);
                             }
-                            $this->deleteCachedDocument($relatedCollection->getId(), $value);
+                            $this->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             $related = $this->getDocument($relatedCollection->getId(), $value->getId());
 
@@ -3742,7 +3742,7 @@ class Database
                                     $related->getId(),
                                     $value
                                 );
-                                $this->deleteCachedDocument($relatedCollection->getId(), $related->getId());
+                                $this->purgeCachedDocument($relatedCollection->getId(), $related->getId());
                             }
 
                             $document->setAttribute($key, $value->getId());
@@ -3921,7 +3921,7 @@ class Database
         $max = $max ? $max - $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
 
-        $this->deleteCachedDocument($collection->getId(), $id);
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
@@ -3992,7 +3992,7 @@ class Database
 
         $min = $min ? $min + $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
-        $this->deleteCachedDocument($collection->getId(), $id);
+        $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
         return $result;
@@ -4052,7 +4052,7 @@ class Database
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
 
         $this->purgeRelatedDocuments($collection, $id);
-        $this->deleteCachedDocument($collection->getId(), $id);
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -4436,7 +4436,7 @@ class Database
      * @return bool
      * @throws DatabaseException
      */
-    public function deleteCachedCollection(string $collection): bool
+    public function purgeCachedCollection(string $collection): bool
     {
         return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
     }
@@ -4450,7 +4450,7 @@ class Database
      * @return bool
      * @throws DatabaseException
      */
-    public function deleteCachedDocument(string $collection, string $id): bool
+    public function purgeCachedDocument(string $collection, string $id): bool
     {
         return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
     }
@@ -5165,7 +5165,7 @@ class Database
         if (!empty($cache)) {
             foreach ($cache as $v) {
                 list($collectionId, $documentId) = explode(':', $v);
-                $this->deleteCachedDocument($collectionId, $documentId);
+                $this->purgeCachedDocument($collectionId, $documentId);
             }
             $this->cache->purge($key);
         }

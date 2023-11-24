@@ -26,15 +26,6 @@ class SQLiteTest extends Base
     }
 
     /**
-     *
-     * @return int
-     */
-    public static function getUsedIndexes(): int
-    {
-        return SQLite::getCountOfDefaultIndexes();
-    }
-
-    /**
      * @return Database
      */
     public static function getDatabase(): Database

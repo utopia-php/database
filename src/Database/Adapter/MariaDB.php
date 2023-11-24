@@ -128,8 +128,7 @@ class MariaDB extends SQL
 
         if ($this->shareTables) {
             $sql .= "
-				UNIQUE KEY _uid_tenant (_tenant,_uid),
-				KEY _tenant (_tenant),
+				UNIQUE KEY _uid_tenant (_tenant, _uid),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt)
 			";

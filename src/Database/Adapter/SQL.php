@@ -282,7 +282,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultAttributes(): int
     {
-        return 5;
+        return \count(Database::INTERNAL_ATTRIBUTES);
     }
 
     /**
@@ -292,7 +292,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultIndexes(): int
     {
-        return 6;
+        return \count(Database::INTERNAL_INDEXES);
     }
 
     /**

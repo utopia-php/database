@@ -145,9 +145,18 @@ class Database
      *
      * @var array<array<string, mixed>>
      */
-    protected const ATTRIBUTES = [
+    public const INTERNAL_ATTRIBUTES = [
         [
             '$id' => '$id',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$internalId',
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
@@ -196,21 +205,26 @@ class Database
             'array' => false,
             'filters' => ['datetime']
         ],
+        [
+            '$id' => '$permissions',
+            'type' => Database::VAR_STRING,
+            'size' => 1000000,
+            'signed' => true,
+            'required' => false,
+            'default' => [],
+            'array' => false,
+            'filters' => ['json']
+        ],
     ];
 
-    /**
-     * List of Internal Attributes
-     *
-     * @var array<string>
-     */
-    public const INTERNAL_ATTRIBUTES = [
-        '$id',
-        '$internalId',
-        '$collection',
-        '$tenant',
-        '$createdAt',
-        '$updatedAt',
-        '$permissions',
+    public const INTERNAL_INDEXES = [
+        '_id',
+        '_uid',
+        '_createdAt',
+        '_updatedAt',
+        '_permissions_id',
+        '_permissions_forwards',
+        '_permissions_backwards',
     ];
 
     /**
@@ -219,7 +233,7 @@ class Database
      *
      * @var array<string, mixed>
      */
-    protected array $collection = [
+    public const COLLECTION = [
         '$id' => self::METADATA,
         '$collection' => self::METADATA,
         'name' => 'collections',
@@ -705,18 +719,8 @@ class Database
          * @var array<Document> $attributes
          */
         $attributes = array_map(function ($attribute) {
-            return new Document([
-                '$id' => ID::custom($attribute[0]),
-                'type' => $attribute[1],
-                'size' => $attribute[2],
-                'required' => $attribute[3],
-            ]);
-        }, [ // Array of [$id, $type, $size, $required]
-            ['name', self::VAR_STRING, 512, true],
-            ['attributes', self::VAR_STRING, 1000000, false],
-            ['indexes', self::VAR_STRING, 1000000, false],
-            ['documentSecurity', self::VAR_BOOLEAN, 0, false],
-        ]);
+            return new Document($attribute);
+        }, self::COLLECTION['attributes']);
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
@@ -843,7 +847,7 @@ class Database
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
-            return new Document($this->collection);
+            return new Document(self::COLLECTION);
         }
 
         // Check index limits, if given
@@ -2414,6 +2418,7 @@ class Database
      *
      * @return Document
      * @throws DatabaseException
+     * @throws Exception
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
@@ -2422,7 +2427,7 @@ class Database
         }
 
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return new Document($this->collection);
+            return new Document(self::COLLECTION);
         }
 
         if (empty($collection)) {
@@ -2587,8 +2592,8 @@ class Database
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
-                    if (!in_array($internalAttribute, $values)) {
-                        $document->removeAttribute($internalAttribute);
+                    if (!in_array($internalAttribute['$id'], $values)) {
+                        $document->removeAttribute($internalAttribute['$id']);
                     }
                 }
             }
@@ -4599,8 +4604,8 @@ class Database
                 $values = $query->getValues();
                 foreach ($results as $result) {
                     foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
-                        if (!\in_array($internalAttribute, $values)) {
-                            $result->removeAttribute($internalAttribute);
+                        if (!\in_array($internalAttribute['$id'], $values)) {
+                            $result->removeAttribute($internalAttribute['$id']);
                         }
                     }
                 }
@@ -4735,7 +4740,7 @@ class Database
     public static function getInternalAttributes(): array
     {
         $attributes = [];
-        foreach (Database::ATTRIBUTES as $internal) {
+        foreach (Database::INTERNAL_ATTRIBUTES as $internal) {
             $attributes[] = new Document($internal);
         }
         return $attributes;
@@ -4753,7 +4758,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -5019,10 +5024,11 @@ class Database
             }
         }
 
-        $keys = [];
-
         // Allow querying internal attributes
-        $keys = array_merge($keys, self::INTERNAL_ATTRIBUTES);
+        $keys = \array_map(
+            fn ($attribute) => $attribute['$id'],
+            self::INTERNAL_ATTRIBUTES
+        );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {

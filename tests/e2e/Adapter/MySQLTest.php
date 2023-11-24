@@ -26,15 +26,6 @@ class MySQLTest extends Base
     }
 
     /**
-     *
-     * @return int
-     */
-    public static function getUsedIndexes(): int
-    {
-        return MySQL::getCountOfDefaultIndexes();
-    }
-
-    /**
      * @return Database
      */
     public static function getDatabase(): Database

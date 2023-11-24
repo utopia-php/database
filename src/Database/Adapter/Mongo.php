@@ -1459,9 +1459,14 @@ class Mongo extends Adapter
     {
         $projection = [];
 
+        $internalKeys = \array_map(
+            fn ($attr) => $attr['$id'],
+            Database::INTERNAL_ATTRIBUTES
+        );
+
         foreach ($selections as $selection) {
             // Skip internal attributes since all are selected by default
-            if (\in_array($selection, Database::INTERNAL_ATTRIBUTES)) {
+            if (\in_array($selection, $internalKeys)) {
                 continue;
             }
 
@@ -1628,7 +1633,7 @@ class Mongo extends Adapter
      */
     public static function getCountOfDefaultAttributes(): int
     {
-        return 6;
+        return \count(Database::INTERNAL_ATTRIBUTES);
     }
 
     /**
@@ -1638,7 +1643,7 @@ class Mongo extends Adapter
      */
     public static function getCountOfDefaultIndexes(): int
     {
-        return 6;
+        return \count(Database::INTERNAL_INDEXES);
     }
 
     /**

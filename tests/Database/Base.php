@@ -1061,7 +1061,7 @@ abstract class Base extends TestCase
             $this->assertEquals(8589934592, $document->getAttribute('bigint'));
         }
 
-        $documents = static::getDatabase()->find($collection, [ Query::limit(100) ]);
+        $documents = static::getDatabase()->find($collection);
         $this->assertEquals($count, count($documents));
 
         // Failure in createDocuments doesnt create any of the new docs
@@ -1098,7 +1098,7 @@ abstract class Base extends TestCase
             $this->assertEquals(DuplicateException::class, $e::class);
         }
 
-        $documents = static::getDatabase()->find($collection, [ Query::limit(100) ]);
+        $documents = static::getDatabase()->find($collection);
         $this->assertEquals($count, count($documents));
 
         return $documents;
@@ -12668,14 +12668,12 @@ abstract class Base extends TestCase
         $books = static::getDatabase()->find('migration_books');
         $authors = static::getDatabase()->find('migration_authors');
 
+        // Ensure book2 exists but isn't related to author
         $this->assertEquals(2, \count($books));
         $this->assertEquals(1, \count($authors));
-        \var_dump($authors[0]);
-        $this->assertEquals(2, \count($authors[0]->getAttribute('migration_books')));
+        $this->assertEquals(1, \count($authors[0]->getAttribute('migration_books')));
         $this->assertEquals('book1', $authors[0]->getAttribute('migration_books')[0]->getId());
-        $this->assertEquals('book2', $authors[0]->getAttribute('migration_books')[0]->getId());
         $this->assertEquals('Book 1', $authors[0]->getAttribute('migration_books')[0]->getAttribute('name'));
-        $this->assertEquals('Book 2', $authors[0]->getAttribute('migration_books')[0]->getAttribute('name'));
 
         static::getDatabase()->deleteCollection('migration_authors');
         static::getDatabase()->deleteCollection('migration_books');

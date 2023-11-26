@@ -1061,6 +1061,48 @@ abstract class Base extends TestCase
             $this->assertEquals(8589934592, $document->getAttribute('bigint'));
         }
 
+        $documents = static::getDatabase()->find($collection, [ Query::limit(100) ]);
+        $this->assertEquals($count, count($documents));
+
+        // Failure in createDocuments doesnt create any of the new docs
+        $documentId = $documents[0]->getId();
+        $documents = [];
+        $documents[] = new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'string' => 'okay doc📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+        ]);
+        $documents[] = new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            '$id' => $documentId,
+            'string' => 'duplicate doc📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+        ]);
+
+        try {
+            $documents = static::getDatabase()->createDocuments($collection, $documents, 3);
+            $this->fail('Failed to throw DuplicateException');
+        } catch (Exception $e) {
+            $this->assertEquals(DuplicateException::class, $e::class);
+        }
+
+        $documents = static::getDatabase()->find($collection, [ Query::limit(100) ]);
+        $this->assertEquals($count, count($documents));
+        
+        \var_dump(count($documents));
+
         return $documents;
     }
 

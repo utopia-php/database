@@ -1100,8 +1100,6 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->find($collection, [ Query::limit(100) ]);
         $this->assertEquals($count, count($documents));
-        
-        \var_dump(count($documents));
 
         return $documents;
     }
@@ -12610,6 +12608,77 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+    }
+
+
+    public function testRelatedMigration(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('migration_authors');
+        static::getDatabase()->createCollection('migration_books');
+
+        static::getDatabase()->createAttribute('migration_authors', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('migration_books', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'migration_authors',
+            relatedCollection: 'migration_books',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'migration_books'
+        );
+
+        static::getDatabase()->createDocument('migration_books', new Document([
+            '$id' => 'book1',
+            'name' => 'Book 1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        static::getDatabase()->createDocument('migration_authors', new Document([
+            '$id' => 'author1',
+            'name' => 'Author 1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'migration_books' => [
+                'book1',
+                'book2',
+            ],
+        ]));
+
+        static::getDatabase()->createDocument('migration_books', new Document([
+            '$id' => 'book2',
+            'name' => 'Book 2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $books = static::getDatabase()->find('migration_books');
+        $authors = static::getDatabase()->find('migration_authors');
+
+        $this->assertEquals(2, \count($books));
+        $this->assertEquals(1, \count($authors));
+        \var_dump($authors[0]);
+        $this->assertEquals(2, \count($authors[0]->getAttribute('migration_books')));
+        $this->assertEquals('book1', $authors[0]->getAttribute('migration_books')[0]->getId());
+        $this->assertEquals('book2', $authors[0]->getAttribute('migration_books')[0]->getId());
+        $this->assertEquals('Book 1', $authors[0]->getAttribute('migration_books')[0]->getAttribute('name'));
+        $this->assertEquals('Book 2', $authors[0]->getAttribute('migration_books')[0]->getAttribute('name'));
+
+        static::getDatabase()->deleteCollection('migration_authors');
+        static::getDatabase()->deleteCollection('migration_books');
     }
 
     public function testEvents(): void

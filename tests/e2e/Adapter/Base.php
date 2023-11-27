@@ -12715,6 +12715,16 @@ abstract class Base extends TestCase
         $docs = $database->find('people');
         $this->assertEquals(1, \count($docs));
 
+		// Remove tenant but leave shared tables enabled
+		$database->setTenant(null);
+
+		try {
+			$database->getDocument('people', $docId);
+			$this->fail('Failed to throw exception');
+		} catch (Exception $e) {
+			$this->assertEquals('Missing tenant. Tenant must be set when table sharing is enabled.', $e->getMessage());
+		}
+
         // Reset state
         $database->setShareTables(false);
         $database->setNamespace(static::$namespace);

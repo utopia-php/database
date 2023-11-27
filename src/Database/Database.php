@@ -223,8 +223,7 @@ class Database
         '_createdAt',
         '_updatedAt',
         '_permissions_id',
-        '_permissions_forwards',
-        '_permissions_backwards',
+        '_permissions',
     ];
 
     /**

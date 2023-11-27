@@ -312,6 +312,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $validate = true;
+
     protected int $relationshipFetchDepth = 1;
 
     /**
@@ -659,6 +661,30 @@ class Database
     }
 
     /**
+     * Enable validation
+     *
+     * @return $this
+     */
+    public function enableValidation(): self
+    {
+        $this->validate = true;
+
+        return $this;
+    }
+
+    /**
+     * Disable validation
+     *
+     * @return $this
+     */
+    public function disableValidation(): self
+    {
+        $this->validate = false;
+
+        return $this;
+    }
+
+    /**
      * Set Share Tables
      *
      * Set whether to share tables between tenants
@@ -814,9 +840,11 @@ class Database
             Permission::create(Role::any()),
         ];
 
-        $validator = new Permissions();
-        if (!$validator->isValid($permissions)) {
-            throw new DatabaseException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new Permissions();
+            if (!$validator->isValid($permissions)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -834,13 +862,15 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-        $validator = new IndexValidator(
-            $attributes,
-            $this->adapter->getMaxIndexLength()
-        );
-        foreach ($indexes as $index) {
-            if (!$validator->isValid($index)) {
-                throw new DatabaseException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new IndexValidator(
+                $attributes,
+                $this->adapter->getMaxIndexLength()
+            );
+            foreach ($indexes as $index) {
+                if (!$validator->isValid($index)) {
+                    throw new DatabaseException($validator->getDescription());
+                }
             }
         }
 
@@ -896,9 +926,11 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $validator = new Permissions();
-        if (!$validator->isValid($permissions)) {
-            throw new DatabaseException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new Permissions();
+            if (!$validator->isValid($permissions)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -2347,13 +2379,14 @@ class Database
 
         $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
 
-        $validator = new IndexValidator(
-            $collection->getAttribute('attributes', []),
-            $this->adapter->getMaxIndexLength()
-        );
-
-        if (!$validator->isValid($index)) {
-            throw new DatabaseException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new IndexValidator(
+                $collection->getAttribute('attributes', []),
+                $this->adapter->getMaxIndexLength()
+            );
+            if (!$validator->isValid($index)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
@@ -2447,9 +2480,11 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $validator = new DocumentValidator($attributes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentValidator($attributes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $relationships = \array_filter(
@@ -2875,9 +2910,11 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Permissions();
-        if (!$validator->isValid($document->getPermissions())) {
-            throw new DatabaseException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new Permissions();
+            if (!$validator->isValid($document->getPermissions())) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $structure = new Structure($collection);
@@ -4487,9 +4524,11 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator($attributes, $indexes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4659,9 +4698,11 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator($attributes, $indexes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4703,9 +4744,11 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator($attributes, $indexes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $queries = self::convertQueries($collection, $queries);

@@ -224,6 +224,35 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
+    public function testDatePrecision(): void
+    {
+        $time = DateTime::now();
+
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('date_precision'));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('date_precision', 'time', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
+
+        for($i = 0; $i < 10; $i++) {
+            $document = static::getDatabase()->createDocument('date_precision', new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'time' => $time
+            ]));
+
+            $time = DateTime::formatTz($time);
+            $this->assertEquals($time, $document->getAttribute('time'));
+            $document = static::getDatabase()->getDocument('date_precision', $document->getId());
+            $this->assertEquals($time, $document->getAttribute('time'));
+
+            \usleep(100000 * \rand(1,10));
+        }
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('date_precision'));
+    }
 
     public function testQueryTimeout(): void
     {

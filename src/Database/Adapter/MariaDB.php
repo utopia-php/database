@@ -857,7 +857,8 @@ class MariaDB extends SQL
                     }
                 }
 
-                $stmt = $this->getPDO()->prepare("
+                $stmt = $this->getPDO()->prepare(
+                    "
                     INSERT INTO {$this->getSQLTable($name)} {$columns}
                     VALUES " . \implode(', ', $batchKeys)
                 );

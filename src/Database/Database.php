@@ -704,10 +704,10 @@ class Database
      *
      * Set tenant to use if tables are shared
      *
-     * @param int $tenant
+     * @param ?int $tenant
      * @return self
      */
-    public function setTenant(int $tenant): self
+    public function setTenant(?int $tenant): self
     {
         $this->adapter->setTenant($tenant);
 

@@ -162,11 +162,11 @@ abstract class Adapter
      *
      * Set tenant to use if tables are shared
      *
-     * @param int $tenant
+     * @param ?int $tenant
      *
      * @return bool
      */
-    public function setTenant(int $tenant): bool
+    public function setTenant(?int $tenant): bool
     {
         $this->tenant = $tenant;
 
@@ -753,7 +753,7 @@ abstract class Adapter
      */
     public function filter(string $value): string
     {
-        $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');

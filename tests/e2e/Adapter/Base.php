@@ -12634,7 +12634,7 @@ abstract class Base extends TestCase
 
         $doc = $database->getDocument('people', $docId);
         $this->assertEquals('Spiderman', $doc['name']);
-		$this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
 
         $docs = $database->find('people');
         $this->assertEquals(1, \count($docs));

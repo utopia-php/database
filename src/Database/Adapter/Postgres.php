@@ -148,7 +148,7 @@ class Postgres extends SQL
 					CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
 				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
 					CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_permission\" 
-				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_permission,_type,_tenant); 
+				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_permission,_type); 
 				";
             } else {
                 $sql .= "

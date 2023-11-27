@@ -162,12 +162,12 @@ class MariaDB extends SQL
             if ($this->shareTables) {
                 $sql .= "
 					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
-					INDEX _permission (_permission, _type, _document, _tenant)
+					INDEX _permission (_permission, _type, _tenant)
 				";
             } else {
                 $sql .= "
 					UNIQUE INDEX _index1 (_document, _type, _permission),
-					INDEX _permission (_permission, _type, _document)
+					INDEX _permission (_permission, _type)
 				";
             }
 

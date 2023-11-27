@@ -128,7 +128,7 @@ class MariaDB extends SQL
 
         if ($this->shareTables) {
             $sql .= "
-				UNIQUE KEY _uid_tenant (_tenant, _uid),
+				UNIQUE KEY _uid_tenant (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt)
 			";
@@ -857,8 +857,7 @@ class MariaDB extends SQL
                     }
                 }
 
-                $stmt = $this->getPDO()->prepare(
-                    "
+                $stmt = $this->getPDO()->prepare("
                     INSERT INTO {$this->getSQLTable($name)} {$columns}
                     VALUES " . \implode(', ', $batchKeys)
                 );

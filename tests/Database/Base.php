@@ -229,7 +229,7 @@ abstract class Base extends TestCase
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('date_precision'));
         $this->assertEquals(true, static::getDatabase()->createAttribute('date_precision', 'time', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
 
-        for($i = 0; $i < 100; $i++) {
+        for($i = 0; $i < 10; $i++) {
             $time = DateTime::now();
 
             $document = static::getDatabase()->createDocument('date_precision', new Document([

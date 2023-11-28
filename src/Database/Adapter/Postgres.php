@@ -36,7 +36,11 @@ class Postgres extends SQL
     {
         $name = $this->filter($name);
 
-        $sql = "CREATE SCHEMA IF NOT EXISTS \"{$name}\"";
+        if ($this->exists($name)) {
+            return true;
+        }
+
+        $sql = "CREATE SCHEMA \"{$name}\"";
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
         return $this->getPDO()

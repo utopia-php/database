@@ -2116,6 +2116,31 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    /**
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
+    public function testSelectInternalID(): void
+    {
+        $documents = static::getDatabase()->find('movies', [
+            Query::select(['$internalId', '$id']),
+            Query::orderAsc(''),
+            Query::limit(1),
+        ]);
+
+        $document = $documents[0];
+
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertCount(2, $document);
+
+        $document = static::getDatabase()->getDocument('movies', $document->getId(), [
+            Query::select(['$internalId']),
+        ]);
+
+        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertCount(1, $document);
+    }
+
     public function testFindOrderBy(): void
     {
         /**
@@ -5570,6 +5595,15 @@ abstract class Base extends TestCase
             id: 'newCity',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
+
+        static::getDatabase()->updateDocument('city', 'city1', new Document(['newCountry' => null, '$id' => 'city1']));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertNull($city1->getAttribute('newCountry'));
+
+        // Check Delete TwoWay TRUE && RELATION_MUTATE_SET_NULL && related value NULL
+        $this->assertTrue(static::getDatabase()->deleteDocument('city', 'city1'));
+        $city1 = static::getDatabase()->getDocument('city', 'city1');
+        $this->assertTrue($city1->isEmpty());
 
         // Delete parent, will set child relationship to null for two-way
         static::getDatabase()->deleteDocument('country', 'country1');
@@ -12431,6 +12465,57 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('labels_test');
 
         $this->assertCount(1, $documents);
+    }
+
+    public function testEnableDisableValidation(): void
+    {
+        $database = static::getDatabase();
+
+        $database->createCollection('validation', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $database->createAttribute(
+            'validation',
+            'name',
+            Database::VAR_STRING,
+            10,
+            false
+        );
+
+        $database->createDocument('validation', new Document([
+            '$id' => 'docwithmorethan36charsasitsidentifier',
+            'name' => 'value1',
+        ]));
+
+        try {
+            $database->find('validation', queries: [
+                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+        }
+
+        $database->disableValidation();
+
+        $database->find('validation', queries: [
+            Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
+        ]);
+
+        $database->enableValidation();
+
+        try {
+            $database->find('validation', queries: [
+                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+        }
     }
 
     public function testMetadata(): void

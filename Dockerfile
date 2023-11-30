@@ -8,14 +8,17 @@ WORKDIR /usr/local/src/
 COPY composer.lock /usr/local/src/
 COPY composer.json /usr/local/src/
 
-RUN composer install --ignore-platform-reqs --optimize-autoloader \
-    --no-plugins --no-scripts --prefer-dist
+RUN composer install \
+  --ignore-platform-reqs \
+  --optimize-autoloader \
+  --no-plugins --no-scripts \
+  --prefer-dist
     
 FROM php:8.0-cli-alpine as compile
 
-ENV PHP_REDIS_VERSION=5.3.4 \
-    PHP_SWOOLE_VERSION=v4.8.0 \
-    PHP_MONGO_VERSION=1.11.1
+ENV PHP_REDIS_VERSION="5.3.4" \
+    PHP_SWOOLE_VERSION="v5.1.1" \
+    PHP_MONGO_VERSION="1.11.1"
     
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
@@ -33,7 +36,8 @@ RUN \
   && cd phpredis \
   && phpize \
   && ./configure \
-  && make && make install
+  && make \
+  && make install
 
 ## Swoole Extension
 FROM compile AS swoole
@@ -41,8 +45,9 @@ RUN \
   git clone --depth 1 --branch $PHP_SWOOLE_VERSION https://github.com/swoole/swoole-src.git \
   && cd swoole-src \
   && phpize \
-  && ./configure --enable-http2 \
-  && make && make install
+  && ./configure \
+  && make \
+  && make install
 
 ## MongoDB Extension
 FROM compile AS mongodb
@@ -52,16 +57,18 @@ RUN \
   && git submodule update --init \
   && phpize \
   && ./configure \
-  && make && make install
+  && make \
+  && make install
 
 ## PCOV Extension
 FROM compile AS pcov
 RUN \
-   git clone https://github.com/krakjoe/pcov.git \
-   && cd pcov \
-   && phpize \
-   && ./configure --enable-pcov \
-   && make && make install
+  git clone https://github.com/krakjoe/pcov.git \
+  && cd pcov \
+  && phpize \
+  && ./configure --enable-pcov \
+  && make \
+  && make install
 
 FROM compile as final
 
@@ -86,7 +93,6 @@ COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20200930/redis.
 COPY --from=mongodb /usr/local/lib/php/extensions/no-debug-non-zts-20200930/mongodb.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20200930/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 
-# Add Source Code
 COPY ./bin /usr/src/code/bin
 COPY ./src /usr/src/code/src
 

@@ -12682,13 +12682,17 @@ abstract class Base extends TestCase
                 '$id' => 'idx_name',
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['name']
-            ]),
-            new Document([
-                '$id' => 'idx_lifeStory',
-                'type' => Database::INDEX_FULLTEXT,
-                'attributes' => ['lifeStory']
-            ]),
+            ])
         ]);
+
+		if ($database->getAdapter()->getSupportForFulltextIndex()) {
+			$database->createIndex(
+				collection: 'people',
+				id: 'idx_lifeStory',
+				type: Database::INDEX_FULLTEXT,
+				attributes: ['lifeStory']
+			);
+		}
 
         $docId = ID::unique();
 

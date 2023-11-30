@@ -12671,24 +12671,24 @@ abstract class Base extends TestCase
                 'size' => 128,
                 'required' => true,
             ]),
-			new Document([
-				'$id' => 'lifeStory',
-				'type' => Database::VAR_STRING,
-				'size' => 65536,
-				'required' => true,
-			])
+            new Document([
+                '$id' => 'lifeStory',
+                'type' => Database::VAR_STRING,
+                'size' => 65536,
+                'required' => true,
+            ])
         ], [
-			new Document([
-				'$id' => 'idx_name',
-				'type' => Database::INDEX_KEY,
-				'attributes' => ['name']
-			]),
-			new Document([
-				'$id' => 'idx_lifeStory',
-				'type' => Database::INDEX_FULLTEXT,
-				'attributes' => ['lifeStory']
-			]),
-		]);
+            new Document([
+                '$id' => 'idx_name',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['name']
+            ]),
+            new Document([
+                '$id' => 'idx_lifeStory',
+                'type' => Database::INDEX_FULLTEXT,
+                'attributes' => ['lifeStory']
+            ]),
+        ]);
 
         $docId = ID::unique();
 
@@ -12698,7 +12698,7 @@ abstract class Base extends TestCase
                 Permission::read(Role::any()),
             ],
             'name' => 'Spiderman',
-			'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.'
+            'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.'
         ]));
 
         $doc = $database->getDocument('people', $docId);

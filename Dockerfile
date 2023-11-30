@@ -85,7 +85,7 @@ RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
 
-RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
+RUN echo "memory_limit=4G" >> $PHP_INI_DIR/php.ini
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
 COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/

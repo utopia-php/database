@@ -224,6 +224,35 @@ abstract class Base extends TestCase
         $this->assertNotNull($document->getInternalId());
     }
 
+    public function testDatePrecision(): void
+    {
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('date_precision'));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('date_precision', 'time', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
+
+        for($i = 0; $i < 10; $i++) {
+            $time = DateTime::now();
+
+            $document = static::getDatabase()->createDocument('date_precision', new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'time' => $time
+            ]));
+
+            $time = DateTime::formatTz($time);
+            $this->assertEquals($time, $document->getAttribute('time'));
+            $document = static::getDatabase()->getDocument('date_precision', $document->getId());
+            $this->assertEquals($time, $document->getAttribute('time'));
+
+            \usleep(100000 * \rand(1, 10));
+        }
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('date_precision'));
+    }
 
     public function testQueryTimeout(): void
     {
@@ -585,6 +614,67 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
+    }
+
+    public function testSkippedRelations(): void
+    {
+        static::getDatabase()->createCollection('buildings');
+        static::getDatabase()->createCollection('addresses');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'buildings',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'addresses',
+            id: 'city',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        static::getDatabase()->createRelationship(
+            collection: 'buildings',
+            relatedCollection: 'addresses',
+            type: Database::RELATION_ONE_TO_ONE
+        );
+
+        $document = static::getDatabase()->skipRelationships(fn () => static::getDatabase()->createDocument('buildings', new Document([
+            '$id' => ID::custom('customBuilding'),
+            'name' => 'Hotel X',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'addresses' => 'customAddress'
+        ])));
+
+        $this->assertEquals('customAddress', $document->getAttribute('addresses'));
+
+        static::getDatabase()->createDocument('addresses', new Document([
+            '$id' => ID::custom('customAddress'),
+            'city' => 'Prague',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $document = static::getDatabase()->getDocument('buildings', $document->getId());
+
+        $this->assertEquals('customAddress', $document->getAttribute('addresses')->getId());
+        $this->assertEquals('Prague', $document->getAttribute('addresses')->getAttribute('city'));
+
+        $this->assertTrue(static::getDatabase()->deleteCollection('buildings'));
+        $this->assertTrue(static::getDatabase()->deleteCollection('addresses'));
     }
 
     /**
@@ -1060,6 +1150,46 @@ abstract class Base extends TestCase
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(8589934592, $document->getAttribute('bigint'));
         }
+
+        $documents = static::getDatabase()->find($collection);
+        $this->assertEquals($count, count($documents));
+
+        // Failure in createDocuments doesnt create any of the new docs
+        $documentId = $documents[0]->getId();
+        $documents = [];
+        $documents[] = new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'string' => 'okay doc📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+        ]);
+        $documents[] = new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            '$id' => $documentId,
+            'string' => 'duplicate doc📝',
+            'integer' => 5,
+            'bigint' => 8589934592, // 2^33
+        ]);
+
+        try {
+            $documents = static::getDatabase()->createDocuments($collection, $documents, 3);
+            $this->fail('Failed to throw DuplicateException');
+        } catch (Exception $e) {
+            $this->assertEquals(DuplicateException::class, $e::class);
+        }
+
+        $documents = static::getDatabase()->find($collection);
+        $this->assertEquals($count, count($documents));
 
         return $documents;
     }
@@ -12619,6 +12749,75 @@ abstract class Base extends TestCase
         $result = static::getDatabase()->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+    }
+
+
+    public function testRelatedMigration(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('migration_authors');
+        static::getDatabase()->createCollection('migration_books');
+
+        static::getDatabase()->createAttribute('migration_authors', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('migration_books', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            collection: 'migration_authors',
+            relatedCollection: 'migration_books',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'migration_books'
+        );
+
+        static::getDatabase()->createDocument('migration_books', new Document([
+            '$id' => 'book1',
+            'name' => 'Book 1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        static::getDatabase()->createDocument('migration_authors', new Document([
+            '$id' => 'author1',
+            'name' => 'Author 1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'migration_books' => [
+                'book1',
+                'book2',
+            ],
+        ]));
+
+        static::getDatabase()->createDocument('migration_books', new Document([
+            '$id' => 'book2',
+            'name' => 'Book 2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $books = static::getDatabase()->find('migration_books');
+        $authors = static::getDatabase()->find('migration_authors');
+
+        // Ensure book2 exists but isn't related to author
+        $this->assertEquals(2, \count($books));
+        $this->assertEquals(1, \count($authors));
+        $this->assertEquals(1, \count($authors[0]->getAttribute('migration_books')));
+        $this->assertEquals('book1', $authors[0]->getAttribute('migration_books')[0]->getId());
+        $this->assertEquals('Book 1', $authors[0]->getAttribute('migration_books')[0]->getAttribute('name'));
+
+        static::getDatabase()->deleteCollection('migration_authors');
+        static::getDatabase()->deleteCollection('migration_books');
     }
 
     public function testEvents(): void

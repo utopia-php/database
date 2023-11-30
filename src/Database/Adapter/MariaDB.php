@@ -1988,7 +1988,7 @@ class MariaDB extends SQL
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
-        $type = match ($type) {
+        $sqlType = match ($type) {
             Database::INDEX_KEY,
             Database::INDEX_ARRAY => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
@@ -1998,12 +1998,12 @@ class MariaDB extends SQL
 
         $attributes = \implode(', ', $attributes);
 
-        if ($this->shareTables) {
+        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
 
-        return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ({$attributes})";
+        return "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection)} ({$attributes})";
     }
 
     /**

@@ -1978,7 +1978,7 @@ class Postgres extends SQL
      */
     protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
     {
-        $type = match ($type) {
+        $sqlType = match ($type) {
             Database::INDEX_KEY,
             Database::INDEX_ARRAY,
             Database::INDEX_FULLTEXT => 'INDEX',
@@ -1989,12 +1989,12 @@ class Postgres extends SQL
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        if ($this->shareTables) {
+        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
 
-        return "CREATE {$type} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
+        return "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
     }
 
     /**

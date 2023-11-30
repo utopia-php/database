@@ -248,7 +248,7 @@ abstract class Base extends TestCase
             $document = static::getDatabase()->getDocument('date_precision', $document->getId());
             $this->assertEquals($time, $document->getAttribute('time'));
 
-            \usleep(100000 * \rand(1,10));
+            \usleep(100000 * \rand(1, 10));
         }
 
         $this->assertEquals(true, static::getDatabase()->deleteCollection('date_precision'));
@@ -614,6 +614,67 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
+    }
+
+    public function testSkippedRelations(): void
+    {
+        static::getDatabase()->createCollection('buildings');
+        static::getDatabase()->createCollection('addresses');
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'buildings',
+            id: 'name',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $this->assertTrue(static::getDatabase()->createAttribute(
+            collection: 'addresses',
+            id: 'city',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        static::getDatabase()->createRelationship(
+            collection: 'buildings',
+            relatedCollection: 'addresses',
+            type: Database::RELATION_ONE_TO_ONE
+        );
+
+        $document = static::getDatabase()->skipRelationships(fn () => static::getDatabase()->createDocument('buildings', new Document([
+            '$id' => ID::custom('customBuilding'),
+            'name' => 'Hotel X',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'addresses' => 'customAddress'
+        ])));
+
+        $this->assertEquals('customAddress', $document->getAttribute('addresses'));
+
+        static::getDatabase()->createDocument('addresses', new Document([
+            '$id' => ID::custom('customAddress'),
+            'city' => 'Prague',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $document = static::getDatabase()->getDocument('buildings', $document->getId());
+
+        $this->assertEquals('customAddress', $document->getAttribute('addresses')->getId());
+        $this->assertEquals('Prague', $document->getAttribute('addresses')->getAttribute('city'));
+
+        $this->assertTrue(static::getDatabase()->deleteCollection('buildings'));
+        $this->assertTrue(static::getDatabase()->deleteCollection('addresses'));
     }
 
     /**

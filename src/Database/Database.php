@@ -4800,6 +4800,10 @@ class Database
      */
     protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
     {
+        if(!$this->filter) {
+            return $value;
+        }
+        
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException('Filter not found');
         }

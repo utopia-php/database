@@ -299,6 +299,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $filter = false;
+
     private int $relationshipFetchDepth = 1;
 
     /**
@@ -644,6 +646,30 @@ class Database
     public function clearTimeout(string $event = Database::EVENT_ALL): void
     {
         $this->adapter->clearTimeout($event);
+    }
+
+    /**
+     * Enable filters
+     *
+     * @return $this
+     */
+    public function enableFilters(): self
+    {
+        $this->filter = true;
+
+        return $this;
+    }
+
+    /**
+     * Disable filters
+     *
+     * @return $this
+     */
+    public function disableFilters(): self
+    {
+        $this->filter = false;
+
+        return $this;
     }
 
     /**

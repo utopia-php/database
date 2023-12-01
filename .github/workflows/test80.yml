@@ -2,8 +2,8 @@ name: "Tests"
 
 on: [pull_request]
 jobs:
-  tests:
-    name: Unit & E2E
+  test:
+    name: Unit & E2E (PHP 8.0)
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +22,9 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         context: .
+        file: ./Dockerfile-8.0
         push: false
-        tags: database-dev
+        tags: database-80
         load: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -34,7 +35,4 @@ jobs:
         sleep 10
 
     - name: Run Tests
-      run: docker compose exec -T tests vendor/bin/phpunit --configuration phpunit.xml
-
-    - name: Check Coverage
-      run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 90
+      run: docker compose exec -T tests80 vendor/bin/phpunit --configuration phpunit.xml

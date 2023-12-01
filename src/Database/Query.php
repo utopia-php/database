@@ -822,7 +822,7 @@ class Query
             try {
                 $parsed[] = Query::parse($query);
             } catch (\Throwable $th) {
-                throw new QueryException("Invalid query: ${query}", previous: $th);
+                throw new QueryException("Invalid query: {$query}", previous: $th);
             }
         }
 

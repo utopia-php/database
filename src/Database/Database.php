@@ -299,7 +299,7 @@ class Database
 
     protected bool $resolveRelationships = true;
 
-    protected bool $filter = false;
+    protected bool $filter = true;
 
     private int $relationshipFetchDepth = 1;
 
@@ -4803,7 +4803,7 @@ class Database
         if(!$this->filter) {
             return $value;
         }
-        
+
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException('Filter not found');
         }

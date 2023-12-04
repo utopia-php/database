@@ -20,6 +20,7 @@ class Query
     public const TYPE_BETWEEN = 'between';
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
+
     public const TYPE_SELECT = 'select';
     public const TYPE_OR = 'or';
 
@@ -362,19 +363,6 @@ class Query
                 if (count($parsedParams) > 0) {
                     return new self($method, values: [$parsedParams[0]]);
                 }
-                return new self($method);
-
-            case self::TYPE_OR:
-
-                if(substr($filter, 0, 3) === 'or(') {
-                    var_dump('Found or operation !!!!!!!!!!!');
-                    var_dump($filter);
-                }
-
-                var_dump('src/Database/Query.php');
-                var_dump($method);
-                var_dump($parsedParams);
-                var_dump('parsing end ........');
                 return new self($method);
 
             default:

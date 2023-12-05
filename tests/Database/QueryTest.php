@@ -4,6 +4,7 @@ namespace Utopia\Tests;
 
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Exception\Query as QueryException;
 use PHPUnit\Framework\TestCase;
 
 class QueryTest extends TestCase
@@ -24,9 +25,9 @@ class QueryTest extends TestCase
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('Iron Man', $query->getValues()[0]);
 
-        $query = new Query(Query::TYPE_ORDERDESC, 'score');
+        $query = new Query(Query::TYPE_ORDER_DESC, 'score');
 
-        $this->assertEquals(Query::TYPE_ORDERDESC, $query->getMethod());
+        $this->assertEquals(Query::TYPE_ORDER_DESC, $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
@@ -56,7 +57,7 @@ class QueryTest extends TestCase
 
         $query = Query::orderAsc('score');
 
-        $this->assertEquals(Query::TYPE_ORDERASC, $query->getMethod());
+        $this->assertEquals(Query::TYPE_ORDER_ASC, $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
@@ -69,7 +70,7 @@ class QueryTest extends TestCase
         $cursor = new Document();
         $query = Query::cursorAfter($cursor);
 
-        $this->assertEquals(Query::TYPE_CURSORAFTER, $query->getMethod());
+        $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([$cursor], $query->getValues());
 
@@ -88,31 +89,51 @@ class QueryTest extends TestCase
 
     public function testParse(): void
     {
-        $query = Query::parse('equal("title", "Iron Man")');
+        $query = Query::parse('{
+  			"method": "equal",
+  			"attribute": "title",
+  			"values": ["Iron Man"]
+		}');
 
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('Iron Man', $query->getValues()[0]);
 
-        $query = Query::parse('lessThan("year", 2001)');
+        $query = Query::parse('{
+		  "method": "lessThan",
+		  "attribute": "year",
+		  "values": [2001]
+		}');
 
         $this->assertEquals('lessThan', $query->getMethod());
         $this->assertEquals('year', $query->getAttribute());
         $this->assertEquals(2001, $query->getValues()[0]);
 
-        $query = Query::parse('equal("published", true)');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": "published",
+		  "values": [true]
+		}');
 
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('published', $query->getAttribute());
         $this->assertTrue($query->getValues()[0]);
 
-        $query = Query::parse('equal("published", false)');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": "published",
+		  "values": [false]
+		}');
 
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('published', $query->getAttribute());
         $this->assertFalse($query->getValues()[0]);
 
-        $query = Query::parse('equal("actors", [ " Johnny Depp ",  " Brad Pitt" , \'Al Pacino \' ])');
+        $query = Query::parse('{
+		    "method": "equal",
+		    "attribute": "actors",
+		    "values": [" Johnny Depp ", " Brad Pitt", "Al Pacino "]
+		}');
 
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('actors', $query->getAttribute());
@@ -120,317 +141,177 @@ class QueryTest extends TestCase
         $this->assertEquals(" Brad Pitt", $query->getValues()[1]);
         $this->assertEquals("Al Pacino ", $query->getValues()[2]);
 
-        $query = Query::parse('equal("actors", ["Brad Pitt", "Johnny Depp"])');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": "actors",
+		  "values": ["Brad Pitt", "Johnny Depp"]
+		}');
 
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('actors', $query->getAttribute());
         $this->assertEquals("Brad Pitt", $query->getValues()[0]);
         $this->assertEquals("Johnny Depp", $query->getValues()[1]);
 
-        $query = Query::parse('contains("writers","Tim O\'Reilly")');
+        $query = Query::parse('{
+		  "method": "contains",
+		  "attribute": "writers",
+		  "values": ["Tim O\'Reilly"]
+		}');
 
         $this->assertEquals('contains', $query->getMethod());
         $this->assertEquals('writers', $query->getAttribute());
         $this->assertEquals("Tim O'Reilly", $query->getValues()[0]);
 
-        $query = Query::parse('greaterThan("score", 8.5)');
+        $query = Query::parse('{
+		  "method": "greaterThan",
+		  "attribute": "score",
+		  "values": [8.5]
+		}');
 
         $this->assertEquals('greaterThan', $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals(8.5, $query->getValues()[0]);
 
-        $query = Query::parse('notEqual("director", "null")');
+        $query = Query::parse('{
+		  "method": "notEqual",
+		  "attribute": "director",
+		  "values": ["null"]
+		}');
 
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals('null', $query->getValues()[0]);
 
-        $query = Query::parse('notEqual("director", null)');
+        $query = Query::parse('{
+		  "method": "notEqual",
+		  "attribute": "director",
+		  "values": [null]
+		}');
 
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(null, $query->getValues()[0]);
 
-        $query = Query::parse('isNull("director")');
+        $query = Query::parse('{
+		  "method": "isNull",
+		  "attribute": "director",
+		  "values": []
+		}');
 
         $this->assertEquals('isNull', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
-        $query = Query::parse('isNotNull("director")');
+        $query = Query::parse('{
+		  "method": "isNotNull",
+		  "attribute": "director",
+		  "values": []
+		}');
 
         $this->assertEquals('isNotNull', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
-        $query = Query::parse('startsWith("director", "Quentin")');
+        $query = Query::parse('{
+		  "method": "startsWith",
+		  "attribute": "director",
+		  "values": ["Quentin"]
+		}');
 
         $this->assertEquals('startsWith', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(['Quentin'], $query->getValues());
 
-        $query = Query::parse('endsWith("director", "Tarantino")');
+        $query = Query::parse('{
+		  "method": "endsWith",
+		  "attribute": "director",
+		  "values": ["Tarantino"]
+		}');
 
         $this->assertEquals('endsWith', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(['Tarantino'], $query->getValues());
 
-        $query = Query::parse('select(["title", "director"])');
+        $query = Query::parse('{
+		  "method": "select",
+		  "attribute": null,
+		  "values": ["title", "director"]
+		}');
 
         $this->assertEquals('select', $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals('title', $query->getValues()[0]);
         $this->assertEquals('director', $query->getValues()[1]);
 
-        $query = Query::parse('between("age", 15, 18)');
+        $query = Query::parse('{
+		  "method": "between",
+		  "attribute": "age",
+		  "values": [15, 18]
+		}');
 
         $this->assertEquals('between', $query->getMethod());
         $this->assertEquals('age', $query->getAttribute());
         $this->assertEquals(15, $query->getValues()[0]);
         $this->assertEquals(18, $query->getValues()[1]);
 
-        $query = Query::parse('between("lastUpdate", "DATE1", "DATE2")');
+        $query = Query::parse('{
+		  "method": "between",
+		  "attribute": "lastUpdate",
+		  "values": ["DATE1", "DATE2"]
+		}');
 
         $this->assertEquals('between', $query->getMethod());
         $this->assertEquals('lastUpdate', $query->getAttribute());
         $this->assertEquals('DATE1', $query->getValues()[0]);
         $this->assertEquals('DATE2', $query->getValues()[1]);
-    }
 
-    public function testParseV2(): void
-    {
-        $query = Query::parse('equal("attr", 1)');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": "attr",
+		  "values": [1]
+		}');
+
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("attr", $query->getAttribute());
         $this->assertEquals([1], $query->getValues());
 
-        $query = Query::parse('equal("attr", [0])');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": "attr",
+		  "values": [0]
+		}');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals("attr", $query->getAttribute());
         $this->assertEquals([0], $query->getValues());
 
-        $query = Query::parse('equal("attr", 0,)');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("attr", $query->getAttribute());
-        $this->assertEquals([0], $query->getValues());
-
-        $query = Query::parse('equal("attr", ["0"])');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("attr", $query->getAttribute());
-        $this->assertEquals(["0"], $query->getValues());
-
-        $query = Query::parse('equal(1, ["[Hello] World"])');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": 1,
+		  "values": ["[Hello] World"]
+		}');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals(1, $query->getAttribute());
         $this->assertEquals("[Hello] World", $query->getValues()[0]);
 
-        $query = Query::parse('equal(1, , , ["[Hello] World"], , , )');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("[Hello] World", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, ["(Hello) World"])');
+        $query = Query::parse('{
+		  "method": "equal",
+		  "attribute": 1,
+		  "values": ["(Hello) World"]
+		}');
         $this->assertCount(1, $query->getValues());
         $this->assertEquals(1, $query->getAttribute());
         $this->assertEquals("(Hello) World", $query->getValues()[0]);
 
-        $query = Query::parse('equal(1, ["Hello , World"])');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello , World", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, ["Hello , World"])');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello , World", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, ["Hello /\ World"])');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello /\ World", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, ["I\'m [**awesome**], \"Dev\"eloper"])');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("I'm [**awesome**], \"Dev\"eloper", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, "\\\\")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("\\\\", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, "Hello\\\\")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello\\\\", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, "Hello\\\\", "World")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello\\\\", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, "Hello\\", World")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello\", World", $query->getValues()[0]);
-
-        $query = Query::parse('equal(1, "Hello\\\\\\", ", "World")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals("Hello\\\\\", ", $query->getValues()[0]);
-
-        $query = Query::parse('equal()');
-        $this->assertCount(0, $query->getValues());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(null, $query->getValue());
-
-        $query = Query::parse('limit()');
-        $this->assertCount(0, $query->getValues());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(null, $query->getValue());
-
-        $query = Query::parse('offset()');
-        $this->assertCount(0, $query->getValues());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(null, $query->getValue());
-
-        $query = Query::parse('cursorAfter()');
-        $this->assertCount(0, $query->getValues());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(null, $query->getValue());
-
-        $query = Query::parse('orderDesc()');
-        $this->assertCount(0, $query->getValues());
-        $this->assertEquals('', $query->getAttribute());
-        $this->assertEquals(null, $query->getValue());
-
-        $query = Query::parse('equal("count", 0)');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("count", $query->getAttribute());
-        $this->assertEquals(0, $query->getValue());
-
-        $query = Query::parse('equal("value", "NormalString")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals("NormalString", $query->getValue());
-
-        $query = Query::parse('equal("value", "{"type":"json","somekey":"someval"}")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('{"type":"json","somekey":"someval"}', $query->getValue());
-
-        $query = Query::parse('equal("value", "{ NormalStringInBraces }")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('{ NormalStringInBraces }', $query->getValue());
-
-        $query = Query::parse('equal("value", ""NormalStringInDoubleQuotes"")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('"NormalStringInDoubleQuotes"', $query->getValue());
-
-        $query = Query::parse('equal("value", "{"NormalStringInDoubleQuotesAndBraces"}")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('{"NormalStringInDoubleQuotesAndBraces"}', $query->getValue());
-
-        $query = Query::parse('equal("value", "\'NormalStringInSingleQuotes\'")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('\'NormalStringInSingleQuotes\'', $query->getValue());
-
-        $query = Query::parse('equal("value", "{\'NormalStringInSingleQuotesAndBraces\'}")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('{\'NormalStringInSingleQuotesAndBraces\'}', $query->getValue());
-
-        $query = Query::parse('equal("value", "SingleQuote\'InMiddle")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('SingleQuote\'InMiddle', $query->getValue());
-
-        $query = Query::parse('equal("value", "DoubleQuote"InMiddle")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('DoubleQuote"InMiddle', $query->getValue());
-
-        $query = Query::parse('equal("value", "Slash/InMiddle")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('Slash/InMiddle', $query->getValue());
-
-        $query = Query::parse('equal("value", "Backslash\InMiddle")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('Backslash\InMiddle', $query->getValue());
-
-        $query = Query::parse('equal("value", "Colon:InMiddle")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('Colon:InMiddle', $query->getValue());
-
-        $query = Query::parse('equal("value", ""quoted":"colon"")');
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals("value", $query->getAttribute());
-        $this->assertEquals('"quoted":"colon"', $query->getValue());
-    }
-
-    /*
-    Tests for aliases if we enable them:
-    public function testAlias(): void    {
-        $query = Query::parse('eq(1)');
-        $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
-        $query = Query::parse('lt(1)');
-        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
-        $query = Query::parse('lte(1)');
-        $this->assertEquals(Query::TYPE_LESSEREQUAL, $query->getMethod());
-        $query = Query::parse('gt(1)');
-        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
-        $query = Query::parse('gte(1)');
-        $this->assertEquals(Query::TYPE_GREATEREQUAL, $query->getMethod());
-    }
-    */
-
-    public function testParseComplex(): void
-    {
-        $queries = [
-            Query::parse('equal("One",[55.55,\'Works\',true])'),
-            // Same query with random spaces
-            Query::parse('equal("One" , [55.55, \'Works\',true])')
-        ];
-
-        foreach ($queries as $query) {
-            $this->assertEquals('equal', $query->getMethod());
-
-            $this->assertIsString($query->getAttribute());
-            $this->assertEquals('One', $query->getAttribute());
-
-            $this->assertCount(3, $query->getValues());
-
-            $this->assertIsNumeric($query->getValues()[0]);
-            $this->assertEquals(55.55, $query->getValues()[0]);
-
-            $this->assertEquals('Works', $query->getValues()[1]);
-
-            $this->assertTrue($query->getValues()[2]);
+        try {
+            Query::parse('{
+			    "method": "equal",
+			    "attribute": 1,
+			    "values": ["Hello /\\ World"]
+			}');
+            $this->fail('Failed to throw exception');
+        } catch (QueryException) {
+            $this->assertTrue(true);
         }
-    }
-
-    public function testGetAttribute(): void
-    {
-        $query = Query::parse('equal("title", "Iron Man")');
-
-        $this->assertIsArray($query->getValues());
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals('Iron Man', $query->getValues()[0]);
-    }
-
-    public function testGetMethod(): void
-    {
-        $query = Query::parse('equal("title", "Iron Man")');
-
-        $this->assertEquals('equal', $query->getMethod());
     }
 
     public function testisMethod(): void
@@ -463,26 +344,17 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_CONTAINS));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SEARCH));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDERASC));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDERDESC));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_ASC));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_DESC));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_LIMIT));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OFFSET));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORAFTER));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORBEFORE));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSOR_AFTER));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSOR_BEFORE));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
-
-        /*
-        Tests for aliases if we enable them:
-        $this->assertTrue(Query::isMethod('lt'));
-        $this->assertTrue(Query::isMethod('lte'));
-        $this->assertTrue(Query::isMethod('gt'));
-        $this->assertTrue(Query::isMethod('gte'));
-        $this->assertTrue(Query::isMethod('eq'));
-        */
 
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));

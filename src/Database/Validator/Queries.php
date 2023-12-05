@@ -99,6 +99,7 @@ class Queries extends Validator
                 Query::TYPE_STARTS_WITH,
                 Query::TYPE_CONTAINS,
                 Query::TYPE_ENDS_WITH,
+                Query::TYPE_AND,
                 Query::TYPE_OR => Base::METHOD_TYPE_FILTER,
                 default => '',
             };

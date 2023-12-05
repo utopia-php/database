@@ -690,7 +690,7 @@ abstract class SQL extends Adapter
             return;
         }
 
-        if($query->getMethod() === Query::TYPE_OR) {
+        if($query->isNested()) {
             foreach ($query->getValue() as $value) {
                 $this->bindConditionValue($stmt, $value);
             }
@@ -942,8 +942,8 @@ abstract class SQL extends Adapter
             }
 
             /* @var $query Query */
-            if($query->getMethod() === Query::TYPE_OR) {
-                $conditions[] = $this->getSQLConditions($query->getValue(), 'or');
+            if($query->isNested()) {
+                $conditions[] = $this->getSQLConditions($query->getValue(), $query->getMethod());
             } else {
                 $conditions[] = $this->getSQLCondition($query);
             }

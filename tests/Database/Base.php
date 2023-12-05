@@ -2914,6 +2914,51 @@ abstract class Base extends TestCase
         $this->assertEquals(1, $count);
     }
 
+    public function testAndSingleQuery(): void
+    {
+        try {
+            static::getDatabase()->find('movies', [
+                Query::and([
+                    Query::equal('active', [true])
+                ])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertEquals('Invalid query: And queries require at least two queries', $e->getMessage());
+        }
+    }
+
+    public function testAndMultipleQueries(): void
+    {
+        $queries = [
+            Query::and([
+                Query::equal('active', [true]),
+                Query::equal('name', ['Frozen II'])
+            ])
+        ];
+        $this->assertCount(1, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(1, static::getDatabase()->count('movies', $queries));
+    }
+
+    public function testAndNested(): void
+    {
+        $queries = [
+            Query::or([
+                Query::equal('active', [false]),
+                Query::and([
+                    Query::equal('active', [true]),
+                    Query::equal('name', ['Frozen']),
+                ])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies', $queries);
+        $this->assertCount(3, $documents);
+
+        $count = static::getDatabase()->count('movies', $queries);
+        $this->assertEquals(3, $count);
+    }
+
     /**
      * @depends testFind
      */

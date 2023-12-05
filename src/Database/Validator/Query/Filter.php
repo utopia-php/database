@@ -173,6 +173,7 @@ class Filter extends Base
                 return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
             case Query::TYPE_OR:
+            case Query::TYPE_AND:
                 $filters = Query::groupByType($value->getValue())['filters'];
 
                 if(count($value->getValue()) !== count($filters)) {

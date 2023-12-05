@@ -1763,12 +1763,15 @@ class MariaDB extends SQL
 
         switch ($query->getMethod()) {
             case Query::TYPE_OR:
+            case Query::TYPE_AND:
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
                     $conditions[] = $this->getSQLCondition($q);
                 }
-                return empty($conditions) ? '' : ' OR (' . implode(' AND ', $conditions) . ')';
+
+                $method = strtoupper($query->getMethod());
+                return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";

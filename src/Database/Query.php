@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use JetBrains\PhpStorm\Pure;
 use Utopia\Database\Exception\Query as QueryException;
 
 class Query
@@ -23,6 +24,7 @@ class Query
 
     public const TYPE_SELECT = 'select';
     public const TYPE_OR = 'or';
+    public const TYPE_AND = 'and';
 
     // Order methods
     public const TYPE_ORDERDESC = 'orderDesc';
@@ -180,6 +182,7 @@ class Query
             self::TYPE_STARTS_WITH,
             self::TYPE_ENDS_WITH,
             self::TYPE_OR,
+            self::TYPE_AND,
             self::TYPE_SELECT => true,
             default => false,
         };
@@ -706,6 +709,15 @@ class Query
     }
 
     /**
+     * @param array<mixed> $queries
+     * @return Query
+     */
+    public static function and(array $queries): self
+    {
+        return new self(self::TYPE_AND, '', [$queries]);
+    }
+
+    /**
      * Filters $queries for $types
      *
      * @param array<Query> $queries
@@ -847,9 +859,9 @@ class Query
      *
      * @return bool
      */
-    public function isNested(): bool
+    #[Pure] public function isNested(): bool
     {
-        if($this->getMethod() === self::TYPE_OR) {
+        if(in_array($this->getMethod(), [self::TYPE_OR, self::TYPE_AND])) {
             return true;
         }
 

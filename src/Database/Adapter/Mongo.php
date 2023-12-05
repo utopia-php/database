@@ -1305,8 +1305,9 @@ class Mongo extends Adapter
         $queries = Query::groupByType($queries)['filters'];
         foreach ($queries as $query) {
             /* @var $query Query */
-            if($query->getMethod() === Query::TYPE_OR) {
-                $filters[$separator][] = $this->buildFilters($query->getValue(), '$or');
+            if($query->isNested()) {
+                $operator = $this->getQueryOperator($query->getMethod());
+                $filters[$separator][] = $this->buildFilters($query->getValue(), $operator);
             } else {
                 $filters[$separator][] = $this->buildFilter($query);
             }
@@ -1396,6 +1397,7 @@ class Mongo extends Adapter
             Query::TYPE_STARTS_WITH,
             Query::TYPE_ENDS_WITH => '$regex',
             Query::TYPE_OR => '$or',
+            Query::TYPE_AND => '$and',
             default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
         };
     }

@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use JetBrains\PhpStorm\Pure;
 use Utopia\Database\Exception\Query as QueryException;
 
 class Query

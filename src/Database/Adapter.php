@@ -246,11 +246,11 @@ abstract class Adapter
      * Optionally check if collection exists in database
      *
      * @param string $database database name
-     * @param string $collection (optional) collection name
+     * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
-    abstract public function exists(string $database, ?string $collection): bool;
+    abstract public function exists(string $database, ?string $collection = null): bool;
 
     /**
      * List Databases
@@ -429,6 +429,19 @@ abstract class Adapter
     abstract public function createDocument(string $collection, Document $document): Document;
 
     /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
+
+    /**
      * Update Document
      *
      * @param string $collection
@@ -437,6 +450,19 @@ abstract class Adapter
      * @return Document
      */
     abstract public function updateDocument(string $collection, Document $document): Document;
+
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
 
     /**
      * Delete Document

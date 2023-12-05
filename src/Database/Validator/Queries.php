@@ -19,13 +19,19 @@ class Queries extends Validator
     protected array $validators;
 
     /**
+     * @var int
+     */
+    protected int $length;
+
+    /**
      * Queries constructor
      *
      * @param array<Base> $validators
      */
-    public function __construct(array $validators = [])
+    public function __construct(array $validators = [], int $length = 0)
     {
         $this->validators = $validators;
+        $this->length = $length;
     }
 
     /**
@@ -48,6 +54,10 @@ class Queries extends Validator
     {
         if (!is_array($value)) {
             $this->message = 'Queries must be an array';
+            return false;
+        }
+
+        if ($this->length && \count($value) > $this->length) {
             return false;
         }
 

@@ -60,7 +60,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
 
   mysql:
-    image: mysql:8.0.31
+    image: mysql:8.0.33
     container_name: utopia-mysql
     networks:
       - database

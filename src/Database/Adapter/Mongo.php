@@ -683,6 +683,43 @@ class Mongo extends Adapter
     }
 
     /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws Duplicate
+     */
+    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $records = [];
+        foreach ($documents as $document) {
+            $document->removeAttribute('$internalId');
+
+            $record = $this->replaceChars('$', '_', (array)$document);
+            $record = $this->timeToMongo($record);
+
+            $records[] = $this->removeNullKeys($record);
+        }
+
+        $documents = $this->client->insertMany($name, $records);
+
+        foreach ($documents as $index => $document) {
+            $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
+            $documents[$index] = $this->timeToDocument($documents[$index]);
+
+            $documents[$index] = new Document($documents[$index]);
+        }
+
+        return $documents;
+    }
+
+    /**
      *
      * @param string $name
      * @param array<string, mixed> $document
@@ -731,6 +768,34 @@ class Mongo extends Adapter
         }
 
         return $document;
+    }
+
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws Duplicate
+     */
+    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        foreach ($documents as $index => $document) {
+            $document = $document->getArrayCopy();
+            $document = $this->replaceChars('$', '_', $document);
+            $document = $this->timeToMongo($document);
+
+            $this->client->update($name, ['_uid' => $document['_uid']], $document);
+
+            $documents[$index] = new Document($document);
+        }
+
+        return $documents;
     }
 
     /**

@@ -54,8 +54,8 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::equal('', ['v'])));
         $this->assertFalse($this->validator->isValid(Query::orderAsc('attr')));
         $this->assertFalse($this->validator->isValid(Query::orderDesc('attr')));
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSORAFTER, values: ['asdf'])));
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSORBEFORE, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
     }
 
     public function testTypeMissmatch(): void

@@ -859,7 +859,7 @@ class Query
      *
      * @return bool
      */
-    #[Pure] public function isNested(): bool
+    public function isNested(): bool
     {
         if(in_array($this->getMethod(), [self::TYPE_OR, self::TYPE_AND])) {
             return true;

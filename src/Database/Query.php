@@ -34,28 +34,28 @@ class Query
     public const TYPE_CURSOR_AFTER = 'cursorAfter';
     public const TYPE_CURSOR_BEFORE = 'cursorBefore';
 
-	public const TYPES = [
-		self::TYPE_EQUAL,
-		self::TYPE_NOT_EQUAL,
-		self::TYPE_LESSER,
-		self::TYPE_LESSER_EQUAL,
-		self::TYPE_GREATER,
-		self::TYPE_GREATER_EQUAL,
-		self::TYPE_CONTAINS,
-		self::TYPE_SEARCH,
-		self::TYPE_IS_NULL,
-		self::TYPE_IS_NOT_NULL,
-		self::TYPE_BETWEEN,
-		self::TYPE_STARTS_WITH,
-		self::TYPE_ENDS_WITH,
-		self::TYPE_SELECT,
-		self::TYPE_ORDER_DESC,
-		self::TYPE_ORDER_ASC,
-		self::TYPE_LIMIT,
-		self::TYPE_OFFSET,
-		self::TYPE_CURSOR_AFTER,
-		self::TYPE_CURSOR_BEFORE,
-	];
+    public const TYPES = [
+        self::TYPE_EQUAL,
+        self::TYPE_NOT_EQUAL,
+        self::TYPE_LESSER,
+        self::TYPE_LESSER_EQUAL,
+        self::TYPE_GREATER,
+        self::TYPE_GREATER_EQUAL,
+        self::TYPE_CONTAINS,
+        self::TYPE_SEARCH,
+        self::TYPE_IS_NULL,
+        self::TYPE_IS_NOT_NULL,
+        self::TYPE_BETWEEN,
+        self::TYPE_STARTS_WITH,
+        self::TYPE_ENDS_WITH,
+        self::TYPE_SELECT,
+        self::TYPE_ORDER_DESC,
+        self::TYPE_ORDER_ASC,
+        self::TYPE_LIMIT,
+        self::TYPE_OFFSET,
+        self::TYPE_CURSOR_AFTER,
+        self::TYPE_CURSOR_BEFORE,
+    ];
 
     protected string $method = '';
     protected string $attribute = '';
@@ -205,25 +205,25 @@ class Query
      */
     public static function parse(string $filter): self
     {
-		try {
-			$query = \json_decode($filter, true, flags: JSON_THROW_ON_ERROR);
-		} catch (JsonException $e) {
-			throw new QueryException('Invalid query: ' . $e->getMessage());
-		}
+        try {
+            $query = \json_decode($filter, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new QueryException('Invalid query: ' . $e->getMessage());
+        }
 
-		if (!\is_array($query)) {
-			throw new QueryException('Invalid query.');
-		}
+        if (!\is_array($query)) {
+            throw new QueryException('Invalid query.');
+        }
 
-		$method = $query['method'] ?? '';
-		$attribute = $query['attribute'] ?? '';
-		$values = $query['values'] ?? [];
+        $method = $query['method'] ?? '';
+        $attribute = $query['attribute'] ?? '';
+        $values = $query['values'] ?? [];
 
-		if (!self::isMethod($method)) {
-			throw new QueryException('Invalid query method. Must be one of: ' . implode(', ', self::TYPES));
-		}
+        if (!self::isMethod($method)) {
+            throw new QueryException('Invalid query method. Must be one of: ' . implode(', ', self::TYPES));
+        }
 
-		return new self($method, $attribute, $values);
+        return new self($method, $attribute, $values);
     }
 
     /**

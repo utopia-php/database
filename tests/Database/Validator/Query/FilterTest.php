@@ -93,4 +93,9 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::parse('greaterThan("attr", [])')));
         $this->assertEquals('GreaterThan queries require exactly one value.', $this->validator->getDescription());
     }
+
+    public function testNested(): void
+    {
+        $this->assertFalse(true);
+    }
 }

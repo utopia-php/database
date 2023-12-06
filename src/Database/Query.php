@@ -635,7 +635,7 @@ class Query
      */
     public function isNested(): bool
     {
-        if(in_array($this->getMethod(), [self::TYPE_OR, self::TYPE_AND])) {
+        if(in_array($this->getMethod(), self::LOGICAL_TYPES)) {
             return true;
         }
 

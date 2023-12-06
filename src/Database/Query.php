@@ -642,4 +642,3 @@ class Query
         return false;
     }
 }
-

@@ -116,30 +116,95 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents($this->collection['attributes'], $this->collection['indexes']);
 
         $queries = [
-            'equal("description", "Best movie ever")',
-            'equal("description", [""])',
-            'lessThanEqual("price", 6.50)',
-            'lessThan("price", 6.50)',
-            'greaterThan("rating", 4)',
-            'greaterThan("rating", 0)',
-            'greaterThanEqual("rating", 6)',
-            'between("price", 1.50, 6.50)',
-            'search("title", "SEO")',
-            'startsWith("title", "Good")',
-            'endsWith("title", "Night")',
-            'isNull("title")',
-            'isNotNull("title")',
-            'cursorAfter("a")',
-            'cursorBefore("b")',
-            'orderAsc("title")',
-            'limit(10)',
-            'offset(10)',
+            [
+                'method' => 'equal',
+                'attribute' => 'description',
+                'values' => ['Best movie ever']
+            ],
+            [
+                'method' => 'equal',
+                'attribute' => 'description',
+                'values' => ['']
+            ],
+            [
+                'method' => 'lessThanEqual',
+                'attribute' => 'price',
+                'values' => [6.50]
+            ],
+            [
+                'method' => 'lessThan',
+                'attribute' => 'price',
+                'values' => [6.50]
+            ],
+            [
+                'method' => 'greaterThan',
+                'attribute' => 'rating',
+                'values' => [4]
+            ],
+            [
+                'method' => 'greaterThan',
+                'attribute' => 'rating',
+                'values' => [0]
+            ],
+            [
+                'method' => 'greaterThanEqual',
+                'attribute' => 'rating',
+                'values' => [6]
+            ],
+            [
+                'method' => 'between',
+                'attribute' => 'price',
+                'values' => [1.50, 6.50]
+            ],
+            [
+                'method' => 'search',
+                'attribute' => 'title',
+                'values' => ['SEO']
+            ],
+            [
+                'method' => 'startsWith',
+                'attribute' => 'title',
+                'values' => ['Good']
+            ],
+            [
+                'method' => 'endsWith',
+                'attribute' => 'title',
+                'values' => ['Night']
+            ],
+            [
+                'method' => 'isNull',
+                'attribute' => 'title',
+            ],
+            [
+                'method' => 'isNotNull',
+                'attribute' => 'title',
+            ],
+            [
+                'method' => 'cursorAfter',
+                'values' => ['a'],
+            ],
+            [
+                'method' => 'cursorBefore',
+                'values' => ['b'],
+            ],
+            [
+                'method' => 'orderAsc',
+                'attribute' => 'title',
+            ],
+            [
+                'method' => 'limit',
+                'values' => [10]
+            ],
+            [
+                'method' => 'offset',
+                'values' => [10]
+            ]
         ];
 
-        $queries[] = Query::orderDesc('');
+        $queries[] = Query::orderDesc();
         $this->assertEquals(true, $validator->isValid($queries));
 
-        $queries = ['equal("is_bool", false)'];
+        $queries = [Query::equal('is_bool', [false])];
         $this->assertEquals(true, $validator->isValid($queries));
     }
 
@@ -150,30 +215,42 @@ class DocumentsQueriesTest extends TestCase
     {
         $validator = new Documents($this->collection['attributes'], $this->collection['indexes']);
 
-        $this->assertEquals(false, $validator->isValid(['notEqual("title", ["Iron Man", "Ant Man"])',]));
+        $queries = [[
+            'method' => 'notEqual',
+            'attribute' => 'title',
+            'values' => ['Iron Man', 'Ant Man']
+        ]];
+        $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: NotEqual queries require exactly one value.', $validator->getDescription());
 
-        $queries = ['search("description", "iron")'];
+        $queries = [[
+            'method' => 'search',
+            'attribute' => 'description',
+            'values' => ['iron']
+        ]];
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
 
-        $queries = ['equal("not_found", 4)'];
+        $queries = [[
+            'method' => 'equal',
+            'attribute' => 'not_found',
+            'values' => [4]
+        ]];
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
 
-        $queries = ['search("description", "iron")'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Searching by attribute "description" requires a fulltext index.', $validator->getDescription());
-
-        $queries = ['equal("not_found", 4)'];
-        $this->assertEquals(false, $validator->isValid($queries));
-        $this->assertEquals('Invalid query: Attribute not found in schema: not_found', $validator->getDescription());
-
-        $queries = ['limit(-1)'];
+        $queries = [[
+            'method' => 'limit',
+            'values' => [-1]
+        ]];
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: Invalid limit: Value must be a valid range between 1 and ' . number_format(PHP_INT_MAX), $validator->getDescription());
 
-        $queries = ['equal("title", [])']; // empty array
+        $queries = [[
+            'method' => 'equal',
+            'attribute' => 'title',
+            'values' => []
+        ]]; // empty array
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
     }

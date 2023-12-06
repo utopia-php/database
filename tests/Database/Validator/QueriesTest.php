@@ -6,6 +6,7 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
@@ -30,26 +31,19 @@ class QueriesTest extends TestCase
         $this->assertEquals(true, $validator->isValid([]));
     }
 
-    public function testInvalidQuery(): void
-    {
-        $validator = new Queries();
-
-        $this->assertEquals(false, $validator->isValid(["this.is.invalid"]));
-    }
-
     public function testInvalidMethod(): void
     {
         $validator = new Queries();
-        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+        $this->assertEquals(false, $validator->isValid([Query::equal('attr', ["value"])]));
 
         $validator = new Queries([new Limit()]);
-        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+        $this->assertEquals(false, $validator->isValid([Query::equal('attr', ["value"])]));
     }
 
     public function testInvalidValue(): void
     {
         $validator = new Queries([new Limit()]);
-        $this->assertEquals(false, $validator->isValid(['limit(-1)']));
+        $this->assertEquals(false, $validator->isValid([Query::limit(-1)]));
     }
 
     /**
@@ -76,10 +70,10 @@ class QueriesTest extends TestCase
             ]
         );
 
-        $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['limit(10)']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['offset(10)']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['orderAsc("name")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::equal('name', ['value'])]), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::limit(10)]), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::offset(10)]), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::orderAsc('name')]), $validator->getDescription());
     }
 }

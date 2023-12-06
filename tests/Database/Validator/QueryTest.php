@@ -110,40 +110,27 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", ["Iron Man", "Ant Man"])')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('equal("$id", "Iron Man")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('equal("description", "Best movie ever")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('greaterThan("rating", 4)')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('notEqual("title", ["Iron Man"])')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('lessThan("price", 6.50)')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('lessThanEqual("price", 6)')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('contains("tags", ["action1", "action2"])')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('contains("tags", "action1")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('cursorAfter("docId")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('cursorBefore("docId")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('orderAsc("title")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('orderDesc("title")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('isNull("title")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('isNotNull("title")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('between("price", 1.5, 10.9)')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('between("birthDay","2024-01-01", "2023-01-01")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('startsWith("title", "Fro")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('endsWith("title", "Zen")')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('select(["title", "description"])')]));
-        $this->assertEquals(true, $validator->isValid([Query::parse('notEqual("title", [""])')]));
-    }
-
-    /**
-     * @throws Exception
-     */
-    public function testInvalidMethod(): void
-    {
-        $validator = new Documents($this->attributes, []);
-
-        $this->assertEquals(false, $validator->isValid([Query::parse('eqqual("title", "Iron Man")')]));
-        $this->assertEquals('Invalid query method: eqqual', $validator->getDescription());
-
-        $this->assertEquals(false, $validator->isValid([Query::parse('notEqual("title", ["Iron Man", "Ant Man"])')]));
+        $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man', 'Ant Man'])]));
+        $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man'])]));
+        $this->assertEquals(true, $validator->isValid([Query::equal('description', ['Best movie ever'])]));
+        $this->assertEquals(true, $validator->isValid([Query::greaterThan('rating', 4)]));
+        $this->assertEquals(true, $validator->isValid([Query::notEqual('title', 'Iron Man')]));
+        $this->assertEquals(true, $validator->isValid([Query::lessThan('price', 6.50)]));
+        $this->assertEquals(true, $validator->isValid([Query::lessThanEqual('price', 6)]));
+        $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1', 'action2'])]));
+        $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1'])]));
+        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'docId']))]));
+        $this->assertEquals(true, $validator->isValid([Query::cursorBefore(new Document(['$id' => 'docId']))]));
+        $this->assertEquals(true, $validator->isValid([Query::orderAsc('title')]));
+        $this->assertEquals(true, $validator->isValid([Query::orderDesc('title')]));
+        $this->assertEquals(true, $validator->isValid([Query::isNull('title')]));
+        $this->assertEquals(true, $validator->isValid([Query::isNotNull('title')]));
+        $this->assertEquals(true, $validator->isValid([Query::between('price', 1.5, 10.9)]));
+        $this->assertEquals(true, $validator->isValid([Query::between('birthDay', '2024-01-01', '2023-01-01')]));
+        $this->assertEquals(true, $validator->isValid([Query::startsWith('title', 'Fro')]));
+        $this->assertEquals(true, $validator->isValid([Query::endsWith('title', 'Zen')]));
+        $this->assertEquals(true, $validator->isValid([Query::select(['title', 'description'])]));
+        $this->assertEquals(true, $validator->isValid([Query::notEqual('title', '')]));
     }
 
     /**
@@ -153,12 +140,19 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse('equal("name", "Iron Man")')]);
+        $response = $validator->isValid([Query::parse([
+            'method' => 'equal',
+            'attribute' => 'name',
+            'values' => ['Iron Man']
+        ])]);
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Invalid query: Attribute not found in schema: name', $validator->getDescription());
 
-        $response = $validator->isValid([Query::parse('orderAsc("name")')]);
+        $response = $validator->isValid([Query::parse([
+            'method' => 'orderAsc',
+            'attribute' => 'name',
+        ])]);
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Invalid query: Attribute not found in schema: name', $validator->getDescription());
@@ -171,7 +165,11 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse('equal("title", 1776)')]);
+        $response = $validator->isValid([Query::parse([
+            'method' => 'equal',
+            'attribute' => 'title',
+            'values' => [1776]
+        ])]);
 
         $this->assertEquals(false, $response);
         $this->assertEquals('Invalid query: Query type does not match expected: string', $validator->getDescription());
@@ -183,7 +181,7 @@ class QueryTest extends TestCase
     public function testQueryDate(): void
     {
         $validator = new Documents($this->attributes, []);
-        $response = $validator->isValid([Query::parse('greaterThan("birthDay", "1960-01-01 10:10:10")')]);
+        $response = $validator->isValid([Query::greaterThan('birthDay', '1960-01-01 10:10:10')]);
         $this->assertEquals(true, $response);
     }
 
@@ -194,16 +192,10 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse('limit(25)')]);
+        $response = $validator->isValid([Query::limit(25)]);
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid([Query::parse('limit()')]);
-        $this->assertEquals(false, $response);
-
-        $response = $validator->isValid([Query::parse('limit(-1)')]);
-        $this->assertEquals(false, $response);
-
-        $response = $validator->isValid([Query::parse('limit("aaa")')]);
+        $response = $validator->isValid([Query::limit(-1)]);
         $this->assertEquals(false, $response);
     }
 
@@ -214,16 +206,10 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse('offset(25)')]);
+        $response = $validator->isValid([Query::offset(25)]);
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid([Query::parse('offset()')]);
-        $this->assertEquals(false, $response);
-
-        $response = $validator->isValid([Query::parse('offset(-1)')]);
-        $this->assertEquals(false, $response);
-
-        $response = $validator->isValid([Query::parse('offset("aaa")')]);
+        $response = $validator->isValid([Query::offset(-1)]);
         $this->assertEquals(false, $response);
     }
 
@@ -234,16 +220,16 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse('orderAsc("title")')]);
+        $response = $validator->isValid([Query::orderAsc('title')]);
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid([Query::parse('orderAsc("")')]);
+        $response = $validator->isValid([Query::orderAsc('')]);
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid([Query::parse('orderAsc()')]);
+        $response = $validator->isValid([Query::orderAsc()]);
         $this->assertEquals(true, $response);
 
-        $response = $validator->isValid([Query::parse('orderAsc("doesNotExist")')]);
+        $response = $validator->isValid([Query::orderAsc('doesNotExist')]);
         $this->assertEquals(false, $response);
     }
 
@@ -254,11 +240,8 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse('cursorAfter("asdf")')]);
+        $response = $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]);
         $this->assertEquals(true, $response);
-
-        $response = $validator->isValid([Query::parse('cursorAfter()')]);
-        $this->assertEquals(false, $response);
     }
 
     /**
@@ -303,9 +286,6 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $response);
 
         $response = $validator->isValid([Query::equal('price', [])]);
-        $this->assertEquals(false, $response);
-
-        $response = $validator->isValid([Query::greaterThan('price', null)]);
         $this->assertEquals(false, $response);
 
         $response = $validator->isValid([Query::isNull('price')]);

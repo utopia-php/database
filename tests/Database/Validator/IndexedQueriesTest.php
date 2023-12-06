@@ -86,17 +86,41 @@ class IndexedQueriesTest extends TestCase
             ]
         );
 
-        $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([[
+            'method' => 'cursorAfter',
+            'attribute' => null,
+            'values' => ['asdf'],
+        ]]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([[
+            'method' => 'equal',
+            'attribute' => 'name',
+            'values' => ['value'],
+        ]]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::equal('name', ['value'])]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['limit(10)']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([[
+            'method' => 'limit',
+            'attribute' => null,
+            'values' => [10],
+        ]]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::limit(10)]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['offset(10)']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([[
+            'method' => 'offset',
+            'attribute' => null,
+            'values' => [10],
+        ]]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::offset(10)]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['orderAsc("name")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([[
+            'method' => 'orderAsc',
+            'attribute' => 'name',
+            'values' => [],
+        ]]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::orderAsc('name')]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['search("name", "value")']), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([[
+            'method' => 'search',
+            'attribute' => 'name',
+            'values' => ['value'],
+        ]]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::search('name', 'value')]), $validator->getDescription());
     }
 
@@ -129,9 +153,20 @@ class IndexedQueriesTest extends TestCase
             ]
         );
 
-        $this->assertEquals(false, $validator->isValid(['equal("dne", "value")']), $validator->getDescription());
-        $this->assertEquals(false, $validator->isValid(['orderAsc("dne")']), $validator->getDescription());
-        $this->assertEquals(false, $validator->isValid(['search("name", "value")']), $validator->getDescription());
+        $this->assertEquals(false, $validator->isValid([[
+            'type' => 'equal',
+            'attribute' => 'dne',
+            'values' => ['value']
+        ]]), $validator->getDescription());
+        $this->assertEquals(false, $validator->isValid([[
+            'type' => 'orderAsc',
+            'attribute' => 'dne',
+        ]]), $validator->getDescription());
+        $this->assertEquals(false, $validator->isValid([[
+            'type' => 'search',
+            'attribute' => 'name',
+            'values' => ['value']
+        ]]), $validator->getDescription());
     }
 
     public function testTwoAttributesFulltext(): void

@@ -12632,66 +12632,6 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->findOne('documents', [
-                Query::search('string', null),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::notEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
                 Query::contains('string', []),
             ]);
             $this->fail('Failed to throw exception');

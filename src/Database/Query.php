@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use JsonException;
 use Utopia\Database\Exception\Query as QueryException;
 
 class Query
@@ -23,8 +22,6 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
 
     public const TYPE_SELECT = 'select';
-    public const TYPE_OR = 'or';
-    public const TYPE_AND = 'and';
 
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
@@ -35,6 +32,10 @@ class Query
     public const TYPE_OFFSET = 'offset';
     public const TYPE_CURSOR_AFTER = 'cursorAfter';
     public const TYPE_CURSOR_BEFORE = 'cursorBefore';
+
+    // Logical methods
+    public const TYPE_AND = 'and';
+    public const TYPE_OR = 'or';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -57,6 +58,8 @@ class Query
         self::TYPE_OFFSET,
         self::TYPE_CURSOR_AFTER,
         self::TYPE_CURSOR_BEFORE,
+        self::TYPE_AND,
+        self::TYPE_OR,
     ];
 
     protected const LOGICAL_TYPES = [
@@ -206,40 +209,76 @@ class Query
     }
 
     /**
-     * Parse query filter
+     * Parse query
      *
-     * @param string $filter
+     * @param array<string, mixed> $query
      * @return self
      * @throws QueryException
      */
-    public static function parse(string $filter): self
+    public static function parse(array $query): self
     {
-        try {
-            $query = \json_decode($filter, true, flags: JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
-            throw new QueryException('Invalid query: ' . $e->getMessage());
-        }
-
-        if (!\is_array($query)) {
-            throw new QueryException('Invalid query.');
-        }
-
         $method = $query['method'] ?? '';
         $attribute = $query['attribute'] ?? '';
         $values = $query['values'] ?? [];
 
         if (!self::isMethod($method)) {
-            throw new QueryException('Invalid query method. Must be one of: ' . implode(', ', self::TYPES));
+            throw new QueryException('Invalid query method: ' . $method);
+        }
+
+        if (\in_array($method, self::LOGICAL_TYPES)) {
+            foreach ($values as $index => $value) {
+                $values[$index] = self::parse($value);
+            }
         }
 
         return new self($method, $attribute, $values);
     }
 
     /**
+     * Parse an array of queries
+     *
+     * @param array<array<string, mixed>> $queries
+     *
+     * @return array<Query>
+     * @throws Exception
+     */
+    public static function parseQueries(array $queries): array
+    {
+        $parsed = [];
+
+        foreach ($queries as $query) {
+            $parsed[] = Query::parse($query);
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        $array = [
+            'method' => $this->method,
+            'attribute' => $this->attribute,
+        ];
+
+        if (\in_array($array['method'], self::LOGICAL_TYPES)) {
+            foreach ($this->values as $index => $value) {
+                $array['values'][$index] = $this->toArray();
+            }
+        } else {
+            $array['values'] = $this->values;
+        }
+
+        return $array;
+    }
+
+    /**
      * Helper method to create Query with equal method
      *
      * @param string $attribute
-     * @param array<mixed> $values
+     * @param array<string|int|float|bool> $values
      * @return Query
      */
     public static function equal(string $attribute, array $values): self
@@ -251,10 +290,10 @@ class Query
      * Helper method to create Query with notEqual method
      *
      * @param string $attribute
-     * @param mixed $value
+     * @param string|int|float|bool $value
      * @return Query
      */
-    public static function notEqual(string $attribute, mixed $value): self
+    public static function notEqual(string $attribute, string|int|float|bool $value): self
     {
         return new self(self::TYPE_NOT_EQUAL, $attribute, [$value]);
     }
@@ -263,10 +302,10 @@ class Query
      * Helper method to create Query with lessThan method
      *
      * @param string $attribute
-     * @param mixed $value
+     * @param string|int|float|bool $value
      * @return Query
      */
-    public static function lessThan(string $attribute, mixed $value): self
+    public static function lessThan(string $attribute, string|int|float|bool $value): self
     {
         return new self(self::TYPE_LESSER, $attribute, [$value]);
     }
@@ -275,10 +314,10 @@ class Query
      * Helper method to create Query with lessThanEqual method
      *
      * @param string $attribute
-     * @param mixed $value
+     * @param string|int|float|bool $value
      * @return Query
      */
-    public static function lessThanEqual(string $attribute, mixed $value): self
+    public static function lessThanEqual(string $attribute, string|int|float|bool $value): self
     {
         return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value]);
     }
@@ -287,10 +326,10 @@ class Query
      * Helper method to create Query with greaterThan method
      *
      * @param string $attribute
-     * @param mixed $value
+     * @param string|int|float|bool $value
      * @return Query
      */
-    public static function greaterThan(string $attribute, mixed $value): self
+    public static function greaterThan(string $attribute, string|int|float|bool $value): self
     {
         return new self(self::TYPE_GREATER, $attribute, [$value]);
     }
@@ -299,10 +338,10 @@ class Query
      * Helper method to create Query with greaterThanEqual method
      *
      * @param string $attribute
-     * @param mixed $value
+     * @param string|int|float|bool $value
      * @return Query
      */
-    public static function greaterThanEqual(string $attribute, mixed$value): self
+    public static function greaterThanEqual(string $attribute, string|int|float|bool $value): self
     {
         return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value]);
     }
@@ -323,11 +362,11 @@ class Query
      * Helper method to create Query with between method
      *
      * @param string $attribute
-     * @param mixed $start
-     * @param mixed $end
+     * @param string|int|float|bool $start
+     * @param string|int|float|bool $end
      * @return Query
      */
-    public static function between(string $attribute, mixed $start, mixed $end): self
+    public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self
     {
         return new self(self::TYPE_BETWEEN, $attribute, [$start, $end]);
     }
@@ -336,10 +375,10 @@ class Query
      * Helper method to create Query with search method
      *
      * @param string $attribute
-     * @param mixed $value
+     * @param string|int|float|bool $value
      * @return Query
      */
-    public static function search(string $attribute, mixed $value): self
+    public static function search(string $attribute, string|int|float|bool $value): self
     {
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }
@@ -361,7 +400,7 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderDesc(string $attribute): self
+    public static function orderDesc(string $attribute = ''): self
     {
         return new self(self::TYPE_ORDER_DESC, $attribute);
     }
@@ -372,7 +411,7 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderAsc(string $attribute): self
+    public static function orderAsc(string $attribute = ''): self
     {
         return new self(self::TYPE_ORDER_ASC, $attribute);
     }
@@ -481,8 +520,9 @@ class Query
     public static function getByType(array $queries, array $types): array
     {
         $filtered = [];
+
         foreach ($queries as $query) {
-            if (in_array($query->getMethod(), $types, true)) {
+            if (\in_array($query->getMethod(), $types, true)) {
                 $filtered[] = clone $query;
             }
         }
@@ -515,6 +555,7 @@ class Query
         $orderTypes = [];
         $cursor = null;
         $cursorDirection = null;
+
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
                 continue;
@@ -523,6 +564,7 @@ class Query
             $method = $query->getMethod();
             $attribute = $query->getAttribute();
             $values = $query->getValues();
+
             switch ($method) {
                 case Query::TYPE_ORDER_ASC:
                 case Query::TYPE_ORDER_DESC:
@@ -530,9 +572,11 @@ class Query
                         $orderAttributes[] = $attribute;
                     }
 
-                    $orderTypes[] = $method === Query::TYPE_ORDER_ASC ? Database::ORDER_ASC : Database::ORDER_DESC;
-                    break;
+                    $orderTypes[] = $method === Query::TYPE_ORDER_ASC
+                        ? Database::ORDER_ASC
+                        : Database::ORDER_DESC;
 
+                    break;
                 case Query::TYPE_LIMIT:
                     // keep the 1st limit encountered and ignore the rest
                     if ($limit !== null) {
@@ -541,19 +585,17 @@ class Query
 
                     $limit = $values[0] ?? $limit;
                     break;
-
                 case Query::TYPE_OFFSET:
-                    // keep the 1st offset encountered and ignore the rest
+                    // Keep the 1st offset encountered and ignore the rest
                     if ($offset !== null) {
                         break;
                     }
 
                     $offset = $values[0] ?? $limit;
                     break;
-
                 case Query::TYPE_CURSOR_AFTER:
                 case Query::TYPE_CURSOR_BEFORE:
-                    // keep the 1st cursor encountered and ignore the rest
+                    // Keep the 1st cursor encountered and ignore the rest
                     if ($cursor !== null) {
                         break;
                     }
@@ -583,42 +625,5 @@ class Query
             'cursorDirection' => $cursorDirection,
         ];
     }
-
-    /**
-     * Iterate over $queries attempting to parse each
-     *
-     * @param array<string> $queries
-     *
-     * @return array<Query>
-     * @throws Exception
-     */
-    public static function parseQueries(array $queries): array
-    {
-        $parsed = [];
-        foreach ($queries as $query) {
-            try {
-                $parsed[] = Query::parse($query);
-            } catch (\Throwable $th) {
-                throw new QueryException("Invalid query: ${query}", previous: $th);
-            }
-        }
-
-        return $parsed;
-    }
-
-    /**
-     * Is isNested
-     *
-     * Function will return true if nested method
-     *
-     * @return bool
-     */
-    public function isNested(): bool
-    {
-        if(in_array($this->getMethod(), [self::TYPE_OR, self::TYPE_AND])) {
-            return true;
-        }
-
-        return false;
-    }
 }
+

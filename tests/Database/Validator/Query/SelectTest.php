@@ -5,6 +5,7 @@ namespace Utopia\Tests\Validator\Query;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Select;
@@ -13,6 +14,9 @@ class SelectTest extends TestCase
 {
     protected Base|null $validator = null;
 
+    /**
+     * @throws Exception
+     */
     public function setUp(): void
     {
         $this->validator = new Select(

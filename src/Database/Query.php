@@ -59,6 +59,11 @@ class Query
         self::TYPE_CURSOR_BEFORE,
     ];
 
+    protected const LOGICAL_TYPES = [
+        self::TYPE_AND,
+        self::TYPE_OR,
+    ];
+
     protected string $method = '';
     protected string $attribute = '';
 

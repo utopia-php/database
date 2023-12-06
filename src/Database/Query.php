@@ -625,5 +625,21 @@ class Query
             'cursorDirection' => $cursorDirection,
         ];
     }
+
+    /**
+     * Is isNested
+     *
+     * Function will return true if nested method
+     *
+     * @return bool
+     */
+    public function isNested(): bool
+    {
+        if(in_array($this->getMethod(), [self::TYPE_OR, self::TYPE_AND])) {
+            return true;
+        }
+
+        return false;
+    }
 }
 

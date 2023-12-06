@@ -66,9 +66,4 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::equal('attr', [])));
         $this->assertEquals('Equal queries require at least one value.', $this->validator->getDescription());
     }
-
-    public function testNested(): void
-    {
-        $this->assertFalse(true);
-    }
 }

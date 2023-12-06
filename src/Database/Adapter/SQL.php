@@ -691,7 +691,7 @@ abstract class SQL extends Adapter
         }
 
         if($query->isNested()) {
-            foreach ($query->getValue() as $value) {
+            foreach ($query->getValues() as $value) {
                 $this->bindConditionValue($stmt, $value);
             }
             return;
@@ -943,7 +943,7 @@ abstract class SQL extends Adapter
 
             /* @var $query Query */
             if($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValue(), $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
             } else {
                 $conditions[] = $this->getSQLCondition($query);
             }

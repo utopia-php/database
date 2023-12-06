@@ -174,9 +174,9 @@ class Filter extends Base
 
             case Query::TYPE_OR:
             case Query::TYPE_AND:
-                $filters = Query::groupByType($value->getValue())['filters'];
+                $filters = Query::groupByType($value->getValues())['filters'];
 
-                if(count($value->getValue()) !== count($filters)) {
+                if(count($value->getValues()) !== count($filters)) {
                     $this->message = \ucfirst($method) . ' queries requires only filters';
                     return false;
                 }

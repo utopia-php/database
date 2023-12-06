@@ -1307,7 +1307,7 @@ class Mongo extends Adapter
             /* @var $query Query */
             if($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
-                $filters[$separator][] = $this->buildFilters($query->getValue(), $operator);
+                $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
             } else {
                 $filters[$separator][] = $this->buildFilter($query);
             }

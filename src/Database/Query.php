@@ -459,7 +459,7 @@ class Query
      */
     public static function or(array $queries): self
     {
-        return new self(self::TYPE_OR, '', [$queries]);
+        return new self(self::TYPE_OR, '', $queries);
     }
 
     /**
@@ -468,7 +468,7 @@ class Query
      */
     public static function and(array $queries): self
     {
-        return new self(self::TYPE_AND, '', [$queries]);
+        return new self(self::TYPE_AND, '', $queries);
     }
 
     /**

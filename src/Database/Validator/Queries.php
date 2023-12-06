@@ -72,7 +72,7 @@ class Queries extends Validator
             }
 
             if($query->isNested()) {
-                if(!self::isValid($query->getValue())) {
+                if(!self::isValid($query->getValues())) {
                     return false;
                 }
             }

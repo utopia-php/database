@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use JsonException;
 use Utopia\Database\Exception\Query as QueryException;
 
 class Query
@@ -211,11 +212,29 @@ class Query
     /**
      * Parse query
      *
+     * @param string $query
+     * @return self
+     * @throws QueryException
+     */
+    public static function parse(string $query): self
+    {
+        try {
+            $query = \json_decode($query, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new QueryException('Invalid query: ' . $e->getMessage());
+        }
+
+        return self::parseQuery($query);
+    }
+
+    /**
+     * Parse query
+     *
      * @param array<string, mixed> $query
      * @return self
      * @throws QueryException
      */
-    public static function parse(array $query): self
+    public static function parseQuery(array $query): self
     {
         $method = $query['method'] ?? '';
         $attribute = $query['attribute'] ?? '';
@@ -227,7 +246,7 @@ class Query
 
         if (\in_array($method, self::LOGICAL_TYPES)) {
             foreach ($values as $index => $value) {
-                $values[$index] = self::parse($value);
+                $values[$index] = self::parseQuery($value);
             }
         }
 
@@ -237,10 +256,10 @@ class Query
     /**
      * Parse an array of queries
      *
-     * @param array<array<string, mixed>> $queries
+     * @param array<string> $queries
      *
      * @return array<Query>
-     * @throws Exception
+     * @throws QueryException
      */
     public static function parseQueries(array $queries): array
     {

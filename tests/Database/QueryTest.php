@@ -93,244 +93,125 @@ class QueryTest extends TestCase
      */
     public function testParse(): void
     {
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'title',
-            'values' => ['Iron Man']
-        ]);
-
+        $jsonString = Query::equal('title', ['Iron Man'])->toString();
+        $query = Query::parse($jsonString);
+        $this->assertEquals('{"method":"equal","attribute":"title","values":["Iron Man"]}', $jsonString);
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('Iron Man', $query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'lessThan',
-            'attribute' => 'year',
-            'values' => [2001]
-        ]);
-
+        $query = Query::parse(Query::lessThan('year', 2001)->toString());
         $this->assertEquals('lessThan', $query->getMethod());
         $this->assertEquals('year', $query->getAttribute());
         $this->assertEquals(2001, $query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'published',
-            'values' => [true]
-        ]);
-
+        $query = Query::parse(Query::equal('published', [true])->toString());
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('published', $query->getAttribute());
         $this->assertTrue($query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'published',
-            'values' => [false]
-        ]);
-
+        $query = Query::parse(Query::equal('published', [false])->toString());
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('published', $query->getAttribute());
         $this->assertFalse($query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'actors',
-            'values' => [' Johnny Depp ', ' Brad Pitt', 'Al Pacino ']
-        ]);
-
+        $query = Query::parse(Query::equal('actors', [' Johnny Depp ', ' Brad Pitt', 'Al Pacino '])->toString());
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('actors', $query->getAttribute());
         $this->assertEquals(' Johnny Depp ', $query->getValues()[0]);
         $this->assertEquals(' Brad Pitt', $query->getValues()[1]);
         $this->assertEquals('Al Pacino ', $query->getValues()[2]);
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'actors',
-            'values' => ['Brad Pitt', 'Johnny Depp']
-        ]);
-
+        $query = Query::parse(Query::equal('actors', ['Brad Pitt', 'Johnny Depp'])->toString());
         $this->assertEquals('equal', $query->getMethod());
         $this->assertEquals('actors', $query->getAttribute());
         $this->assertEquals('Brad Pitt', $query->getValues()[0]);
         $this->assertEquals('Johnny Depp', $query->getValues()[1]);
 
-        $query = Query::parse([
-            'method' => 'contains',
-            'attribute' => 'writers',
-            'values' => ['Tim O\'Reilly']
-        ]);
-
+        $query = Query::parse(Query::contains('writers', ['Tim O\'Reilly'])->toString());
         $this->assertEquals('contains', $query->getMethod());
         $this->assertEquals('writers', $query->getAttribute());
         $this->assertEquals('Tim O\'Reilly', $query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'greaterThan',
-            'attribute' => 'score',
-            'values' => [8.5]
-        ]);
-
+        $query = Query::parse(Query::greaterThan('score', 8.5)->toString());
         $this->assertEquals('greaterThan', $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals(8.5, $query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'notEqual',
-            'attribute' => 'director',
-            'values' => ['null']
-        ]);
-
+        $query = Query::parse(Query::notEqual('director', 'null')->toString());
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals('null', $query->getValues()[0]);
 
-        $query = Query::parse([
-            'method' => 'notEqual',
-            'attribute' => 'director',
-            'values' => [null]
-        ]);
-
-        $this->assertEquals('notEqual', $query->getMethod());
-        $this->assertEquals('director', $query->getAttribute());
-        $this->assertEquals(null, $query->getValues()[0]);
-
-        $query = Query::parse([
-            'method' => 'isNull',
-            'attribute' => 'director',
-            'values' => []
-        ]);
-
+        $query = Query::parse(Query::isNull('director')->toString());
         $this->assertEquals('isNull', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'isNotNull',
-            'attribute' => 'director',
-            'values' => []
-        ]);
-
+        $query = Query::parse(Query::isNotNull('director')->toString());
         $this->assertEquals('isNotNull', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'startsWith',
-            'attribute' => 'director',
-            'values' => ['Quentin']
-        ]);
-
+        $query = Query::parse(Query::startsWith('director', 'Quentin')->toString());
         $this->assertEquals('startsWith', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(['Quentin'], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'endsWith',
-            'attribute' => 'director',
-            'values' => ['Tarantino']
-        ]);
-
+        $query = Query::parse(Query::endsWith('director', 'Tarantino')->toString());
         $this->assertEquals('endsWith', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(['Tarantino'], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'select',
-            'attribute' => null,
-            'values' => ['title', 'director']
-        ]);
-
+        $query = Query::parse(Query::select(['title', 'director'])->toString());
         $this->assertEquals('select', $query->getMethod());
         $this->assertEquals(null, $query->getAttribute());
         $this->assertEquals(['title', 'director'], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'between',
-            'attribute' => 'age',
-            'values' => [15, 18]
-        ]);
-
+        $query = Query::parse(Query::between('age', 15, 18)->toString());
         $this->assertEquals('between', $query->getMethod());
         $this->assertEquals('age', $query->getAttribute());
         $this->assertEquals([15, 18], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'between',
-            'attribute' => 'lastUpdate',
-            'values' => ['DATE1', 'DATE2']
-        ]);
-
+        $query = Query::parse(Query::between('lastUpdate', 'DATE1', 'DATE2')->toString());
         $this->assertEquals('between', $query->getMethod());
         $this->assertEquals('lastUpdate', $query->getAttribute());
         $this->assertEquals(['DATE1', 'DATE2'], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'attr',
-            'values' => [1]
-        ]);
-
+        $query = Query::parse(Query::equal('attr', [1])->toString());
         $this->assertCount(1, $query->getValues());
         $this->assertEquals('attr', $query->getAttribute());
         $this->assertEquals([1], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 'attr',
-            'values' => [0]
-        ]);
-
+        $query = Query::parse(Query::equal('attr', [0])->toString());
         $this->assertCount(1, $query->getValues());
         $this->assertEquals('attr', $query->getAttribute());
         $this->assertEquals([0], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 1,
-            'values' => ['[Hello] World']
-        ]);
-
+        $query = Query::parse(Query::equal('1', ['[Hello] World'])->toString());
         $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
+        $this->assertEquals('1', $query->getAttribute());
         $this->assertEquals(['[Hello] World'], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 1,
-            'values' => ['(Hello) World']
-        ]);
-
-        $this->assertCount(1, $query->getValues());
-        $this->assertEquals(1, $query->getAttribute());
-        $this->assertEquals(['(Hello) World'], $query->getValues());
-
-        $query = Query::parse([
-            'method' => 'equal',
-            'attribute' => 1,
-            'values' => ['Hello /\\ World']
-        ]);
-
+        $query = Query::parse(Query::equal('1', ['Hello /\\ World'])->toString());
         $this->assertCount(1, $query->getValues());
         $this->assertEquals(1, $query->getAttribute());
         $this->assertEquals(['Hello /\ World'], $query->getValues());
 
-        $query = Query::parse([
-            'method' => 'or',
-            'values' => [
-                ['method' => 'equal', 'attribute' => 'attr1', 'values' => ['Hello']],
-                ['method' => 'equal', 'attribute' => 'attr2', 'values' => ['World']]
-            ]
-        ]);
+        $json = Query::or([
+            Query::equal('actors', ['Brad Pitt']),
+            Query::equal('actors', ['Johnny Depp'])
+        ])->toString();
+
+        $query = Query::parse($json);
 
         /** @var array<Query> $queries */
         $queries = $query->getValues();
-
         $this->assertCount(2, $query->getValues());
         $this->assertEquals(Query::TYPE_OR, $query->getMethod());
         $this->assertEquals(Query::TYPE_EQUAL, $queries[0]->getMethod());
-        $this->assertEquals('attr1', $queries[0]->getAttribute());
+        $this->assertEquals('actors', $queries[0]->getAttribute());
+        $this->assertEquals($json, '{"method":"or","attribute":"","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
     }
 
     public function testisMethod(): void

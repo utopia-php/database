@@ -284,13 +284,21 @@ class Query
 
         if (\in_array($array['method'], self::LOGICAL_TYPES)) {
             foreach ($this->values as $index => $value) {
-                $array['values'][$index] = $this->toArray();
+                $array['values'][$index] = $value->toArray();
             }
         } else {
             $array['values'] = $this->values;
         }
 
         return $array;
+    }
+
+    /**
+     * @return string
+     */
+    public function toString(): string
+    {
+        return json_encode($this->toArray());
     }
 
     /**

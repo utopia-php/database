@@ -315,6 +315,22 @@ class QueryTest extends TestCase
         $this->assertCount(1, $query->getValues());
         $this->assertEquals(1, $query->getAttribute());
         $this->assertEquals(['Hello /\ World'], $query->getValues());
+
+        $query = Query::parse([
+            'method' => 'or',
+            'values' => [
+                ['method' => 'equal', 'attribute' => 'attr1', 'values' => ['Hello']],
+                ['method' => 'equal', 'attribute' => 'attr2', 'values' => ['World']]
+            ]
+        ]);
+
+        /** @var array<Query> $queries */
+        $queries = $query->getValues();
+
+        $this->assertCount(2, $query->getValues());
+        $this->assertEquals(Query::TYPE_OR, $query->getMethod());
+        $this->assertEquals(Query::TYPE_EQUAL, $queries[0]->getMethod());
+        $this->assertEquals('attr1', $queries[0]->getAttribute());
     }
 
     public function testisMethod(): void

@@ -130,7 +130,7 @@ class MariaDB extends SQL
             $sql .= "
 				UNIQUE KEY _uid_tenant (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
-				KEY _updated_at (_tenant, _updatedAt)
+				KEY _updated_at (_tenant, _updatedAt),
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {

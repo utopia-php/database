@@ -84,7 +84,7 @@ services:
 
   proxy:
     # TODO: Release and use official image
-    image: utopia-php/database-proxy-test # Build from https://github.com/utopia-php/database-proxy/
+    image: database-proxy # Build from https://github.com/utopia-php/database-proxy/
     container_name: utopia-proxy
     networks:
       - database

@@ -11,6 +11,7 @@ use Utopia\Fetch\Client;
 use Utopia\Database\Query;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Fetch\FetchException;
 
 abstract class Proxy extends Adapter
 {
@@ -33,12 +34,16 @@ abstract class Proxy extends Adapter
         $this->database = $database;
     }
 
-    private function query(string $action, mixed $body = []): mixed
+    /**
+     * @throws FetchException
+     * @throws DatabaseException
+     * @throws Exception
+     */
+    private function query(string $method, string $path, mixed $body = []): mixed
     {
         $roles = \implode(',', Authorization::getRoles());
         $response = Client::fetch(
-            url: $this->endpoint . '/queries/' . $action,
-            method: 'POST',
+            url: $this->endpoint . $path,
             headers: [
                 'x-utopia-secret' => $this->secret,
                 'x-utopia-database' => $this->database,
@@ -50,8 +55,12 @@ abstract class Proxy extends Adapter
                 'x-utopia-timeout' => self::$timeout ? \strval(self::$timeout) : '',
                 'content-type' => 'application/json'
             ],
+            method: $method,
             body: $body
         );
+
+
+        var_dump($response);
 
         if ($response->getStatusCode() >= 400) {
             if (empty($response->getBody())) {
@@ -86,10 +95,11 @@ abstract class Proxy extends Adapter
      * Ping Database
      *
      * @return bool
+     * @throws DatabaseException|FetchException
      */
     public function ping(): bool
     {
-        return $this->query('ping');
+        return $this->query('GET', '/ping', []);
     }
 
     /**
@@ -98,10 +108,11 @@ abstract class Proxy extends Adapter
      * @param string $name
      *
      * @return bool
+     * @throws DatabaseException|FetchException
      */
     public function create(string $name): bool
     {
-        return $this->query('create', ['name' => $name]);
+        return $this->query('POST', '/databases', ['database' => $name]);
     }
 
     /**
@@ -115,7 +126,15 @@ abstract class Proxy extends Adapter
      */
     public function exists(string $database, ?string $collection): bool
     {
-        return $this->query('exists', ['database' => $database, 'collection' => $collection]);
+        $path = '/databases/' . $database;
+        $body = [];
+
+        if(!empty($collectione)){
+            $path .= '/collections/' . $collection;
+            $body = ['database' => $database];
+        }
+
+        return $this->query('GET', $path, $body);
     }
 
     /**
@@ -127,7 +146,7 @@ abstract class Proxy extends Adapter
      */
     public function delete(string $name): bool
     {
-        return $this->query('delete', ['name' => $name]);
+        return $this->query('DELETE', '/databases/' . $name, []);
     }
 
     /**
@@ -140,7 +159,11 @@ abstract class Proxy extends Adapter
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        return $this->query('createCollection', ['name' => $name, 'attributes' => $attributes, 'indexes' => $indexes]);
+        return $this->query('POST', '/collections', [
+            'collection' => $name,
+            'attributes' => $attributes,
+            'indexes' => $indexes
+        ]);
     }
 
     /**
@@ -152,7 +175,7 @@ abstract class Proxy extends Adapter
      */
     public function deleteCollection(string $id): bool
     {
-        return $this->query('deleteCollection', ['id' => $id]);
+        return $this->query('DELETE', '/collections/' . $id, []);
     }
 
     /**
@@ -168,9 +191,8 @@ abstract class Proxy extends Adapter
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
-        return $this->query('createAttribute', [
-            'collection' => $collection,
-            'id' => $id,
+        return $this->query('POST', '/collections/' . $collection . '/attributes', [
+            'attribute' => $id,
             'type' => $type,
             'size' => $size,
             'signed' => $signed,
@@ -192,9 +214,7 @@ abstract class Proxy extends Adapter
      */
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
-        return $this->query('updateAttribute', [
-            'collection' => $collection,
-            'id' => $id,
+        return $this->query('PUT', '/collections/'.$collection.'/attributes/' . $id, [
             'type' => $type,
             'size' => $size,
             'signed' => $signed,
@@ -212,7 +232,7 @@ abstract class Proxy extends Adapter
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->query('deleteAttribute', ['collection' => $collection, 'id' => $id]);
+        return $this->query('DELETE', '/collections/' . $collection . '/attributes/' . $id, []);
     }
 
     /**
@@ -225,7 +245,7 @@ abstract class Proxy extends Adapter
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        return $this->query('renameAttribute', ['collection' => $collection, 'old' => $old, 'new' => $new]);
+        return $this->query('PATCH', '/collections/' . $collection . '/attributes/' . $old . '/name', ['new' => $new]);
     }
 
     /**
@@ -239,8 +259,7 @@ abstract class Proxy extends Adapter
      */
     public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
-        return $this->query('createRelationship', [
-            'collection' => $collection,
+        return $this->query('POST', '/collections/' . $collection . '/relationships', [
             'relatedCollection' => $relatedCollection,
             'type' => $type,
             'twoWay' => $twoWay,
@@ -264,9 +283,7 @@ abstract class Proxy extends Adapter
      */
     public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        return $this->query('updateRelationship', [
-            'collection' => $collection,
-            'relatedCollection' => $relatedCollection,
+        return $this->query('PUT', '/collections/'. $collection .'/relationships/' . $relatedCollection, [
             'type' => $type,
             'twoWay' => $twoWay,
             'key' => $key,
@@ -290,9 +307,7 @@ abstract class Proxy extends Adapter
      */
     public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
     {
-        return $this->query('deleteRelationship', [
-            'collection' => $collection,
-            'relatedCollection' => $relatedCollection,
+        return $this->query('DELETE', '/collections/'. $collection .'/relationships/' . $relatedCollection, [
             'type' => $type,
             'twoWay' => $twoWay,
             'key' => $key,
@@ -311,7 +326,9 @@ abstract class Proxy extends Adapter
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        return $this->query('renameIndex', ['collection' => $collection, 'old' => $old, 'new' => $new]);
+        return $this->query('PATCH', '/collections/'.$collection.'/indexes/'.$old.'/name',[
+            'new' => $new
+        ]);
     }
 
     /**
@@ -328,7 +345,13 @@ abstract class Proxy extends Adapter
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        return $this->query('createIndex', ['collection' => $collection, 'id' => $id, 'type' => $type, 'attributes' => $attributes, 'lengths' => $lengths, 'orders' => $orders]);
+        return $this->query('POST', '/collections/' . $collection . '/indexes', [
+            'index' => $id,
+            'type' => $type,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders
+        ]);
     }
 
     /**
@@ -341,7 +364,7 @@ abstract class Proxy extends Adapter
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->query('deleteIndex', ['collection' => $collection, 'id' => $id]);
+        return $this->query('DELETE', '/collections/' . $collection . '/indexes/' . $id . '/name', []);
     }
 
     /**
@@ -354,7 +377,7 @@ abstract class Proxy extends Adapter
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        return new Document($this->query('getDocument', ['collection' => $collection, 'id' => $id, 'queries' => $queries]));
+        return new Document($this->query('GET', '/collections/'.$collection.'/documents/' . $id, ['queries' => $queries]));
     }
 
     /**
@@ -364,10 +387,11 @@ abstract class Proxy extends Adapter
      * @param Document $document
      *
      * @return Document
+     * @throws DatabaseException|FetchException
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        return new Document($this->query('createDocument', ['collection' => $collection, 'document' => $document]));
+        return new Document($this->query('POST', '/collections/' . $collection . '/documents', ['document' => $document]));
     }
 
     /**
@@ -377,10 +401,11 @@ abstract class Proxy extends Adapter
      * @param Document $document
      *
      * @return Document
+     * @throws DatabaseException|FetchException
      */
     public function updateDocument(string $collection, Document $document): Document
     {
-        return new Document($this->query('updateDocument', ['collection' => $collection, 'document' => $document]));
+        return new Document($this->query('PUT', '/collections/'. $collection .'/documents', ['document' => $document]));
     }
 
     /**
@@ -393,7 +418,7 @@ abstract class Proxy extends Adapter
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        return $this->query('deleteDocument', ['collection' => $collection, 'id' => $id]);
+        return $this->query('DELETE','/collections/'. $collection .'/documents/' . $id, []);
     }
 
     /**
@@ -415,8 +440,7 @@ abstract class Proxy extends Adapter
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
-        $results = $this->query('find', [
-            'collection' => $collection,
+        $results = $this->query('GET', '/collections/' . $collection . '/documents', [
             'queries' => $queries,
             'limit' => $limit,
             'offset' => $offset,
@@ -446,8 +470,7 @@ abstract class Proxy extends Adapter
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
     {
-        return $this->query('sum', [
-            'collection' => $collection,
+        return $this->query('GET', '/collections/'. $collection .'/documents-sum', [
             'attribute' => $attribute,
             'queries' => $queries,
             'max' => $max,
@@ -466,8 +489,7 @@ abstract class Proxy extends Adapter
      */
     public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
-        return $this->query('count', [
-            'collection' => $collection,
+        return $this->query('GET', '/collections/'. $collection .'/documents-count', [
             'queries' => $queries,
             'max' => $max,
             'timeout' => $timeout
@@ -479,22 +501,11 @@ abstract class Proxy extends Adapter
      *
      * @param string $collection
      * @return int
-     * @throws DatabaseException
+     * @throws DatabaseException|FetchException
      */
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->query('getSizeOfCollection', ['collection' => $collection]);
-    }
-
-    /**
-     * Get current attribute count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getCountOfAttributes(Document $collection): int
-    {
-        return $this->query('getCountOfAttributes', ['collection' => $collection]);
+        return $this->query('GET', '/collections/' . $collection . '/size', []);
     }
 
     /**
@@ -505,6 +516,7 @@ abstract class Proxy extends Adapter
      */
     public function getCountOfIndexes(Document $collection): int
     {
+        //todo: removed...
         return $this->query('getCountOfIndexes', ['collection' => $collection]);
     }
 
@@ -519,6 +531,7 @@ abstract class Proxy extends Adapter
      */
     public function getAttributeWidth(Document $collection): int
     {
+        // todo: removed...
         return $this->query('getAttributeWidth', ['collection' => $collection]);
     }
 
@@ -549,9 +562,7 @@ abstract class Proxy extends Adapter
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
     {
-        return $this->query('increaseDocumentAttribute', [
-            'collection' => $collection,
-            'id' => $id,
+        return $this->query('PATCH', '/collections/'. $collection .'/documents/'. $id .'/increase', [
             'attribute' => $attribute,
             'value' => $value,
             'min' => $min,

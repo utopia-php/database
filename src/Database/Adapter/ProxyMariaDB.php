@@ -184,6 +184,32 @@ class ProxyMariaDB extends Proxy
     }
 
     /**
+     * Get current attribute count from collection document
+     *
+     * @param Document $collection
+     * @return int
+     */
+    public function getCountOfAttributes(Document $collection): int
+    {
+        $attributes = \count($collection->getAttribute('attributes') ?? []);
+
+        // +1 ==> virtual columns count as total, so add as buffer
+        return $attributes + static::getCountOfDefaultAttributes() + 1;
+    }
+
+    /**
+     * Get current index count from collection document
+     *
+     * @param Document $collection
+     * @return int
+     */
+    public function getCountOfIndexes(Document $collection): int
+    {
+        $indexes = \count($collection->getAttribute('indexes') ?? []);
+        return $indexes + static::getCountOfDefaultIndexes();
+    }
+
+    /**
      * Get list of keywords that cannot be used
      *  Refference: https://mariadb.com/kb/en/reserved-words/
      *

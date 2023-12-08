@@ -154,6 +154,10 @@ class SQLite extends MariaDB
         $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
         $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
+		if ($this->shareTables) {
+			$this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
+		}
+
         foreach ($indexes as $index) {
             $indexId = $this->filter($index->getId());
             $indexType = $index->getAttribute('type');

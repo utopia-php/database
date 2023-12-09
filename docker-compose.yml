@@ -90,7 +90,7 @@ services:
       - database
     environment:
       - UTOPIA_DATABASE_PROXY_SECRET=test-secret
-      - UTOPIA_DATABASE_PROXY_SECRET_CONNECTIONS=default=mariadb://root:password@proxy-mariadb:3306/appwrite
+      - UTOPIA_DATABASE_PROXY_SECRET_CONNECTION=mariadb://root:password@proxy-mariadb:3306/appwrite
 
   proxy-mariadb:
     image: mariadb:10.7

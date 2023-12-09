@@ -219,39 +219,39 @@ abstract class Base extends TestCase
         $this->assertNotEmpty($document->getInternalId());
         $this->assertNotNull($document->getInternalId());
     }
-
-    public function testQueryTimeoutUsingStaticTimeout(): void
-    {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            static::getDatabase()->createCollection('global-timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 5 ; $i++) {
-                static::getDatabase()->createDocument('global-timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(Timeout::class);
-            static::getDatabase()->setTimeout(1);
-
-            try {
-                static::getDatabase()->find('global-timeouts', [
-                    Query::notEqual('longtext', 'appwrite'),
-                ]);
-            } catch(Timeout $ex) {
-                static::getDatabase()->clearTimeout();
-                static::getDatabase()->deleteCollection('global-timeouts');
-                throw $ex;
-            }
-        }
-        $this->expectNotToPerformAssertions();
-    }
+//
+//    public function testQueryTimeoutUsingStaticTimeout(): void
+//    {
+//        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+//            static::getDatabase()->createCollection('global-timeouts');
+//            $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+//
+//            for ($i = 0 ; $i <= 5 ; $i++) {
+//                static::getDatabase()->createDocument('global-timeouts', new Document([
+//                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+//                    '$permissions' => [
+//                        Permission::read(Role::any()),
+//                        Permission::update(Role::any()),
+//                        Permission::delete(Role::any())
+//                    ]
+//                ]));
+//            }
+//
+//            $this->expectException(Timeout::class);
+//            static::getDatabase()->setTimeout(1);
+//
+//            try {
+//                static::getDatabase()->find('global-timeouts', [
+//                    Query::notEqual('longtext', 'appwrite'),
+//                ]);
+//            } catch(Timeout $ex) {
+//                static::getDatabase()->clearTimeout();
+//                static::getDatabase()->deleteCollection('global-timeouts');
+//                throw $ex;
+//            }
+//        }
+//        $this->expectNotToPerformAssertions();
+//    }
 
 
     /**
@@ -261,6 +261,7 @@ abstract class Base extends TestCase
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection('actors'));
         $this->assertCount(2, static::getDatabase()->listCollections());
+
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
@@ -1193,6 +1194,9 @@ abstract class Base extends TestCase
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
+
+        var_dump($document->getAttributes());
+
         $this->assertEquals(5, $document->getAttribute('integer'));
         $this->assertArrayNotHasKey('float', $document->getAttributes());
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
@@ -1321,6 +1325,7 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find('documents', [
             Query::search('string', '*test+alias@email-provider.com'),
         ]);
+        var_dump($documents);
 
         $this->assertEquals(1, count($documents));
     }

@@ -59,9 +59,6 @@ abstract class Proxy extends Adapter
             body: $body
         );
 
-
-        var_dump($response);
-
         if ($response->getStatusCode() >= 400) {
             if (empty($response->getBody())) {
                 throw new Exception('Internal ' . $response->getStatusCode() . ' HTTP error in database proxy');
@@ -127,14 +124,13 @@ abstract class Proxy extends Adapter
     public function exists(string $database, ?string $collection): bool
     {
         $path = '/databases/' . $database;
-        $body = [];
 
-        if(!empty($collectione)){
-            $path .= '/collections/' . $collection;
-            $body = ['database' => $database];
+        if(!empty($collection))
+        {
+            $path = '/collections/' . $collection . '?database=' . $database;
         }
 
-        return $this->query('GET', $path, $body);
+        return $this->query('GET', $path, []);
     }
 
     /**
@@ -364,7 +360,7 @@ abstract class Proxy extends Adapter
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->query('DELETE', '/collections/' . $collection . '/indexes/' . $id . '/name', []);
+        return $this->query('DELETE', '/collections/'. $collection .'/indexes/' . $id, []);
     }
 
     /**
@@ -374,10 +370,20 @@ abstract class Proxy extends Adapter
      * @param string $id
      * @param array<Query> $queries
      * @return Document
+     * @throws DatabaseException
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        return new Document($this->query('GET', '/collections/'.$collection.'/documents/' . $id, ['queries' => $queries]));
+        $path = '/collections/' . $collection . '/documents/' . $id;
+
+        $arr = [];
+        foreach ($queries as $query){
+            $arr[] = json_encode($query->jsonSerialize());
+        }
+
+        $path .= '?' . http_build_query(['queries'=> $arr]);
+
+        return new Document($this->query('GET', $path, []));
     }
 
     /**
@@ -440,6 +446,8 @@ abstract class Proxy extends Adapter
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
+
+
         $results = $this->query('GET', '/collections/' . $collection . '/documents', [
             'queries' => $queries,
             'limit' => $limit,
@@ -506,33 +514,6 @@ abstract class Proxy extends Adapter
     public function getSizeOfCollection(string $collection): int
     {
         return $this->query('GET', '/collections/' . $collection . '/size', []);
-    }
-
-    /**
-     * Get current index count from collection document
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getCountOfIndexes(Document $collection): int
-    {
-        //todo: removed...
-        return $this->query('getCountOfIndexes', ['collection' => $collection]);
-    }
-
-    /**
-     * Estimate maximum number of bytes required to store a document in $collection.
-     * Byte requirement varies based on column type and size.
-     * Needed to satisfy MariaDB/MySQL row width limit.
-     * Return 0 when no restrictions apply to row width
-     *
-     * @param Document $collection
-     * @return int
-     */
-    public function getAttributeWidth(Document $collection): int
-    {
-        // todo: removed...
-        return $this->query('getAttributeWidth', ['collection' => $collection]);
     }
 
     /**

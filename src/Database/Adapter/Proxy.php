@@ -446,10 +446,13 @@ abstract class Proxy extends Adapter
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
+        $arr = [];
+        foreach ($queries as $query){
+            $arr[] = json_encode($query->jsonSerialize());
+        }
 
-
-        $results = $this->query('GET', '/collections/' . $collection . '/documents', [
-            'queries' => $queries,
+        $body = [
+            'queries'=> $arr,
             'limit' => $limit,
             'offset' => $offset,
             'orderAttributes' => $orderAttributes,
@@ -457,7 +460,12 @@ abstract class Proxy extends Adapter
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
             'timeout' => $timeout
-        ]);
+        ];
+
+        $path = '/collections/' . $collection . '/documents';
+        $path .= '?' . http_build_query($body);
+
+        $results = $this->query('GET', $path, []);
 
         foreach ($results as $index => $document) {
             $results[$index] = new Document($results[$index]);

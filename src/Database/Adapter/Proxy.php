@@ -69,13 +69,14 @@ abstract class Proxy extends Adapter
             try {
                 $exception = new $error['type']($error['message'], $error['code']);
                 /**
-                 * @var \Utopia\Database\Exception $exception
+                 * @var DatabaseException $exception
                  */
 
                 $exception->setFile($error['file']);
                 $exception->setLine($error['line']);
                 // TODO: If possible in PHP, set trace too for better error reporting
                 // $exception->setTrace($error['trace']);
+
             } catch(Throwable $err) {
                 // Cannot find exception type
                 throw new Exception($error['message'], $error['code']);
@@ -480,18 +481,30 @@ abstract class Proxy extends Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int|null $max
-     *
+     * @param int|string|null $max
+     * @param int|string|null $timeout
      * @return int|float
+     * @throws DatabaseException
+     * @throws FetchException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null, ?int $timeout = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], int|string|null $max = null, int|string|null $timeout = null): float|int
     {
-        return $this->query('GET', '/collections/'. $collection .'/documents-sum', [
+        $arr = [];
+        foreach ($queries as $query){
+            $arr[] = json_encode($query->jsonSerialize());
+        }
+
+        $body = [
             'attribute' => $attribute,
-            'queries' => $queries,
+            'queries' => $arr,
             'max' => $max,
             'timeout' => $timeout
-        ]);
+        ];
+
+        $path = '/collections/'. $collection .'/documents-sum';
+        $path .= '?' . http_build_query($body);
+
+        return $this->query('GET', $path, []);
     }
 
     /**

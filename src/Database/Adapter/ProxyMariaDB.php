@@ -157,8 +157,8 @@ class ProxyMariaDB extends Proxy
      */
     public function getSupportForTimeouts(): bool
     {
-        // todo: make this true and test pass?
-        return false;
+        // todo: make this true for timeout Exceptions
+        return true;
     }
 
     /**

@@ -3739,7 +3739,6 @@ abstract class Base extends TestCase
     {
         $document->setAttribute('$id', 'duplicated');
         static::getDatabase()->createDocument($document->getCollection(), $document);
-
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
     }

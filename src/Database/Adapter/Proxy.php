@@ -505,11 +505,21 @@ abstract class Proxy extends Adapter
      */
     public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
-        return $this->query('GET', '/collections/'. $collection .'/documents-count', [
-            'queries' => $queries,
+        $arr = [];
+        foreach ($queries as $query){
+            $arr[] = json_encode($query->jsonSerialize());
+        }
+
+        $body = [
+            'queries'=> $arr,
             'max' => $max,
             'timeout' => $timeout
-        ]);
+        ];
+
+        $path = '/collections/'. $collection .'/documents-count';
+        $path .= '?' . http_build_query($body);
+
+        return $this->query('GET', $path, []);
     }
 
     /**

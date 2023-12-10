@@ -2960,6 +2960,7 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('year', [2019])]);
+
         $this->assertEquals(2, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('with-dash', ['Works'])]);
         $this->assertEquals(2, $count);
@@ -2998,6 +2999,7 @@ abstract class Base extends TestCase
     public function testSum(): void
     {
         Authorization::setRole('user:x');
+
         $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');

@@ -37,6 +37,15 @@ class QueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid(["this.is.invalid"]));
     }
 
+    public function testInvalidApiCall(): void
+    {
+        $validator = new Queries(); 
+        $queryParams = ['queries' => 100];
+        $isValid = $validator->isValid($queryParams['queries']);
+        $this->assertFalse($isValid);
+        $this->assertStringContainsString('Queries must be an array', $validator->getDescription());
+    }
+
     public function testInvalidMethod(): void
     {
         $validator = new Queries();

@@ -127,7 +127,7 @@ class Queries extends Validator
      */
     public function isArray(): bool
     {
-        return true;
+        return is_array($value);
     }
 
     /**

@@ -520,7 +520,7 @@ class Query
     }
 
     /**
-     * @param array<mixed> $queries
+     * @param array<Query> $queries
      * @return Query
      */
     public static function or(array $queries): self
@@ -529,7 +529,7 @@ class Query
     }
 
     /**
-     * @param array<mixed> $queries
+     * @param array<Query> $queries
      * @return Query
      */
     public static function and(array $queries): self
@@ -654,9 +654,7 @@ class Query
     }
 
     /**
-     * Is isNested
-     *
-     * Function will return true if nested method
+     * Is this query able to contain other queries
      *
      * @return bool
      */

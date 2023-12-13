@@ -71,7 +71,7 @@ $cli
                 return;
         }
 
-        $database->setDefaultDatabase($name);
+        $database->setDatabase($name);
         $database->setNamespace($namespace);
 
         Console::info("For query: greaterThan(created, 2010-01-01 05:00:00)', 'equal(genre,travel)");

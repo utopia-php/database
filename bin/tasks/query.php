@@ -45,7 +45,7 @@ $cli
                 );
 
                 $database = new Database(new Mongo($client), $cache);
-                $database->setDefaultDatabase($name);
+                $database->setDatabase($name);
                 $database->setNamespace($namespace);
                 break;
 
@@ -58,7 +58,7 @@ $cli
                 $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
                 $database = new Database(new MariaDB($pdo), $cache);
-                $database->setDefaultDatabase($name);
+                $database->setDatabase($name);
                 $database->setNamespace($namespace);
                 break;
 
@@ -71,7 +71,7 @@ $cli
                 $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
                 $database = new Database(new MySQL($pdo), $cache);
-                $database->setDefaultDatabase($name);
+                $database->setDatabase($name);
                 $database->setNamespace($namespace);
                 break;
 

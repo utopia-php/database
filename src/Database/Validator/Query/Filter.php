@@ -177,7 +177,7 @@ class Filter extends Base
                 $filters = Query::groupByType($value->getValues())['filters'];
 
                 if(count($value->getValues()) !== count($filters)) {
-                    $this->message = \ucfirst($method) . ' queries requires only filters';
+                    $this->message = \ucfirst($method) . ' queries can only contain filter queries';
                     return false;
                 }
 

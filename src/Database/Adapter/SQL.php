@@ -934,7 +934,7 @@ abstract class SQL extends Adapter
      * @return string
      * @throws Exception
      */
-public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
+    public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
     {
         $conditions = [];
         foreach ($queries as $query) {

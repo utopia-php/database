@@ -287,7 +287,13 @@ class Query
                 $array['values'][$index] = $value->toArray();
             }
         } else {
-            $array['values'] = $this->values;
+            $array['values'] = [];
+            foreach ($this->values as $value){
+                if ($value instanceof Document && in_array($this->method, [self::TYPE_CURSOR_AFTER, self::TYPE_CURSOR_BEFORE])){
+                    $value = $value->getId();
+                }
+                $array['values'][] = $value;
+            }
         }
 
         return $array;
@@ -295,10 +301,15 @@ class Query
 
     /**
      * @return string
+     * @throws QueryException
      */
     public function toString(): string
     {
-        return json_encode($this->toArray());
+        try {
+            return \json_encode($this->toArray(), flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new QueryException('Invalid Json: ' . $e->getMessage());
+        }
     }
 
     /**

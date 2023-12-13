@@ -6,7 +6,6 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Exception\Query as QueryException;
-use PHPUnit\Framework\TestCase;
 
 class QueryTest extends TestCase
 {

@@ -140,20 +140,11 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse([
-            'method' => 'equal',
-            'attribute' => 'name',
-            'values' => ['Iron Man']
-        ])]);
-
+        $response = $validator->isValid([Query::equal('name', ['Iron Man'])]);
         $this->assertEquals(false, $response);
         $this->assertEquals('Invalid query: Attribute not found in schema: name', $validator->getDescription());
 
-        $response = $validator->isValid([Query::parse([
-            'method' => 'orderAsc',
-            'attribute' => 'name',
-        ])]);
-
+        $response = $validator->isValid([Query::orderAsc('name')]);
         $this->assertEquals(false, $response);
         $this->assertEquals('Invalid query: Attribute not found in schema: name', $validator->getDescription());
     }
@@ -165,12 +156,7 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::parse([
-            'method' => 'equal',
-            'attribute' => 'title',
-            'values' => [1776]
-        ])]);
-
+        $response = $validator->isValid([Query::equal('title', [1776])]);
         $this->assertEquals(false, $response);
         $this->assertEquals('Invalid query: Query type does not match expected: string', $validator->getDescription());
     }
@@ -181,6 +167,7 @@ class QueryTest extends TestCase
     public function testQueryDate(): void
     {
         $validator = new Documents($this->attributes, []);
+
         $response = $validator->isValid([Query::greaterThan('birthDay', '1960-01-01 10:10:10')]);
         $this->assertEquals(true, $response);
     }

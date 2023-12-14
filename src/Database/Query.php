@@ -279,7 +279,7 @@ class Query
     {
         $array = ['method' => $this->method];
 
-        if(!empty($this->attribute)){
+        if(!empty($this->attribute)) {
             $array['attribute'] = $this->attribute;
         }
 
@@ -289,8 +289,8 @@ class Query
             }
         } else {
             $array['values'] = [];
-            foreach ($this->values as $value){
-                if ($value instanceof Document && in_array($this->method, [self::TYPE_CURSOR_AFTER, self::TYPE_CURSOR_BEFORE])){
+            foreach ($this->values as $value) {
+                if ($value instanceof Document && in_array($this->method, [self::TYPE_CURSOR_AFTER, self::TYPE_CURSOR_BEFORE])) {
                     $value = $value->getId();
                 }
                 $array['values'][] = $value;

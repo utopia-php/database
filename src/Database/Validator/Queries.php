@@ -71,15 +71,21 @@ class Queries extends Validator
                 }
             }
 
+            if($query->isNested()) {
+                if(!self::isValid($query->getValues())) {
+                    return false;
+                }
+            }
+
             $method = $query->getMethod();
             $methodType = match ($method) {
                 Query::TYPE_SELECT => Base::METHOD_TYPE_SELECT,
                 Query::TYPE_LIMIT => Base::METHOD_TYPE_LIMIT,
                 Query::TYPE_OFFSET => Base::METHOD_TYPE_OFFSET,
-                Query::TYPE_CURSORAFTER,
-                Query::TYPE_CURSORBEFORE => Base::METHOD_TYPE_CURSOR,
-                Query::TYPE_ORDERASC,
-                Query::TYPE_ORDERDESC => Base::METHOD_TYPE_ORDER,
+                Query::TYPE_CURSOR_AFTER,
+                Query::TYPE_CURSOR_BEFORE => Base::METHOD_TYPE_CURSOR,
+                Query::TYPE_ORDER_ASC,
+                Query::TYPE_ORDER_DESC => Base::METHOD_TYPE_ORDER,
                 Query::TYPE_EQUAL,
                 Query::TYPE_NOT_EQUAL,
                 Query::TYPE_LESSER,
@@ -92,7 +98,9 @@ class Queries extends Validator
                 Query::TYPE_BETWEEN,
                 Query::TYPE_STARTS_WITH,
                 Query::TYPE_CONTAINS,
-                Query::TYPE_ENDS_WITH => Base::METHOD_TYPE_FILTER,
+                Query::TYPE_ENDS_WITH,
+                Query::TYPE_AND,
+                Query::TYPE_OR => Base::METHOD_TYPE_FILTER,
                 default => '',
             };
 

@@ -699,6 +699,13 @@ abstract class SQL extends Adapter
             return;
         }
 
+        if($query->isNested()) {
+            foreach ($query->getValues() as $value) {
+                $this->bindConditionValue($stmt, $value);
+            }
+            return;
+        }
+
         foreach ($query->getValues() as $key => $value) {
             $value = match ($query->getMethod()) {
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
@@ -912,5 +919,39 @@ abstract class SQL extends Adapter
     public function getMaxIndexLength(): int
     {
         return 768;
+    }
+
+    /**
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    abstract protected function getSQLCondition(Query $query): string;
+
+    /**
+     * @param array<Query> $queries
+     * @param string $separator
+     * @return string
+     * @throws Exception
+     */
+    public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
+    {
+        $conditions = [];
+        foreach ($queries as $query) {
+
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
+            /* @var $query Query */
+            if($query->isNested()) {
+                $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
+            } else {
+                $conditions[] = $this->getSQLCondition($query);
+            }
+        }
+
+        $tmp = implode(' '. $separator .' ', $conditions);
+        return empty($tmp) ? '' : '(' . $tmp . ')';
     }
 }

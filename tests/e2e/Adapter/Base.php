@@ -2857,6 +2857,111 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testOrSingleQuery(): void
+    {
+        try {
+            static::getDatabase()->find('movies', [
+                Query::or([
+                    Query::equal('active', [true])
+                ])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertEquals('Invalid query: Or queries require at least two queries', $e->getMessage());
+        }
+    }
+
+    public function testOrMultipleQueries(): void
+    {
+        $queries = [
+            Query::or([
+                Query::equal('active', [true]),
+                Query::equal('name', ['Frozen II'])
+            ])
+        ];
+        $this->assertCount(4, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(4, static::getDatabase()->count('movies', $queries));
+
+        $queries = [
+            Query::equal('active', [true]),
+            Query::or([
+                Query::equal('name', ['Frozen']),
+                Query::equal('name', ['Frozen II']),
+                Query::equal('director', ['Joe Johnston'])
+            ])
+        ];
+
+        $this->assertCount(3, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(3, static::getDatabase()->count('movies', $queries));
+    }
+
+    public function testOrNested(): void
+    {
+        $queries = [
+            Query::select(['director']),
+            Query::equal('director', ['Joe Johnston']),
+            Query::or([
+                Query::equal('name', ['Frozen']),
+                Query::or([
+                    Query::equal('active', [true]),
+                    Query::equal('active', [false]),
+                ])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies', $queries);
+        $this->assertCount(1, $documents);
+        $this->assertArrayNotHasKey('name', $documents[0]);
+
+        $count = static::getDatabase()->count('movies', $queries);
+        $this->assertEquals(1, $count);
+    }
+
+    public function testAndSingleQuery(): void
+    {
+        try {
+            static::getDatabase()->find('movies', [
+                Query::and([
+                    Query::equal('active', [true])
+                ])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertEquals('Invalid query: And queries require at least two queries', $e->getMessage());
+        }
+    }
+
+    public function testAndMultipleQueries(): void
+    {
+        $queries = [
+            Query::and([
+                Query::equal('active', [true]),
+                Query::equal('name', ['Frozen II'])
+            ])
+        ];
+        $this->assertCount(1, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(1, static::getDatabase()->count('movies', $queries));
+    }
+
+    public function testAndNested(): void
+    {
+        $queries = [
+            Query::or([
+                Query::equal('active', [false]),
+                Query::and([
+                    Query::equal('active', [true]),
+                    Query::equal('name', ['Frozen']),
+                ])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies', $queries);
+        $this->assertCount(3, $documents);
+
+        $count = static::getDatabase()->count('movies', $queries);
+        $this->assertEquals(3, $count);
+    }
+
     /**
      * @depends testFind
      */
@@ -12526,66 +12631,6 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::search('string', null),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::notEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {

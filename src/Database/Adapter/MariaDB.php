@@ -1580,13 +1580,10 @@ class MariaDB extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
         }
-
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
@@ -1709,8 +1706,9 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if (Authorization::$status) {
@@ -1880,7 +1878,7 @@ class MariaDB extends SQL
         return \implode(', ', $selections);
     }
 
-    /*
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1902,6 +1900,17 @@ class MariaDB extends SQL
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()) {
+            case Query::TYPE_OR:
+            case Query::TYPE_AND:
+                $conditions = [];
+                /* @var $q Query */
+                foreach ($query->getValue() as $q) {
+                    $conditions[] = $this->getSQLCondition($q);
+                }
+
+                $method = strtoupper($query->getMethod());
+                return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
+
             case Query::TYPE_SEARCH:
                 return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
@@ -1917,8 +1926,7 @@ class MariaDB extends SQL
                 foreach ($query->getValues() as $key => $value) {
                     $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
                 }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
+                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }
 

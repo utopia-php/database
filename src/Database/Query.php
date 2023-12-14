@@ -277,10 +277,11 @@ class Query
      */
     public function toArray(): array
     {
-        $array = [
-            'method' => $this->method,
-            'attribute' => $this->attribute,
-        ];
+        $array = ['method' => $this->method];
+
+        if(!empty($this->attribute)){
+            $array['attribute'] = $this->attribute;
+        }
 
         if (\in_array($array['method'], self::LOGICAL_TYPES)) {
             foreach ($this->values as $index => $value) {

@@ -211,7 +211,7 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_OR, $query->getMethod());
         $this->assertEquals(Query::TYPE_EQUAL, $queries[0]->getMethod());
         $this->assertEquals('actors', $queries[0]->getAttribute());
-        $this->assertEquals($json, '{"method":"or","attribute":"","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
+        $this->assertEquals($json, '{"method":"or","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
     }
 
     public function testisMethod(): void
@@ -235,6 +235,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('between'));
         $this->assertTrue(Query::isMethod('select'));
         $this->assertTrue(Query::isMethod('or'));
+        $this->assertTrue(Query::isMethod('and'));
 
         $this->assertTrue(Query::isMethod(Query::TYPE_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_NOT_EQUAL));
@@ -255,6 +256,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_AND));
 
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));

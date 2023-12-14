@@ -317,6 +317,6 @@ class QueryTest extends TestCase
                 )]
         ));
 
-        $this->assertEquals('Invalid query: Or queries requires only filters', $validator->getDescription());
+        $this->assertEquals('Invalid query: Or queries can only contain filter queries', $validator->getDescription());
     }
 }

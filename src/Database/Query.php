@@ -414,10 +414,10 @@ class Query
      * Helper method to create Query with search method
      *
      * @param string $attribute
-     * @param string|int|float|bool $value
+     * @param string $value
      * @return Query
      */
-    public static function search(string $attribute, string|int|float|bool $value): self
+    public static function search(string $attribute, string $value): self
     {
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
     }

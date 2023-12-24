@@ -525,25 +525,35 @@ class Postgres extends SQL
         $relatedTable = $this->getSQLTable($relatedName);
         $key = $this->filter($key);
 
+        $sql = '';
+
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                    }
+                }
+                else if ($side === Database::RELATION_SIDE_CHILD) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                    }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
-                } else {
+                } elseif ($twoWay) {
                     $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                } else {
+                if ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                } elseif ($twoWay) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -562,6 +572,10 @@ class Postgres extends SQL
                 break;
             default:
                 throw new DatabaseException('Invalid relationship type');
+        }
+
+        if (empty($sql)) {
+            return true;
         }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);

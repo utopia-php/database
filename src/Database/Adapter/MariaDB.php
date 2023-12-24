@@ -532,9 +532,17 @@ class MariaDB extends SQL
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                    }
+                }
+                else if ($side === Database::RELATION_SIDE_CHILD) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                    }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -545,9 +553,9 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                if ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
-                } else {
+                } elseif ($twoWay) {
                     $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
                 }
                 break;

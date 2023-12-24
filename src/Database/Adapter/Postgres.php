@@ -534,8 +534,7 @@ class Postgres extends SQL
                     if ($twoWay) {
                         $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
                     }
-                }
-                else if ($side === Database::RELATION_SIDE_CHILD) {
+                } elseif ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
                     if ($twoWay) {
                         $sql .= "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";

@@ -24,9 +24,9 @@ class QueryTest extends TestCase
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals('Iron Man', $query->getValues()[0]);
 
-        $query = new Query(Query::TYPE_ORDERDESC, 'score');
+        $query = new Query(Query::TYPE_ORDER_DESC, 'score');
 
-        $this->assertEquals(Query::TYPE_ORDERDESC, $query->getMethod());
+        $this->assertEquals(Query::TYPE_ORDER_DESC, $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
@@ -56,7 +56,7 @@ class QueryTest extends TestCase
 
         $query = Query::orderAsc('score');
 
-        $this->assertEquals(Query::TYPE_ORDERASC, $query->getMethod());
+        $this->assertEquals(Query::TYPE_ORDER_ASC, $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
@@ -69,7 +69,7 @@ class QueryTest extends TestCase
         $cursor = new Document();
         $query = Query::cursorAfter($cursor);
 
-        $this->assertEquals(Query::TYPE_CURSORAFTER, $query->getMethod());
+        $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([$cursor], $query->getValues());
 
@@ -446,12 +446,12 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_CONTAINS));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SEARCH));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDERASC));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDERDESC));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_ASC));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_DESC));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_LIMIT));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OFFSET));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORAFTER));
-        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSORBEFORE));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSOR_AFTER));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSOR_BEFORE));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));

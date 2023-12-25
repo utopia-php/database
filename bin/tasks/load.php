@@ -57,7 +57,7 @@ $cli
                     $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
                     $database = new Database(new MariaDB($pdo), $cache);
-                    $database->setDefaultDatabase($name);
+                    $database->setDatabase($name);
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
@@ -90,7 +90,7 @@ $cli
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
-                            $database->setDefaultDatabase($name);
+                            $database->setDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
@@ -117,7 +117,7 @@ $cli
                     $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
                     $database = new Database(new MySQL($pdo), $cache);
-                    $database->setDefaultDatabase($name);
+                    $database->setDatabase($name);
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
@@ -151,7 +151,7 @@ $cli
                             $pdo = $pool->get();
 
                             $database = new Database(new MySQL($pdo), $cache);
-                            $database->setDefaultDatabase($name);
+                            $database->setDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
@@ -179,7 +179,7 @@ $cli
                     );
 
                     $database = new Database(new Mongo($client), $cache);
-                    $database->setDefaultDatabase($name);
+                    $database->setDatabase($name);
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
@@ -190,10 +190,10 @@ $cli
 
                     $start = microtime(true);
 
-                    for ($i=0; $i < $limit/1000; $i++) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
                         go(function () use ($client, $faker, $name, $namespace, $cache) {
                             $database = new Database(new Mongo($client), $cache);
-                            $database->setDefaultDatabase($name);
+                            $database->setDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
@@ -228,8 +228,8 @@ $cli
 
 function createSchema(Database $database): void
 {
-    if ($database->exists($database->getDefaultDatabase())) {
-        $database->delete($database->getDefaultDatabase());
+    if ($database->exists($database->getDatabase())) {
+        $database->delete($database->getDatabase());
     }
     $database->create();
 

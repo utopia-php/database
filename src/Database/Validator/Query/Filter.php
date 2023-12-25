@@ -172,6 +172,22 @@ class Filter extends Base
             case Query::TYPE_IS_NOT_NULL:
                 return $this->isValidAttributeAndValues($attribute, $value->getValues());
 
+            case Query::TYPE_OR:
+            case Query::TYPE_AND:
+                $filters = Query::groupByType($value->getValues())['filters'];
+
+                if(count($value->getValues()) !== count($filters)) {
+                    $this->message = \ucfirst($method) . ' queries can only contain filter queries';
+                    return false;
+                }
+
+                if(count($filters) < 2) {
+                    $this->message = \ucfirst($method) . ' queries require at least two queries';
+                    return false;
+                }
+
+                return true;
+
             default:
                 return false;
         }

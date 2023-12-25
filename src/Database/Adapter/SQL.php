@@ -48,43 +48,41 @@ abstract class SQL extends Adapter
      * @param string $database
      * @param string|null $collection
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function exists(string $database, ?string $collection): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
 
         if (!\is_null($collection)) {
             $collection = $this->filter($collection);
-
-            $select = 'TABLE_NAME';
-            $from = 'INFORMATION_SCHEMA.TABLES';
-            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
-            $match = "{$this->getNamespace()}_{$collection}";
-        } else {
-            $select = 'SCHEMA_NAME';
-            $from = 'INFORMATION_SCHEMA.SCHEMATA';
-            $where = 'SCHEMA_NAME = :schema';
-            $match = $database;
-        }
-
-        $stmt = $this->getPDO()
-            ->prepare("SELECT {$select}
-                FROM {$from}
-                WHERE {$where};");
-
-        $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
-
-        if (!\is_null($collection)) {
+            $stmt = $this->getPDO()->prepare("
+                SELECT TABLE_NAME 
+                FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_SCHEMA = :schema 
+                  AND TABLE_NAME = :table
+            ");
+            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
             $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+        } else {
+            $stmt = $this->getPDO()->prepare("
+                SELECT SCHEMA_NAME FROM
+                INFORMATION_SCHEMA.SCHEMATA
+                WHERE SCHEMA_NAME = :schema
+            ");
+            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
-        return (($document[$select] ?? '') === $match) || // case insensitive check
-            (($document[strtolower($select)] ?? '') === $match);
+        if (empty($document)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -109,23 +107,36 @@ abstract class SQL extends Adapter
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
-
         $selections = $this->getAttributeSelections($queries);
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT {$this->getAttributeProjection($selections)} 
+        $sql = "
+		    SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid;
-        ");
+            WHERE _uid = :_uid 
+		";
+
+        if ($this->shareTables) {
+            $sql .= "AND _tenant = :_tenant";
+        }
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
+
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->getTenant());
+        }
+
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         if (empty($document)) {
             return new Document([]);
         }
+
+        $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
             $document['$internalId'] = $document['_id'];
@@ -134,6 +145,10 @@ abstract class SQL extends Adapter
         if (\array_key_exists('_uid', $document)) {
             $document['$id'] = $document['_uid'];
             unset($document['_uid']);
+        }
+        if (\array_key_exists('_tenant', $document)) {
+            $document['$tenant'] = $document['_tenant'];
+            unset($document['_tenant']);
         }
         if (\array_key_exists('_createdAt', $document)) {
             $document['$createdAt'] = $document['_createdAt'];
@@ -267,7 +282,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultAttributes(): int
     {
-        return 4;
+        return \count(Database::INTERNAL_ATTRIBUTES);
     }
 
     /**
@@ -277,7 +292,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultIndexes(): int
     {
-        return 5;
+        return \count(Database::INTERNAL_INDEXES);
     }
 
     /**
@@ -312,34 +327,20 @@ abstract class SQL extends Adapter
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
-                    switch (true) {
-                        case ($attribute['size'] > 16777215):
-                            // 8 bytes length + 4 bytes for LONGTEXT
-                            $total += 12;
-                            break;
-
-                        case ($attribute['size'] > 65535):
-                            // 8 bytes length + 3 bytes for MEDIUMTEXT
-                            $total += 11;
-                            break;
-
-                        case ($attribute['size'] > $this->getMaxVarcharLength()):
-                            // 8 bytes length + 2 bytes for TEXT
-                            $total += 10;
-                            break;
-
-                        case ($attribute['size'] > 255):
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += ($attribute['size'] * 4) + 2;
-                            break;
-
-                        default:
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += ($attribute['size'] * 4) + 1;
-                            break;
-                    }
+                    $total += match (true) {
+                        // 8 bytes length + 4 bytes for LONGTEXT
+                        $attribute['size'] > 16777215 => 12,
+                        // 8 bytes length + 3 bytes for MEDIUMTEXT
+                        $attribute['size'] > 65535 => 11,
+                        // 8 bytes length + 2 bytes for TEXT
+                        $attribute['size'] > $this->getMaxVarcharLength() => 10,
+                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
+                        // 8 bytes length + 2 bytes for VARCHAR(>255)
+                        $attribute['size'] > 255 => ($attribute['size'] * 4) + 2,
+                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
+                        // 8 bytes length + 1 bytes for VARCHAR(<=255)
+                        default => ($attribute['size'] * 4) + 1,
+                    };
                     break;
 
                 case Database::VAR_INTEGER:
@@ -698,6 +699,13 @@ abstract class SQL extends Adapter
             return;
         }
 
+        if($query->isNested()) {
+            foreach ($query->getValues() as $value) {
+                $this->bindConditionValue($stmt, $value);
+            }
+            return;
+        }
+
         foreach ($query->getValues() as $key => $value) {
             $value = match ($query->getMethod()) {
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
@@ -838,26 +846,19 @@ abstract class SQL extends Adapter
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-        return "table_main._uid IN (
-                    SELECT distinct(_document)
-                    FROM {$this->getSQLTable($collection . '_perms')}
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = 'read'
-                )";
-    }
 
-    /**
-     * Get SQL schema
-     *
-     * @return string
-     */
-    protected function getSQLSchema(): string
-    {
-        if (!$this->getSupportForSchemas()) {
-            return '';
+        $tenantQuery = '';
+        if ($this->shareTables) {
+            $tenantQuery = 'AND _tenant = :_tenant';
         }
 
-        return "`{$this->getDefaultDatabase()}`.";
+        return "table_main._uid IN (
+                    SELECT _document
+                    FROM {$this->getSQLTable($collection . '_perms')}
+                    WHERE _permission IN (" . implode(', ', $roles) . ")
+                      AND _type = 'read'
+                      {$tenantQuery}
+                )";
     }
 
     /**
@@ -868,7 +869,7 @@ abstract class SQL extends Adapter
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
+        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$name}`";
     }
 
     /**
@@ -920,5 +921,39 @@ abstract class SQL extends Adapter
     public function getMaxIndexLength(): int
     {
         return 768;
+    }
+
+    /**
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    abstract protected function getSQLCondition(Query $query): string;
+
+    /**
+     * @param array<Query> $queries
+     * @param string $separator
+     * @return string
+     * @throws Exception
+     */
+    public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
+    {
+        $conditions = [];
+        foreach ($queries as $query) {
+
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
+            /* @var $query Query */
+            if($query->isNested()) {
+                $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
+            } else {
+                $conditions[] = $this->getSQLCondition($query);
+            }
+        }
+
+        $tmp = implode(' '. $separator .' ', $conditions);
+        return empty($tmp) ? '' : '(' . $tmp . ')';
     }
 }

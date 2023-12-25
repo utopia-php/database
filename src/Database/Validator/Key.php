@@ -48,6 +48,10 @@ class Key extends Validator
             return false;
         }
 
+        if ($value === '') {
+            return false;
+        }
+
         // no leading special characters
         $leading = \mb_substr($value, 0, 1);
         if ($leading === '_' || $leading === '.' || $leading === '-') {

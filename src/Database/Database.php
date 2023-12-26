@@ -2734,10 +2734,10 @@ class Database
             throw new InvalidArgumentException($validator->getDescription());
         }
 
-        // $structure = new Structure($collection);
-        // if (!$structure->isValid($document)) {
-        //     throw new StructureException($structure->getDescription());
-        // }
+         $structure = new Structure($collection);
+         if (!$structure->isValid($document)) {
+             throw new StructureException($structure->getDescription());
+         }
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
@@ -2792,10 +2792,10 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            // $validator = new Structure($collection);
-            // if (!$validator->isValid($document)) {
-            //     throw new StructureException($validator->getDescription());
-            // }
+            $validator = new Structure($collection);
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
 
             $documents[$key] = $document;
         }

@@ -23,6 +23,12 @@ class FilterTest extends TestCase
                     'type' => Database::VAR_STRING,
                     'array' => false,
                 ]),
+                new Document([
+                    '$id' => 'attr_array',
+                    'key' => 'attr_array',
+                    'type' => Database::VAR_STRING,
+                    'array' => true,
+                ]),
             ],
         );
     }
@@ -34,7 +40,7 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::isNull('attr')));
         $this->assertTrue($this->validator->isValid(Query::startsWith('attr', 'super')));
         $this->assertTrue($this->validator->isValid(Query::endsWith('attr', 'man')));
-        $this->assertTrue($this->validator->isValid(Query::contains('attr', ['super'])));
+        $this->assertTrue($this->validator->isValid(Query::contains('attr_array', ['super'])));
     }
 
     public function testFailure(): void
@@ -57,6 +63,7 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::orderDesc('attr')));
         $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
         $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(Query::contains('attr', ['super'])));
     }
 
     public function testEmptyValues(): void

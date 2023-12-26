@@ -1592,6 +1592,100 @@ abstract class Base extends TestCase
 
 
     /**
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws ConflictException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     */
+    public function testArrayAttribute(): array
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        $collection = 'json';
+        $permissions = [Permission::read(Role::any())];
+
+        static::getDatabase()->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'age',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: true,
+        ));
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'active',
+            Database::VAR_BOOLEAN,
+            size: 0,
+            required: true,
+            array: true
+        ));
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'names',
+            Database::VAR_STRING,
+            size: 50,
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'numbers',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: false,
+            signed: false,
+            array: true
+        ));
+
+        try {
+            static::getDatabase()->createDocument($collection, new Document([]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Missing required attribute "active"', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument($collection, new Document([
+                'active' => [false],
+                'names' => ['Joe', 100],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 50 chars', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument($collection, new Document([
+                'active' => [false],
+                'numbers' => [-100],
+                'age' => [-20],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Should fails since it is Signed is false!', $e->getMessage());
+        }
+
+        $document = static::getDatabase()->createDocument($collection, new Document([
+            '$permissions' => $permissions,
+            'names' => ['Joe Baden', 'Antony Blinken', '100'],
+            'numbers' => [0, -100, 999, 10.4],
+        ]));
+
+        var_dump($document);
+        $this->assertEquals(0,1);
+
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function testFind(): array
@@ -1971,11 +2065,15 @@ abstract class Base extends TestCase
 
         $this->assertEquals(0, count($documents));
 
-        $this->expectException(DatabaseException::class);
-
-        static::getDatabase()->find('movies', [
-            Query::contains('name', ['Frozen']),
-        ]);
+        try {
+            static::getDatabase()->find('movies', [
+                Query::contains('name', ['Frozen']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid query: Cannot query contains on attribute "name" because it is not an array.', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
     }
 
     public function testFindFulltext(): void

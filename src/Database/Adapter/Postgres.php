@@ -86,11 +86,13 @@ class Postgres extends SQL
 
         foreach ($attributes as &$attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'TEXT';
-            }
+            $attrType = $this->getSQLType(
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
+            );
 
             $attribute = "\"{$attrId}\" {$attrType}, ";
         }
@@ -261,11 +263,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'JSONB';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         $sql = "
 			ALTER TABLE {$this->getSQLTable($name)}
@@ -350,11 +348,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'JSONB';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -1937,8 +1931,12 @@ class Postgres extends SQL
      *
      * @return string
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
+        if($array === true){
+            return 'JSONB';
+        }
+
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes

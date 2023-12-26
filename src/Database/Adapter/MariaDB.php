@@ -83,11 +83,13 @@ class MariaDB extends SQL
 
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'LONGTEXT';
-            }
+            $attrType = $this->getSQLType(
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
+            );
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
@@ -268,7 +270,7 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($array) {
             $type = 'JSON';
@@ -299,11 +301,7 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'JSON';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
 
@@ -1609,7 +1607,6 @@ class MariaDB extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
@@ -1943,11 +1940,16 @@ class MariaDB extends SQL
      * @param string $type
      * @param int $size
      * @param bool $signed
+     * @param bool $array
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
+        if($array === true){
+            return 'JSON';
+        }
+
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes

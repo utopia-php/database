@@ -106,7 +106,6 @@ class SQLite extends MariaDB
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
         try {
@@ -124,12 +123,9 @@ class SQLite extends MariaDB
             $attrType = $this->getSQLType(
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
-                $attribute->getAttribute('signed', true)
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
             );
-
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'LONGTEXT';
-            }
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }

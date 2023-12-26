@@ -85,7 +85,7 @@ $cli
                     );
 
                     // A coroutine is assigned per 1000 documents
-                    for ($i=0; $i < $limit/1000; $i++) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
                         \go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
@@ -94,7 +94,7 @@ $cli
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 createDocument($database, $faker);
                             }
 
@@ -146,7 +146,7 @@ $cli
                     );
 
                     // A coroutine is assigned per 1000 documents
-                    for ($i=0; $i < $limit/1000; $i++) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
                         \go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
@@ -155,7 +155,7 @@ $cli
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 createDocument($database, $faker);
                             }
 
@@ -197,7 +197,7 @@ $cli
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 createDocument($database, $faker);
                             }
 

@@ -143,8 +143,18 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                if(!$this->isValidAttributeAndValues($attribute, $value->getValues())) {
+                    return false;
+                }
 
+                if(Query::TYPE_CONTAINS === $method) {
+                    if($this->schema[$attribute]['array'] === false) {
+                        $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array.';
+                        return false;
+                    }
+                }
+
+                return true;
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
             case Query::TYPE_LESSER_EQUAL:

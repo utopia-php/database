@@ -1175,6 +1175,9 @@ class Database
                 if ($size > $this->adapter->getLimitForString()) {
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
+                else if ($size < 1) {
+                    throw new DatabaseException('Min size is 1');
+                }
                 break;
 
             case self::VAR_INTEGER:
@@ -4559,6 +4562,8 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
+        /**  @var array<Query> $queries */
+
         $queries = \array_merge(
             $selects,
             self::convertQueries($collection, $filters)
@@ -4569,16 +4574,17 @@ class Database
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
-                case Query::TYPE_CONTAINS:
-                    $attribute = $query->getAttribute();
-                    foreach ($collection->getAttribute('attributes', []) as $attr) {
-                        $key = $attr->getAttribute('key', $attr->getAttribute('$id'));
-                        $array = $attr->getAttribute('array', false);
-                        if ($key === $attribute && !$array) {
-                            throw new DatabaseException('Cannot query contains on attribute "' . $attribute . '" because it is not an array.');
-                        }
-                    }
-                    break;
+                // todo: moved to validator....
+                //                case Query::TYPE_CONTAINS:
+                //                    $attribute = $query->getAttribute();
+                //                    foreach ($collection->getAttribute('attributes', []) as $attr) {
+                //                        $key = $attr->getAttribute('key', $attr->getAttribute('$id'));
+                //                        $array = $attr->getAttribute('array', false);
+                //                        if ($key === $attribute && !$array) {
+                //                            throw new DatabaseException('Cannot query contains on attribute "' . $attribute . '" because it is not an array.');
+                //                        }
+                //                    }
+                //                    break;
                 case Query::TYPE_SELECT:
                     $values = $query->getValues();
                     foreach ($values as $valueIndex => $value) {

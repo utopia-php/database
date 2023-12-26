@@ -98,11 +98,11 @@ $cli
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
-		Console::info("contains('tags', ['tag1'])");
-		$start = microtime(true);
-		$database->createIndex('articles', 'tags', Database::INDEX_KEY, ['tags']);
-		$time = microtime(true) - $start;
-		Console::success("{$time} seconds");
+        Console::info("contains('tags', ['tag1'])");
+        $start = microtime(true);
+        $database->createIndex('articles', 'tags', Database::INDEX_KEY, ['tags']);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
     });
 
 $cli

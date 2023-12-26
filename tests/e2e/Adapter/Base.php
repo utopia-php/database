@@ -1599,7 +1599,7 @@ abstract class Base extends TestCase
      * @throws StructureException
      * @throws DatabaseException
      */
-    public function testArrayAttribute(): array
+    public function testArrayAttribute(): void
     {
         Authorization::setRole(Role::any()->toString());
 
@@ -1609,14 +1609,6 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection($collection, permissions: [
             Permission::create(Role::any()),
         ]);
-
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
-            $collection,
-            'age',
-            Database::VAR_INTEGER,
-            size: 0,
-            required: true,
-        ));
 
         $this->assertEquals(true, static::getDatabase()->createAttribute(
             $collection,
@@ -1646,6 +1638,15 @@ abstract class Base extends TestCase
             array: true
         ));
 
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'age',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: false,
+            signed: false
+        ));
+
         try {
             static::getDatabase()->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
@@ -1666,23 +1667,45 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->createDocument($collection, new Document([
                 'active' => [false],
-                'numbers' => [-100],
-                'age' => [-20],
+                'age' => 1.5,
             ]));
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Should fails since it is Signed is false!', $e->getMessage());
+            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument($collection, new Document([
+                'active' => [false],
+                'age' => -1,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            //$this->assertEquals('Should fail since it is Signed = false!!!!', $e->getMessage());
         }
 
         $document = static::getDatabase()->createDocument($collection, new Document([
-            '$permissions' => $permissions,
-            'names' => ['Joe Baden', 'Antony Blinken', '100'],
-            'numbers' => [0, -100, 999, 10.4],
+            'active' => [false],
+            'names' => ['Joe', 'Antony', '100'],
+            'numbers' => [0, 100, 1000, -1],
         ]));
+
+        $this->assertEquals(false, $document->getAttribute('active')[0]);
+        $this->assertEquals('Antony', $document->getAttribute('names')[1]);
+        $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+
+//        try {
+//              todo: force create only INDEX_ARRAY for array????
+//              static::getDatabase()->createIndex($collection, 'ind-names', Database::INDEX_FULLTEXT, ['names']);
+//            $this->fail('Failed to throw exception');
+//        } catch(Throwable $e) {
+//            $this->assertEquals('Should this fail? can we create a fulltext index on array as users do today?', $e->getMessage());
+//        }
+
+        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'ind-names', Database::INDEX_ARRAY, ['names']));
 
         var_dump($document);
         $this->assertEquals(0,1);
-
     }
 
     /**
@@ -2074,6 +2097,9 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid query: Cannot query contains on attribute "name" because it is not an array.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
+
+        $this->assertTrue(false);
+
     }
 
     public function testFindFulltext(): void

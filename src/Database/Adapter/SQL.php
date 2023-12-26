@@ -230,6 +230,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForIndexArray(): bool
+    {
+        return true;
+    }
+
+    /**
      * Is unique index supported?
      *
      * @return bool

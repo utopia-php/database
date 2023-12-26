@@ -1606,6 +1606,7 @@ class MariaDB extends SQL
             {$sqlLimit};
         ";
 
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
         $stmt = $this->getPDO()->prepare($sql);
 

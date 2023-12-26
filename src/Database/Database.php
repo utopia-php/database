@@ -2366,6 +2366,11 @@ class Database
                 }
                 break;
 
+            case self::INDEX_ARRAY:
+                if (!$this->adapter->getSupportForIndexArray()) {
+                    throw new DatabaseException('Key index array is not supported');
+                }
+                break;
             default:
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }

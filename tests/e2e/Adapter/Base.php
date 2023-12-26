@@ -1685,6 +1685,7 @@ abstract class Base extends TestCase
         }
 
         $document = static::getDatabase()->createDocument($collection, new Document([
+            '$permissions' => $permissions,
             'active' => [false],
             'names' => ['Joe', 'Antony', '100'],
             'numbers' => [0, 100, 1000, -1],
@@ -1702,10 +1703,19 @@ abstract class Base extends TestCase
 //            $this->assertEquals('Should this fail? can we create a fulltext index on array as users do today?', $e->getMessage());
 //        }
 
-        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'ind-names', Database::INDEX_ARRAY, ['names']));
+        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'index-names', Database::INDEX_ARRAY, ['names']));
 
-        var_dump($document);
-        $this->assertEquals(0,1);
+        if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+            $documents = static::getDatabase()->find($collection, [
+                Query::contains('names', ['Jake', 'Joe'])
+            ]);
+
+            $this->assertCount(1, $documents);
+
+            var_dump($documents);
+            $this->assertEquals(true,false);
+        }
+
     }
 
     /**

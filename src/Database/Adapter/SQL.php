@@ -955,7 +955,6 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            /* @var $query Query */
             if($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
             } else {

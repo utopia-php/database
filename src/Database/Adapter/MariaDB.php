@@ -1926,6 +1926,14 @@ class MariaDB extends SQL
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
+
+
+//                $conditions = [];
+//                foreach ($query->getValues() as $key => $value) {
+//                    $conditions[] = "JSON_CONTAINS(`table_main`.{$attribute}, :{$placeholder}_{$key})";
+//                }
+//                $condition = implode(' OR ', $conditions);
+//                return empty($condition) ? '' : '(' . $condition . ')';
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {

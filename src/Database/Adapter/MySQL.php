@@ -31,7 +31,7 @@ class MySQL extends MariaDB
                 $type = 'INDEX';
 
                 foreach ($attributes as $key => $value) {
-                    $attributes[$key] = '(CAST(' . $value . ' AS char(255) ARRAY))';
+                    $attributes[$key] = '(CAST(`' . $value . '` AS char(255) ARRAY))';
                 }
                 break;
 

@@ -1623,7 +1623,7 @@ abstract class Base extends TestCase
             $collection,
             'names',
             Database::VAR_STRING,
-            size: 50,
+            size: 255,
             required: false,
             array: true
         ));
@@ -1661,7 +1661,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 50 chars', $e->getMessage());
+            $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
         }
 
         try {
@@ -1703,7 +1703,9 @@ abstract class Base extends TestCase
 //            $this->assertEquals('Should this fail? can we create a fulltext index on array as users do today?', $e->getMessage());
 //        }
 
-        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'index-names', Database::INDEX_ARRAY, ['names']));
+        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-numbers', Database::INDEX_ARRAY, ['numbers'], [], []));
+
+        //$this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-names', Database::INDEX_ARRAY, ['age', 'names'], [], ['asc', 'desc']));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             $documents = static::getDatabase()->find($collection, [

@@ -268,16 +268,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.31.1",
+            "version": "0.32.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "e50d2d16f4bc31319043f3f6d3dbea36c6fd6b68"
+                "reference": "ad6f7e6d6b38cf5bed4e3af9a1394c59d4bb9225"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/e50d2d16f4bc31319043f3f6d3dbea36c6fd6b68",
-                "reference": "e50d2d16f4bc31319043f3f6d3dbea36c6fd6b68",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/ad6f7e6d6b38cf5bed4e3af9a1394c59d4bb9225",
+                "reference": "ad6f7e6d6b38cf5bed4e3af9a1394c59d4bb9225",
                 "shasum": ""
             },
             "require": {
@@ -307,9 +307,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/framework/issues",
-                "source": "https://github.com/utopia-php/framework/tree/0.31.1"
+                "source": "https://github.com/utopia-php/framework/tree/0.32.0"
             },
-            "time": "2023-12-08T18:47:29+00:00"
+            "time": "2023-12-26T14:18:36+00:00"
         },
         {
             "name": "utopia-php/mongo",

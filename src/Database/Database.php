@@ -1175,9 +1175,6 @@ class Database
                 if ($size > $this->adapter->getLimitForString()) {
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
-                else if ($size < 1) {
-                    throw new DatabaseException('Min size is 1');
-                }
                 break;
 
             case self::VAR_INTEGER:

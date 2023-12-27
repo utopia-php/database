@@ -641,7 +641,7 @@ class MariaDB extends SQL
         }
 
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
-
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         return $this->getPDO()

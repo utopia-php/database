@@ -1711,10 +1711,22 @@ abstract class Base extends TestCase
             $documents = static::getDatabase()->find($collection, [
                 Query::contains('names', ['Jake', 'Joe'])
             ]);
+            $this->assertCount(1, $documents);
 
+            $documents = static::getDatabase()->find($collection, [
+                Query::contains('numbers', [-1, 0])
+            ]);
+            $this->assertCount(1, $documents);
+
+
+            $documents = static::getDatabase()->find($collection, [
+                Query::contains('active', [false])
+            ]);
             $this->assertCount(1, $documents);
 
             var_dump($documents);
+
+
             $this->assertEquals(true,false);
         }
 

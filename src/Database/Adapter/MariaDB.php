@@ -1920,20 +1920,13 @@ class MariaDB extends SQL
                 return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
+                // todo: change to JSON_OVERLAPS when using mariaDB 10.9
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
                     $conditions[] = "JSON_CONTAINS(`table_main`.{$attribute}, :{$placeholder}_{$key})";
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
-
-
-//                $conditions = [];
-//                foreach ($query->getValues() as $key => $value) {
-//                    $conditions[] = "JSON_CONTAINS(`table_main`.{$attribute}, :{$placeholder}_{$key})";
-//                }
-//                $condition = implode(' OR ', $conditions);
-//                return empty($condition) ? '' : '(' . $condition . ')';
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {

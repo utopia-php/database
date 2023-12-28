@@ -254,6 +254,10 @@ class Structure extends Validator
                 continue;
             }
 
+            if($type === Database::VAR_RELATIONSHIP){
+                continue;
+            }
+
             switch ($type) {
                 case Database::VAR_STRING:
                     $size = $attribute['size'] ?? 0;
@@ -276,8 +280,6 @@ class Structure extends Validator
                     $validator = new DatetimeValidator();
                     break;
 
-                case Database::VAR_RELATIONSHIP:
-                    return true;
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;

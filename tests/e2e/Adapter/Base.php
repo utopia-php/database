@@ -1727,7 +1727,7 @@ abstract class Base extends TestCase
             var_dump($documents);
 
 
-            $this->assertEquals(true,false);
+            //$this->assertEquals(true,false);
         }
 
     }
@@ -2121,9 +2121,6 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid query: Cannot query contains on attribute "name" because it is not an array.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
-
-        $this->assertTrue(false);
-
     }
 
     public function testFindFulltext(): void

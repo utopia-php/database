@@ -1623,7 +1623,7 @@ abstract class Base extends TestCase
             $collection,
             'names',
             Database::VAR_STRING,
-            size: 255,
+            size: 255, // todo: this makes problems, array is Longtext/Json while length is data length, index problems
             required: false,
             array: true
         ));
@@ -1705,7 +1705,8 @@ abstract class Base extends TestCase
 
         $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-numbers', Database::INDEX_ARRAY, ['numbers'], [], []));
 
-        //$this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-names', Database::INDEX_ARRAY, ['age', 'names'], [], ['asc', 'desc']));
+        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-names1', Database::INDEX_ARRAY, ['names'], [255], ['desc']));
+        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-names2', Database::INDEX_ARRAY, ['age', 'names'], [100,100], ['asc', 'desc']));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             $documents = static::getDatabase()->find($collection, [
@@ -1725,10 +1726,9 @@ abstract class Base extends TestCase
             $this->assertCount(1, $documents);
 
             var_dump($documents);
-
-
-            //$this->assertEquals(true,false);
         }
+
+        $this->assertEquals(true,false);
 
     }
 

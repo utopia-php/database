@@ -2,7 +2,6 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -39,12 +38,12 @@ class AuthorizationTest extends TestCase
             ],
         ]);
 
-        $object = $this->authorization->setAction(Database::PERMISSION_READ);
+        $object = $this->authorization;
 
         $this->assertEquals($object->isValid($document->getRead()), false);
         $this->assertEquals($object->isValid(''), false);
         $this->assertEquals($object->isValid([]), false);
-        $this->assertEquals($object->getDescription(), 'No permissions provided for action \'read\'');
+        $this->assertEquals($object->getDescription(), 'No permissions provided for action \'unknownAction\'');
 
         $this->authorization->setRole(Role::user('456')->toString());
         $this->authorization->setRole(Role::user('123')->toString());

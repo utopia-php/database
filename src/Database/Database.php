@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Validation;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -2255,7 +2256,6 @@ class Database
 
         $queries = \array_values($queries);
 
-        $validator = $this->authorization->setAction(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
 
@@ -2269,10 +2269,12 @@ class Database
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
-                if (!$validator->isValid([
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
-                ])) {
+                try {
+                    $this->authorization->validate(self::PERMISSION_READ, [
+                        ...$collection->getRead(),
+                        ...($documentSecurity ? $document->getRead() : [])
+                    ]);
+                } catch(Validation $err) {
                     return new Document();
                 }
             }
@@ -2291,10 +2293,12 @@ class Database
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
-            if (!$validator->isValid([
-                ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
-            ])) {
+            try {
+                $this->authorization->validate(self::PERMISSION_READ, [
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $document->getRead() : [])
+                ]);
+            } catch(Validation $err) {
                 return new Document();
             }
         }
@@ -2613,9 +2617,10 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
-            $authorization = $this->authorization->setAction(self::PERMISSION_CREATE);
-            if (!$authorization->isValid($collection->getCreate())) {
-                throw new AuthorizationException($authorization->getDescription());
+            try {
+                $this->authorization->validate(self::PERMISSION_CREATE, $collection->getCreate());
+            } catch(Validation $err) {
+                throw new AuthorizationException($err->getMessage());
             }
         }
 
@@ -2963,7 +2968,6 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        $validator = $this->authorization->setAction(self::PERMISSION_UPDATE);
         $shouldUpdate = false;
 
         if ($collection->getId() !== self::METADATA) {
@@ -3050,11 +3054,15 @@ class Database
                 }
             }
 
-            if ($shouldUpdate && !$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $old->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
+            if ($shouldUpdate) {
+                try {
+                    $this->authorization->validate(self::PERMISSION_UPDATE, [
+                        ...$collection->getUpdate(),
+                        ...($documentSecurity ? $old->getUpdate() : [])
+                    ]);
+                } catch(Validation $err) {
+                    throw new AuthorizationException($err->getMessage());
+                }
             }
         }
 
@@ -3496,19 +3504,19 @@ class Database
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
-        $validator = $this->authorization->setAction(self::PERMISSION_UPDATE);
-
         $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $document->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
+            try {
+                $this->authorization->validate(self::PERMISSION_UPDATE, [
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $document->getUpdate() : [])
+                ]);
+            } catch(Validation $err) {
+                throw new AuthorizationException($err->getMessage());
             }
         }
 
@@ -3563,19 +3571,19 @@ class Database
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
-        $validator = $this->authorization->setAction(self::PERMISSION_UPDATE);
-
         $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $document->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
+            try {
+                $this->authorization->validate(self::PERMISSION_UPDATE, [
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $document->getUpdate() : [])
+                ]);
+            } catch(Validation $err) {
+                throw new AuthorizationException($err->getMessage());
             }
         }
 
@@ -3628,15 +3636,15 @@ class Database
         $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $validator = $this->authorization->setAction(self::PERMISSION_DELETE);
-
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getDelete(),
-                ...($documentSecurity ? $document->getDelete() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
+            try {
+                $this->authorization->validate(self::PERMISSION_DELETE, [
+                    ...$collection->getDelete(),
+                    ...($documentSecurity ? $document->getDelete() : [])
+                ]);
+            } catch(Validation $err) {
+                throw new AuthorizationException($err->getMessage());
             }
         }
 
@@ -4089,9 +4097,14 @@ class Database
             throw new QueryException($validator->getDescription());
         }
 
-        $authorization = $this->authorization->setAction(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $authorization->isValid($collection->getRead());
+
+        try {
+            $this->authorization->validate(self::PERMISSION_READ, $collection->getRead());
+            $skipAuth = true;
+        } catch(Validation $err) {
+            $skipAuth = false;
+        }
 
         if (!$skipAuth && !$documentSecurity) {
             throw new AuthorizationException($validator->getDescription());
@@ -4261,16 +4274,18 @@ class Database
             throw new QueryException($validator->getDescription());
         }
 
-        $authorization = $this->authorization->setAction(self::PERMISSION_READ);
-        if ($authorization->isValid($collection->getRead())) {
+        try {
+            $this->authorization->validate(self::PERMISSION_READ, $collection->getRead());
             $skipAuth = true;
+        } catch(Validation $err) {
+            $skipAuth = false;
         }
 
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
-        $count = $skipAuth ?? false ? $this->authorization->skip($getCount) : $getCount();
+        $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
 

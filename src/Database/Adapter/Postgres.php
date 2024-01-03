@@ -1046,7 +1046,7 @@ class Postgres extends SQL
         }
 
 
-        if ($this->authorization->status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1159,7 +1159,7 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->authorization->status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1213,13 +1213,13 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        $permissions = ($this->authorization->status) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
+        $permissions = ($this->authorization->getStatus()) ? $this->getSQLPermissionsCondition($collection, $roles) : '1=1'; // Disable join when no authorization required
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->authorization->status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 

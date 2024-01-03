@@ -135,7 +135,7 @@ class Authorization extends Validator
     /**
      * @var bool
      */
-    public bool $status = true;
+    protected bool $status = true;
 
     /**
      * Default value in case we need
@@ -143,7 +143,7 @@ class Authorization extends Validator
      *
      * @var bool
      */
-    public bool $statusDefault = true;
+    protected bool $statusDefault = true;
 
     /**
      * Change default status.
@@ -157,6 +157,27 @@ class Authorization extends Validator
     {
         $this->statusDefault = $status;
         $this->status = $status;
+    }
+
+    /**
+     * Change status
+     *
+     * @param bool $status
+     * @return void
+     */
+    public function setStatus(bool $status): void
+    {
+        $this->status = $status;
+    }
+
+    /**
+     * Get status
+     *
+     * @return bool
+     */
+    public function getStatus(): bool
+    {
+        return $this->status;
     }
 
     /**

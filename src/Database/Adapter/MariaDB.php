@@ -1038,7 +1038,7 @@ class MariaDB extends SQL
         }
 
 
-        if ($this->authorization->status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1151,7 +1151,7 @@ class MariaDB extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->authorization->status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1207,7 +1207,7 @@ class MariaDB extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->authorization->status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 

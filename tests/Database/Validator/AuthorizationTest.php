@@ -103,24 +103,24 @@ class AuthorizationTest extends TestCase
 
     public function testNestedSkips(): void
     {
-        $this->assertEquals(true, $this->authorization->status);
+        $this->assertEquals(true, $this->authorization->getStatus());
 
         $this->authorization->skip(function () {
-            $this->assertEquals(false, $this->authorization->status);
+            $this->assertEquals(false, $this->authorization->getStatus());
 
             $this->authorization->skip(function () {
-                $this->assertEquals(false, $this->authorization->status);
+                $this->assertEquals(false, $this->authorization->getStatus());
 
                 $this->authorization->skip(function () {
-                    $this->assertEquals(false, $this->authorization->status);
+                    $this->assertEquals(false, $this->authorization->getStatus());
                 });
 
-                $this->assertEquals(false, $this->authorization->status);
+                $this->assertEquals(false, $this->authorization->getStatus());
             });
 
-            $this->assertEquals(false, $this->authorization->status);
+            $this->assertEquals(false, $this->authorization->getStatus());
         });
 
-        $this->assertEquals(true, $this->authorization->status);
+        $this->assertEquals(true, $this->authorization->getStatus());
     }
 }

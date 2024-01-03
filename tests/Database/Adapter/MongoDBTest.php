@@ -51,7 +51,8 @@ class MongoDBTest extends Base
             false
         );
 
-        $database = new Database(new Mongo($client), $cache, [], $this->authorization);
+        $database = new Database(new Mongo($client), $cache, []);
+        $database->setAuthorization($this->authorization);
         $database->setDefaultDatabase($schema);
         $database->setNamespace('myapp_' . uniqid());
 

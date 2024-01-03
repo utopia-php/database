@@ -316,18 +316,13 @@ class Database
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
      */
-    public function __construct(Adapter $adapter, Cache $cache, array $filters = [], Authorization $authorization = null)
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
-        if (\is_null($authorization)) {
-            $authorization = new Authorization();
-        }
-
-        $adapter->setAuthorization($authorization);
-
-        $this->authorization = $authorization;
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
+
+        $this->setAuthorization(new Authorization());
 
         self::addFilter(
             'json',
@@ -398,6 +393,19 @@ class Database
                 return DateTime::formatTz($value);
             }
         );
+    }
+
+    /**
+     * Sets instance of authorization for permission checks
+     *
+     * @param Authorization $authorization
+     * @return self
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->adapter->setAuthorization($authorization);
+        $this->authorization = $authorization;
+        return $this;
     }
 
     /**

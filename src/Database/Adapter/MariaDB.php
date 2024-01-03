@@ -272,10 +272,6 @@ class MariaDB extends SQL
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
-        if ($array) {
-            $type = 'JSON';
-        }
-
         $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 

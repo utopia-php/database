@@ -1597,7 +1597,6 @@ abstract class Base extends TestCase
      * @throws ConflictException
      * @throws LimitException
      * @throws StructureException
-     * @throws DatabaseException
      */
     public function testArrayAttribute(): void
     {
@@ -1612,7 +1611,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, static::getDatabase()->createAttribute(
             $collection,
-            'active',
+            'booleans',
             Database::VAR_BOOLEAN,
             size: 0,
             required: true,
@@ -1623,7 +1622,7 @@ abstract class Base extends TestCase
             $collection,
             'names',
             Database::VAR_STRING,
-            size: 255, // todo: this makes problems, array is Longtext/Json while length is data length, index problems
+            size: 255, // Does this mean each Element max is 255? We need to check this on Structure validation?
             required: false,
             array: true
         ));
@@ -1651,12 +1650,12 @@ abstract class Base extends TestCase
             static::getDatabase()->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Invalid document structure: Missing required attribute "active"', $e->getMessage());
+            $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
         }
 
         try {
             static::getDatabase()->createDocument($collection, new Document([
-                'active' => [false],
+                'booleans' => [false],
                 'names' => ['Joe', 100],
             ]));
             $this->fail('Failed to throw exception');
@@ -1666,7 +1665,7 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->createDocument($collection, new Document([
-                'active' => [false],
+                'booleans' => [false],
                 'age' => 1.5,
             ]));
             $this->fail('Failed to throw exception');
@@ -1676,7 +1675,7 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->createDocument($collection, new Document([
-                'active' => [false],
+                'booleans' => [false],
                 'age' => -1,
             ]));
             $this->fail('Failed to throw exception');
@@ -1684,29 +1683,88 @@ abstract class Base extends TestCase
             //$this->assertEquals('Should fail since it is Signed = false!!!!', $e->getMessage());
         }
 
-        $document = static::getDatabase()->createDocument($collection, new Document([
+        static::getDatabase()->createDocument($collection, new Document([
+            '$id' => 'joe',
             '$permissions' => $permissions,
-            'active' => [false],
+            'booleans' => [false],
             'names' => ['Joe', 'Antony', '100'],
             'numbers' => [0, 100, 1000, -1],
         ]));
 
-        $this->assertEquals(false, $document->getAttribute('active')[0]);
+        $document = static::getDatabase()->getDocument($collection, 'joe');
+
+        $this->assertEquals(false, $document->getAttribute('booleans')[0]);
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
 
-//        try {
-//              todo: force create only INDEX_ARRAY for array????
-//              static::getDatabase()->createIndex($collection, 'ind-names', Database::INDEX_FULLTEXT, ['names']);
-//            $this->fail('Failed to throw exception');
-//        } catch(Throwable $e) {
-//            $this->assertEquals('Should this fail? can we create a fulltext index on array as users do today?', $e->getMessage());
-//        }
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid "Fulltext" index on array attributes', $e->getMessage());
+        }
 
-        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-numbers', Database::INDEX_ARRAY, ['numbers'], [], []));
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names']);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Only a single index can be created on array attributes found "numbers,names"', $e->getMessage());
+        }
 
-        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-names1', Database::INDEX_ARRAY, ['names'], [255], ['desc']));
-        $this->assertTrue(true, static::getDatabase()->createIndex($collection, 'indx-names2', Database::INDEX_ARRAY, ['age', 'names'], [100,100], ['asc', 'desc']));
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names']);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Only a single index can be created on array attributes found "numbers,names"', $e->getMessage());
+        }
+
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'long_names',
+            Database::VAR_STRING,
+            size: 2000,
+            required: false,
+            array: true
+        ));
+
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_names'], [], []);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Index length for array not specified', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_names'], [1000], []);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['names'], [255], ['desc']);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid index order "desc" on array attribute "names"', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Key part length are forbidden on "integer" data-type', $e->getMessage());
+        }
+
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_names', Database::INDEX_KEY, ['names'], [255], []));
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names1', Database::INDEX_KEY, ['age', 'names'], [null, 255], []));
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
+       // $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names', Database::INDEX_ARRAY, ['age', 'names'], [255, 255], []));
+
+
+        $this->assertEquals(true,false);
+
+
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             $documents = static::getDatabase()->find($collection, [

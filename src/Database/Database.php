@@ -2362,7 +2362,7 @@ class Database
                     throw new DatabaseException('Fulltext index is not supported');
                 }
                 break;
-
+    
             case self::INDEX_ARRAY:
                 if (!$this->adapter->getSupportForIndexArray()) {
                     throw new DatabaseException('Key index array is not supported');

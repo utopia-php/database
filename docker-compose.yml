@@ -38,7 +38,7 @@ services:
       POSTGRES_PASSWORD: password
 
   mariadb:
-    image: mariadb:10.7
+    image: mariadb:10.9 # Is it ok to upgrade Appwrite to >= 10.9 for JSON_OVERLAPS
     container_name: utopia-mariadb
     networks:
       - database

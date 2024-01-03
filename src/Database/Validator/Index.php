@@ -20,6 +20,7 @@ class Index extends Validator
     /**
      * @param array<Document> $attributes
      * @param int $maxLength
+     * @param bool $indexArraySupport
      * @throws DatabaseException
      */
     public function __construct(array $attributes, int $maxLength)
@@ -97,7 +98,6 @@ class Index extends Validator
     /**
      * @param Document $index
      * @return bool
-     * @throws DatabaseException
      */
     public function checkFulltextIndexNonString(Document $index): bool
     {
@@ -106,6 +106,42 @@ class Index extends Validator
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
                     $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a FULLTEXT index, must be of type string';
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkArrayIndex(Document $index): bool
+    {
+        $attributes = $index->getAttribute('attributes', []);
+        $orders = $index->getAttribute('orders', []);
+
+        $arrayAttributes = [];
+        foreach ($attributes as $key => $attribute) {
+            $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
+            if($attribute->getAttribute('array') === true){
+                // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
+                if(!in_array($index->getAttribute('type'), [Database::INDEX_ARRAY, Database::INDEX_KEY])){
+                    $this->message = 'Invalid "' . ucfirst($index->getAttribute('type')) . '" index on array attributes';
+                    return false;
+                }
+
+                var_dump($attribute);
+                $arrayAttributes[] = $attribute->getAttribute('key', '');
+                if(count($arrayAttributes) > 1){
+                    $this->message = 'Only a single index can be created on array attributes found "' . implode(',', $arrayAttributes) . '"';
+                    return false;
+                }
+
+                $direction = $orders[$key] ?? '';
+                if(!empty($direction)){
+                    $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
             }
@@ -129,10 +165,24 @@ class Index extends Validator
         foreach ($index->getAttribute('attributes', []) as $attributePosition => $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)];
 
+            $isArray = $attribute->getAttribute('array', false);
+
+            if($isArray && empty($lengths[$attributePosition])){
+                $this->message = 'Index length for array not specified';
+                return false;
+            }
+
+            if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])){
+                $this->message = 'Key part length are forbidden on "' . $attribute->getAttribute('type') . '" data-type';
+                return false;
+            }
+
             switch ($attribute->getAttribute('type')) {
                 case Database::VAR_STRING:
                     $attributeSize = $attribute->getAttribute('size', 0);
                     $indexLength = $lengths[$attributePosition] ?? $attributeSize;
+                    var_dump($attributeName);
+                    var_dump($indexLength);
                     break;
                 case Database::VAR_FLOAT:
                     $attributeSize = 2; // 8 bytes / 4 mb4
@@ -140,6 +190,7 @@ class Index extends Validator
                     break;
                 default:
                     $attributeSize = 1; // 4 bytes / 4 mb4
+                   // $attributeSize = $attribute->getAttribute('size', 1); // 4 bytes / 4 mb4
                     $indexLength = 1;
                     break;
             }
@@ -183,6 +234,10 @@ class Index extends Validator
         }
 
         if (!$this->checkFulltextIndexNonString($value)) {
+            return false;
+        }
+
+        if (!$this->checkArrayIndex($value)) {
             return false;
         }
 

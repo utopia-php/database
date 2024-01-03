@@ -2,7 +2,6 @@
 
 namespace Utopia\Tests\Validator;
 
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -39,7 +38,7 @@ class AuthorizationTest extends TestCase
             ],
         ]);
 
-        $object = $this->authorization->setAction(Database::PERMISSION_READ);
+        $object = $this->authorization;
 
         $this->assertEquals($object->isValid($document->getRead()), false);
         $this->assertEquals($object->isValid(''), false);

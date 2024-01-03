@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Exception\Validation;
 use Utopia\Http\Validator;
 
 class Authorization extends Validator
@@ -16,31 +17,7 @@ class Authorization extends Validator
     /**
      * @var string
      */
-    protected string $action = '';
-
-    /**
-     * @var string
-     */
     protected string $message = 'Authorization Error';
-
-    /**
-     * @param string $action
-     */
-    public function __construct(string $action = '')
-    {
-        $this->action = $action;
-    }
-
-    /**
-     * @param string $action
-     * @return self
-     */
-    public function setAction(string $action): self
-    {
-        $this->action = $action;
-
-        return $this;
-    }
 
     /**
      * Get Description.
@@ -54,37 +31,50 @@ class Authorization extends Validator
         return $this->message;
     }
 
+    /*
+     * Deprecated for this specific validator. Use validate() instead
+    */
+    public function isValid(mixed $permissions): bool
+    {
+        try {
+            $this->validate('unknownAction', $permissions);
+            return true;
+        } catch(Validation $error) {
+            $this->message = $error->getMessage();
+            return false;
+        }
+    }
+
     /**
-     * Is valid.
+     * Validation. Replacement of isValid() which throws exception instead
      *
      * Returns true if valid or false if not.
      *
+     * @param string $action
      * @param mixed $permissions
      *
-     * @return bool
+     * @return void
+     * @throws Validation
      */
-    public function isValid($permissions): bool
+    public function validate(string $action, mixed $permissions): void
     {
         if (!$this->status) {
-            return true;
+            return;
         }
 
         if (empty($permissions)) {
-            $this->message = 'No permissions provided for action \''.$this->action.'\'';
-            return false;
+            throw new Validation('No permissions provided for action \''.$action.'\'');
         }
 
         $permission = '-';
 
         foreach ($permissions as $permission) {
             if (\array_key_exists($permission, $this->roles)) {
-                return true;
+                return;
             }
         }
 
-        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
-
-        return false;
+        throw new Validation('Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.');
     }
 
     /**

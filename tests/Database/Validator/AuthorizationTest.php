@@ -43,7 +43,7 @@ class AuthorizationTest extends TestCase
         $this->assertEquals($object->isValid($document->getRead()), false);
         $this->assertEquals($object->isValid(''), false);
         $this->assertEquals($object->isValid([]), false);
-        $this->assertEquals($object->getDescription(), 'No permissions provided for action \'read\'');
+        $this->assertEquals($object->getDescription(), 'No permissions provided for action \'unknownAction\'');
 
         $this->authorization->setRole(Role::user('456')->toString());
         $this->authorization->setRole(Role::user('123')->toString());

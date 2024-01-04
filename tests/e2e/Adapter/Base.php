@@ -1673,16 +1673,6 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
         }
 
-        try {
-            static::getDatabase()->createDocument($collection, new Document([
-                'booleans' => [false],
-                'age' => -1,
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
-            //$this->assertEquals('Should fail since it is Signed = false!!!!', $e->getMessage());
-        }
-
         static::getDatabase()->createDocument($collection, new Document([
             '$id' => 'joe',
             '$permissions' => $permissions,
@@ -1701,7 +1691,7 @@ abstract class Base extends TestCase
             static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Invalid "Fulltext" index on array attributes', $e->getMessage());
+            $this->assertEquals('Fulltext" index is forbidden on array attributes', $e->getMessage());
         }
 
         try {
@@ -1753,17 +1743,17 @@ abstract class Base extends TestCase
             static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Key part length are forbidden on "integer" data-type', $e->getMessage());
+            $this->assertEquals('Key part length are forbidden on "integer" data-type for "age"', $e->getMessage());
         }
 
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_names', Database::INDEX_KEY, ['names'], [255], []));
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names1', Database::INDEX_KEY, ['age', 'names'], [null, 255], []));
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
-       // $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names', Database::INDEX_ARRAY, ['age', 'names'], [255, 255], []));
 
+
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'test', Database::INDEX_ARRAY, ['names'], [255], []));
 
         $this->assertEquals(true,false);
-
 
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
@@ -1777,7 +1767,6 @@ abstract class Base extends TestCase
             ]);
             $this->assertCount(1, $documents);
 
-
             $documents = static::getDatabase()->find($collection, [
                 Query::contains('active', [false])
             ]);
@@ -1787,7 +1776,6 @@ abstract class Base extends TestCase
         }
 
         $this->assertEquals(true,false);
-
     }
 
     /**

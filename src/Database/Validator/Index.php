@@ -125,14 +125,15 @@ class Index extends Validator
         $arrayAttributes = [];
         foreach ($attributes as $key => $attribute) {
             $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
+            var_dump($attribute);
+
             if($attribute->getAttribute('array') === true){
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
                 if(!in_array($index->getAttribute('type'), [Database::INDEX_ARRAY, Database::INDEX_KEY])){
-                    $this->message = 'Invalid "' . ucfirst($index->getAttribute('type')) . '" index on array attributes';
+                    $this->message = ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
 
-                var_dump($attribute);
                 $arrayAttributes[] = $attribute->getAttribute('key', '');
                 if(count($arrayAttributes) > 1){
                     $this->message = 'Only a single index can be created on array attributes found "' . implode(',', $arrayAttributes) . '"';
@@ -173,7 +174,7 @@ class Index extends Validator
             }
 
             if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])){
-                $this->message = 'Key part length are forbidden on "' . $attribute->getAttribute('type') . '" data-type';
+                $this->message = 'Key part length are forbidden on "' . $attribute->getAttribute('type') . '" data-type for "' . $attributeName . '"';
                 return false;
             }
 
@@ -181,8 +182,6 @@ class Index extends Validator
                 case Database::VAR_STRING:
                     $attributeSize = $attribute->getAttribute('size', 0);
                     $indexLength = $lengths[$attributePosition] ?? $attributeSize;
-                    var_dump($attributeName);
-                    var_dump($indexLength);
                     break;
                 case Database::VAR_FLOAT:
                     $attributeSize = 2; // 8 bytes / 4 mb4
@@ -190,7 +189,6 @@ class Index extends Validator
                     break;
                 default:
                     $attributeSize = 1; // 4 bytes / 4 mb4
-                   // $attributeSize = $attribute->getAttribute('size', 1); // 4 bytes / 4 mb4
                     $indexLength = 1;
                     break;
             }

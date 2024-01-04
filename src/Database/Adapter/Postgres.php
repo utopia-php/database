@@ -84,7 +84,7 @@ class Postgres extends SQL
 
         $this->getPDO()->beginTransaction();
 
-        foreach ($attributes as &$attribute) {
+        foreach ($attributes as $index => $attribute) {
             $attrId = $this->filter($attribute->getId());
 
             $attrType = $this->getSQLType(
@@ -94,7 +94,7 @@ class Postgres extends SQL
                 $attribute->getAttribute('array', false)
             );
 
-            $attribute = "\"{$attrId}\" {$attrType}, ";
+            $attributes[$index] = "\"{$attrId}\" {$attrType}, ";
         }
 
         /**
@@ -171,16 +171,22 @@ class Postgres extends SQL
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
-                $indexAttributes = $index->getAttribute('attributes');
                 $indexOrders = $index->getAttribute('orders', []);
+                $indexAttributes = $index->getAttribute('attributes', []);
+
+                foreach ($indexAttributes as $key => $attribute){
+                    $indexAttributes[$key] = [
+                        'attribute' => $attribute,
+                        'order' => $indexOrders[$key] ?? null,
+                        'length' => null,
+                    ];
+                }
 
                 $this->createIndex(
                     $id,
                     $indexId,
                     $indexType,
                     $indexAttributes,
-                    [],
-                    $indexOrders
                 );
             }
         } catch (Exception $e) {
@@ -571,42 +577,49 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
-     *
+     * @param array $attributes
      * @return bool
+     * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes): bool
     {
-        $name = $this->filter($collection);
+        $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
+        foreach ($attributes as $key => $attribute) {
+            $order = empty($attribute['order']) || Database::INDEX_FULLTEXT === $type ? '' : $attribute['order'];
 
-        foreach ($attributes as $key => &$attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
+            $attr = match ($attribute['attribute']) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attribute['attribute']),
+            };
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attribute = "LOWER(\"{$attribute}\"::text) {$order}";
+                $attributes[$key] = "LOWER(\"{$attr}\"::text) {$order}";
             } else {
-                $attribute = "\"{$attribute}\" {$order}";
+                $attributes[$key] = "\"{$attr}\" {$order}";
             }
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $sqlType = match ($type) {
+            Database::INDEX_KEY,
+            Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+        };
+
+        $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
+        $attributes = \implode(', ', $attributes);
+
+        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
+
+        $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         return $this->getPDO()

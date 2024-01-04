@@ -377,13 +377,10 @@ class SQLite extends MariaDB
      * @param string $id
      * @param string $type
      * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
      * @return bool
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);

@@ -509,14 +509,14 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
+     * @param array $attributes
      * @param array<string, mixed> $collation
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $collation = []): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -527,11 +527,14 @@ class Mongo extends Adapter
         // pass in custom index name
         $indexes['name'] = $id;
 
-        foreach ($attributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
+        foreach ($attributes as $attribute) {
 
-            $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-            $indexes['key'][$attribute] = $orderType;
+            $attr = $attribute['attribute'];
+            $attr = $this->filter($attr);
+
+            $order = $this->filter($attribute['order']);
+            $order = empty($order) ? Database::ORDER_ASC : $order;
+            $indexes['key'][$attr] = $this->getOrder($order);
 
             switch ($type) {
                 case Database::INDEX_KEY:

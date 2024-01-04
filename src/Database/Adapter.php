@@ -430,13 +430,10 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
-     *
+     * @param array $attributes
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes): bool;
 
     /**
      * Delete Index

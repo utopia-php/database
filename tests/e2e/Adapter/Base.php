@@ -1750,12 +1750,6 @@ abstract class Base extends TestCase
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names1', Database::INDEX_KEY, ['age', 'names'], [null, 255], []));
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
 
-
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'test', Database::INDEX_ARRAY, ['names'], [255], []));
-
-        $this->assertEquals(true,false);
-
-
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             $documents = static::getDatabase()->find($collection, [
                 Query::contains('names', ['Jake', 'Joe'])
@@ -1768,14 +1762,12 @@ abstract class Base extends TestCase
             $this->assertCount(1, $documents);
 
             $documents = static::getDatabase()->find($collection, [
-                Query::contains('active', [false])
+                Query::contains('booleans', [false])
             ]);
             $this->assertCount(1, $documents);
-
-            var_dump($documents);
         }
 
-        $this->assertEquals(true,false);
+        //$this->assertEquals(true,false);
     }
 
     /**

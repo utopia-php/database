@@ -604,39 +604,44 @@ class MariaDB extends SQL
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array<string> $attributes
-     * @param array<int> $lengths
-     * @param array<string> $orders
+     * @param array $attributes
      * @return bool
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
-
         foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
+            $length = empty($attribute['length']) ? '' : '(' . (int)$attribute['length'] . ')';
+            $order = empty($attribute['order']) || Database::INDEX_FULLTEXT === $type ? '' : $attribute['order'];
 
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
+            $attr = match ($attribute['attribute']) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attribute['attribute']),
+            };
 
-            $attributes[$key] = "`{$attribute}`{$length} {$order}";
+            $attributes[$key] = "`{$attr}`{$length} {$order}";
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $sqlType = match ($type) {
+            Database::INDEX_KEY => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+        };
+
+        $attributes = \implode(', ', $attributes);
+
+        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
+
+        $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($name)} ({$attributes})";
         var_dump($sql);
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 

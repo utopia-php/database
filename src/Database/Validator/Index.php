@@ -125,7 +125,6 @@ class Index extends Validator
         $arrayAttributes = [];
         foreach ($attributes as $key => $attribute) {
             $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
-            var_dump($attribute);
 
             if($attribute->getAttribute('array') === true){
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values

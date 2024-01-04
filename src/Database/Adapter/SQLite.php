@@ -385,7 +385,6 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
         $stmt = $this->getPDO()->prepare("
 			SELECT name 

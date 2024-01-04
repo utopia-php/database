@@ -2393,15 +2393,8 @@ class Database
             }
         }
 
-        foreach ($attributes as $key => $attribute){
-            $attributes[$key] = [
-                'attribute' => $attribute,
-                'order' => $orders[$key] ?? null,
-                'length' => $lengths[$key] ?? null,
-            ];
-        }
+        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $collection->getAttribute('attributes', []));
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));

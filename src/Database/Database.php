@@ -2904,8 +2904,8 @@ class Database
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', $time)
-            ->setAttribute('$updatedAt', $time);
+            ->setAttribute('$createdAt', empty($document->getCreatedAt()) ? $time : $document->getCreatedAt())
+            ->setAttribute('$updatedAt', empty($document->getUpdatedAt()) ? $time : $document->getUpdatedAt());
 
         $document = $this->encode($collection, $document);
 

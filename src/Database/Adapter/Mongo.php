@@ -510,13 +510,16 @@ class Mongo extends Adapter
      * @param string $id
      * @param string $type
      * @param array $attributes
+     * @param array $lengths
+     * @param array $orders
+     * @param array $collectionAttributes
      * @param array<string, mixed> $collation
      * @return bool
      * @throws DatabaseException
      * @throws MongoException
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collectionAttributes, array $collation = []): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -527,14 +530,11 @@ class Mongo extends Adapter
         // pass in custom index name
         $indexes['name'] = $id;
 
-        foreach ($attributes as $attribute) {
+        foreach ($attributes as $i => $attribute) {
+            $attribute = $this->filter($attribute);
 
-            $attr = $attribute['attribute'];
-            $attr = $this->filter($attr);
-
-            $order = $this->filter($attribute['order']);
-            $order = empty($order) ? Database::ORDER_ASC : $order;
-            $indexes['key'][$attr] = $this->getOrder($order);
+            $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+            $indexes['key'][$attribute] = $orderType;
 
             switch ($type) {
                 case Database::INDEX_KEY:
@@ -592,6 +592,7 @@ class Mongo extends Adapter
                 $index['attributes'],
                 $index['lengths'] ?? [],
                 $index['orders'] ?? [],
+                []
             )) {
             return true;
         }
@@ -1556,16 +1557,6 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Is index array supported?
-     *
-     * @return bool
-     */
-    public function getSupportForIndexArray(): bool
     {
         return true;
     }

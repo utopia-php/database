@@ -1092,14 +1092,13 @@ class SQLite extends MariaDB
     {
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 return 'INDEX';
 
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
@@ -1119,7 +1118,6 @@ class SQLite extends MariaDB
 
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 $type = 'INDEX';
                 break;
 
@@ -1130,7 +1128,7 @@ class SQLite extends MariaDB
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {

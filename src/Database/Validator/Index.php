@@ -20,7 +20,6 @@ class Index extends Validator
     /**
      * @param array<Document> $attributes
      * @param int $maxLength
-     * @param bool $indexArraySupport
      * @throws DatabaseException
      */
     public function __construct(array $attributes, int $maxLength)
@@ -128,7 +127,7 @@ class Index extends Validator
 
             if($attribute->getAttribute('array') === true){
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if(!in_array($index->getAttribute('type'), [Database::INDEX_ARRAY, Database::INDEX_KEY])){
+                if(!in_array($index->getAttribute('type'), [Database::INDEX_KEY])){
                     $this->message = ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }

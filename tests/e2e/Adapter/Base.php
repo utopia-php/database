@@ -1725,11 +1725,13 @@ abstract class Base extends TestCase
             $this->assertEquals('Index length for array not specified', $e->getMessage());
         }
 
-        try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_names'], [1000], []);
-            $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
-            $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
+        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
+            try {
+                static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_names'], [1000], []);
+                $this->fail('Failed to throw exception');
+            } catch(Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
+            }
         }
 
         try {
@@ -1766,8 +1768,6 @@ abstract class Base extends TestCase
             ]);
             $this->assertCount(1, $documents);
         }
-
-        //$this->assertEquals(true,false);
     }
 
     /**

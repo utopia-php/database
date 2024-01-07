@@ -230,16 +230,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForIndexArray(): bool
-    {
-        return true;
-    }
-
-    /**
      * Is unique index supported?
      *
      * @return bool
@@ -831,7 +821,6 @@ abstract class SQL extends Adapter
     {
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 return 'INDEX';
 
             case Database::INDEX_UNIQUE:
@@ -841,7 +830,7 @@ abstract class SQL extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 

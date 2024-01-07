@@ -607,13 +607,6 @@ abstract class Adapter
     abstract public function getSupportForIndex(): bool;
 
     /**
-     * Is index array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIndexArray(): bool;
-
-    /**
      * Is unique index supported?
      *
      * @return bool

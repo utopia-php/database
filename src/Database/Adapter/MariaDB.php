@@ -617,9 +617,11 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         foreach ($attributes as $i => $attr) {
-            $collectionAttribute = \array_filter($collectionAttributes, function ($collectionAttribute) use ($attr) {
-                return $collectionAttribute->getAttribute('key') === $attr;
-            });
+            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => $collectionAttribute->getAttribute('key') === $attr);
+
+//            $collectionAttribute = \array_filter($collectionAttributes, function ($collectionAttribute) use ($attr) {
+//                return $collectionAttribute->getAttribute('key') === $attr;
+//            });
 
             $collectionAttribute = end($collectionAttribute);
 

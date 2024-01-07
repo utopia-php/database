@@ -146,12 +146,12 @@ class SQLite extends MariaDB
 
         $this->getPDO()->prepare($sql)->execute();
 
-        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
-        $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
-        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
+        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], [], []);
+        $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], [], []);
+        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], [], []);
 
         if ($this->shareTables) {
-            $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
+            $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], [], []);
         }
 
         foreach ($indexes as $index) {
@@ -161,7 +161,7 @@ class SQLite extends MariaDB
             $indexLengths = $index->getAttribute('lengths', []);
             $indexOrders = $index->getAttribute('orders', []);
 
-            $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
+            $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders, []);
         }
 
         $sql = "
@@ -180,8 +180,8 @@ class SQLite extends MariaDB
             ->prepare($sql)
             ->execute();
 
-        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
-        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
+        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], [], []);
+        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], [], []);
 
         $this->getPDO()->commit();
 
@@ -312,7 +312,7 @@ class SQLite extends MariaDB
                 $this->deleteIndex($name, $index['$id']);
             } elseif (\in_array($id, $attributes)) {
                 $this->deleteIndex($name, $index['$id']);
-                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders']);
+                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders'], []);
             }
         }
 
@@ -363,6 +363,7 @@ class SQLite extends MariaDB
                 $index['attributes'],
                 $index['lengths'],
                 $index['orders'],
+                []
             )) {
             return true;
         }
@@ -377,10 +378,13 @@ class SQLite extends MariaDB
      * @param string $id
      * @param string $type
      * @param array<string> $attributes
+     * @param array $lengths
+     * @param array $orders
+     * @param array $collectionAttributes
      * @return bool
      * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collectionAttributes): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -389,8 +393,7 @@ class SQLite extends MariaDB
         $stmt = $this->getPDO()->prepare("
 			SELECT name 
 			FROM sqlite_master 
-			WHERE type='index' 
-			  AND name=:_index;
+			WHERE type='index' AND name=:_index;
 		");
         $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
         $stmt->execute();

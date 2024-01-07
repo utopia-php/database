@@ -1691,7 +1691,12 @@ abstract class Base extends TestCase
             static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Fulltext" index is forbidden on array attributes', $e->getMessage());
+            if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+                $this->assertEquals('Fulltext" index is forbidden on array attributes', $e->getMessage());
+            }
+            else {
+                $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+            }
         }
 
         try {
@@ -1753,6 +1758,13 @@ abstract class Base extends TestCase
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+            // todo: show we throw exception using equal on array attribute?
+            // todo: should contains ['Joe', 'black'] means where  'Joe' and 'black' VS OR? VS JSON_OVERLAPS which means OR
+            $documents = static::getDatabase()->find($collection, [
+                Query::equal('names', ['Joe'])
+            ]);
+            $this->assertCount(0, $documents);
+
             $documents = static::getDatabase()->find($collection, [
                 Query::contains('names', ['Jake', 'Joe'])
             ]);

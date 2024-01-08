@@ -2018,36 +2018,6 @@ class MariaDB extends SQL
         }
     }
 
-    //    /**
-    //     * Get SQL Index
-    //     *
-    //     * @param string $collection
-    //     * @param string $id
-    //     * @param string $type
-    //     * @param array<string> $attributes
-    //     * @return string
-    //     * @throws Exception
-    //     */
-    //    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    //    {
-    //        $sqlType = match ($type) {
-    //            Database::INDEX_KEY,
-    //            Database::INDEX_ARRAY => 'INDEX',
-    //            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-    //            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-    //            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
-    //        };
-    //
-    //        $attributes = \implode(', ', $attributes);
-    //
-    //        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
-    //            // Add tenant as first index column for best performance
-    //            $attributes = "_tenant, {$attributes}";
-    //        }
-    //
-    //        return "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection)} ({$attributes})";
-    //    }
-
     /**
      * Get PDO Type
      *

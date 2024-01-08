@@ -101,7 +101,7 @@ class Filter extends Base
             }
         }
 
-        if(isset($attributeSchema['array'])){
+        if(isset($attributeSchema['array'])) {
             if($attributeSchema['array'] === false && Query::TYPE_CONTAINS === $method) {
                 $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array.';
                 return false;

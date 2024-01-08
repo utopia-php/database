@@ -509,17 +509,14 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $id
      * @param string $type
-     * @param array $attributes
-     * @param array $lengths
-     * @param array $orders
-     * @param array $collectionAttributes
+     * @param array<string> $attributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      * @param array<string, mixed> $collation
      * @return bool
-     * @throws DatabaseException
-     * @throws MongoException
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collectionAttributes, array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -592,7 +589,6 @@ class Mongo extends Adapter
                 $index['attributes'],
                 $index['lengths'] ?? [],
                 $index['orders'] ?? [],
-                []
             )) {
             return true;
         }

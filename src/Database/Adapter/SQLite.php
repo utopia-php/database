@@ -106,6 +106,7 @@ class SQLite extends MariaDB
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
+        $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
         try {
@@ -146,12 +147,12 @@ class SQLite extends MariaDB
 
         $this->getPDO()->prepare($sql)->execute();
 
-        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], [], []);
-        $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], [], []);
-        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], [], []);
+        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
+        $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
+        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
         if ($this->shareTables) {
-            $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], [], []);
+            $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
         }
 
         foreach ($indexes as $index) {
@@ -161,7 +162,7 @@ class SQLite extends MariaDB
             $indexLengths = $index->getAttribute('lengths', []);
             $indexOrders = $index->getAttribute('orders', []);
 
-            $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders, []);
+            $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
         }
 
         $sql = "
@@ -180,8 +181,8 @@ class SQLite extends MariaDB
             ->prepare($sql)
             ->execute();
 
-        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], [], []);
-        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], [], []);
+        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
         $this->getPDO()->commit();
 
@@ -312,7 +313,7 @@ class SQLite extends MariaDB
                 $this->deleteIndex($name, $index['$id']);
             } elseif (\in_array($id, $attributes)) {
                 $this->deleteIndex($name, $index['$id']);
-                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders'], []);
+                $this->createIndex($name, $index['$id'], $index['type'], \array_diff($attributes, [$id]), $index['lengths'], $index['orders']);
             }
         }
 
@@ -340,11 +341,15 @@ class SQLite extends MariaDB
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->filter($collection);
-        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+        $collection = $this->getDocument(Database::METADATA, $collection);
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexes = json_decode($collectionDocument['indexes'], true);
+        $indexes = \json_decode($collection->getAttribute('indexes', []), true);
         $index = null;
 
         foreach ($indexes as $node) {
@@ -355,15 +360,14 @@ class SQLite extends MariaDB
         }
 
         if ($index
-            && $this->deleteIndex($collection, $old)
+            && $this->deleteIndex($collection->getId(), $old)
             && $this->createIndex(
-                $collection,
+                $collection->getId(),
                 $new,
                 $index['type'],
                 $index['attributes'],
                 $index['lengths'],
                 $index['orders'],
-                []
             )) {
             return true;
         }
@@ -378,13 +382,13 @@ class SQLite extends MariaDB
      * @param string $id
      * @param string $type
      * @param array<string> $attributes
-     * @param array $lengths
-     * @param array $orders
-     * @param array $collectionAttributes
+     * @param array<int> $lengths
+     * @param array<string> $orders
      * @return bool
-     * @throws DatabaseException
+     * @throws Exception
+     * @throws PDOException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collectionAttributes): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -1151,6 +1155,7 @@ class SQLite extends MariaDB
         $attributes = implode(', ', $attributes);
 
         if ($this->shareTables) {
+            // todo: for share tables should we use tenant as part of key?
             $key = "`{$this->getNamespace()}_{$collection}_{$id}`";
             $attributes = "_tenant {$postfix}, {$attributes}";
         }

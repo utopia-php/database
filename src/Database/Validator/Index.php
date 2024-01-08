@@ -125,21 +125,21 @@ class Index extends Validator
         foreach ($attributes as $key => $attribute) {
             $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
 
-            if($attribute->getAttribute('array') === true){
+            if($attribute->getAttribute('array') === true) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if(!in_array($index->getAttribute('type'), [Database::INDEX_KEY])){
+                if(!in_array($index->getAttribute('type'), [Database::INDEX_KEY])) {
                     $this->message = ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
 
                 $arrayAttributes[] = $attribute->getAttribute('key', '');
-                if(count($arrayAttributes) > 1){
+                if(count($arrayAttributes) > 1) {
                     $this->message = 'Only a single index can be created on array attributes found "' . implode(',', $arrayAttributes) . '"';
                     return false;
                 }
 
                 $direction = $orders[$key] ?? '';
-                if(!empty($direction)){
+                if(!empty($direction)) {
                     $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
@@ -166,12 +166,12 @@ class Index extends Validator
 
             $isArray = $attribute->getAttribute('array', false);
 
-            if($isArray && empty($lengths[$attributePosition])){
+            if($isArray && empty($lengths[$attributePosition])) {
                 $this->message = 'Index length for array not specified';
                 return false;
             }
 
-            if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])){
+            if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
                 $this->message = 'Key part length are forbidden on "' . $attribute->getAttribute('type') . '" data-type for "' . $attributeName . '"';
                 return false;
             }

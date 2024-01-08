@@ -2388,8 +2388,7 @@ class Database
             }
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $collection->getAttribute('attributes', []));
-
+        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));

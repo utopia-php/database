@@ -76,7 +76,6 @@ class Postgres extends SQL
      * @param array<Document> $attributes
      * @param array<Document> $indexes
      * @return bool
-     * @throws DatabaseException
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
@@ -171,8 +170,8 @@ class Postgres extends SQL
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
-                $indexOrders = $index->getAttribute('orders', []);
                 $indexAttributes = $index->getAttribute('attributes', []);
+                $indexOrders = $index->getAttribute('orders', []);
 
                 $this->createIndex(
                     $id,
@@ -180,8 +179,7 @@ class Postgres extends SQL
                     $indexType,
                     $indexAttributes,
                     [],
-                    $indexOrders,
-                    $attributes
+                    $indexOrders
                 );
             }
         } catch (Exception $e) {
@@ -575,11 +573,10 @@ class Postgres extends SQL
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
-     * @param array $collectionAttributes
+     *
      * @return bool
-     * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collectionAttributes): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
@@ -617,7 +614,6 @@ class Postgres extends SQL
         }
 
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
-        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         return $this->getPDO()
@@ -1946,7 +1942,7 @@ class Postgres extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if($array === true){
+        if($array === true) {
             return 'JSONB';
         }
 

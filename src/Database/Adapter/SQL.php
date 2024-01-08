@@ -865,10 +865,11 @@ abstract class SQL extends Adapter
      *
      * @param string $name
      * @return string
+     * @throws DatabaseException
      */
     protected function getSQLTable(string $name): string
     {
-        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$name}`";
+        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$this->filter($name)}`";
     }
 
     /**

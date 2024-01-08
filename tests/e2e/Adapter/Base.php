@@ -1693,8 +1693,7 @@ abstract class Base extends TestCase
         } catch(Throwable $e) {
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
                 $this->assertEquals('Fulltext" index is forbidden on array attributes', $e->getMessage());
-            }
-            else {
+            } else {
                 $this->assertEquals('Fulltext index is not supported', $e->getMessage());
             }
         }
@@ -1758,12 +1757,25 @@ abstract class Base extends TestCase
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
-            // todo: show we throw exception using equal on array attribute?
             // todo: should contains ['Joe', 'black'] means where  'Joe' and 'black' VS OR? VS JSON_OVERLAPS which means OR
-            $documents = static::getDatabase()->find($collection, [
-                Query::equal('names', ['Joe'])
-            ]);
-            //$this->assertCount(0, $documents);
+
+            try {
+                static::getDatabase()->find($collection, [
+                    Query::equal('names', ['Joe'])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch(Throwable $e) {
+                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array. Please use contains', $e->getMessage());
+            }
+
+            try {
+                static::getDatabase()->find($collection, [
+                    Query::contains('age', [10])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch(Throwable $e) {
+                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array.', $e->getMessage());
+            }
 
             $documents = static::getDatabase()->find($collection, [
                 Query::contains('names', ['Jake', 'Joe'])

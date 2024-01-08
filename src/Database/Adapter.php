@@ -433,10 +433,10 @@ abstract class Adapter
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
-     * @param array<Document> $collectionAttributes
+     *
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collectionAttributes): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool;
 
     /**
      * Delete Index

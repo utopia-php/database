@@ -64,7 +64,7 @@ class Filter extends Base
      * @param array<mixed> $values
      * @return bool
      */
-    protected function isValidAttributeAndValues(string $attribute, array $values): bool
+    protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool
     {
         if (!$this->isValidAttribute($attribute)) {
             return false;
@@ -97,6 +97,18 @@ class Filter extends Base
 
             if (!$condition) {
                 $this->message = 'Query type does not match expected: ' . $attributeType;
+                return false;
+            }
+        }
+
+        if(isset($attributeSchema['array'])){
+            if($attributeSchema['array'] === false && Query::TYPE_CONTAINS === $method) {
+                $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array.';
+                return false;
+            }
+
+            if($attributeSchema['array'] === true && Query::TYPE_CONTAINS !== $method) {
+                $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array. Please use ' . Query::TYPE_CONTAINS;
                 return false;
             }
         }
@@ -143,18 +155,8 @@ class Filter extends Base
                     return false;
                 }
 
-                if(!$this->isValidAttributeAndValues($attribute, $value->getValues())) {
-                    return false;
-                }
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
-                if(Query::TYPE_CONTAINS === $method) {
-                    if($this->schema[$attribute]['array'] === false) {
-                        $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array.';
-                        return false;
-                    }
-                }
-
-                return true;
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
             case Query::TYPE_LESSER_EQUAL:
@@ -168,7 +170,7 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_BETWEEN:
                 if (count($value->getValues()) != 2) {
@@ -176,11 +178,11 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_OR:
             case Query::TYPE_AND:

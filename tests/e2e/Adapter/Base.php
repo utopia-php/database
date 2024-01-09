@@ -3646,6 +3646,36 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testStructureValidationAfterRelationsAttribute(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection("structure_1", [], [], [Permission::create(Role::any())]);
+        static::getDatabase()->createCollection("structure_2", [], [], [Permission::create(Role::any())]);
+
+        static::getDatabase()->createRelationship(
+            collection: "structure_1",
+            relatedCollection: "structure_2",
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        try {
+            static::getDatabase()->createDocument('structure_1', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'structure_2' => '100',
+                'name' => 'Frozen', // Unknown attribute 'name' after relation attribute
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+    }
+
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

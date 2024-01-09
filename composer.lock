@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d061889d90a313cff4207a1449b549df",
+    "content-hash": "d6ee891117614d18ee2f10466bfea758",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -219,16 +219,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.8.0",
+            "version": "0.9.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "212e66100a1f32e674fca5d9bc317cc998303089"
+                "reference": "4fc7b4789b5f0ce74835c1ecfec4f3afe6f0e34e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/212e66100a1f32e674fca5d9bc317cc998303089",
-                "reference": "212e66100a1f32e674fca5d9bc317cc998303089",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/4fc7b4789b5f0ce74835c1ecfec4f3afe6f0e34e",
+                "reference": "4fc7b4789b5f0ce74835c1ecfec4f3afe6f0e34e",
                 "shasum": ""
             },
             "require": {
@@ -239,6 +239,7 @@
             },
             "require-dev": {
                 "laravel/pint": "1.2.*",
+                "phpstan/phpstan": "1.9.x-dev",
                 "phpunit/phpunit": "^9.3",
                 "vimeo/psalm": "4.13.1"
             },
@@ -262,22 +263,22 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.8.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.9.0"
             },
-            "time": "2022-10-16T16:48:09+00:00"
+            "time": "2024-01-07T18:11:23+00:00"
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.33.0",
+            "version": "0.32.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/http.git",
-                "reference": "e3ff6b933082d57b48e7c4267bb605c0bf2250fd"
+                "reference": "ad6f7e6d6b38cf5bed4e3af9a1394c59d4bb9225"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/http/zipball/e3ff6b933082d57b48e7c4267bb605c0bf2250fd",
-                "reference": "e3ff6b933082d57b48e7c4267bb605c0bf2250fd",
+                "url": "https://api.github.com/repos/utopia-php/http/zipball/ad6f7e6d6b38cf5bed4e3af9a1394c59d4bb9225",
+                "reference": "ad6f7e6d6b38cf5bed4e3af9a1394c59d4bb9225",
                 "shasum": ""
             },
             "require": {
@@ -307,9 +308,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/http/issues",
-                "source": "https://github.com/utopia-php/http/tree/0.33.0"
+                "source": "https://github.com/utopia-php/http/tree/0.32.0"
             },
-            "time": "2024-01-08T13:30:27+00:00"
+            "time": "2023-12-26T14:18:36+00:00"
         },
         {
             "name": "utopia-php/mongo",
@@ -834,16 +835,16 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.10.55",
+            "version": "1.10.54",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpstan.git",
-                "reference": "9a88f9d18ddf4cf54c922fbeac16c4cb164c5949"
+                "reference": "3e25f279dada0adc14ffd7bad09af2e2fc3523bb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/9a88f9d18ddf4cf54c922fbeac16c4cb164c5949",
-                "reference": "9a88f9d18ddf4cf54c922fbeac16c4cb164c5949",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/3e25f279dada0adc14ffd7bad09af2e2fc3523bb",
+                "reference": "3e25f279dada0adc14ffd7bad09af2e2fc3523bb",
                 "shasum": ""
             },
             "require": {
@@ -892,7 +893,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2024-01-08T12:32:40+00:00"
+            "time": "2024-01-05T15:50:47+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -2603,5 +2604,5 @@
         "php": ">=8.0"
     },
     "platform-dev": [],
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.2.0"
 }

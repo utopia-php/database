@@ -1703,7 +1703,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-                $this->assertEquals('Fulltext" index is forbidden on array attributes', $e->getMessage());
+                $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
             } else {
                 $this->assertEquals('Fulltext index is not supported', $e->getMessage());
             }
@@ -1752,7 +1752,7 @@ abstract class Base extends TestCase
             static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Key part length are forbidden on "integer" data-type for "age"', $e->getMessage());
+            $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
         }
 
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_names', Database::INDEX_KEY, ['names'], [255], []));

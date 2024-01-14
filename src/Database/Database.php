@@ -4560,7 +4560,6 @@ class Database
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         /**  @var array<Query> $queries */
-
         $queries = \array_merge(
             $selects,
             self::convertQueries($collection, $filters)

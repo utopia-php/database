@@ -140,7 +140,7 @@ class Index extends Validator
 
                 $direction = $orders[$key] ?? '';
                 if(!empty($direction)) {
-                    $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
+                    $this->message = 'An array attribute can not have an index order';
                     return false;
                 }
             }

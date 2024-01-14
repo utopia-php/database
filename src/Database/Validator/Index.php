@@ -136,7 +136,7 @@ class Index extends Validator
             if($isArray) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
                 if(!in_array($index->getAttribute('type'), [Database::INDEX_KEY])) {
-                    $this->message = ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
+                    $this->message = '"' . ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
 

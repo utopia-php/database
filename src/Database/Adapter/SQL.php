@@ -716,7 +716,6 @@ abstract class SQL extends Adapter
 
         if($this->getSupportForQueryOverlaps() && $query->attributeArray && $query->getMethod() == Query::TYPE_CONTAINS) {
             $placeholder = $this->getSQLPlaceholder($query) . '_0';
-            var_dump(json_encode($query->getValues()));
             $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
             return;
         }

@@ -1605,7 +1605,7 @@ class Postgres extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-        var_dump($sql);
+
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {

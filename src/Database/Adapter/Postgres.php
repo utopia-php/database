@@ -16,6 +16,8 @@ use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
 {
+    protected string $like = 'ILIKE';
+
     /**
      * Differences between MariaDB and Postgres
      *
@@ -1603,7 +1605,7 @@ class Postgres extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-
+        var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
@@ -1882,6 +1884,7 @@ class Postgres extends SQL
 
         $attribute = "\"{$query->getAttribute()}\"";
         $placeholder = $this->getSQLPlaceholder($query);
+        $operator = null;
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
@@ -1895,17 +1898,13 @@ class Postgres extends SQL
                 return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                $conditions = [];
-                foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = "{$attribute} @> :{$placeholder}_{$key}";
-                }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
+                $operator = $query->attributeArray ? '@>' : null;
 
             default:
                 $conditions = [];
+                $operator = $operator ?? $this->getSQLOperator($query->getMethod());
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$operator.' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -2080,6 +2079,16 @@ class Postgres extends SQL
     public function getSupportForTimeouts(): bool
     {
         return true;
+    }
+
+    /**
+     * Does the adapter handle Query Array Overlaps?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryOverlaps(): bool
+    {
+        return false;
     }
 
     /**

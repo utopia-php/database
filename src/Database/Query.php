@@ -70,6 +70,7 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+    public bool $attributeArray = false;
 
     /**
      * @var array<mixed>

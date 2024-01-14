@@ -120,15 +120,28 @@ class Index extends Validator
     {
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
+        $lengths = $index->getAttribute('lengths', []);
 
         $arrayAttributes = [];
-        foreach ($attributes as $key => $attribute) {
-            $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
+        foreach ($attributes as $attributePosition => $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
 
-            if($attribute->getAttribute('array') === true) {
+            $isArray = $attribute->getAttribute('array', false);
+
+            if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+                $this->message = 'Key part length are forbidden on "' . $attribute->getAttribute('type') . '" data-type for "' . $attributeName . '"';
+                return false;
+            }
+
+            if($isArray) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
                 if(!in_array($index->getAttribute('type'), [Database::INDEX_KEY])) {
                     $this->message = ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
+                    return false;
+                }
+
+                if(empty($lengths[$attributePosition])) {
+                    $this->message = 'Index length for array not specified';
                     return false;
                 }
 
@@ -138,9 +151,9 @@ class Index extends Validator
                     return false;
                 }
 
-                $direction = $orders[$key] ?? '';
+                $direction = $orders[$attributePosition] ?? '';
                 if(!empty($direction)) {
-                    $this->message = 'An array attribute can not have an index order';
+                    $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
             }
@@ -163,18 +176,6 @@ class Index extends Validator
 
         foreach ($index->getAttribute('attributes', []) as $attributePosition => $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)];
-
-            $isArray = $attribute->getAttribute('array', false);
-
-            if($isArray && empty($lengths[$attributePosition])) {
-                $this->message = 'Index length for array not specified';
-                return false;
-            }
-
-            if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
-                $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
-                return false;
-            }
 
             switch ($attribute->getAttribute('type')) {
                 case Database::VAR_STRING:

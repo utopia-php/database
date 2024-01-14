@@ -1628,7 +1628,7 @@ class MariaDB extends SQL
             {$sqlOrder}
             {$sqlLimit};
         ";
-
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -1942,13 +1942,10 @@ class MariaDB extends SQL
                 return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                // todo: use JSON_OVERLAPS .. find a solution to postgres...
-                $conditions = [];
-                foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = "JSON_CONTAINS(`table_main`.{$attribute}, :{$placeholder}_{$key})";
+                if($this->getSupportForQueryOverlaps() && $query->attributeArray) {
+                    return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
                 }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
+
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
@@ -2041,6 +2038,16 @@ class MariaDB extends SQL
      * @return bool
      */
     public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter handle Query Array Overlaps?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryOverlaps(): bool
     {
         return true;
     }

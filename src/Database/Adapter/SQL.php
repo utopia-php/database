@@ -14,6 +14,7 @@ use Utopia\Database\Query;
 abstract class SQL extends Adapter
 {
     protected mixed $pdo;
+    protected string $like = 'LIKE';
 
     /**
      * Constructor.
@@ -682,6 +683,13 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    /**
+     * Does the adapter handle array Overlaps?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForQueryOverlaps(): bool;
+
     public function getSupportForRelationships(): bool
     {
         return true;
@@ -706,12 +714,19 @@ abstract class SQL extends Adapter
             return;
         }
 
+        if($this->getSupportForQueryOverlaps() && $query->attributeArray && $query->getMethod() == Query::TYPE_CONTAINS) {
+            $placeholder = $this->getSQLPlaceholder($query) . '_0';
+            var_dump(json_encode($query->getValues()));
+            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
+            return;
+        }
+
         foreach ($query->getValues() as $key => $value) {
             $value = match ($query->getMethod()) {
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                 Query::TYPE_SEARCH => $this->getFulltextValue($value),
-                Query::TYPE_CONTAINS => \json_encode($value),
+                Query::TYPE_CONTAINS => $query->attributeArray ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                 default => $value
             };
 
@@ -777,7 +792,8 @@ abstract class SQL extends Adapter
                 return 'IS NOT NULL';
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
-                return 'LIKE';
+            case Query::TYPE_CONTAINS:
+                return $this->like;
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }

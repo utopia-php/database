@@ -1388,7 +1388,12 @@ class Mongo extends Adapter
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
-            $filter[$attribute]['$in'] = $query->getValues();
+            if($query->getMethod() === Query::TYPE_CONTAINS && $query->attributeArray === false){
+                $filter[$attribute]['$regex'] = $this->escapeWildcards($value);
+            }
+            else {
+                $filter[$attribute]['$in'] = $query->getValues();
+            }
         } elseif ($operator == '$search') {
             $filter['$text'][$operator] = $value;
         } elseif ($operator === Query::TYPE_BETWEEN) {

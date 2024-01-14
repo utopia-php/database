@@ -5167,6 +5167,12 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {
+            foreach ($queries as $query) {
+                if ($query->getAttribute() === $attribute->getId()) {
+                    $query->attributeArray = $attribute->getAttribute('array', false);
+                }
+            }
+
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {

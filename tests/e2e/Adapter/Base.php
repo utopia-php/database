@@ -1646,6 +1646,15 @@ abstract class Base extends TestCase
             signed: false
         ));
 
+        $this->assertEquals(true, static::getDatabase()->createAttribute(
+            $collection,
+            'tv_show',
+            Database::VAR_STRING,
+            size: 100,
+            required: false,
+            signed: false,
+        ));
+
         try {
             static::getDatabase()->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
@@ -1679,6 +1688,8 @@ abstract class Base extends TestCase
             'booleans' => [false],
             'names' => ['Joe', 'Antony', '100'],
             'numbers' => [0, 100, 1000, -1],
+            'age' => 41,
+            'tv_show' => 'Everybody Loves Raymond',
         ]));
 
         $document = static::getDatabase()->getDocument($collection, 'joe');
@@ -1699,23 +1710,15 @@ abstract class Base extends TestCase
         }
 
         try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names']);
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Only a single index can be created on array attributes found "numbers,names"', $e->getMessage());
+            $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
         }
-
-        try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names']);
-            $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
-            $this->assertEquals('Only a single index can be created on array attributes found "numbers,names"', $e->getMessage());
-        }
-
 
         $this->assertEquals(true, static::getDatabase()->createAttribute(
             $collection,
-            'long_names',
+            'long_size',
             Database::VAR_STRING,
             size: 2000,
             required: false,
@@ -1723,7 +1726,7 @@ abstract class Base extends TestCase
         ));
 
         try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_names'], [], []);
+            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_size'], [], []);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             $this->assertEquals('Index length for array not specified', $e->getMessage());
@@ -1731,7 +1734,7 @@ abstract class Base extends TestCase
 
         if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
             try {
-                static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_names'], [1000], []);
+                static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_size'], [1000], []);
                 $this->fail('Failed to throw exception');
             } catch(Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
@@ -1757,11 +1760,9 @@ abstract class Base extends TestCase
         $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
-            // todo: should contains ['Joe', 'black'] means where  'Joe' and 'black' VS OR? VS JSON_OVERLAPS which means OR
-
             try {
                 static::getDatabase()->find($collection, [
-                    Query::equal('names', ['Joe'])
+                    Query::equal('names', ['Joe']),
                 ]);
                 $this->fail('Failed to throw exception');
             } catch(Throwable $e) {
@@ -1778,17 +1779,27 @@ abstract class Base extends TestCase
             }
 
             $documents = static::getDatabase()->find($collection, [
+                Query::isNull('long_size')
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = static::getDatabase()->find($collection, [
+                Query::contains('tv_show', ['Love'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = static::getDatabase()->find($collection, [
                 Query::contains('names', ['Jake', 'Joe'])
             ]);
             $this->assertCount(1, $documents);
 
             $documents = static::getDatabase()->find($collection, [
-                Query::contains('numbers', [-1, 0])
+                Query::contains('numbers', [-1, 0, 999])
             ]);
             $this->assertCount(1, $documents);
 
             $documents = static::getDatabase()->find($collection, [
-                Query::contains('booleans', [false])
+                Query::contains('booleans', [false, true])
             ]);
             $this->assertCount(1, $documents);
         }
@@ -2176,11 +2187,11 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->find('movies', [
-                Query::contains('name', ['Frozen']),
+                Query::contains('price', [10.5]),
             ]);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Invalid query: Cannot query contains on attribute "name" because it is not an array.', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
     }

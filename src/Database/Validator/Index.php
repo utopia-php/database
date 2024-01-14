@@ -172,7 +172,7 @@ class Index extends Validator
             }
 
             if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
-                $this->message = 'Key part length are forbidden on "' . $attribute->getAttribute('type') . '" data-type for "' . $attributeName . '"';
+                $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
                 return false;
             }
 

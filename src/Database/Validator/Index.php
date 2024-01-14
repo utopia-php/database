@@ -134,7 +134,7 @@ class Index extends Validator
 
                 $arrayAttributes[] = $attribute->getAttribute('key', '');
                 if(count($arrayAttributes) > 1) {
-                    $this->message = 'Only a single index can be created on array attributes found "' . implode(',', $arrayAttributes) . '"';
+                   $this->message = 'An index may only contain one array attribute';
                     return false;
                 }
 

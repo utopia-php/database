@@ -1946,6 +1946,7 @@ class MariaDB extends SQL
                     return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
                 }
 
+                // no break
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {

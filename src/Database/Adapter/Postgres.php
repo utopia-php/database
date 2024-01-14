@@ -1900,6 +1900,7 @@ class Postgres extends SQL
             case Query::TYPE_CONTAINS:
                 $operator = $query->attributeArray ? '@>' : null;
 
+                // no break
             default:
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());

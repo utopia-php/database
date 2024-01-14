@@ -1155,7 +1155,6 @@ class SQLite extends MariaDB
         $attributes = implode(', ', $attributes);
 
         if ($this->shareTables) {
-            // todo: for share tables should we use tenant as part of key?
             $key = "`{$this->getNamespace()}_{$collection}_{$id}`";
             $attributes = "_tenant {$postfix}, {$attributes}";
         }

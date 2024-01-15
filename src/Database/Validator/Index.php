@@ -126,16 +126,9 @@ class Index extends Validator
         foreach ($attributes as $attributePosition => $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
 
-            $isArray = $attribute->getAttribute('array', false);
-
-            if(!$isArray && $attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
-                $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
-                return false;
-            }
-
-            if($isArray) {
+            if($attribute->getAttribute('array', false)) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if(!in_array($index->getAttribute('type'), [Database::INDEX_KEY])) {
+                if($index->getAttribute('type') != Database::INDEX_KEY) {
                     $this->message = '"' . ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
@@ -156,6 +149,10 @@ class Index extends Validator
                     $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
+            }
+            else if($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+                $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
+                return false;
             }
         }
         return true;

@@ -1650,7 +1650,7 @@ abstract class Base extends TestCase
             $collection,
             'tv_show',
             Database::VAR_STRING,
-            size: 100,
+            size: 700,
             required: false,
             signed: false,
         ));
@@ -1683,7 +1683,7 @@ abstract class Base extends TestCase
         }
 
         static::getDatabase()->createDocument($collection, new Document([
-            '$id' => 'joe',
+            '$id' => 'id1',
             '$permissions' => $permissions,
             'booleans' => [false],
             'names' => ['Joe', 'Antony', '100'],
@@ -1692,7 +1692,7 @@ abstract class Base extends TestCase
             'tv_show' => 'Everybody Loves Raymond',
         ]));
 
-        $document = static::getDatabase()->getDocument($collection, 'joe');
+        $document = static::getDatabase()->getDocument($collection, 'id1');
 
         $this->assertEquals(false, $document->getAttribute('booleans')[0]);
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
@@ -1724,6 +1724,9 @@ abstract class Base extends TestCase
             required: false,
             array: true
         ));
+
+        // tv_show Index length (700) + numbers(?) > 768 should break
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []));
 
         try {
             static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_size'], [], []);

@@ -149,8 +149,7 @@ class Index extends Validator
                     $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
-            }
-            else if($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+            } elseif($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
                 $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
                 return false;
             }
@@ -187,6 +186,11 @@ class Index extends Validator
                     $attributeSize = 1; // 4 bytes / 4 mb4
                     $indexLength = 1;
                     break;
+            }
+
+            if($attribute->getAttribute('array', false)) {
+                $attributeSize = Database::ARRAY_INDEX_LENGTH;
+                $indexLength = Database::ARRAY_INDEX_LENGTH;
             }
 
             if ($indexLength > $attributeSize) {

@@ -1725,42 +1725,31 @@ abstract class Base extends TestCase
             array: true
         ));
 
-        // tv_show Index length (700) + numbers(?) > 768 should break
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []));
-
-        try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_size'], [], []);
-            $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
-            $this->assertEquals('Index length for array not specified', $e->getMessage());
-        }
-
         if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
+            // If getMaxIndexLength() > 0 We clear length for array attributes
+            static::getDatabase()->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
+            static::getDatabase()->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
+
             try {
-                static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['long_size'], [1000], []);
+                static::getDatabase()->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
                 $this->fail('Failed to throw exception');
             } catch(Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
             }
         }
 
-        try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['names'], [255], ['desc']);
-            $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
-            $this->assertEquals('Invalid index order "desc" on array attribute "names"', $e->getMessage());
-        }
+        // We clear orders for array attributes
+        static::getDatabase()->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
 
         try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+            static::getDatabase()->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
         }
 
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_names', Database::INDEX_KEY, ['names'], [255], []));
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names1', Database::INDEX_KEY, ['age', 'names'], [null, 255], []));
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx_age_names2', Database::INDEX_KEY, ['age', 'booleans'], [0, 255], []));
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
+        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             try {

@@ -638,7 +638,7 @@ class MariaDB extends SQL
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
             if(!empty($collectionAttribute['array']) && $this->castIndexArray()) {
-                $attributes[$i] = '(CAST(' . $attr . ' AS char(255) ARRAY))';
+                $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
 

@@ -103,7 +103,7 @@ class Filter extends Base
         }
 
         if($attributeSchema['array'] === false && $method === Query::TYPE_CONTAINS && $attributeSchema['type'] !==  Database::VAR_STRING) {
-            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array.';
+            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
             return false;
         }
 

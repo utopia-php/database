@@ -688,7 +688,7 @@ abstract class SQL extends Adapter
      *
      * @return bool
      */
-    abstract public function getSupportForQueryOverlaps(): bool;
+    abstract public function getSupportForJSONOverlaps(): bool;
 
     public function getSupportForRelationships(): bool
     {

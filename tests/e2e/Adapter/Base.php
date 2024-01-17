@@ -1787,7 +1787,7 @@ abstract class Base extends TestCase
                 ]);
                 $this->fail('Failed to throw exception');
             } catch(Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array. Please use contains', $e->getMessage());
+                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
             }
 
             try {
@@ -1796,7 +1796,7 @@ abstract class Base extends TestCase
                 ]);
                 $this->fail('Failed to throw exception');
             } catch(Throwable $e) {
-                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array.', $e->getMessage());
+                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array or string.', $e->getMessage());
             }
 
             $documents = $database->find($collection, [
@@ -2212,7 +2212,7 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
-            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array.', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array or string.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
     }

@@ -16,8 +16,6 @@ use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
 {
-    protected string $like = 'ILIKE';
-
     /**
      * Differences between MariaDB and Postgres
      *
@@ -1898,7 +1896,7 @@ class Postgres extends SQL
                 return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                $operator = $query->attributeArray ? '@>' : null;
+                $operator = $query->onArray() ? '@>' : null;
 
                 // no break
             default:
@@ -2087,7 +2085,7 @@ class Postgres extends SQL
      *
      * @return bool
      */
-    public function getSupportForQueryOverlaps(): bool
+    public function getSupportForJSONOverlaps(): bool
     {
         return false;
     }
@@ -2133,5 +2131,13 @@ class Postgres extends SQL
         }
 
         throw $e;
+    }
+
+    /**
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'LIKE';
     }
 }

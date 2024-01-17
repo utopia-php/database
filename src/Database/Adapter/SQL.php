@@ -14,7 +14,6 @@ use Utopia\Database\Query;
 abstract class SQL extends Adapter
 {
     protected mixed $pdo;
-    protected string $like = 'LIKE';
 
     /**
      * Constructor.
@@ -714,7 +713,7 @@ abstract class SQL extends Adapter
             return;
         }
 
-        if($this->getSupportForQueryOverlaps() && $query->attributeArray && $query->getMethod() == Query::TYPE_CONTAINS) {
+        if($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
             $placeholder = $this->getSQLPlaceholder($query) . '_0';
             $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
             return;
@@ -725,7 +724,7 @@ abstract class SQL extends Adapter
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                 Query::TYPE_SEARCH => $this->getFulltextValue($value),
-                Query::TYPE_CONTAINS => $query->attributeArray ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                 default => $value
             };
 
@@ -792,7 +791,7 @@ abstract class SQL extends Adapter
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_CONTAINS:
-                return $this->like;
+                return $this->getLikeOperator();
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -970,4 +969,13 @@ abstract class SQL extends Adapter
         $tmp = implode(' '. $separator .' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
     }
+
+    /**
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'LIKE';
+    }
+
 }

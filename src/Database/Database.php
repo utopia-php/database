@@ -5186,7 +5186,7 @@ class Database
         foreach ($attributes as $attribute) {
             foreach ($queries as $query) {
                 if ($query->getAttribute() === $attribute->getId()) {
-                    $query->attributeArray = $attribute->getAttribute('array', false);
+                    $query->setOnArray($attribute->getAttribute('array', false));
                 }
             }
 

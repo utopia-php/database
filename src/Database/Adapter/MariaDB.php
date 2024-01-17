@@ -1943,7 +1943,7 @@ class MariaDB extends SQL
                 return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                if($this->getSupportForQueryOverlaps() && $query->attributeArray) {
+                if($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
                 }
 

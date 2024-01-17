@@ -1602,14 +1602,15 @@ abstract class Base extends TestCase
     {
         Authorization::setRole(Role::any()->toString());
 
+        $database = static::getDatabase();
         $collection = 'json';
         $permissions = [Permission::read(Role::any())];
 
-        static::getDatabase()->createCollection($collection, permissions: [
+        $database->createCollection($collection, permissions: [
             Permission::create(Role::any()),
         ]);
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
+        $this->assertEquals(true, $database->createAttribute(
             $collection,
             'booleans',
             Database::VAR_BOOLEAN,
@@ -1618,7 +1619,7 @@ abstract class Base extends TestCase
             array: true
         ));
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
+        $this->assertEquals(true, $database->createAttribute(
             $collection,
             'names',
             Database::VAR_STRING,
@@ -1627,7 +1628,7 @@ abstract class Base extends TestCase
             array: true
         ));
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
+        $this->assertEquals(true, $database->createAttribute(
             $collection,
             'numbers',
             Database::VAR_INTEGER,
@@ -1637,7 +1638,7 @@ abstract class Base extends TestCase
             array: true
         ));
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
+        $this->assertEquals(true, $database->createAttribute(
             $collection,
             'age',
             Database::VAR_INTEGER,
@@ -1646,7 +1647,7 @@ abstract class Base extends TestCase
             signed: false
         ));
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
+        $this->assertEquals(true, $database->createAttribute(
             $collection,
             'tv_show',
             Database::VAR_STRING,
@@ -1655,16 +1656,45 @@ abstract class Base extends TestCase
             signed: false,
         ));
 
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'short',
+            Database::VAR_STRING,
+            size: 5,
+            required: false,
+            signed: false,
+            array: true
+        ));
+
         try {
-            static::getDatabase()->createDocument($collection, new Document([]));
+            $database->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
         }
 
+        $database->updateAttribute($collection, 'booleans', required: false);
+
+        $doc = $database->getCollection($collection);
+        $attribute = $doc->getAttribute('attributes')[0];
+        $this->assertEquals('boolean', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(true, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+
         try {
-            static::getDatabase()->createDocument($collection, new Document([
-                'booleans' => [false],
+            $database->createDocument($collection, new Document([
+                'short' => ['More than 5 size'],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
                 'names' => ['Joe', 100],
             ]));
             $this->fail('Failed to throw exception');
@@ -1673,8 +1703,7 @@ abstract class Base extends TestCase
         }
 
         try {
-            static::getDatabase()->createDocument($collection, new Document([
-                'booleans' => [false],
+            $database->createDocument($collection, new Document([
                 'age' => 1.5,
             ]));
             $this->fail('Failed to throw exception');
@@ -1682,7 +1711,7 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
         }
 
-        static::getDatabase()->createDocument($collection, new Document([
+        $database->createDocument($collection, new Document([
             '$id' => 'id1',
             '$permissions' => $permissions,
             'booleans' => [false],
@@ -1692,14 +1721,14 @@ abstract class Base extends TestCase
             'tv_show' => 'Everybody Loves Raymond',
         ]));
 
-        $document = static::getDatabase()->getDocument($collection, 'id1');
+        $document = $database->getDocument($collection, 'id1');
 
         $this->assertEquals(false, $document->getAttribute('booleans')[0]);
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
 
         try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
+            $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
@@ -1710,13 +1739,13 @@ abstract class Base extends TestCase
         }
 
         try {
-            static::getDatabase()->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
+            $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
         }
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute(
+        $this->assertEquals(true, $database->createAttribute(
             $collection,
             'long_size',
             Database::VAR_STRING,
@@ -1725,13 +1754,13 @@ abstract class Base extends TestCase
             array: true
         ));
 
-        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
+        if ($database->getAdapter()->getMaxIndexLength() > 0) {
             // If getMaxIndexLength() > 0 We clear length for array attributes
-            static::getDatabase()->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
-            static::getDatabase()->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
+            $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
+            $database->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
 
             try {
-                static::getDatabase()->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
+                $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
                 $this->fail('Failed to throw exception');
             } catch(Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
@@ -1739,21 +1768,21 @@ abstract class Base extends TestCase
         }
 
         // We clear orders for array attributes
-        static::getDatabase()->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
+        $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
 
         try {
-            static::getDatabase()->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+            $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
         }
 
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
-        $this->assertTrue(static::getDatabase()->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
+        $this->assertTrue($database->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
+        $this->assertTrue($database->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             try {
-                static::getDatabase()->find($collection, [
+                $database->find($collection, [
                     Query::equal('names', ['Joe']),
                 ]);
                 $this->fail('Failed to throw exception');
@@ -1762,7 +1791,7 @@ abstract class Base extends TestCase
             }
 
             try {
-                static::getDatabase()->find($collection, [
+                $database->find($collection, [
                     Query::contains('age', [10])
                 ]);
                 $this->fail('Failed to throw exception');
@@ -1770,27 +1799,27 @@ abstract class Base extends TestCase
                 $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array.', $e->getMessage());
             }
 
-            $documents = static::getDatabase()->find($collection, [
+            $documents = $database->find($collection, [
                 Query::isNull('long_size')
             ]);
             $this->assertCount(1, $documents);
 
-            $documents = static::getDatabase()->find($collection, [
+            $documents = $database->find($collection, [
                 Query::contains('tv_show', ['Love'])
             ]);
             $this->assertCount(1, $documents);
 
-            $documents = static::getDatabase()->find($collection, [
+            $documents = $database->find($collection, [
                 Query::contains('names', ['Jake', 'Joe'])
             ]);
             $this->assertCount(1, $documents);
 
-            $documents = static::getDatabase()->find($collection, [
+            $documents = $database->find($collection, [
                 Query::contains('numbers', [-1, 0, 999])
             ]);
             $this->assertCount(1, $documents);
 
-            $documents = static::getDatabase()->find($collection, [
+            $documents = $database->find($collection, [
                 Query::contains('booleans', [false, true])
             ]);
             $this->assertCount(1, $documents);

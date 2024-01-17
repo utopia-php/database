@@ -1388,7 +1388,7 @@ class Mongo extends Adapter
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
-            if($query->getMethod() === Query::TYPE_CONTAINS && $query->attributeArray === false) {
+            if($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
                 $filter[$attribute]['$regex'] = $this->escapeWildcards($value);
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();

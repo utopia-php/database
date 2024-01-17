@@ -22,7 +22,6 @@ class Filter extends Base
     public function __construct(array $attributes = [], int $maxValuesCount = 100)
     {
         foreach ($attributes as $attribute) {
-            $attribute->setAttribute('array', $attribute->getAttribute('array', false));
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }
 
@@ -102,12 +101,21 @@ class Filter extends Base
             }
         }
 
-        if($attributeSchema['array'] === false && $method === Query::TYPE_CONTAINS && $attributeSchema['type'] !==  Database::VAR_STRING) {
+        $array = $attributeSchema['array'] ?? false;
+
+        if(
+            !$array &&
+            $method === Query::TYPE_CONTAINS &&
+            $attributeSchema['type'] !==  Database::VAR_STRING
+        ) {
             $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array.';
             return false;
         }
 
-        if($attributeSchema['array'] === true && !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])) {
+        if(
+            $array &&
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+        ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array. Please use ' . Query::TYPE_CONTAINS;
             return false;
         }

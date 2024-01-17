@@ -2049,7 +2049,7 @@ class MariaDB extends SQL
      *
      * @return bool
      */
-    public function getSupportForQueryOverlaps(): bool
+    public function getSupportForJSONOverlaps(): bool
     {
         return true;
     }

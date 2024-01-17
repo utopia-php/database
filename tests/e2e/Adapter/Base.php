@@ -4537,15 +4537,44 @@ abstract class Base extends TestCase
 
         $this->assertEquals(1, count($documents));
 
-        $this->expectException(StructureException::class);
-        static::getDatabase()->createDocument('datetime', new Document([
-            '$permissions' => [
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'date' => "1975-12-06 00:00:61"
-        ]));
+
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => "1975-12-06 00:00:61" // 61 seconds is invalid
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => '1975-12-06 00:00:61' // 61 seconds is invalid
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+
+        $documents = static::getDatabase()->find('datetime', [
+            Query::equal('date', ['1975-12-06 00:00:61'])
+        ]);
+
+        $this->assertEquals(true, false);
+        var_dump($documents);
+
+
+        $documents = static::getDatabase()->find('datetime', [
+            Query::equal('date', ['2023-10-2515:09:09.966399Z'])
+        ]);
+
+        var_dump($documents);
+
+
+
     }
 
     public function testCreateDateTimeAttributeFailure(): void

@@ -4536,6 +4536,11 @@ abstract class Base extends TestCase
         ]);
         $this->assertEquals(1, count($documents));
 
+        $documents = static::getDatabase()->find('datetime', [
+            Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
+        ]);
+        $this->assertCount(1, $documents);
+
         try {
             static::getDatabase()->createDocument('datetime', new Document([
                 'date' => "1975-12-06 00:00:61" // 61 seconds is invalid
@@ -4545,37 +4550,21 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
-        try {
-            static::getDatabase()->createDocument('datetime', new Document([
-                'date' => '1975-12-06 00:00:61' // 61 seconds is invalid
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
+        $invalidDates = [
+            '1975-12-06 00:00:61',
+            '16/01/2024 12:00:00AM'
+        ];
 
-        try {
-            static::getDatabase()->find('datetime', [
-                Query::equal('date', ['1975-12-06 00:00:61'])
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Invalid query: Query type does not match expected: datetime', $e->getMessage());
+        foreach ($invalidDates as $date) {
+            try {
+                static::getDatabase()->find('datetime', [
+                    Query::equal('date', [$date])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals('Invalid query: Query type does not match expected: datetime', $e->getMessage());
+            }
         }
-
-        try {
-            static::getDatabase()->find('datetime', [
-                Query::equal('date', ['16/01/2024 12:00:00AM'])
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Invalid query: Query type does not match expected: datetime', $e->getMessage());
-        }
-
-        $documents = static::getDatabase()->find('datetime', [
-            Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
-        ]);
-        $this->assertCount(1, $documents);
     }
 
     public function testCreateDateTimeAttributeFailure(): void

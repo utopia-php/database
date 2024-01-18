@@ -62,8 +62,6 @@ class DateTime
             $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
             return DateTime::format($value);
         } catch (\Exception $e) {
-            var_dump($e->getMessage());
-            var_dump($e->getCode());
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
     }

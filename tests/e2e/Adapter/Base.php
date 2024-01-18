@@ -4534,10 +4534,7 @@ abstract class Base extends TestCase
             Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),
             Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
         ]);
-
         $this->assertEquals(1, count($documents));
-
-
 
         try {
             static::getDatabase()->createDocument('datetime', new Document([
@@ -4548,7 +4545,6 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
-
         try {
             static::getDatabase()->createDocument('datetime', new Document([
                 'date' => '1975-12-06 00:00:61' // 61 seconds is invalid
@@ -4558,23 +4554,28 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
+        try {
+            static::getDatabase()->find('datetime', [
+                Query::equal('date', ['1975-12-06 00:00:61'])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid query: Query type does not match expected: datetime', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('datetime', [
+                Query::equal('date', ['16/01/2024 12:00:00AM'])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid query: Query type does not match expected: datetime', $e->getMessage());
+        }
 
         $documents = static::getDatabase()->find('datetime', [
-            Query::equal('date', ['1975-12-06 00:00:61'])
+            Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
         ]);
-
-        $this->assertEquals(true, false);
-        var_dump($documents);
-
-
-        $documents = static::getDatabase()->find('datetime', [
-            Query::equal('date', ['2023-10-2515:09:09.966399Z'])
-        ]);
-
-        var_dump($documents);
-
-
-
+        $this->assertCount(1, $documents);
     }
 
     public function testCreateDateTimeAttributeFailure(): void

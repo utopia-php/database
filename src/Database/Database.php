@@ -5166,10 +5166,6 @@ class Database
 
         foreach ($attributes as $attribute) {
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-
-                var_dump('dsdsdsdsdsdsdsdsdsdsdsdsdsdsdsdsdsdsds');
-
-
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {
                         $values = $query->getValues();

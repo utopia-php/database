@@ -1805,7 +1805,7 @@ abstract class Base extends TestCase
             $this->assertCount(1, $documents);
 
             $documents = $database->find($collection, [
-                Query::contains('tv_show', ['Love'])
+                Query::contains('tv_show', ['love'])
             ]);
             $this->assertCount(1, $documents);
 

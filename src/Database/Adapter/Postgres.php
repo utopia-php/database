@@ -2138,6 +2138,6 @@ class Postgres extends SQL
      */
     public function getLikeOperator(): string
     {
-        return 'LIKE';
+        return 'ILIKE';
     }
 }

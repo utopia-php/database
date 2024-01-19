@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 
@@ -56,6 +57,11 @@ class Select extends Base
             return false;
         }
 
+        $internalKeys = \array_map(
+            fn ($attr) => $attr['$id'],
+            Database::INTERNAL_ATTRIBUTES
+        );
+
         foreach ($value->getValues() as $attribute) {
             if (\str_contains($attribute, '.')) {
                 //special symbols with `dots`
@@ -69,7 +75,7 @@ class Select extends Base
             }
 
             // Skip internal attributes
-            if (\in_array($attribute, self::INTERNAL_ATTRIBUTES)) {
+            if (\in_array($attribute, $internalKeys)) {
                 continue;
             }
 

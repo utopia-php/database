@@ -5,12 +5,9 @@ mock.json
 data-tests.php
 loader.php
 .phpunit.result.cache
-/bin/view/results/
 .vscode
 .vscode/*
 database.sql
-
-## - Oh Wess!
 Makefile
 .envrc
 .vscode

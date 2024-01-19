@@ -70,6 +70,7 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+    protected bool $onArray = false;
 
     /**
      * @var array<mixed>
@@ -677,5 +678,22 @@ class Query
         }
 
         return false;
+    }
+
+    /**
+     * @return bool
+     */
+    public function onArray(): bool
+    {
+        return $this->onArray;
+    }
+
+    /**
+     * @param bool $bool
+     * @return void
+     */
+    public function setOnArray(bool $bool): void
+    {
+        $this->onArray = $bool;
     }
 }

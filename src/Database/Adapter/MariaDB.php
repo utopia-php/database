@@ -83,11 +83,13 @@ class MariaDB extends SQL
 
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'LONGTEXT';
-            }
+            $attrType = $this->getSQLType(
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
+            );
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
@@ -268,11 +270,7 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
@@ -299,11 +297,7 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
 
@@ -614,41 +608,68 @@ class MariaDB extends SQL
      * @param array<int> $lengths
      * @param array<string> $orders
      * @return bool
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $collection = $this->getDocument(Database::METADATA, $collection);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
-
-        foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
-
-            $attributes[$key] = "`{$attribute}`{$length} {$order}";
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
+        $id = $this->filter($id);
+
+        foreach ($attributes as $i => $attr) {
+            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => array_key_exists('key', $collectionAttribute) && $collectionAttribute['key'] === $attr);
+            $collectionAttribute = end($collectionAttribute);
+            $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
+            $length = empty($lengths[$i]) ? '' : '(' . (int)$lengths[$i] . ')';
+
+            $attr = match ($attr) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attr),
+            };
+
+            $attributes[$i] = "`{$attr}`{$length} {$order}";
+
+            if(!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+                $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
+            }
+        }
+
+        $sqlType = match ($type) {
+            Database::INDEX_KEY => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+        };
+
+        $attributes = \implode(', ', $attributes);
+
+        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
+
+        $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
+    }
+
+    /**
+     * @return bool
+     */
+    public function castIndexArray(): bool
+    {
+        return false;
     }
 
     /**
@@ -1912,19 +1933,25 @@ class MariaDB extends SQL
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
-                return "MATCH(table_main.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+                return "MATCH(`table_main`.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
-                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+                return "`table_main`.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+                return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
+            case Query::TYPE_CONTAINS:
+                if($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                    return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
+                }
+
+                // no break
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute . ' ' . $this->getSQLOperator($query->getMethod()) . ' :' . $placeholder . '_' . $key;
+                    $conditions[] = "{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
@@ -1936,11 +1963,16 @@ class MariaDB extends SQL
      * @param string $type
      * @param int $size
      * @param bool $signed
+     * @param bool $array
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
+        if($array === true) {
+            return 'JSON';
+        }
+
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
@@ -1986,36 +2018,6 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get SQL Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    {
-        $sqlType = match ($type) {
-            Database::INDEX_KEY,
-            Database::INDEX_ARRAY => 'INDEX',
-            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
-        };
-
-        $attributes = \implode(', ', $attributes);
-
-        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
-            // Add tenant as first index column for best performance
-            $attributes = "_tenant, {$attributes}";
-        }
-
-        return "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection)} ({$attributes})";
-    }
-
-    /**
      * Get PDO Type
      *
      * @param mixed $value
@@ -2038,6 +2040,16 @@ class MariaDB extends SQL
      * @return bool
      */
     public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter handle Query Array Overlaps?
+     *
+     * @return bool
+     */
+    public function getSupportForJSONOverlaps(): bool
     {
         return true;
     }

@@ -605,6 +605,29 @@ class Database
         return $this->adapter->getDatabase();
     }
 
+	/**
+	 * Set the cache instance
+	 *
+	 * @param Cache $cache
+	 *
+	 * @return $this
+	 */
+	public function setCache(Cache $cache): self
+	{
+		$this->cache = $cache;
+		return $this;
+	}
+
+	/**
+	 * Get the cache instance
+	 *
+	 * @return Cache
+	 */
+	public function getCache(): Cache
+	{
+		return $this->cache;
+	}
+
     /**
      * Set the name to use for cache
      *
@@ -712,6 +735,16 @@ class Database
         return $this;
     }
 
+	/**
+	 * Get instance filters
+	 *
+	 * @return array<string, array{encode: callable, decode: callable}>
+	 */
+	public function getInstanceFilters(): array
+	{
+		return $this->instanceFilters;
+	}
+
     /**
      * Enable validation
      *
@@ -772,6 +805,26 @@ class Database
 
         return $this;
     }
+
+	/**
+	 * Get list of keywords that cannot be used
+	 *
+	 * @return string[]
+	 */
+	public function getKeywords(): array
+	{
+		return $this->adapter->getKeywords();
+	}
+
+	/**
+	 * Get Database Adapter
+	 *
+	 * @return Adapter
+	 */
+	public function getAdapter(): Adapter
+	{
+		return $this->adapter;
+	}
 
     /**
      * Ping Database
@@ -5223,60 +5276,6 @@ class Database
     public function getLimitForIndexes(): int
     {
         return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
-    }
-
-    /**
-     * Get list of keywords that cannot be used
-     *
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return $this->adapter->getKeywords();
-    }
-
-    /**
-     * Get Database Adapter
-     *
-     * @return Adapter
-     */
-    public function getAdapter(): Adapter
-    {
-        return $this->adapter;
-    }
-
-    /**
-     * Get Cache
-     *
-     * @return Cache
-     */
-    public function getCache(): Cache
-    {
-        return $this->cache;
-    }
-
-    /**
-     * Set cache
-     *
-     * @param Cache $cache
-     *
-     * @return $this
-     */
-    public function setCache(Cache $cache): self
-    {
-        $this->cache = $cache;
-        return $this;
-    }
-
-
-    /**
-     * Get instance filters
-     *
-     * @return array<string, array{encode: callable, decode: callable}>
-     */
-    public function getInstanceFilters(): array
-    {
-        return $this->instanceFilters;
     }
 
     /**

@@ -98,7 +98,7 @@ class Filter extends Base
 
             switch ($attributeType) {
                 case Database::VAR_STRING:
-                    $validator = new Text(9999, 0); // todo: how long can a value be?
+                    $validator = new Text(0, 0);
                     break;
 
                 case Database::VAR_INTEGER:
@@ -125,7 +125,7 @@ class Filter extends Base
             }
 
             if (!is_null($validator) && !$validator->isValid($value)) {
-                $this->message = 'Query type does not match expected: ' . $attributeType;
+                $this->message = 'Query value invalid for attribute "' . $attribute . '": ' . $validator->getDescription();
                 return false;
             }
         }

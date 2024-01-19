@@ -124,8 +124,8 @@ class Filter extends Base
                     return false;
             }
 
-            if (!is_null($validator) && !$validator->isValid($value)) {
-                $this->message = 'Query value invalid for attribute "' . $attribute . '": ' . $validator->getDescription();
+            if (!\is_null($validator) && !$validator->isValid($value)) {
+                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
                 return false;
             }
         }

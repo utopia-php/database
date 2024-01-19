@@ -158,7 +158,7 @@ class QueryTest extends TestCase
 
         $response = $validator->isValid([Query::equal('title', [1776])]);
         $this->assertEquals(false, $response);
-        $this->assertEquals('Invalid query: Query type does not match expected: string', $validator->getDescription());
+        $this->assertEquals('Invalid query: Query value is invalid for attribute "title"', $validator->getDescription());
     }
 
     /**

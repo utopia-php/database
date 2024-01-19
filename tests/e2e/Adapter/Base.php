@@ -4562,7 +4562,7 @@ abstract class Base extends TestCase
                 ]);
                 $this->fail('Failed to throw exception');
             } catch (Exception $e) {
-                $this->assertEquals('Invalid query: Query type does not match expected: datetime', $e->getMessage());
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
             }
         }
     }

@@ -4,7 +4,7 @@ services:
 
   tests:
     container_name: tests
-    image: database-dev
+    image: databases-dev
     build:
       context: .
     networks:
@@ -38,7 +38,7 @@ services:
       POSTGRES_PASSWORD: password
 
   mariadb:
-    image: mariadb:10.7
+    image: mariadb:10.11
     container_name: utopia-mariadb
     networks:
       - database

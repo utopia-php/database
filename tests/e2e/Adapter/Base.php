@@ -85,7 +85,6 @@ abstract class Base extends TestCase
             return;
         }
 
-
         static::getDatabase()->createCollection('c1');
         static::getDatabase()->createCollection('c2');
 
@@ -190,7 +189,6 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-
         // RELATION_MANY_TO_ONE
         static::getDatabase()->createCollection('c2');
         static::getDatabase()->createRelationship(
@@ -241,8 +239,6 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
-
-
     }
 
     /**

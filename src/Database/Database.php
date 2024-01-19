@@ -605,28 +605,28 @@ class Database
         return $this->adapter->getDatabase();
     }
 
-	/**
-	 * Set the cache instance
-	 *
-	 * @param Cache $cache
-	 *
-	 * @return $this
-	 */
-	public function setCache(Cache $cache): self
-	{
-		$this->cache = $cache;
-		return $this;
-	}
+    /**
+     * Set the cache instance
+     *
+     * @param Cache $cache
+     *
+     * @return $this
+     */
+    public function setCache(Cache $cache): self
+    {
+        $this->cache = $cache;
+        return $this;
+    }
 
-	/**
-	 * Get the cache instance
-	 *
-	 * @return Cache
-	 */
-	public function getCache(): Cache
-	{
-		return $this->cache;
-	}
+    /**
+     * Get the cache instance
+     *
+     * @return Cache
+     */
+    public function getCache(): Cache
+    {
+        return $this->cache;
+    }
 
     /**
      * Set the name to use for cache
@@ -735,15 +735,15 @@ class Database
         return $this;
     }
 
-	/**
-	 * Get instance filters
-	 *
-	 * @return array<string, array{encode: callable, decode: callable}>
-	 */
-	public function getInstanceFilters(): array
-	{
-		return $this->instanceFilters;
-	}
+    /**
+     * Get instance filters
+     *
+     * @return array<string, array{encode: callable, decode: callable}>
+     */
+    public function getInstanceFilters(): array
+    {
+        return $this->instanceFilters;
+    }
 
     /**
      * Enable validation
@@ -806,25 +806,25 @@ class Database
         return $this;
     }
 
-	/**
-	 * Get list of keywords that cannot be used
-	 *
-	 * @return string[]
-	 */
-	public function getKeywords(): array
-	{
-		return $this->adapter->getKeywords();
-	}
+    /**
+     * Get list of keywords that cannot be used
+     *
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return $this->adapter->getKeywords();
+    }
 
-	/**
-	 * Get Database Adapter
-	 *
-	 * @return Adapter
-	 */
-	public function getAdapter(): Adapter
-	{
-		return $this->adapter;
-	}
+    /**
+     * Get Database Adapter
+     *
+     * @return Adapter
+     */
+    public function getAdapter(): Adapter
+    {
+        return $this->adapter;
+    }
 
     /**
      * Ping Database
@@ -4667,8 +4667,6 @@ class Database
      */
     public function find(string $collection, array $queries = []): array
     {
-        $collectionId = $collection;
-
         if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
@@ -4676,7 +4674,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection "' . $collectionId . '" not found');
+            throw new DatabaseException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);

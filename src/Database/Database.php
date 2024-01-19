@@ -32,7 +32,7 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
 
-    // Relationships Types
+    // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 
     // Index Types
@@ -40,7 +40,7 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
-    public const INDEX_ARRAY = 'array';
+    public const ARRAY_INDEX_LENGTH = 255;
 
     // Relation Types
     public const RELATION_ONE_TO_ONE = 'oneToOne';
@@ -2364,7 +2364,25 @@ class Database
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
+        }
+
+        /** @var array<Document> $collectionAttributes */
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $i => $attr) {
+            foreach ($collectionAttributes as $collectionAttribute) {
+                if($collectionAttribute->getAttribute('key') === $attr) {
+                    $isArray = $collectionAttribute->getAttribute('array', false);
+                    if($isArray) {
+                        if($this->adapter->getMaxIndexLength() > 0) {
+                            $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                        }
+                        $orders[$i] = null;
+                    }
+                    break;
+                }
+            }
         }
 
         $index = new Document([
@@ -4559,6 +4577,7 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
+        /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
             self::convertQueries($collection, $filters)
@@ -5165,6 +5184,12 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {
+            foreach ($queries as $query) {
+                if ($query->getAttribute() === $attribute->getId()) {
+                    $query->setOnArray($attribute->getAttribute('array', false));
+                }
+            }
+
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {

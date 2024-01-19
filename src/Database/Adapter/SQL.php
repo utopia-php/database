@@ -679,8 +679,15 @@ abstract class SQL extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return false;
+        return true;
     }
+
+    /**
+     * Does the adapter handle array Overlaps?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForJSONOverlaps(): bool;
 
     public function getSupportForRelationships(): bool
     {
@@ -706,15 +713,23 @@ abstract class SQL extends Adapter
             return;
         }
 
+        if($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
+            $placeholder = $this->getSQLPlaceholder($query) . '_0';
+            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
+            return;
+        }
+
         foreach ($query->getValues() as $key => $value) {
             $value = match ($query->getMethod()) {
                 Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                 Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                 Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                 default => $value
             };
 
-            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
+            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
+
             $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
         }
     }
@@ -775,7 +790,8 @@ abstract class SQL extends Adapter
                 return 'IS NOT NULL';
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
-                return 'LIKE';
+            case Query::TYPE_CONTAINS:
+                return $this->getLikeOperator();
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -819,7 +835,6 @@ abstract class SQL extends Adapter
     {
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 return 'INDEX';
 
             case Database::INDEX_UNIQUE:
@@ -829,7 +844,7 @@ abstract class SQL extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
@@ -864,10 +879,11 @@ abstract class SQL extends Adapter
      *
      * @param string $name
      * @return string
+     * @throws DatabaseException
      */
     protected function getSQLTable(string $name): string
     {
-        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$name}`";
+        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$this->filter($name)}`";
     }
 
     /**
@@ -943,7 +959,6 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            /* @var $query Query */
             if($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
             } else {
@@ -954,4 +969,13 @@ abstract class SQL extends Adapter
         $tmp = implode(' '. $separator .' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
     }
+
+    /**
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'LIKE';
+    }
+
 }

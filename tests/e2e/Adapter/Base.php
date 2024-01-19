@@ -2258,6 +2258,46 @@ abstract class Base extends TestCase
         ];
     }
 
+    public function testOrderByNonEnglish(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        static::getDatabase()->createCollection('orderNonEnglish', permissions: [
+            Permission::create(Role::any()),
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('orderNonEnglish', 'name', Database::VAR_STRING, 128, true));
+
+        static::getDatabase()->createDocument('orderNonEnglish', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Å',
+        ]));
+
+        static::getDatabase()->createDocument('orderNonEnglish', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'A',
+        ]));
+
+        $documents = static::getDatabase()->find('orderNonEnglish', [
+            Query::orderAsc('name'),
+        ]);
+
+        $this->assertEquals(2, count($documents));
+        $this->assertEquals('A', $documents[0]->getAttribute('name'));
+        $this->assertEquals('Å', $documents[1]->getAttribute('name'));
+
+        $documents = static::getDatabase()->find('orderNonEnglish', [
+            Query::orderDesc('name'),
+        ]);
+
+        $this->assertEquals('Å', $documents[0]->getAttribute('name'));
+        $this->assertEquals('A', $documents[1]->getAttribute('name'));
+    }
+
     public function testFindBasicChecks(): void
     {
         $documents = static::getDatabase()->find('movies');

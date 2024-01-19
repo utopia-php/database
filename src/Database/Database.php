@@ -605,28 +605,28 @@ class Database
         return $this->adapter->getDatabase();
     }
 
-	/**
-	 * Set the name to use for cache
-	 *
-	 * @param string $name
-	 * @return $this
-	 */
-	public function setCacheName(string $name): self
-	{
-		$this->cacheName = $name;
+    /**
+     * Set the name to use for cache
+     *
+     * @param string $name
+     * @return $this
+     */
+    public function setCacheName(string $name): self
+    {
+        $this->cacheName = $name;
 
-		return $this;
-	}
+        return $this;
+    }
 
-	/**
-	 * Get the cache name
-	 *
-	 * @return string
-	 */
-	public function getCacheName(): string
-	{
-		return $this->cacheName;
-	}
+    /**
+     * Get the cache name
+     *
+     * @return string
+     */
+    public function getCacheName(): string
+    {
+        return $this->cacheName;
+    }
 
     /**
      * Set a metadata value to be printed in the query comments

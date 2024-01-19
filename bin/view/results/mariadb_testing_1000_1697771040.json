@@ -1,0 +1,52 @@
+[
+  {
+    "roles": 2,
+    "results": {
+      "greaterThan, equal[1], limit(1000)": 0.014531135559082031,
+      "equal[3], limit(1000)": 0.01854395866394043,
+      "greaterThan, limit(1000)": 0.03291916847229004,
+      "search, limit(1000)": 0.037921905517578125,
+      "contains[1], limit(1000)": 0.0019600391387939453
+    }
+  },
+  {
+    "roles": 102,
+    "results": {
+      "greaterThan, equal[1], limit(1000)": 0.0018169879913330078,
+      "equal[3], limit(1000)": 0.012106895446777344,
+      "greaterThan, limit(1000)": 0.030903100967407227,
+      "search, limit(1000)": 0.03960585594177246,
+      "contains[1], limit(1000)": 0.0017769336700439453
+    }
+  },
+  {
+    "roles": 495,
+    "results": {
+      "greaterThan, equal[1], limit(1000)": 0.0020799636840820312,
+      "equal[3], limit(1000)": 0.013564109802246094,
+      "greaterThan, limit(1000)": 0.032176971435546875,
+      "search, limit(1000)": 0.03503084182739258,
+      "contains[1], limit(1000)": 0.001474142074584961
+    }
+  },
+  {
+    "roles": 954,
+    "results": {
+      "greaterThan, equal[1], limit(1000)": 0.0017261505126953125,
+      "equal[3], limit(1000)": 0.012243986129760742,
+      "greaterThan, limit(1000)": 0.03142595291137695,
+      "search, limit(1000)": 0.03658008575439453,
+      "contains[1], limit(1000)": 0.0016679763793945312
+    }
+  },
+  {
+    "roles": 1812,
+    "results": {
+      "greaterThan, equal[1], limit(1000)": 0.0019099712371826172,
+      "equal[3], limit(1000)": 0.012614965438842773,
+      "greaterThan, limit(1000)": 0.030133962631225586,
+      "search, limit(1000)": 0.03749680519104004,
+      "contains[1], limit(1000)": 0.0017859935760498047
+    }
+  }
+]

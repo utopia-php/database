@@ -18,14 +18,14 @@ use Utopia\Validator\Text;
 
 /**
  * @Example
- * docker-compose exec tests bin/index --adapter=mysql --name=testing
+ * docker compose exec tests bin/index --adapter=mysql --name=testing
  */
 
 $cli
     ->task('index')
     ->desc('Index mock data for testing queries')
-    ->param('adapter', '', new Text(0), 'Database adapter', false)
-    ->param('name', '', new Text(0), 'Name of created database.', false)
+    ->param('adapter', '', new Text(0), 'Database adapter')
+    ->param('name', '', new Text(0), 'Name of created database.')
     ->action(function ($adapter, $name) {
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
@@ -71,39 +71,39 @@ $cli
                 return;
         }
 
-        $database->setDefaultDatabase($name);
+        $database->setDatabase($name);
         $database->setNamespace($namespace);
 
-        Console::info("For query: greaterThan(created, 2010-01-01 05:00:00)', 'equal(genre,travel)");
-
+        Console::info("greaterThan('created', ['2010-01-01 05:00:00']), equal('genre', ['travel'])");
         $start = microtime(true);
         $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
         Console::info("equal('genre', ['fashion', 'finance', 'sports'])");
-
         $start = microtime(true);
         $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
 
-
         Console::info("greaterThan('views', 100000)");
-
         $start = microtime(true);
         $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
-
 
         Console::info("search('text', 'Alice')");
         $start = microtime(true);
         $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
         $time = microtime(true) - $start;
         Console::success("{$time} seconds");
-    });
 
+        Console::info("contains('tags', ['tag1'])");
+        $start = microtime(true);
+        $database->createIndex('articles', 'tags', Database::INDEX_KEY, ['tags']);
+        $time = microtime(true) - $start;
+        Console::success("{$time} seconds");
+    });
 
 $cli
     ->error()

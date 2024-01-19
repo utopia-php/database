@@ -4979,18 +4979,37 @@ abstract class Base extends TestCase
             Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),
             Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
         ]);
-
         $this->assertEquals(1, count($documents));
 
-        $this->expectException(StructureException::class);
-        static::getDatabase()->createDocument('datetime', new Document([
-            '$permissions' => [
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'date' => "1975-12-06 00:00:61"
-        ]));
+        $documents = static::getDatabase()->find('datetime', [
+            Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
+        ]);
+        $this->assertCount(1, $documents);
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => "1975-12-06 00:00:61" // 61 seconds is invalid
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $invalidDates = [
+            '1975-12-06 00:00:61',
+            '16/01/2024 12:00:00AM'
+        ];
+
+        foreach ($invalidDates as $date) {
+            try {
+                static::getDatabase()->find('datetime', [
+                    Query::equal('date', [$date])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
+            }
+        }
     }
 
     public function testCreateDateTimeAttributeFailure(): void

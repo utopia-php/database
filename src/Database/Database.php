@@ -135,6 +135,8 @@ class Database
 
     protected Cache $cache;
 
+    protected string $cacheName = 'default';
+
     /**
      * @var array<bool|string>
      */
@@ -311,9 +313,13 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected int $relationshipFetchDepth = 1;
+
+    protected bool $filter = true;
+
     protected bool $validate = true;
 
-    protected int $relationshipFetchDepth = 1;
+    protected bool $preserveDates = false;
 
     /**
      * Stack of collection IDs when creating or updating related documents
@@ -600,6 +606,52 @@ class Database
     }
 
     /**
+     * Set the cache instance
+     *
+     * @param Cache $cache
+     *
+     * @return $this
+     */
+    public function setCache(Cache $cache): self
+    {
+        $this->cache = $cache;
+        return $this;
+    }
+
+    /**
+     * Get the cache instance
+     *
+     * @return Cache
+     */
+    public function getCache(): Cache
+    {
+        return $this->cache;
+    }
+
+    /**
+     * Set the name to use for cache
+     *
+     * @param string $name
+     * @return $this
+     */
+    public function setCacheName(string $name): self
+    {
+        $this->cacheName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Get the cache name
+     *
+     * @return string
+     */
+    public function getCacheName(): string
+    {
+        return $this->cacheName;
+    }
+
+    /**
      * Set a metadata value to be printed in the query comments
      *
      * @param string $key
@@ -660,6 +712,40 @@ class Database
     }
 
     /**
+     * Enable filters
+     *
+     * @return $this
+     */
+    public function enableFilters(): self
+    {
+        $this->filter = true;
+
+        return $this;
+    }
+
+    /**
+     * Disable filters
+     *
+     * @return $this
+     */
+    public function disableFilters(): self
+    {
+        $this->filter = false;
+
+        return $this;
+    }
+
+    /**
+     * Get instance filters
+     *
+     * @return array<string, array{encode: callable, decode: callable}>
+     */
+    public function getInstanceFilters(): array
+    {
+        return $this->instanceFilters;
+    }
+
+    /**
      * Enable validation
      *
      * @return $this
@@ -711,6 +797,33 @@ class Database
         $this->adapter->setTenant($tenant);
 
         return $this;
+    }
+
+    public function setPreserveDates(bool $preserve): self
+    {
+        $this->preserveDates = $preserve;
+
+        return $this;
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     *
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return $this->adapter->getKeywords();
+    }
+
+    /**
+     * Get Database Adapter
+     *
+     * @return Adapter
+     */
+    public function getAdapter(): Adapter
+    {
+        return $this->adapter;
     }
 
     /**
@@ -1804,7 +1917,8 @@ class Database
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            if (
+                $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
                 && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {
@@ -2559,7 +2673,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
+        $cacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
@@ -2630,7 +2744,7 @@ class Database
          */
         foreach ($this->map as $key => $value) {
             [$k, $v] = \explode('=>', $key);
-            $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
+            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
             $cache = $this->cache->load($ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
@@ -2927,11 +3041,14 @@ class Database
 
         $time = DateTime::now();
 
+        $createdAt = $document->getCreatedAt();
+        $updatedAt = $document->getUpdatedAt();
+
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', $time)
-            ->setAttribute('$updatedAt', $time);
+            ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
+            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
         $document = $this->encode($collection, $document);
 
@@ -2998,11 +3115,14 @@ class Database
                 }
             }
 
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', $time)
-                ->setAttribute('$updatedAt', $time);
+                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
+                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
             $document = $this->encode($collection, $document);
 
@@ -3359,15 +3479,16 @@ class Database
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
 
-                    switch($relationType) {
+                    switch ($relationType) {
                         case Database::RELATION_ONE_TO_ONE:
                             $oldValue = $old->getAttribute($key) instanceof Document
                                 ? $old->getAttribute($key)->getId()
                                 : $old->getAttribute($key);
 
                             if ((\is_null($value) !== \is_null($oldValue))
-                            || (\is_string($value) && $value !== $oldValue)
-                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document && $value->getId() !== $oldValue)
+                            ) {
                                 $shouldUpdate = true;
                             }
                             break;
@@ -3383,15 +3504,17 @@ class Database
                                     : $old->getAttribute($key);
 
                                 if ((\is_null($value) !== \is_null($oldValue))
-                                || (\is_string($value) && $value !== $oldValue)
-                                || ($value instanceof Document &&  $value->getId() !== $oldValue)) {
+                                    || (\is_string($value) && $value !== $oldValue)
+                                    || ($value instanceof Document &&  $value->getId() !== $oldValue)
+                                ) {
                                     $shouldUpdate = true;
                                 }
                                 break;
                             }
 
                             if ((\is_null($old->getAttribute($key)) !== \is_null($value))
-                            || \count($old->getAttribute($key)) !== \count($value)) {
+                                || \count($old->getAttribute($key)) !== \count($value)
+                            ) {
                                 $shouldUpdate = true;
                                 break;
                             }
@@ -3401,7 +3524,8 @@ class Database
                                     : $old->getAttribute($key)[$index];
 
                                 if ((\is_string($relation) && $relation !== $oldValue)
-                                || ($relation instanceof Document && $relation->getId() !== $oldValue)) {
+                                    || ($relation instanceof Document && $relation->getId() !== $oldValue)
+                                ) {
                                     $shouldUpdate = true;
                                     break;
                                 }
@@ -3434,7 +3558,8 @@ class Database
         }
 
         if ($shouldUpdate) {
-            $document->setAttribute('$updatedAt', $time);
+            $updatedAt = $document->getUpdatedAt();
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
         }
 
         // Check if document was updated after the request timestamp
@@ -3507,6 +3632,10 @@ class Database
                 throw new DatabaseException('Must define $id attribute for each document');
             }
 
+            $updatedAt = $document->getUpdatedAt();
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            $document = $this->encode($collection, $document);
+
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument(
                     $collection->getId(),
@@ -3514,12 +3643,11 @@ class Database
                 )
             ));
 
-            $document->setAttribute('$updatedAt', $time);
-            $document = $this->encode($collection, $document);
-
             $validator = new Authorization(self::PERMISSION_UPDATE);
-            if ($collection->getId() !== self::METADATA
-                && !$validator->isValid($old->getUpdate())) {
+            if (
+                $collection->getId() !== self::METADATA
+                && !$validator->isValid($old->getUpdate())
+            ) {
                 throw new AuthorizationException($validator->getDescription());
             }
 
@@ -3578,7 +3706,7 @@ class Database
             if ($oldValue == $value) {
                 if (
                     ($relationType === Database::RELATION_ONE_TO_ONE  ||
-                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -4059,8 +4187,11 @@ class Database
         }
 
         $min = $min ? $min + $value : null;
+
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
+
         $this->purgeCachedDocument($collection->getId(), $id);
+
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
         return $result;
@@ -4192,8 +4323,8 @@ class Database
                         // collection as an existing relationship, but a different two-way key (the third condition),
                         // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                         $transitive = (($existingKey === $twoWayKey
-                                && $existingCollection === $relatedCollection->getId()
-                                && $existingSide !== $side)
+                            && $existingCollection === $relatedCollection->getId()
+                            && $existingSide !== $side)
                             || ($existingTwoWayKey === $key
                                 && $existingRelatedCollection === $collection->getId()
                                 && $existingSide !== $side)
@@ -4321,7 +4452,7 @@ class Database
                             Query::equal($twoWayKey, [$document->getId()])
                         ]);
                     } else {
-                        if(empty($value)) {
+                        if (empty($value)) {
                             return;
                         }
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
@@ -4506,7 +4637,7 @@ class Database
      */
     public function purgeCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
     }
 
     /**
@@ -4520,7 +4651,7 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
     }
 
     /**
@@ -5046,6 +5177,10 @@ class Database
      */
     protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
     {
+        if (!$this->filter) {
+            return $value;
+        }
+
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException('Filter not found');
         }
@@ -5142,46 +5277,6 @@ class Database
     }
 
     /**
-     * Get list of keywords that cannot be used
-     *
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return $this->adapter->getKeywords();
-    }
-
-    /**
-     * Get Database Adapter
-     *
-     * @return Adapter
-     */
-    public function getAdapter(): Adapter
-    {
-        return $this->adapter;
-    }
-
-    /**
-     * Get Cache
-     *
-     * @return Cache
-     */
-    public function getCache(): Cache
-    {
-        return $this->cache;
-    }
-
-    /**
-     * Get instance filters
-     *
-     * @return array<string, array{encode: callable, decode: callable}>
-     */
-    public function getInstanceFilters(): array
-    {
-        return $this->instanceFilters;
-    }
-
-    /**
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
@@ -5236,7 +5331,7 @@ class Database
             return;
         }
 
-        $key = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+        $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
         $cache = $this->cache->load($key, self::TTL);
         if (!empty($cache)) {
             foreach ($cache as $v) {

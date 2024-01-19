@@ -815,8 +815,6 @@ class Mongo extends Adapter
             }
 
             $this->client->update($name, $filters, $document);
-
-            $documents[$index] = new Document($document);
         }
 
         return $documents;

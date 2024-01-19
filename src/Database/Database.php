@@ -135,7 +135,7 @@ class Database
 
     protected Cache $cache;
 
-    protected string $name;
+    protected string $cacheName = 'default';
 
     /**
      * @var array<bool|string>
@@ -342,12 +342,11 @@ class Database
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
      */
-    public function __construct(Adapter $adapter, Cache $cache, array $filters = [], string $name = 'default')
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
     {
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
-        $this->name = $name;
 
         self::addFilter(
             'json',
@@ -605,6 +604,29 @@ class Database
     {
         return $this->adapter->getDatabase();
     }
+
+	/**
+	 * Set the name to use for cache
+	 *
+	 * @param string $name
+	 * @return $this
+	 */
+	public function setCacheName(string $name): self
+	{
+		$this->cacheName = $name;
+
+		return $this;
+	}
+
+	/**
+	 * Get the cache name
+	 *
+	 * @return string
+	 */
+	public function getCacheName(): string
+	{
+		return $this->cacheName;
+	}
 
     /**
      * Set a metadata value to be printed in the query comments
@@ -2598,7 +2620,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = $this->name . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
+        $cacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
@@ -2669,7 +2691,7 @@ class Database
          */
         foreach ($this->map as $key => $value) {
             [$k, $v] = \explode('=>', $key);
-            $ck = $this->name . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
+            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
             $cache = $this->cache->load($ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
@@ -4562,7 +4584,7 @@ class Database
      */
     public function purgeCachedCollection(string $collection): bool
     {
-        return $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
     }
 
     /**
@@ -4576,7 +4598,7 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge($this->name . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
     }
 
     /**
@@ -5312,7 +5334,7 @@ class Database
             return;
         }
 
-        $key = $this->name . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+        $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
         $cache = $this->cache->load($key, self::TTL);
         if (!empty($cache)) {
             foreach ($cache as $v) {

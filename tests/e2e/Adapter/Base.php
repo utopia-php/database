@@ -241,6 +241,27 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('indexes'));
     }
 
+    public function testAdapterFilter(): void
+    {
+        $collection = static::getDatabase()->createCollection('shmue.l');
+        $this->assertEquals('shmue.l', $collection->getId());
+
+        $collection = static::getDatabase()->createCollection('shmu.el');
+        $this->assertEquals('shmu.el', $collection->getId());
+
+        // todo: This is very bad! we got 2 rows in Metadata: "shmue.l", "shmu.el" & one collection in DB named "shmuel"!!!
+        // Meaning we can take data out of shmuel collection using different name
+
+
+        static::getDatabase()->createCollection('filter');
+        static::getDatabase()->createAttribute('filter', 'attr1', Database::VAR_STRING, 10, false);
+
+        // todo: this Throws PDOException: SQLSTATE[42S21]: Column already exists: 1060 Duplicate column name 'attr1'
+        static::getDatabase()->createAttribute('filter', 'attr.1', Database::VAR_STRING, 10, false);
+
+        $this->assertEquals(true, false);
+    }
+
     public function testPreserveDatesUpdate(): void
     {
         Authorization::disable();

@@ -27,7 +27,6 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Structure;
 use Utopia\Http\Validator\Range;
-use Utopia\Database\Exception\Structure as StructureException;
 
 abstract class Base extends TestCase
 {

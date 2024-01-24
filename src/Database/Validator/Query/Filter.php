@@ -6,10 +6,10 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
-use Utopia\Validator\Boolean;
-use Utopia\Validator\FloatValidator;
-use Utopia\Validator\Integer;
-use Utopia\Validator\Text;
+use Utopia\Http\Validator\Boolean;
+use Utopia\Http\Validator\FloatValidator;
+use Utopia\Http\Validator\Integer;
+use Utopia\Http\Validator\Text;
 
 class Filter extends Base
 {

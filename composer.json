@@ -33,7 +33,7 @@
         "ext-pdo": "*",
         "ext-mbstring": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "dev-fix-v2-swoole-coroutines as 0.31.0",
+        "utopia-php/framework": "0.34.*",
         "utopia-php/cache": "0.8.*",
         "utopia-php/mongo": "0.3.*"
     },
@@ -42,7 +42,7 @@
         "phpunit/phpunit": "^9.4",
         "pcov/clobber": "^2.0",
         "swoole/ide-helper": "4.8.0",
-        "utopia-php/cli": "^0.14.0",
+        "utopia-php/cli": "0.17.*",
         "laravel/pint": "1.4.*",
         "phpstan/phpstan": "1.10.*",
         "rregeer/phpunit-coverage-check": "^0.3.1"

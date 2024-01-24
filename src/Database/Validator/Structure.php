@@ -323,10 +323,6 @@ class Structure extends Validator
                     }
                 }
             } else {
-                if($type == Database::VAR_INTEGER) {
-                    var_dump($value);
-                }
-
                 if (!$validator->isValid($value)) {
                     $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
                     return false;

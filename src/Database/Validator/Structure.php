@@ -11,10 +11,8 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
-use Utopia\Validator\Integer;
 use Utopia\Validator\Range;
 use Utopia\Validator\Text;
-use function _PHPStan_3d4486d07\Symfony\Component\String\s;
 
 class Structure extends Validator
 {
@@ -271,7 +269,7 @@ class Structure extends Validator
                     $max = $size >= 8 ? Database::MAX_BIG_INTEGER : Database::MAX_INTEGER;
                     $min = -$max;
 
-                    if($signed === false){
+                    if($signed === false) {
                         //$max *= 2;
                         $min = 0;
                     }
@@ -325,7 +323,9 @@ class Structure extends Validator
                     }
                 }
             } else {
-                if($type == Database::VAR_INTEGER)var_dump($value);
+                if($type == Database::VAR_INTEGER) {
+                    var_dump($value);
+                }
 
                 if (!$validator->isValid($value)) {
                     $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();

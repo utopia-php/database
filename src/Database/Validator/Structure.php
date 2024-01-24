@@ -53,6 +53,16 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
+            '$id' => '$tenant',
+            'type' => Database::VAR_STRING,
+            'size' => 36,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
             '$id' => '$permissions',
             'type' => Database::VAR_STRING,
             'size' => 67000, // medium text
@@ -208,7 +218,7 @@ class Structure extends Validator
         }
 
         if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
-            $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
+            $this->message = 'Collection not found';
             return false;
         }
 
@@ -244,6 +254,10 @@ class Structure extends Validator
                 continue;
             }
 
+            if($type === Database::VAR_RELATIONSHIP) {
+                continue;
+            }
+
             switch ($type) {
                 case Database::VAR_STRING:
                     $size = $attribute['size'] ?? 0;
@@ -266,8 +280,6 @@ class Structure extends Validator
                     $validator = new DatetimeValidator();
                     break;
 
-                case Database::VAR_RELATIONSHIP:
-                    return true;
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;

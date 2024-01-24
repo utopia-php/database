@@ -3,16 +3,16 @@
 namespace Utopia\Database;
 
 use Exception;
-use InvalidArgumentException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
-use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -32,7 +32,7 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
 
-    // Relationships Types
+    // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 
     // Index Types
@@ -40,7 +40,7 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
-    public const INDEX_ARRAY = 'array';
+    public const ARRAY_INDEX_LENGTH = 255;
 
     // Relation Types
     public const RELATION_ONE_TO_ONE = 'oneToOne';
@@ -107,13 +107,19 @@ class Database
 
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
+    public const EVENT_DOCUMENTS_CREATE = 'documents_create';
     public const EVENT_DOCUMENT_READ = 'document_read';
     public const EVENT_DOCUMENT_UPDATE = 'document_update';
+    public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
     public const EVENT_DOCUMENT_DELETE = 'document_delete';
     public const EVENT_DOCUMENT_COUNT = 'document_count';
     public const EVENT_DOCUMENT_SUM = 'document_sum';
     public const EVENT_DOCUMENT_INCREASE = 'document_increase';
     public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
+
+    public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
+    public const EVENT_PERMISSIONS_READ = 'permissions_read';
+    public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
@@ -123,9 +129,13 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
+    public const INSERT_BATCH_SIZE = 100;
+
     protected Adapter $adapter;
 
     protected Cache $cache;
+
+    protected string $cacheName = 'default';
 
     /**
      * @var array<bool|string>
@@ -133,22 +143,22 @@ class Database
     protected array $map = [];
 
     /**
-     * @var array<string, bool>
-     */
-    protected array $primitives = [
-        self::VAR_STRING => true,
-        self::VAR_INTEGER => true,
-        self::VAR_FLOAT => true,
-        self::VAR_BOOLEAN => true,
-    ];
-
-    /**
-     * List of Internal Ids
+     * List of Internal attributes
+     *
      * @var array<array<string, mixed>>
      */
-    protected static array $attributes = [
+    public const INTERNAL_ATTRIBUTES = [
         [
             '$id' => '$id',
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
+            'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$internalId',
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
@@ -161,6 +171,16 @@ class Database
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$tenant',
+            'type' => self::VAR_STRING,
+            'size' => 36,
+            'required' => false,
+            'default' => null,
             'signed' => true,
             'array' => false,
             'filters' => [],
@@ -186,21 +206,26 @@ class Database
             'default' => null,
             'array' => false,
             'filters' => ['datetime']
-        ]
+        ],
+        [
+            '$id' => '$permissions',
+            'type' => Database::VAR_STRING,
+            'size' => 1000000,
+            'signed' => true,
+            'required' => false,
+            'default' => [],
+            'array' => false,
+            'filters' => ['json']
+        ],
     ];
 
-    /**
-     * List of Internal Attributes
-     *
-     * @var array<string>
-     */
-    public const INTERNAL_ATTRIBUTES = [
-        '$id',
-        '$internalId',
-        '$createdAt',
-        '$updatedAt',
-        '$permissions',
-        '$collection',
+    public const INTERNAL_INDEXES = [
+        '_id',
+        '_uid',
+        '_createdAt',
+        '_updatedAt',
+        '_permissions_id',
+        '_permissions',
     ];
 
     /**
@@ -209,7 +234,7 @@ class Database
      *
      * @var array<string, mixed>
      */
-    protected array $collection = [
+    public const COLLECTION = [
         '$id' => self::METADATA,
         '$collection' => self::METADATA,
         'name' => 'collections',
@@ -266,7 +291,7 @@ class Database
     /**
      * @var array<string, array{encode: callable, decode: callable}>
      */
-    private array $instanceFilters = [];
+    protected array $instanceFilters = [];
 
     /**
      * @var array<string, mixed>
@@ -288,23 +313,29 @@ class Database
 
     protected bool $resolveRelationships = true;
 
-    private int $relationshipFetchDepth = 1;
+    protected int $relationshipFetchDepth = 1;
+
+    protected bool $filter = true;
+
+    protected bool $validate = true;
+
+    protected bool $preserveDates = false;
 
     /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
      */
-    private array $relationshipWriteStack = [];
+    protected array $relationshipWriteStack = [];
 
     /**
      * @var array<Document>
      */
-    private array $relationshipFetchStack = [];
+    protected array $relationshipFetchStack = [];
 
     /**
      * @var array<Document>
      */
-    private array $relationshipDeleteStack = [];
+    protected array $relationshipDeleteStack = [];
 
     /**
      * @param Adapter $adapter
@@ -392,6 +423,7 @@ class Database
      * Add listener to events
      *
      * @param string $event
+     * @param string $name
      * @param callable $callback
      * @return self
      */
@@ -401,6 +433,22 @@ class Database
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][$name] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Add a transformation to be applied to a query string before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param callable $callback
+     * @return $this
+     */
+    public function before(string $event, string $name, callable $callback): self
+    {
+        $this->adapter->before($event, $name, $callback);
+
         return $this;
     }
 
@@ -468,14 +516,14 @@ class Database
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
 
         foreach (($this->listeners[$event] ?? []) as $name => $callback) {
             if (isset($this->silentListeners[$name])) {
                 continue;
             }
-            call_user_func($callback, $event, $args);
+            $callback($event, $args);
         }
     }
 
@@ -508,7 +556,7 @@ class Database
      *
      * @return $this
      *
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function setNamespace(string $namespace): self
     {
@@ -523,8 +571,6 @@ class Database
      * Get namespace of current set scope
      *
      * @return string
-     *
-     * @throws DatabaseException
      */
     public function getNamespace(): string
     {
@@ -535,14 +581,15 @@ class Database
      * Set database to use for current scope
      *
      * @param string $name
-     * @param bool $reset
      *
-     * @return bool
-     * @throws Exception
+     * @return self
+     * @throws DatabaseException
      */
-    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    public function setDatabase(string $name): self
     {
-        return $this->adapter->setDefaultDatabase($name, $reset);
+        $this->adapter->setDatabase($name);
+
+        return $this;
     }
 
     /**
@@ -550,13 +597,233 @@ class Database
      *
      * Get Database from current scope
      *
-     * @throws Exception
+     * @return string
+     * @throws DatabaseException
+     */
+    public function getDatabase(): string
+    {
+        return $this->adapter->getDatabase();
+    }
+
+    /**
+     * Set the cache instance
+     *
+     * @param Cache $cache
+     *
+     * @return $this
+     */
+    public function setCache(Cache $cache): self
+    {
+        $this->cache = $cache;
+        return $this;
+    }
+
+    /**
+     * Get the cache instance
+     *
+     * @return Cache
+     */
+    public function getCache(): Cache
+    {
+        return $this->cache;
+    }
+
+    /**
+     * Set the name to use for cache
+     *
+     * @param string $name
+     * @return $this
+     */
+    public function setCacheName(string $name): self
+    {
+        $this->cacheName = $name;
+
+        return $this;
+    }
+
+    /**
+     * Get the cache name
      *
      * @return string
      */
-    public function getDefaultDatabase(): string
+    public function getCacheName(): string
     {
-        return $this->adapter->getDefaultDatabase();
+        return $this->cacheName;
+    }
+
+    /**
+     * Set a metadata value to be printed in the query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return self
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->adapter->setMetadata($key, $value);
+
+        return $this;
+    }
+
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->adapter->getMetadata();
+    }
+
+    /**
+     * Clear metadata
+     *
+     * @return void
+     */
+    public function resetMetadata(): void
+    {
+        $this->adapter->resetMetadata();
+    }
+
+    /**
+     * Set maximum query execution time
+     *
+     * @param int $milliseconds
+     * @param string $event
+     * @return self
+     * @throws Exception
+     */
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): self
+    {
+        $this->adapter->setTimeout($milliseconds, $event);
+
+        return $this;
+    }
+
+    /**
+     * Clear maximum query execution time
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event = Database::EVENT_ALL): void
+    {
+        $this->adapter->clearTimeout($event);
+    }
+
+    /**
+     * Enable filters
+     *
+     * @return $this
+     */
+    public function enableFilters(): self
+    {
+        $this->filter = true;
+
+        return $this;
+    }
+
+    /**
+     * Disable filters
+     *
+     * @return $this
+     */
+    public function disableFilters(): self
+    {
+        $this->filter = false;
+
+        return $this;
+    }
+
+    /**
+     * Get instance filters
+     *
+     * @return array<string, array{encode: callable, decode: callable}>
+     */
+    public function getInstanceFilters(): array
+    {
+        return $this->instanceFilters;
+    }
+
+    /**
+     * Enable validation
+     *
+     * @return $this
+     */
+    public function enableValidation(): self
+    {
+        $this->validate = true;
+
+        return $this;
+    }
+
+    /**
+     * Disable validation
+     *
+     * @return $this
+     */
+    public function disableValidation(): self
+    {
+        $this->validate = false;
+
+        return $this;
+    }
+
+    /**
+     * Set Share Tables
+     *
+     * Set whether to share tables between tenants
+     *
+     * @param bool $share
+     * @return self
+     */
+    public function setShareTables(bool $share): self
+    {
+        $this->adapter->setShareTables($share);
+
+        return $this;
+    }
+
+    /**
+     * Set Tenant
+     *
+     * Set tenant to use if tables are shared
+     *
+     * @param ?int $tenant
+     * @return self
+     */
+    public function setTenant(?int $tenant): self
+    {
+        $this->adapter->setTenant($tenant);
+
+        return $this;
+    }
+
+    public function setPreserveDates(bool $preserve): self
+    {
+        $this->preserveDates = $preserve;
+
+        return $this;
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     *
+     * @return string[]
+     */
+    public function getKeywords(): array
+    {
+        return $this->adapter->getKeywords();
+    }
+
+    /**
+     * Get Database Adapter
+     *
+     * @return Adapter
+     */
+    public function getAdapter(): Adapter
+    {
+        return $this->adapter;
     }
 
     /**
@@ -570,38 +837,32 @@ class Database
     }
 
     /**
-     * Create the Default Database
+     * Create the database
      *
-     * @throws Exception
+     * @throws DatabaseException
      *
      * @return bool
      */
-    public function create(): bool
+    public function create(?string $database = null): bool
     {
-        $name = $this->adapter->getDefaultDatabase();
-        $this->adapter->create($name);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $database = $database ?? $this->adapter->getDatabase();
+        $this->adapter->create($database);
 
         /**
          * Create array of attribute documents
          * @var array<Document> $attributes
          */
         $attributes = array_map(function ($attribute) {
-            return new Document([
-                '$id' => ID::custom($attribute[0]),
-                'type' => $attribute[1],
-                'size' => $attribute[2],
-                'required' => $attribute[3],
-            ]);
-        }, [ // Array of [$id, $type, $size, $required]
-            ['name', self::VAR_STRING, 512, true],
-            ['attributes', self::VAR_STRING, 1000000, false],
-            ['indexes', self::VAR_STRING, 1000000, false],
-            ['documentSecurity', self::VAR_BOOLEAN, 0, false],
-        ]);
+            return new Document($attribute);
+        }, self::COLLECTION['attributes']);
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
-        $this->trigger(self::EVENT_DATABASE_CREATE, $name);
+        $this->trigger(self::EVENT_DATABASE_CREATE, $database);
 
         return true;
     }
@@ -610,13 +871,19 @@ class Database
      * Check if database exists
      * Optionally check if collection exists in database
      *
-     * @param string $database database name
+     * @param string|null $database (optional) database name
      * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
-    public function exists(string $database, string $collection = null): bool
+    public function exists(?string $database = null, ?string $collection = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $database = $database ?? $this->adapter->getDatabase();
+
         return $this->adapter->exists($database, $collection);
     }
 
@@ -627,6 +894,10 @@ class Database
      */
     public function list(): array
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $databases = $this->adapter->list();
 
         $this->trigger(self::EVENT_DATABASE_LIST, $databases);
@@ -637,15 +908,23 @@ class Database
     /**
      * Delete Database
      *
-     * @param string $name
-     *
+     * @param string|null $database
      * @return bool
      */
-    public function delete(string $name): bool
+    public function delete(?string $database = null): bool
     {
-        $deleted = $this->adapter->delete($name);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
 
-        $this->trigger(self::EVENT_DATABASE_DELETE, ['name' => $name, 'deleted' => $deleted]);
+        $database = $database ?? $this->adapter->getDatabase();
+
+        $deleted = $this->adapter->delete($database);
+
+        $this->trigger(self::EVENT_DATABASE_DELETE, [
+            'name' => $database,
+            'deleted' => $deleted
+        ]);
 
         return $deleted;
     }
@@ -661,18 +940,23 @@ class Database
      * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
-     * @throws InvalidArgumentException
      * @throws LimitException
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
 
-        $validator = new Permissions();
-        if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new Permissions();
+            if (!$validator->isValid($permissions)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -690,15 +974,22 @@ class Database
             'documentSecurity' => $documentSecurity
         ]);
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new IndexValidator(
+                $attributes,
+                $this->adapter->getMaxIndexLength()
+            );
+            foreach ($indexes as $index) {
+                if (!$validator->isValid($index)) {
+                    throw new DatabaseException($validator->getDescription());
+                }
+            }
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
-            return new Document($this->collection);
+            return new Document(self::COLLECTION);
         }
 
         // Check index limits, if given
@@ -706,7 +997,7 @@ class Database
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
 
-        // check attribute limits, if given
+        // Check attribute limits, if given
         if ($attributes) {
             if (
                 $this->adapter->getLimitForAttributes() > 0 &&
@@ -738,19 +1029,32 @@ class Database
      * @param bool $documentSecurity
      *
      * @return Document
-     * @throws InvalidArgumentException
      * @throws ConflictException
      * @throws DatabaseException
-     * @throws InvalidArgumentException
      */
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
-        $validator = new Permissions();
-        if (!$validator->isValid($permissions)) {
-            throw new InvalidArgumentException($validator->getDescription());
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        if ($this->validate) {
+            $validator = new Permissions();
+            if (!$validator->isValid($permissions)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables()
+            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
 
         $collection
             ->setAttribute('$permissions', $permissions)
@@ -773,7 +1077,17 @@ class Database
      */
     public function getCollection(string $id): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+        if ($id !== self::METADATA
+            && $this->adapter->getShareTables()
+            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            return new Document();
+        }
 
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
 
@@ -791,14 +1105,20 @@ class Database
      */
     public function listCollections(int $limit = 25, int $offset = 0): array
     {
-        Authorization::disable();
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
 
         $result = $this->silent(fn () => $this->find(self::METADATA, [
             Query::limit($limit),
             Query::offset($offset)
         ]));
 
-        Authorization::reset();
+        if ($this->adapter->getShareTables()) {
+            $result = \array_filter($result, function ($collection) {
+                return $collection->getAttribute('$tenant') === $this->adapter->getTenant();
+            });
+        }
 
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
@@ -814,7 +1134,21 @@ class Database
      */
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->adapter->getSizeOfCollection($collection);
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        return $this->adapter->getSizeOfCollection($collection->getId());
     }
 
     /**
@@ -826,7 +1160,19 @@ class Database
      */
     public function deleteCollection(string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes'),
@@ -872,9 +1218,17 @@ class Database
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getShareTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -1045,11 +1399,16 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      */
-    private function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
+    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
         if ($collection->getId() === self::METADATA) {
-            throw new DatabaseException('Cannot update metadata attributes');
+            throw new DatabaseException('Cannot update metadata indexes');
         }
 
         $indexes = $collection->getAttribute('indexes', []);
@@ -1083,9 +1442,14 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      */
-    private function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
+    protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
         if ($collection->getId() === self::METADATA) {
             throw new DatabaseException('Cannot update metadata attributes');
         }
@@ -1320,10 +1684,10 @@ class Database
                     throw new DatabaseException('Failed to update attribute');
                 }
 
-                $this->deleteCachedCollection($collection);
+                $this->purgeCachedCollection($collection);
             }
 
-            $this->deleteCachedDocument(self::METADATA, $collection);
+            $this->purgeCachedDocument(self::METADATA, $collection);
         });
     }
 
@@ -1340,6 +1704,10 @@ class Database
      */
     public function checkAttribute(Document $collection, Document $attribute): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = clone $collection;
 
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
@@ -1373,6 +1741,10 @@ class Database
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
@@ -1440,6 +1812,10 @@ class Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
@@ -1514,6 +1890,10 @@ class Database
         ?string $twoWayKey = null,
         string $onDelete = Database::RELATION_MUTATE_RESTRICT
     ): bool {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -1531,13 +1911,14 @@ class Database
         $twoWayKey ??= $collection->getId();
 
         $attributes = $collection->getAttribute('attributes', []);
-        /** @var Document[] $attributes */
+        /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+            if (
+                $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
                 && \strtolower($attribute->getAttribute('options')['twoWayKey']) === \strtolower($twoWayKey)
                 && $attribute->getAttribute('options')['relatedCollection'] === $relatedCollection->getId()
             ) {
@@ -1701,6 +2082,10 @@ class Database
         ?bool $twoWay = null,
         ?string $onDelete = null
     ): bool {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (
             \is_null($newKey)
             && \is_null($newTwoWayKey)
@@ -1779,7 +2164,7 @@ class Database
                     $junctionAttribute->setAttribute('key', $newTwoWayKey);
                 });
 
-                $this->deleteCachedCollection($junction);
+                $this->purgeCachedCollection($junction);
             }
 
             if ($altering) {
@@ -1799,8 +2184,8 @@ class Database
                 }
             }
 
-            $this->deleteCachedCollection($collection->getId());
-            $this->deleteCachedCollection($relatedCollection->getId());
+            $this->purgeCachedCollection($collection->getId());
+            $this->purgeCachedCollection($relatedCollection->getId());
 
             $renameIndex = function (string $collection, string $key, string $newKey) {
                 $this->updateIndexMeta(
@@ -1866,6 +2251,10 @@ class Database
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
@@ -1911,9 +2300,17 @@ class Database
 
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
-                    $this->deleteIndex($collection->getId(), $indexKey);
-                    if ($twoWay) {
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        $this->deleteIndex($collection->getId(), $indexKey);
+                        if ($twoWay) {
+                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        }
+                    }
+                    if ($side === Database::RELATION_SIDE_CHILD) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        if ($twoWay) {
+                            $this->deleteIndex($collection->getId(), $indexKey);
+                        }
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
@@ -1924,9 +2321,9 @@ class Database
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                    if ($side === Database::RELATION_SIDE_CHILD) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } else {
+                    } elseif ($twoWay) {
                         $this->deleteIndex($collection->getId(), $indexKey);
                     }
                     break;
@@ -1958,8 +2355,8 @@ class Database
             throw new DatabaseException('Failed to delete relationship');
         }
 
-        $this->deleteCachedCollection($collection->getId());
-        $this->deleteCachedCollection($relatedCollection->getId());
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedCollection($relatedCollection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
 
@@ -1982,6 +2379,10 @@ class Database
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
@@ -2041,16 +2442,15 @@ class Database
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (empty($attributes)) {
             throw new DatabaseException('Missing attributes');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
-        }
 
         // index IDs are case-insensitive
         $indexes = $collection->getAttribute('indexes', []);
@@ -2086,21 +2486,46 @@ class Database
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
 
-        $collection->setAttribute('indexes', new Document([
+        /** @var array<Document> $collectionAttributes */
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $i => $attr) {
+            foreach ($collectionAttributes as $collectionAttribute) {
+                if($collectionAttribute->getAttribute('key') === $attr) {
+                    $isArray = $collectionAttribute->getAttribute('array', false);
+                    if($isArray) {
+                        if($this->adapter->getMaxIndexLength() > 0) {
+                            $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                        }
+                        $orders[$i] = null;
+                    }
+                    break;
+                }
+            }
+        }
+
+        $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'attributes' => $attributes,
             'lengths' => $lengths,
             'orders' => $orders,
-        ]), Document::SET_TYPE_APPEND);
+        ]);
 
-        $validator = new IndexValidator($this->adapter->getMaxIndexLength());
-        if (!$validator->isValid($collection)) {
-            throw new DatabaseException($validator->getDescription());
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+
+        if ($this->validate) {
+            $validator = new IndexValidator(
+                $collection->getAttribute('attributes', []),
+                $this->adapter->getMaxIndexLength()
+            );
+            if (!$validator->isValid($index)) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
@@ -2128,6 +2553,10 @@ class Database
      */
     public function deleteIndex(string $collection, string $id): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $indexes = $collection->getAttribute('indexes', []);
@@ -2162,11 +2591,16 @@ class Database
      *
      * @return Document
      * @throws DatabaseException
+     * @throws Exception
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return new Document($this->collection);
+            return new Document(self::COLLECTION);
         }
 
         if (empty($collection)) {
@@ -2185,9 +2619,11 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $validator = new DocumentValidator($attributes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentValidator($attributes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $relationships = \array_filter(
@@ -2237,7 +2673,7 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = 'cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id;
+        $cacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
 
         if (!empty($selections)) {
             $cacheKey .= ':' . \md5(\implode($selections));
@@ -2307,13 +2743,13 @@ class Database
          * @phpstan-ignore-next-line
          */
         foreach ($this->map as $key => $value) {
-            list($k, $v) = explode('=>', $key);
-            $ck = 'cache-' . $this->getNamespace() . ':map:' . $k;
+            [$k, $v] = \explode('=>', $key);
+            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
             $cache = $this->cache->load($ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
             }
-            if (!in_array($v, $cache)) {
+            if (!\in_array($v, $cache)) {
                 $cache[] = $v;
                 $this->cache->save($ck, $cache);
             }
@@ -2331,8 +2767,8 @@ class Database
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
-                    if (!in_array($internalAttribute, $values)) {
-                        $document->removeAttribute($internalAttribute);
+                    if (!in_array($internalAttribute['$id'], $values)) {
+                        $document->removeAttribute($internalAttribute['$id']);
                     }
                 }
             }
@@ -2590,6 +3026,10 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
@@ -2601,17 +3041,22 @@ class Database
 
         $time = DateTime::now();
 
+        $createdAt = $document->getCreatedAt();
+        $updatedAt = $document->getUpdatedAt();
+
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', $time)
-            ->setAttribute('$updatedAt', $time);
+            ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
+            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Permissions();
-        if (!$validator->isValid($document->getPermissions())) {
-            throw new InvalidArgumentException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new Permissions();
+            if (!$validator->isValid($document->getPermissions())) {
+                throw new DatabaseException($validator->getDescription());
+            }
         }
 
         $structure = new Structure($collection);
@@ -2634,6 +3079,70 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
         return $document;
+    }
+
+    /**
+     * Create Documents in a batch
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws Exception
+     */
+    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        if (empty($documents)) {
+            return [];
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $time = DateTime::now();
+
+        foreach ($documents as $key => $document) {
+            if ($this->adapter->getShareTables()) {
+                if (empty($document->getAttribute('$tenant'))) {
+                    throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+                }
+            }
+
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
+            $document
+                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$collection', $collection->getId())
+                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
+                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            $document = $this->encode($collection, $document);
+
+            $validator = new Structure($collection);
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+
+            $documents[$key] = $document;
+        }
+
+        $documents = $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
+
+        foreach ($documents as $key => $document) {
+            $documents[$key] = $this->decode($collection, $document);
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE, $documents);
+
+        return $documents;
     }
 
     /**
@@ -2895,7 +3404,7 @@ class Database
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $this->deleteCachedDocument($relatedCollection->getId(), $relationId);
+                $this->purgeCachedDocument($relatedCollection->getId(), $relationId);
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
@@ -2927,6 +3436,10 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if (!$document->getId() || !$id) {
             throw new DatabaseException('Must define $id attribute');
         }
@@ -2934,11 +3447,13 @@ class Database
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
+        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
+        $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
         $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
         $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
@@ -2964,15 +3479,16 @@ class Database
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
 
-                    switch($relationType) {
+                    switch ($relationType) {
                         case Database::RELATION_ONE_TO_ONE:
                             $oldValue = $old->getAttribute($key) instanceof Document
                                 ? $old->getAttribute($key)->getId()
                                 : $old->getAttribute($key);
 
                             if ((\is_null($value) !== \is_null($oldValue))
-                            || (\is_string($value) && $value !== $oldValue)
-                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document && $value->getId() !== $oldValue)
+                            ) {
                                 $shouldUpdate = true;
                             }
                             break;
@@ -2988,15 +3504,17 @@ class Database
                                     : $old->getAttribute($key);
 
                                 if ((\is_null($value) !== \is_null($oldValue))
-                                || (\is_string($value) && $value !== $oldValue)
-                                || ($value instanceof Document &&  $value->getId() !== $oldValue)) {
+                                    || (\is_string($value) && $value !== $oldValue)
+                                    || ($value instanceof Document &&  $value->getId() !== $oldValue)
+                                ) {
                                     $shouldUpdate = true;
                                 }
                                 break;
                             }
 
                             if ((\is_null($old->getAttribute($key)) !== \is_null($value))
-                            || \count($old->getAttribute($key)) !== \count($value)) {
+                                || \count($old->getAttribute($key)) !== \count($value)
+                            ) {
                                 $shouldUpdate = true;
                                 break;
                             }
@@ -3006,7 +3524,8 @@ class Database
                                     : $old->getAttribute($key)[$index];
 
                                 if ((\is_string($relation) && $relation !== $oldValue)
-                                || ($relation instanceof Document && $relation->getId() !== $oldValue)) {
+                                    || ($relation instanceof Document && $relation->getId() !== $oldValue)
+                                ) {
                                     $shouldUpdate = true;
                                     break;
                                 }
@@ -3039,7 +3558,8 @@ class Database
         }
 
         if ($shouldUpdate) {
-            $document->setAttribute('$updatedAt', $time);
+            $updatedAt = $document->getUpdatedAt();
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
         }
 
         // Check if document was updated after the request timestamp
@@ -3070,11 +3590,84 @@ class Database
 
         $this->purgeRelatedDocuments($collection, $id);
 
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
+    }
+
+    /**
+     * Update Documents in a batch
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws AuthorizationException
+     * @throws Exception
+     * @throws StructureException
+     */
+    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        if (empty($documents)) {
+            return [];
+        }
+
+        $time = DateTime::now();
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        foreach ($documents as $document) {
+            if ($this->adapter->getShareTables() && empty($document->getAttribute('$tenant'))) {
+                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+            }
+
+            if (!$document->getId()) {
+                throw new DatabaseException('Must define $id attribute for each document');
+            }
+
+            $updatedAt = $document->getUpdatedAt();
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            $document = $this->encode($collection, $document);
+
+            $old = Authorization::skip(fn () => $this->silent(
+                fn () => $this->getDocument(
+                    $collection->getId(),
+                    $document->getId()
+                )
+            ));
+
+            $validator = new Authorization(self::PERMISSION_UPDATE);
+            if (
+                $collection->getId() !== self::METADATA
+                && !$validator->isValid($old->getUpdate())
+            ) {
+                throw new AuthorizationException($validator->getDescription());
+            }
+
+            $validator = new Structure($collection);
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+        }
+
+        $documents = $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
+
+        foreach ($documents as $key => $document) {
+            $documents[$key] = $this->decode($collection, $document);
+
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
+
+        return $documents;
     }
 
     /**
@@ -3113,7 +3706,7 @@ class Database
             if ($oldValue == $value) {
                 if (
                     ($relationType === Database::RELATION_ONE_TO_ONE  ||
-                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -3327,7 +3920,7 @@ class Database
                                 // For many-one we need to update the related key to null if no relation exists
                                 $document->setAttribute($key, null);
                             }
-                            $this->deleteCachedDocument($relatedCollection->getId(), $value);
+                            $this->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             $related = $this->getDocument($relatedCollection->getId(), $value->getId());
 
@@ -3345,12 +3938,15 @@ class Database
                                     $related->getId(),
                                     $value
                                 );
-                                $this->deleteCachedDocument($relatedCollection->getId(), $related->getId());
+                                $this->purgeCachedDocument($relatedCollection->getId(), $related->getId());
                             }
 
                             $document->setAttribute($key, $value->getId());
                         } elseif (\is_null($value)) {
                             break;
+                        } elseif (empty($value)) {
+                            throw new DatabaseException('Invalid value for relationship');
+
                         } else {
                             throw new DatabaseException('Invalid value for relationship');
                         }
@@ -3472,6 +4068,10 @@ class Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
@@ -3516,7 +4116,8 @@ class Database
 
         $max = $max ? $max - $value : null;
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
@@ -3539,6 +4140,10 @@ class Database
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
     {
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
@@ -3582,8 +4187,11 @@ class Database
         }
 
         $min = $min ? $min + $value : null;
+
         $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
+
+        $this->purgeCachedDocument($collection->getId(), $id);
+
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
         return $result;
@@ -3605,7 +4213,12 @@ class Database
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $validator = new Authorization(self::PERMISSION_DELETE);
@@ -3635,10 +4248,10 @@ class Database
             $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
         }
 
-        $this->purgeRelatedDocuments($collection, $id);
-        $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection->getId() . ':' . $id . ':*');
-
         $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
+
+        $this->purgeRelatedDocuments($collection, $id);
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -3710,8 +4323,8 @@ class Database
                         // collection as an existing relationship, but a different two-way key (the third condition),
                         // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                         $transitive = (($existingKey === $twoWayKey
-                                && $existingCollection === $relatedCollection->getId()
-                                && $existingSide !== $side)
+                            && $existingCollection === $relatedCollection->getId()
+                            && $existingSide !== $side)
                             || ($existingTwoWayKey === $key
                                 && $existingRelatedCollection === $collection->getId()
                                 && $existingSide !== $side)
@@ -3839,6 +4452,9 @@ class Database
                             Query::equal($twoWayKey, [$document->getId()])
                         ]);
                     } else {
+                        if (empty($value)) {
+                            return;
+                        }
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId());
                     }
 
@@ -4019,9 +4635,9 @@ class Database
      * @return bool
      * @throws DatabaseException
      */
-    public function deleteCachedCollection(string $collection): bool
+    public function purgeCachedCollection(string $collection): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
     }
 
     /**
@@ -4033,9 +4649,9 @@ class Database
      * @return bool
      * @throws DatabaseException
      */
-    public function deleteCachedDocument(string $collection, string $id): bool
+    public function purgeCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge('cache-' . $this->getNamespace() . ':' . $collection . ':' . $id . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
     }
 
     /**
@@ -4043,38 +4659,40 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param int|null $timeout
      *
      * @return array<Document>
      * @throws DatabaseException
+     * @throws QueryException
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $timeout = null): array
+    public function find(string $collection, array $queries = []): array
     {
-        if (!\is_null($timeout) && $timeout <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $originalName = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection "'. $originalName .'" not found');
+            throw new DatabaseException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator($attributes, $indexes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getRead());
 
-        if (!$skipAuth && !$documentSecurity) {
-            throw new AuthorizationException($validator->getDescription());
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
         }
 
         $relationships = \array_filter(
@@ -4098,6 +4716,7 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
+        /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
             self::convertQueries($collection, $filters)
@@ -4157,8 +4776,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
-            $timeout
+            $cursorDirection ?? Database::CURSOR_AFTER
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
@@ -4175,14 +4793,16 @@ class Database
             }
         }
 
+        unset($query);
+
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($results as $result) {
                     foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
-                        if (!\in_array($internalAttribute, $values)) {
-                            $result->removeAttribute($internalAttribute);
+                        if (!\in_array($internalAttribute['$id'], $values)) {
+                            $result->removeAttribute($internalAttribute['$id']);
                         }
                     }
                 }
@@ -4197,10 +4817,10 @@ class Database
     /**
      * @param string $collection
      * @param array<Query> $queries
-     * @return bool|Document
+     * @return false|Document
      * @throws DatabaseException
      */
-    public function findOne(string $collection, array $queries = []): bool|Document
+    public function findOne(string $collection, array $queries = []): false|Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
             Query::limit(1)
@@ -4227,18 +4847,19 @@ class Database
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new DatabaseException("Collection not found");
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator($attributes, $indexes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
@@ -4272,18 +4893,19 @@ class Database
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new DatabaseException("Collection not found");
+        if ($this->adapter->getShareTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator($attributes, $indexes);
-        if (!$validator->isValid($queries)) {
-            throw new QueryException($validator->getDescription());
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $queries = self::convertQueries($collection, $queries);
@@ -4295,15 +4917,6 @@ class Database
         return $sum;
     }
 
-    public function setTimeout(int $milliseconds): void
-    {
-        $this->adapter->setTimeout($milliseconds);
-    }
-
-    public function clearTimeout(): void
-    {
-        $this->adapter->clearTimeout();
-    }
     /**
      * Add Attribute Filter
      *
@@ -4322,19 +4935,6 @@ class Database
     }
 
     /**
-     * @return array<Document>
-     * @throws DatabaseException
-     */
-    public static function getInternalAttributes(): array
-    {
-        $attributes = [];
-        foreach (self::$attributes as $internal) {
-            $attributes[] = new Document($internal);
-        }
-        return $attributes;
-    }
-
-    /**
      * Encode Document
      *
      * @param Document $collection
@@ -4346,7 +4946,14 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+
+        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
+            // We don't want to encode permissions into a JSON string
+            return $attribute['$id'] !== '$permissions';
+        });
+
+        $attributes = \array_merge($attributes, $internalAttributes);
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -4423,7 +5030,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -4570,6 +5177,10 @@ class Database
      */
     protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
     {
+        if (!$this->filter) {
+            return $value;
+        }
+
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException('Filter not found');
         }
@@ -4612,10 +5223,11 @@ class Database
             }
         }
 
-        $keys = [];
-
         // Allow querying internal attributes
-        $keys = array_merge($keys, self::INTERNAL_ATTRIBUTES);
+        $keys = \array_map(
+            fn ($attribute) => $attribute['$id'],
+            self::INTERNAL_ATTRIBUTES
+        );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
@@ -4665,26 +5277,6 @@ class Database
     }
 
     /**
-     * Get list of keywords that cannot be used
-     *
-     * @return string[]
-     */
-    public function getKeywords(): array
-    {
-        return $this->adapter->getKeywords();
-    }
-
-    /**
-     * Get Database Adapter
-     *
-     * @return Adapter
-     */
-    public function getAdapter(): Adapter
-    {
-        return $this->adapter;
-    }
-
-    /**
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
@@ -4695,6 +5287,12 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {
+            foreach ($queries as $query) {
+                if ($query->getAttribute() === $attribute->getId()) {
+                    $query->setOnArray($attribute->getAttribute('array', false));
+                }
+            }
+
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {
@@ -4733,12 +5331,12 @@ class Database
             return;
         }
 
-        $key = 'cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
+        $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
         $cache = $this->cache->load($key, self::TTL);
         if (!empty($cache)) {
             foreach ($cache as $v) {
                 list($collectionId, $documentId) = explode(':', $v);
-                $this->deleteCachedDocument($collectionId, $documentId);
+                $this->purgeCachedDocument($collectionId, $documentId);
             }
             $this->cache->purge($key);
         }

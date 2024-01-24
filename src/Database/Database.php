@@ -32,6 +32,9 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
 
+    public const MAX_INTEGER = 2147483647;
+    public const MAX_BIG_INTEGER = PHP_INT_MAX;
+
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 

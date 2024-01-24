@@ -12,7 +12,9 @@ use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
+use Utopia\Validator\Range;
 use Utopia\Validator\Text;
+use function _PHPStan_3d4486d07\Symfony\Component\String\s;
 
 class Structure extends Validator
 {
@@ -249,6 +251,8 @@ class Structure extends Validator
             $array = $attribute['array'] ?? false;
             $format = $attribute['format'] ?? '';
             $required = $attribute['required'] ?? false;
+            $size = $attribute['size'] ?? 0;
+            $signed = $attribute['signed'] ?? false;
 
             if ($required === false && is_null($value)) { // Allow null value to optional params
                 continue;
@@ -260,12 +264,19 @@ class Structure extends Validator
 
             switch ($type) {
                 case Database::VAR_STRING:
-                    $size = $attribute['size'] ?? 0;
                     $validator = new Text($size, min: 0);
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer();
+                    $max = $size >= 8 ? Database::MAX_BIG_INTEGER : Database::MAX_INTEGER;
+                    $min = -$max;
+
+                    if($signed === false){
+                        //$max *= 2;
+                        $min = 0;
+                    }
+
+                    $validator = new Range($min, $max, Database::VAR_INTEGER);
                     break;
 
                 case Database::VAR_FLOAT:
@@ -314,6 +325,8 @@ class Structure extends Validator
                     }
                 }
             } else {
+                if($type == Database::VAR_INTEGER)var_dump($value);
+
                 if (!$validator->isValid($value)) {
                     $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
                     return false;

@@ -232,7 +232,7 @@ function createSchema(Database $database): void
     }
     $database->create();
 
-    Authorization::setRole(Role::any()->toString());
+    Authorization::addRole(Role::any()->toString());
     $database->createCollection('articles', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),

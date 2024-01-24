@@ -53,11 +53,11 @@ abstract class Base extends TestCase
     {
         if (is_null(self::$authorizationSingleton)) {
             self::$authorizationSingleton = new Authorization();
-            self::$authorizationSingleton->setRole('any');
+            self::$authorizationSingleton->addRole('any');
         }
 
         $this->authorization = self::$authorizationSingleton;
-        $this->authorization->setRole('any');
+        $this->authorization->addRole('any');
     }
 
     public function tearDown(): void
@@ -1498,7 +1498,7 @@ abstract class Base extends TestCase
      */
     public function testFind(): array
     {
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
         $this->getDatabase()->createCollection('movies', permissions: [
             Permission::create(Role::any()),
             Permission::update(Role::users())
@@ -1732,7 +1732,7 @@ abstract class Base extends TestCase
         /**
          * Check Permissions
          */
-        $this->authorization->setRole('user:x');
+        $this->authorization->addRole('user:x');
         $documents = $this->getDatabase()->find('movies');
 
         $this->assertEquals(6, count($documents));
@@ -2980,7 +2980,7 @@ abstract class Base extends TestCase
         $count = $this->getDatabase()->count('movies', [Query::equal('with-dash', ['Works2', 'Works3'])]);
         $this->assertEquals(4, $count);
 
-        $this->authorization->unsetRole('user:x');
+        $this->authorization->removeRole('user:x');
         $count = $this->getDatabase()->count('movies');
         $this->assertEquals(5, $count);
 
@@ -3011,7 +3011,7 @@ abstract class Base extends TestCase
      */
     public function testSum(): void
     {
-        $this->authorization->setRole('user:x');
+        $this->authorization->addRole('user:x');
         $sum = $this->getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = $this->getDatabase()->sum('movies', 'year');
@@ -3024,8 +3024,8 @@ abstract class Base extends TestCase
         $sum = $this->getDatabase()->sum('movies', 'year', [Query::equal('year', [2019])], 1);
         $this->assertEquals(2019, $sum);
 
-        $this->authorization->unsetRole('user:x');
-        $this->authorization->unsetRole('userx');
+        $this->authorization->removeRole('user:x');
+        $this->authorization->removeRole('userx');
         $sum = $this->getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = $this->getDatabase()->sum('movies', 'year');
@@ -3286,7 +3286,7 @@ abstract class Base extends TestCase
     public function testReadPermissionsSuccess(Document $document): Document
     {
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $document = $this->getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
@@ -3310,7 +3310,7 @@ abstract class Base extends TestCase
         $document = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
         $this->assertEquals(true, $document->isEmpty());
 
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         return $document;
     }
@@ -3318,7 +3318,7 @@ abstract class Base extends TestCase
     public function testReadPermissionsFailure(): Document
     {
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $document = $this->getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
@@ -3341,7 +3341,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $document->isEmpty());
 
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         return $document;
     }
@@ -3378,7 +3378,7 @@ abstract class Base extends TestCase
         $this->expectException(AuthorizationException::class);
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $document = $this->getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
@@ -3812,7 +3812,7 @@ abstract class Base extends TestCase
      */
     public function testUniqueIndexDuplicateUpdate(): void
     {
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
         // create document then update to conflict with index
         $document = $this->getDatabase()->createDocument('movies', new Document([
             '$permissions' => [
@@ -4469,7 +4469,7 @@ abstract class Base extends TestCase
 
     public function testWritePermissions(): void
     {
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
         $database = $this->getDatabase();
 
         $database->createCollection('animals', permissions: [
@@ -9987,7 +9987,7 @@ abstract class Base extends TestCase
             return;
         }
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
         $lawn1 = $this->getDatabase()->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 
@@ -10064,7 +10064,7 @@ abstract class Base extends TestCase
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
 
-        $this->authorization->setRole(Role::user('user1')->toString());
+        $this->authorization->addRole(Role::user('user1')->toString());
 
         $bird1 = $this->getDatabase()->getDocument('birds', 'bird1');
 
@@ -10077,7 +10077,7 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Bird 1 Updated', $bird1['name']);
 
-        $this->authorization->setRole(Role::user('user2')->toString());
+        $this->authorization->addRole(Role::user('user2')->toString());
 
         // Try delete multi-level nested document
         $deleted = $this->getDatabase()->deleteDocument(
@@ -11352,7 +11352,7 @@ abstract class Base extends TestCase
     public function testCollectionPermissionsCreateWorks(Document $collection): array
     {
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $document = $this->getDatabase()->createDocument($collection->getId(), new Document([
             '$id' => ID::unique(),
@@ -11375,7 +11375,7 @@ abstract class Base extends TestCase
     public function testCollectionPermissionsCreateThrowsException(Document $collection): void
     {
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
         $this->expectException(AuthorizationException::class);
 
         $this->getDatabase()->createDocument($collection->getId(), new Document([
@@ -11399,7 +11399,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $document = $this->getDatabase()->getDocument(
             $collection->getId(),
@@ -11420,7 +11420,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $document = $this->getDatabase()->getDocument(
             $collection->getId(),
@@ -11440,13 +11440,13 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $documents = $this->getDatabase()->find($collection->getId());
         $this->assertNotEmpty($documents);
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('random')->toString());
+        $this->authorization->addRole(Role::user('random')->toString());
 
         try {
             $this->getDatabase()->find($collection->getId());
@@ -11466,7 +11466,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $this->expectException(AuthorizationException::class);
         $this->getDatabase()->find($collection->getId());
@@ -11482,7 +11482,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $count = $this->getDatabase()->count(
             $collection->getId()
@@ -11502,7 +11502,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $count = $this->getDatabase()->count(
             $collection->getId()
@@ -11520,7 +11520,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $this->assertInstanceOf(Document::class, $this->getDatabase()->updateDocument(
             $collection->getId(),
@@ -11539,7 +11539,7 @@ abstract class Base extends TestCase
     {
         [$collection, $document] = $data;
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $this->expectException(AuthorizationException::class);
         $document = $this->getDatabase()->updateDocument(
@@ -11558,7 +11558,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $this->expectException(AuthorizationException::class);
         $this->getDatabase()->deleteDocument(
@@ -11576,7 +11576,7 @@ abstract class Base extends TestCase
         [$collection, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $this->assertTrue($this->getDatabase()->deleteDocument(
             $collection->getId(),
@@ -11668,7 +11668,7 @@ abstract class Base extends TestCase
     {
         [$collection, $collectionOneToOne, $collectionOneToMany] = $data;
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $document = $this->getDatabase()->createDocument($collection->getId(), new Document([
             '$id' => ID::unique(),
@@ -11721,7 +11721,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
         $this->expectException(AuthorizationException::class);
 
         $this->getDatabase()->createDocument($collection->getId(), new Document([
@@ -11744,7 +11744,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $document = $this->getDatabase()->getDocument(
             $collection->getId(),
@@ -11758,7 +11758,7 @@ abstract class Base extends TestCase
         $this->assertFalse($document->isEmpty());
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('random')->toString());
+        $this->authorization->addRole(Role::user('random')->toString());
 
         $document = $this->getDatabase()->getDocument(
             $collection->getId(),
@@ -11783,7 +11783,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $document = $this->getDatabase()->getDocument(
             $collection->getId(),
@@ -11802,7 +11802,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $documents = $this->getDatabase()->find(
             $collection->getId()
@@ -11818,7 +11818,7 @@ abstract class Base extends TestCase
         $this->assertFalse($document->isEmpty());
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('random')->toString());
+        $this->authorization->addRole(Role::user('random')->toString());
 
         $documents = $this->getDatabase()->find(
             $collection->getId()
@@ -11834,7 +11834,7 @@ abstract class Base extends TestCase
         $this->assertFalse($document->isEmpty());
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('unknown')->toString());
+        $this->authorization->addRole(Role::user('unknown')->toString());
 
         $documents = $this->getDatabase()->find(
             $collection->getId()
@@ -11853,7 +11853,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $documents = $this->getDatabase()->count(
             $collection->getId()
@@ -11862,7 +11862,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, $documents);
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('random')->toString());
+        $this->authorization->addRole(Role::user('random')->toString());
 
         $documents = $this->getDatabase()->count(
             $collection->getId()
@@ -11871,7 +11871,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, $documents);
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('unknown')->toString());
+        $this->authorization->addRole(Role::user('unknown')->toString());
 
         $documents = $this->getDatabase()->count(
             $collection->getId()
@@ -11890,7 +11890,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
         $this->getDatabase()->updateDocument(
             $collection->getId(),
             $document->getId(),
@@ -11900,7 +11900,7 @@ abstract class Base extends TestCase
         $this->assertTrue(true);
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('random')->toString());
+        $this->authorization->addRole(Role::user('random')->toString());
 
         $this->getDatabase()->updateDocument(
             $collection->getId(),
@@ -11922,7 +11922,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $this->expectException(AuthorizationException::class);
         $document = $this->getDatabase()->updateDocument(
@@ -11941,7 +11941,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $this->expectException(AuthorizationException::class);
         $document = $this->getDatabase()->deleteDocument(
@@ -11959,7 +11959,7 @@ abstract class Base extends TestCase
         [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::users()->toString());
+        $this->authorization->addRole(Role::users()->toString());
 
         $this->assertTrue($this->getDatabase()->deleteDocument(
             $collection->getId(),
@@ -11975,7 +11975,7 @@ abstract class Base extends TestCase
         }
 
         $this->authorization->cleanRoles();
-        $this->authorization->setRole(Role::user('a')->toString());
+        $this->authorization->addRole(Role::user('a')->toString());
 
         $this->getDatabase()->createCollection('parentRelationTest', [], [], [
             Permission::read(Role::user('a')),
@@ -12340,7 +12340,7 @@ abstract class Base extends TestCase
 
         $this->assertEmpty($documents);
 
-        $this->authorization->setRole(Role::label('reader')->toString());
+        $this->authorization->addRole(Role::label('reader')->toString());
 
         $documents = $this->getDatabase()->find('labels_test');
 

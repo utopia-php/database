@@ -18,6 +18,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
@@ -2269,12 +2270,12 @@ class Database
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
-                try {
-                    $this->authorization->validate(self::PERMISSION_READ, [
-                        ...$collection->getRead(),
-                        ...($documentSecurity ? $document->getRead() : [])
-                    ]);
-                } catch(Validation $err) {
+                $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, [
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $document->getRead() : [])
+                ]));
+
+                if (!$isValid) {
                     return new Document();
                 }
             }
@@ -2293,12 +2294,12 @@ class Database
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
-            try {
-                $this->authorization->validate(self::PERMISSION_READ, [
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
-                ]);
-            } catch(Validation $err) {
+            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, [
+                ...$collection->getRead(),
+                ...($documentSecurity ? $document->getRead() : [])
+            ]));
+
+            if (!$isValid) {
                 return new Document();
             }
         }
@@ -2617,10 +2618,9 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
-            try {
-                $this->authorization->validate(self::PERMISSION_CREATE, $collection->getCreate());
-            } catch(Validation $err) {
-                throw new AuthorizationException($err->getMessage());
+            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_CREATE, $collection->getCreate()));
+            if (!$isValid) {
+                throw new AuthorizationException($this->authorization->getDescription());
             }
         }
 
@@ -3055,13 +3055,12 @@ class Database
             }
 
             if ($shouldUpdate) {
-                try {
-                    $this->authorization->validate(self::PERMISSION_UPDATE, [
-                        ...$collection->getUpdate(),
-                        ...($documentSecurity ? $old->getUpdate() : [])
-                    ]);
-                } catch(Validation $err) {
-                    throw new AuthorizationException($err->getMessage());
+                $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $old->getUpdate() : [])
+                ]));
+                if (!$isValid) {
+                    throw new AuthorizationException($this->authorization->getDescription());
                 }
             }
         }
@@ -3510,13 +3509,12 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            try {
-                $this->authorization->validate(self::PERMISSION_UPDATE, [
-                    ...$collection->getUpdate(),
-                    ...($documentSecurity ? $document->getUpdate() : [])
-                ]);
-            } catch(Validation $err) {
-                throw new AuthorizationException($err->getMessage());
+            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $document->getUpdate() : [])
+            ]));
+            if (!$isValid) {
+                throw new AuthorizationException($this->authorization->getDescription());
             }
         }
 
@@ -3577,13 +3575,12 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            try {
-                $this->authorization->validate(self::PERMISSION_UPDATE, [
-                    ...$collection->getUpdate(),
-                    ...($documentSecurity ? $document->getUpdate() : [])
-                ]);
-            } catch(Validation $err) {
-                throw new AuthorizationException($err->getMessage());
+            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $document->getUpdate() : [])
+            ]));
+            if (!$isValid) {
+                throw new AuthorizationException($this->authorization->getDescription());
             }
         }
 
@@ -3638,13 +3635,12 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            try {
-                $this->authorization->validate(self::PERMISSION_DELETE, [
-                    ...$collection->getDelete(),
-                    ...($documentSecurity ? $document->getDelete() : [])
-                ]);
-            } catch(Validation $err) {
-                throw new AuthorizationException($err->getMessage());
+            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
+                ...$collection->getDelete(),
+                ...($documentSecurity ? $document->getDelete() : [])
+            ]));
+            if (!$isValid) {
+                throw new AuthorizationException($this->authorization->getDescription());
             }
         }
 
@@ -4099,10 +4095,10 @@ class Database
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        try {
-            $this->authorization->validate(self::PERMISSION_READ, $collection->getRead());
+        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+        if ($isValid) {
             $skipAuth = true;
-        } catch(Validation $err) {
+        } else {
             $skipAuth = false;
         }
 
@@ -4274,10 +4270,10 @@ class Database
             throw new QueryException($validator->getDescription());
         }
 
-        try {
-            $this->authorization->validate(self::PERMISSION_READ, $collection->getRead());
+        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+        if ($isValid) {
             $skipAuth = true;
-        } catch(Validation $err) {
+        } else {
             $skipAuth = false;
         }
 

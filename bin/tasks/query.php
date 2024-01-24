@@ -177,7 +177,7 @@ function runQueries(Database $database, int $limit)
 function addRoles($faker, $count)
 {
     for ($i = 0; $i < $count; $i++) {
-        Authorization::setRole($faker->numerify('user####'));
+        Authorization::addRole($faker->numerify('user####'));
     }
     return count(Authorization::getRoles());
 }

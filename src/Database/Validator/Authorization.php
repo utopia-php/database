@@ -3,10 +3,24 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Exception\Validation;
+use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Http\Validator;
 
 class Authorization extends Validator
 {
+    /**
+     * @var bool
+     */
+    protected bool $status = true;
+
+    /**
+     * Default value in case we need
+     *  to reset Authorization status
+     *
+     * @var bool
+     */
+    protected bool $statusDefault = true;
+
     /**
      * @var array<string, bool>
      */
@@ -32,56 +46,44 @@ class Authorization extends Validator
     }
 
     /*
-     * Deprecated for this specific validator. Use validate() instead
-    */
-    public function isValid(mixed $permissions): bool
-    {
-        try {
-            $this->validate('unknownAction', $permissions);
-            return true;
-        } catch(Validation $error) {
-            $this->message = $error->getMessage();
-            return false;
-        }
-    }
-
-    /**
-     * Validation. Replacement of isValid() which throws exception instead
+     * Validation
      *
      * Returns true if valid or false if not.
-     *
-     * @param string $action
-     * @param mixed $permissions
-     *
-     * @return void
-     * @throws Validation
-     */
-    public function validate(string $action, mixed $permissions): void
+    */
+    public function isValid(mixed $input): bool
     {
+        /**
+         * @var Input $input
+         */
+        $permissions = $input->getPermissions();
+        $action = $input->getAction();
+
         if (!$this->status) {
-            return;
+            return true;
         }
 
         if (empty($permissions)) {
-            throw new Validation('No permissions provided for action \''.$action.'\'');
+            $this->message = 'No permissions provided for action \''.$action.'\'';
+            return false;
         }
 
         $permission = '-';
 
         foreach ($permissions as $permission) {
             if (\array_key_exists($permission, $this->roles)) {
-                return;
+                return true;
             }
         }
 
-        throw new Validation('Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.');
+        $this->message = 'Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+        return false;
     }
 
     /**
      * @param string $role
      * @return void
      */
-    public function setRole(string $role): void
+    public function addRole(string $role): void
     {
         $this->roles[$role] = true;
     }
@@ -91,7 +93,7 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public function unsetRole(string $role): void
+    public function removeRole(string $role): void
     {
         unset($this->roles[$role]);
     }
@@ -123,23 +125,9 @@ class Authorization extends Validator
     }
 
     /**
-     * @var bool
-     */
-    protected bool $status = true;
-
-    /**
-     * Default value in case we need
-     *  to reset Authorization status
-     *
-     * @var bool
-     */
-    protected bool $statusDefault = true;
-
-    /**
      * Change default status.
      * This will be used for the
      *  value set on the $this->reset() method
-     *
      * @param bool $status
      * @return void
      */

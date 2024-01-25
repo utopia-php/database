@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Exception\Validation;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Http\Validator;
 
@@ -53,7 +52,8 @@ class Authorization extends Validator
     public function isValid(mixed $input): bool // any, CREATE
     {
         if(!($input instanceof Input)) {
-            throw new Validation('Authorization validator requires Input class to validate.');
+            $this->message = 'Invalid input provided';
+            return false;
         }
 
         /**

@@ -12,7 +12,6 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
 {

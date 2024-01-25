@@ -3663,19 +3663,18 @@ class Database
             $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
             $document = $this->encode($collection, $document);
 
-            $old = Authorization::skip(fn () => $this->silent(
+            $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId()
                 )
             ));
 
-            $validator = new Authorization(self::PERMISSION_UPDATE);
             if (
                 $collection->getId() !== self::METADATA
-                && !$validator->isValid($old->getUpdate())
+                && !$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $old->getUpdate()))
             ) {
-                throw new AuthorizationException($validator->getDescription());
+                throw new AuthorizationException($this->authorization->getDescription());
             }
 
             $validator = new Structure($collection);
@@ -4716,7 +4715,7 @@ class Database
         $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+            throw new AuthorizationException($this->authorization->getDescription());
         }
 
         $relationships = \array_filter(

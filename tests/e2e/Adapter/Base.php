@@ -251,7 +251,7 @@ abstract class Base extends TestCase
 
     public function testPreserveDatesUpdate(): void
     {
-        Authorization::disable();
+        $this->authorization->disable();
 
         $this->getDatabase()->setPreserveDates(true);
 
@@ -297,12 +297,12 @@ abstract class Base extends TestCase
 
         $this->getDatabase()->setPreserveDates(false);
 
-        Authorization::reset();
+        $this->authorization->reset();
     }
 
     public function testPreserveDatesCreate(): void
     {
-        Authorization::disable();
+        $this->authorization->disable();
 
         $this->getDatabase()->setPreserveDates(true);
 
@@ -345,7 +345,7 @@ abstract class Base extends TestCase
 
         $this->getDatabase()->setPreserveDates(false);
 
-        Authorization::reset();
+        $this->authorization->reset();
     }
 
     /**
@@ -1870,9 +1870,9 @@ abstract class Base extends TestCase
      */
     public function testArrayAttribute(): void
     {
-        Authorization::setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $collection = 'json';
         $permissions = [Permission::read(Role::any())];
 
@@ -13130,7 +13130,7 @@ abstract class Base extends TestCase
 
     public function testEnableDisableValidation(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('validation', permissions: [
             Permission::create(Role::any()),
@@ -13229,7 +13229,7 @@ abstract class Base extends TestCase
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
          */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->exists('schema1')) {
             $database->setDatabase('schema1')->delete();

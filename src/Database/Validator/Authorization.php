@@ -59,7 +59,7 @@ class Authorization extends Validator
         /**
          * @var Input $input
          */
-        
+
         $permissions = $input->getPermissions();
         $action = $input->getAction();
 

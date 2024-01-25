@@ -28,7 +28,7 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    public static function getDatabase(bool $fresh = false): Database
+    public function getDatabase(bool $fresh = false): Database
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;

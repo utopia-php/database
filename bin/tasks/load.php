@@ -25,6 +25,8 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Http\Validator\Numeric;
 use Utopia\Http\Validator\Text;
 
+$authorization = new Authorization();
+
 /**
  * @Example
  * docker compose exec tests bin/load --adapter=mariadb --limit=1000 --name=testing
@@ -61,7 +63,7 @@ $cli
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
-                    createSchema($database);
+                    $createSchema($database);
 
                     // reclaim resources
                     $database = null;
@@ -121,7 +123,7 @@ $cli
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
-                    createSchema($database);
+                    $createSchema($database);
 
                     // reclaim resources
                     $database = null;
@@ -183,7 +185,7 @@ $cli
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
-                    createSchema($database);
+                    $createSchema($database);
 
                     // Fill DB
                     $faker = Factory::create();
@@ -226,14 +228,13 @@ $cli
     });
 
 
-function createSchema(Database $database): void
-{
+$createSchema = function (Database $database) use ($authorization): void {
     if ($database->exists($database->getDatabase())) {
         $database->delete($database->getDatabase());
     }
     $database->create();
 
-    Authorization::setRole(Role::any()->toString());
+    $authorization->addRole(Role::any()->toString());
 
     $database->createCollection('articles', permissions: [
         Permission::create(Role::any()),
@@ -247,7 +248,7 @@ function createSchema(Database $database): void
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
     $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
     $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
-}
+};
 
 function createDocument($database, Generator $faker): void
 {

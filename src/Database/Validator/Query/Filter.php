@@ -5,6 +5,11 @@ namespace Utopia\Database\Validator\Query;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Http\Validator\Boolean;
+use Utopia\Http\Validator\FloatValidator;
+use Utopia\Http\Validator\Integer;
+use Utopia\Http\Validator\Text;
 
 class Filter extends Base
 {
@@ -64,7 +69,7 @@ class Filter extends Base
      * @param array<mixed> $values
      * @return bool
      */
-    protected function isValidAttributeAndValues(string $attribute, array $values): bool
+    protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool
     {
         if (!$this->isValidAttribute($attribute)) {
             return false;
@@ -88,17 +93,60 @@ class Filter extends Base
         $attributeType = $attributeSchema['type'];
 
         foreach ($values as $value) {
-            $condition = match ($attributeType) {
-                Database::VAR_RELATIONSHIP => true,
-                Database::VAR_DATETIME => gettype($value) === Database::VAR_STRING,
-                Database::VAR_FLOAT => (gettype($value) === Database::VAR_FLOAT || gettype($value) === Database::VAR_INTEGER),
-                default => gettype($value) === $attributeType
-            };
 
-            if (!$condition) {
-                $this->message = 'Query type does not match expected: ' . $attributeType;
+            $validator = null;
+
+            switch ($attributeType) {
+                case Database::VAR_STRING:
+                    $validator = new Text(0, 0);
+                    break;
+
+                case Database::VAR_INTEGER:
+                    $validator = new Integer();
+                    break;
+
+                case Database::VAR_FLOAT:
+                    $validator = new FloatValidator();
+                    break;
+
+                case Database::VAR_BOOLEAN:
+                    $validator = new Boolean();
+                    break;
+
+                case Database::VAR_DATETIME:
+                    $validator = new DatetimeValidator();
+                    break;
+
+                case Database::VAR_RELATIONSHIP:
+                    break;
+                default:
+                    $this->message = 'Unknown Data type';
+                    return false;
+            }
+
+            if (!\is_null($validator) && !$validator->isValid($value)) {
+                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
                 return false;
             }
+        }
+
+        $array = $attributeSchema['array'] ?? false;
+
+        if(
+            !$array &&
+            $method === Query::TYPE_CONTAINS &&
+            $attributeSchema['type'] !==  Database::VAR_STRING
+        ) {
+            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+            return false;
+        }
+
+        if(
+            $array &&
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+        ) {
+            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
+            return false;
         }
 
         return true;
@@ -143,7 +191,7 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
@@ -158,7 +206,7 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_BETWEEN:
                 if (count($value->getValues()) != 2) {
@@ -166,11 +214,27 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
+            case Query::TYPE_OR:
+            case Query::TYPE_AND:
+                $filters = Query::groupByType($value->getValues())['filters'];
+
+                if(count($value->getValues()) !== count($filters)) {
+                    $this->message = \ucfirst($method) . ' queries can only contain filter queries';
+                    return false;
+                }
+
+                if(count($filters) < 2) {
+                    $this->message = \ucfirst($method) . ' queries require at least two queries';
+                    return false;
+                }
+
+                return true;
 
             default:
                 return false;

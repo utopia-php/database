@@ -32,12 +32,7 @@ abstract class Base extends TestCase
     /**
      * @var Authorization
      */
-    protected static ?Authorization $authorizationSingleton = null;
-
-    /**
-     * @var Authorization
-     */
-    protected ?Authorization $authorization = null;
+    protected static ?Authorization $authorization = null;
 
     /**
      * @return Database
@@ -51,13 +46,10 @@ abstract class Base extends TestCase
 
     public function setUp(): void
     {
-        if (is_null(self::$authorizationSingleton)) {
-            self::$authorizationSingleton = new Authorization();
-            self::$authorizationSingleton->addRole('any');
+        if (is_null($this->authorization)) {
+            $this->authorization = new Authorization();
+            $this->authorization->addRole('any');
         }
-
-        $this->authorization = self::$authorizationSingleton;
-        $this->authorization->addRole('any');
     }
 
     public function tearDown(): void

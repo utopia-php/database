@@ -4095,12 +4095,7 @@ class Database
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
-        if ($isValid) {
-            $skipAuth = true;
-        } else {
-            $skipAuth = false;
-        }
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
 
         if (!$skipAuth && !$documentSecurity) {
             throw new AuthorizationException($validator->getDescription());
@@ -4270,12 +4265,7 @@ class Database
             throw new QueryException($validator->getDescription());
         }
 
-        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
-        if ($isValid) {
-            $skipAuth = true;
-        } else {
-            $skipAuth = false;
-        }
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
 
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);

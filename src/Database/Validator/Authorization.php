@@ -52,9 +52,14 @@ class Authorization extends Validator
     */
     public function isValid(mixed $input): bool
     {
+        if(!($input instanceof Input)) {
+            throw new Validation('Authorization validator requires Input class to validate.');
+        }
+
         /**
          * @var Input $input
          */
+        
         $permissions = $input->getPermissions();
         $action = $input->getAction();
 

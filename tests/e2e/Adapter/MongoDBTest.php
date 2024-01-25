@@ -51,7 +51,7 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache, []);
-        $database->setAuthorization($this->authorization);
+        $database->setAuthorization(self::$authorization);
         $database->setDatabase($schema);
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

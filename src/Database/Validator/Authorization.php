@@ -50,7 +50,7 @@ class Authorization extends Validator
      *
      * Returns true if valid or false if not.
     */
-    public function isValid(mixed $input): bool
+    public function isValid(mixed $input): bool // any, CREATE
     {
         if(!($input instanceof Input)) {
             throw new Validation('Authorization validator requires Input class to validate.');
@@ -88,7 +88,7 @@ class Authorization extends Validator
      * @param string $role
      * @return void
      */
-    public function addRole(string $role): void
+    public function addRole(string $role): void // user:meldiron, users, any
     {
         $this->roles[$role] = true;
     }

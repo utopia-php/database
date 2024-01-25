@@ -48,7 +48,7 @@ class MySQLTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MySQL($pdo), $cache, []);
-        $database->setAuthorization($this->authorization);
+        $database->setAuthorization(self::$authorization);
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

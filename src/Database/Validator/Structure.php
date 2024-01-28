@@ -11,6 +11,7 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
+use Utopia\Validator\Integer;
 use Utopia\Validator\Range;
 use Utopia\Validator\Text;
 
@@ -250,7 +251,7 @@ class Structure extends Validator
             $format = $attribute['format'] ?? '';
             $required = $attribute['required'] ?? false;
             $size = $attribute['size'] ?? 0;
-            $signed = $attribute['signed'] ?? false;
+            $signed = $attribute['signed'] ?? true;
 
             if ($required === false && is_null($value)) { // Allow null value to optional params
                 continue;
@@ -260,33 +261,32 @@ class Structure extends Validator
                 continue;
             }
 
+            $validators = [];
+
             switch ($type) {
                 case Database::VAR_STRING:
-                    $validator = new Text($size, min: 0);
+                    $validators[] = new Text($size, min: 0);
                     break;
 
                 case Database::VAR_INTEGER:
-                    $max = $size >= 8 ? Database::MAX_BIG_INTEGER : Database::MAX_INTEGER;
-                    $min = -$max;
-
-                    if($signed === false) {
-                        //$max *= 2;
-                        $min = 0;
-                    }
-
-                    $validator = new Range($min, $max, Database::VAR_INTEGER);
+                    $validators[] = new Integer();
+                    $max = $size >= 8 ? Database::BIG_INT_MAX : Database::INT_MAX;
+                    $min = $signed ? -$max : 0;
+                    $validators[] = new Range($min, $max, Database::VAR_INTEGER);
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator();
+                    $validators[] = new FloatValidator();
+                    $min = $signed ? -Database::DOUBLE_MAX : 0;
+                    $validators[] =  new Range($min, Database::DOUBLE_MAX, Database::VAR_FLOAT);
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean();
+                    $validators[] = new Boolean();
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
+                    $validators[] = new DatetimeValidator();
                     break;
 
                 default:
@@ -300,7 +300,7 @@ class Structure extends Validator
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
                 $format = self::getFormat($format, $type);
-                $validator = $format['callback']($attribute);
+                $validators = [$format['callback']($attribute)];
             }
 
             if ($array) { // Validate attribute type for arrays - format for arrays handled separately
@@ -317,15 +317,19 @@ class Structure extends Validator
                         continue;
                     }
 
-                    if (!$validator->isValid($child)) {
-                        $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
-                        return false;
+                    foreach ($validators as $validator){
+                        if (!$validator->isValid($child)) {
+                            $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
+                            return false;
+                        }
                     }
                 }
             } else {
-                if (!$validator->isValid($value)) {
-                    $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
-                    return false;
+                foreach ($validators as $validator){
+                    if (!$validator->isValid($value)) {
+                        $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
+                        return false;
+                    }
                 }
             }
         }

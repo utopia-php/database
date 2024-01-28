@@ -1903,8 +1903,6 @@ abstract class Base extends TestCase
      */
     public function testUpdateDocumentDuplicatePermissions(Document $document): Document
     {
-
-        var_dump($document);
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
         $new

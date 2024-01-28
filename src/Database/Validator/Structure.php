@@ -317,7 +317,7 @@ class Structure extends Validator
                         continue;
                     }
 
-                    foreach ($validators as $validator){
+                    foreach ($validators as $validator) {
                         if (!$validator->isValid($child)) {
                             $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
                             return false;
@@ -325,7 +325,7 @@ class Structure extends Validator
                     }
                 }
             } else {
-                foreach ($validators as $validator){
+                foreach ($validators as $validator) {
                     if (!$validator->isValid($value)) {
                         $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
                         return false;

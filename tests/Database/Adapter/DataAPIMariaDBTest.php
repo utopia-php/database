@@ -5,15 +5,13 @@ namespace Utopia\Tests\Adapter;
 use Utopia\Cache\Adapter\None;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter\ProxyMariaDB;
+use Utopia\Database\Adapter\DataAPIMariaDB;
 use Utopia\Tests\Base;
 
-class ProxyMariaDBTest extends Base
+class DataAPIMariaDBTest extends Base
 {
     public static ?Database $database = null;
 
-    // TODO@kodumbeats hacky way to identify adapters for tests
-    // Remove once all methods are implemented
     /**
      * Return name of adapter
      *
@@ -21,7 +19,7 @@ class ProxyMariaDBTest extends Base
      */
     public static function getAdapterName(): string
     {
-        return "proxy-mariadb";
+        return "data-api-mariadb";
     }
 
     /**
@@ -33,7 +31,7 @@ class ProxyMariaDBTest extends Base
             return self::$database;
         }
 
-        $database = new Database(new ProxyMariaDB('http://proxy/v1', 'test-secret', 'default'), new Cache(new None()));
+        $database = new Database(new DataAPIMariaDB('http://data-api/v1', 'test-secret', 'default'), new Cache(new None()));
         $database->setDefaultDatabase('utopiaTests');
         $database->setNamespace('myapp_' . uniqid());
 

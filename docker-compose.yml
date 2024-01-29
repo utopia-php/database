@@ -82,19 +82,18 @@ services:
     networks:
       - database
 
-  proxy:
-    # TODO: Release and use official image
-    image: database-proxy # Build from https://github.com/utopia-php/database-proxy/
-    container_name: utopia-proxy
+  data-api:
+    image: utopia-php/data-api:0.1.0
+    container_name: utopia-data-api
     networks:
       - database
     environment:
-      - UTOPIA_DATABASE_PROXY_SECRET=test-secret
-      - UTOPIA_DATABASE_PROXY_SECRET_CONNECTION=mariadb://root:password@proxy-mariadb:3306/appwrite
+      - UTOPIA_DATABASE_API_SECRET=test-secret
+      - UTOPIA_DATABASE_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/appwrite
 
-  proxy-mariadb:
+  data-api-mariadb:
     image: mariadb:10.7
-    container_name: utopia-proxy-mariadb
+    container_name: utopia-data-api-mariadb
     networks:
       - database
     environment:

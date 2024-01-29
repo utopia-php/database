@@ -13,7 +13,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Fetch\FetchException;
 
-abstract class Proxy extends Adapter
+abstract class DataAPI extends Adapter
 {
     protected string $endpoint;
     protected string $secret;
@@ -61,22 +61,16 @@ abstract class Proxy extends Adapter
 
         if ($response->getStatusCode() >= 400) {
             if (empty($response->getBody())) {
-                throw new Exception('Internal ' . $response->getStatusCode() . ' HTTP error in database proxy');
+                throw new Exception('Internal ' . $response->getStatusCode() . ' HTTP error in data api');
             }
 
             $error = \json_decode($response->getBody(), true);
 
             try {
-                $exception = new $error['type']($error['message'], $error['code']);
+                $exception = new $error['type']($error['message'], $error['code'], $error['file'], $error['line']);
                 /**
                  * @var DatabaseException $exception
                  */
-
-                $exception->setFile($error['file']);
-                $exception->setLine($error['line']);
-                // TODO: If possible in PHP, set trace too for better error reporting
-                // $exception->setTrace($error['trace']);
-
             } catch(Throwable $err) {
                 // Cannot find exception type
                 throw new Exception($error['message'], $error['code']);

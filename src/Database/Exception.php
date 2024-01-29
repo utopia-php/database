@@ -4,12 +4,11 @@ namespace Utopia\Database;
 
 class Exception extends \Exception
 {
-    public function setFile(string $file): void
+    public function __construct(string $message = '', int $code = 0, string $file = '', int $line = 0)
     {
+        $this->message = $message;
+        $this->code = $code;
         $this->file = $file;
-    }
-    public function setLine(int $line): void
-    {
         $this->line = $line;
     }
 }

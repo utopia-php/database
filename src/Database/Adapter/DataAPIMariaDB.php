@@ -6,7 +6,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 
-class ProxyMariaDB extends Proxy
+class DataAPIMariaDB extends DataAPI
 {
     /**
      * Get max STRING limit

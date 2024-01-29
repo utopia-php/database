@@ -1,12 +1,11 @@
 <?php
 
-namespace Utopia\Tests\Adapter;
+namespace Tests\E2E\Adapter;
 
 use Utopia\Cache\Adapter\None;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\DataAPIMariaDB;
-use Utopia\Tests\Base;
 
 class DataAPIMariaDBTest extends Base
 {
@@ -32,7 +31,7 @@ class DataAPIMariaDBTest extends Base
         }
 
         $database = new Database(new DataAPIMariaDB('http://data-api/v1', 'test-secret', 'default'), new Cache(new None()));
-        $database->setDefaultDatabase('utopiaTests');
+        $database->setDatabase('utopiaTests');
         $database->setNamespace('myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {

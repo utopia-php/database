@@ -48,11 +48,11 @@ abstract class DataAPI extends Adapter
                 'x-utopia-secret' => $this->secret,
                 'x-utopia-database' => $this->database,
                 'x-utopia-namespace' => $this->getNamespace(),
-                'x-utopia-default-database' => $this->defaultDatabase,
                 'x-utopia-auth-roles' => $roles,
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                'x-utopia-timeout' => self::$timeout ? \strval(self::$timeout) : '',
+                // TODO: Fix timeout
+                // 'x-utopia-timeout' => self::$timeout ? \strval(self::$timeout) : '',
                 'content-type' => 'application/json'
             ],
             method: $method,
@@ -116,12 +116,11 @@ abstract class DataAPI extends Adapter
      *
      * @return bool
      */
-    public function exists(string $database, ?string $collection): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         $path = '/databases/' . $database;
 
-        if(!empty($collection))
-        {
+        if(!empty($collection)) {
             $path = '/collections/' . $collection . '?database=' . $database;
         }
 
@@ -317,7 +316,7 @@ abstract class DataAPI extends Adapter
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        return $this->query('PATCH', '/collections/'.$collection.'/indexes/'.$old.'/name',[
+        return $this->query('PATCH', '/collections/'.$collection.'/indexes/'.$old.'/name', [
             'new' => $new
         ]);
     }
@@ -372,11 +371,11 @@ abstract class DataAPI extends Adapter
         $path = '/collections/' . $collection . '/documents/' . $id;
 
         $arr = [];
-        foreach ($queries as $query){
+        foreach ($queries as $query) {
             $arr[] = json_encode($query->jsonSerialize());
         }
 
-        $path .= '?' . http_build_query(['queries'=> $arr]);
+        $path .= '?' . http_build_query(['queries' => $arr]);
 
         return new Document($this->query('GET', $path, []));
     }
@@ -419,7 +418,7 @@ abstract class DataAPI extends Adapter
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        return $this->query('DELETE','/collections/'. $collection .'/documents/' . $id, []);
+        return $this->query('DELETE', '/collections/'. $collection .'/documents/' . $id, []);
     }
 
     /**
@@ -442,12 +441,12 @@ abstract class DataAPI extends Adapter
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
     {
         $arr = [];
-        foreach ($queries as $query){
+        foreach ($queries as $query) {
             $arr[] = json_encode($query->jsonSerialize());
         }
 
         $body = [
-            'queries'=> $arr,
+            'queries' => $arr,
             'limit' => $limit,
             'offset' => $offset,
             'orderAttributes' => $orderAttributes,
@@ -484,7 +483,7 @@ abstract class DataAPI extends Adapter
     public function sum(string $collection, string $attribute, array $queries = [], int|string|null $max = null, int|string|null $timeout = null): float|int
     {
         $arr = [];
-        foreach ($queries as $query){
+        foreach ($queries as $query) {
             $arr[] = json_encode($query->jsonSerialize());
         }
 
@@ -513,12 +512,12 @@ abstract class DataAPI extends Adapter
     public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
     {
         $arr = [];
-        foreach ($queries as $query){
+        foreach ($queries as $query) {
             $arr[] = json_encode($query->jsonSerialize());
         }
 
         $body = [
-            'queries'=> $arr,
+            'queries' => $arr,
             'max' => $max,
             'timeout' => $timeout
         ];

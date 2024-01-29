@@ -88,8 +88,8 @@ services:
     networks:
       - database
     environment:
-      - UTOPIA_DATABASE_API_SECRET=test-secret
-      - UTOPIA_DATABASE_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/appwrite
+      - UTOPIA_DATA_API_SECRET=test-secret
+      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/appwrite
 
   data-api-mariadb:
     image: mariadb:10.7

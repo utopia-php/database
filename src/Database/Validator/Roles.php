@@ -41,7 +41,7 @@ class Roles extends Validator
                 'allowed' => false,
                 'required' => false,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],
@@ -51,7 +51,7 @@ class Roles extends Validator
                 'allowed' => false,
                 'required' => false,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],
@@ -61,7 +61,7 @@ class Roles extends Validator
                 'allowed' => false,
                 'required' => false,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => true,
                 'required' => false,
                 'options' => self::USER_DIMENSIONS
@@ -72,7 +72,7 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => true,
                 'required' => false,
                 'options' => self::USER_DIMENSIONS
@@ -83,7 +83,7 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => true,
                 'required' => false,
             ],
@@ -93,7 +93,7 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],
@@ -103,7 +103,7 @@ class Roles extends Validator
                 'allowed' => true,
                 'required' => true,
             ],
-            'dimension' =>[
+            'dimension' => [
                 'allowed' => false,
                 'required' => false,
             ],

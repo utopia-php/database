@@ -269,6 +269,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
+                    // We need both Integer and Range because Range implicitly casts non-numeric values
                     $validators[] = new Integer();
                     $max = $size >= 8 ? Database::BIG_INT_MAX : Database::INT_MAX;
                     $min = $signed ? -$max : 0;
@@ -276,6 +277,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_FLOAT:
+                    // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();
                     $min = $signed ? -Database::DOUBLE_MAX : 0;
                     $validators[] =  new Range($min, Database::DOUBLE_MAX, Database::VAR_FLOAT);

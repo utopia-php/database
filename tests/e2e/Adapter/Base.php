@@ -1928,6 +1928,16 @@ abstract class Base extends TestCase
             array: true
         ));
 
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'pref',
+            Database::VAR_STRING,
+            size: 16384,
+            required: false,
+            signed: false,
+            filters: ['json'],
+        ));
+
         try {
             $database->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
@@ -1981,6 +1991,12 @@ abstract class Base extends TestCase
             'numbers' => [0, 100, 1000, -1],
             'age' => 41,
             'tv_show' => 'Everybody Loves Raymond',
+            'pref' => [
+                'fname' => 'Joe',
+                'lname' => 'Baiden',
+                'age' => 80,
+                'male' => true,
+            ],
         ]));
 
         $document = $database->getDocument($collection, 'id1');
@@ -2083,6 +2099,12 @@ abstract class Base extends TestCase
 
             $documents = $database->find($collection, [
                 Query::contains('booleans', [false, true])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // Regular like query on primitive json string data
+            $documents = $database->find($collection, [
+                Query::contains('pref', ['Joe'])
             ]);
             $this->assertCount(1, $documents);
         }

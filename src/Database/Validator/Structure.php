@@ -300,7 +300,7 @@ class Structure extends Validator
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
                 $format = self::getFormat($format, $type);
-                $validators = [$format['callback']($attribute)];
+                $validators[] = $format['callback']($attribute);
             }
 
             if ($array) { // Validate attribute type for arrays - format for arrays handled separately

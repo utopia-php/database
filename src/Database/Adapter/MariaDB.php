@@ -1492,12 +1492,17 @@ class MariaDB extends SQL
             $stmtPermissions->bindValue(':_tenant', $this->tenant);
         }
 
+		$deleted = false;
+
         try {
             $this->getPDO()->beginTransaction();
 
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
+
+			$deleted = $stmt->rowCount();
+
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');
             }
@@ -1508,7 +1513,7 @@ class MariaDB extends SQL
             throw new DatabaseException($th->getMessage());
         }
 
-        return true;
+        return $deleted;
     }
 
     /**

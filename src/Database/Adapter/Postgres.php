@@ -1473,14 +1473,14 @@ class Postgres extends SQL
             $stmtPermissions->bindValue(':_tenant', $this->tenant);
         }
 
-		$deleted = false;
+        $deleted = false;
 
         try {
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
 
-			$deleted = $stmt->rowCount();
+            $deleted = $stmt->rowCount();
 
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');

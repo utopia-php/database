@@ -1460,7 +1460,6 @@ class Postgres extends SQL
 			WHERE _document = :_uid
 		";
 
-
         if ($this->shareTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
@@ -1474,10 +1473,15 @@ class Postgres extends SQL
             $stmtPermissions->bindValue(':_tenant', $this->tenant);
         }
 
+        $deleted = false;
+
         try {
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
+
+            $deleted = $stmt->rowCount();
+
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');
             }
@@ -1490,7 +1494,7 @@ class Postgres extends SQL
             throw new DatabaseException('Failed to commit transaction');
         }
 
-        return true;
+        return $deleted;
     }
 
     /**

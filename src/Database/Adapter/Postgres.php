@@ -1348,10 +1348,15 @@ class Postgres extends SQL
         $stmtPermissions = $this->getPDO()->prepare($sql);
         $stmtPermissions->bindValue(':_uid', $id);
 
+        $deleted = false;
+
         try {
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
+
+            $deleted = $stmt->rowCount();
+
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to clean permissions');
             }
@@ -1364,7 +1369,7 @@ class Postgres extends SQL
             throw new DatabaseException('Failed to commit transaction');
         }
 
-        return true;
+        return $deleted;
     }
 
     /**

@@ -1356,12 +1356,17 @@ class MariaDB extends SQL
         $stmtPermissions = $this->getPDO()->prepare($sql);
         $stmtPermissions->bindValue(':_uid', $id);
 
+        $deleted = false;
+
         try {
             $this->getPDO()->beginTransaction();
 
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
+
+            $deleted = $stmt->rowCount();
+
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to clean permissions');
             }
@@ -1372,7 +1377,7 @@ class MariaDB extends SQL
             throw new DatabaseException($th->getMessage());
         }
 
-        return true;
+        return $deleted;
     }
 
     /**

@@ -117,7 +117,6 @@ class MariaDB extends SQL
 			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
-				_tenant INT(11) UNSIGNED DEFAULT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
 				_updatedAt DATETIME(3) DEFAULT NULL,
 				_permissions MEDIUMTEXT DEFAULT NULL,
@@ -128,6 +127,7 @@ class MariaDB extends SQL
 
         if ($this->shareTables) {
             $sql .= "
+            	_tenant INT(11) UNSIGNED DEFAULT NULL,
 				UNIQUE KEY _uid_tenant (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
@@ -153,7 +153,6 @@ class MariaDB extends SQL
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
 					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					_tenant INT(11) UNSIGNED DEFAULT NULL,
 					_type VARCHAR(12) NOT NULL,
 					_permission VARCHAR(255) NOT NULL,
 					_document VARCHAR(255) NOT NULL,
@@ -162,6 +161,7 @@ class MariaDB extends SQL
 
             if ($this->shareTables) {
                 $sql .= "
+                	_tenant INT(11) UNSIGNED DEFAULT NULL,
 					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
 					INDEX _permission (_tenant, _permission, _type)
 				";
@@ -688,10 +688,13 @@ class MariaDB extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+		if ($this->shareTables) {
+			$attributes['_tenant'] = $this->tenant;
+		}
 
         $name = $this->filter($collection);
         $columns = '';
@@ -747,7 +750,15 @@ class MariaDB extends SQL
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
+
+				if ($this->shareTables) {
+					$permission .= ", :_tenant)";
+				} else {
+					$permission .= ")";
+				}
+
+				$permissions[] = $permission;
             }
         }
 
@@ -755,12 +766,22 @@ class MariaDB extends SQL
             $permissions = \implode(', ', $permissions);
 
             $sqlPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
-				VALUES {$permissions}
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
 			";
+
+			if ($this->shareTables) {
+				$sqlPermissions .= ', _tenant)';
+			} else {
+				$sqlPermissions .= ")";
+			}
+
+			$sqlPermissions .=	" VALUES {$permissions}";
             $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
             $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
+
+			if ($this->shareTables) {
+				$stmtPermissions->bindValue(':_tenant', $this->tenant);
+			}
         }
 
         try {
@@ -824,10 +845,13 @@ class MariaDB extends SQL
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+					if ($this->shareTables) {
+						$attributes['_tenant'] = $this->tenant;
+					}
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {
@@ -853,7 +877,15 @@ class MariaDB extends SQL
                     foreach (Database::PERMISSIONS as $type) {
                         foreach ($document->getPermissionsByType($type) as $permission) {
                             $permission = \str_replace('"', '', $permission);
-                            $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+							$permission = "('{$type}', '{$permission}', '{$document->getId()}'";
+
+							if ($this->shareTables) {
+								$permission .= ", :_tenant)";
+							} else {
+								$permission .= ")";
+							}
+
+							$permissions[] = $permission;
                         }
                     }
                 }
@@ -871,12 +903,24 @@ class MariaDB extends SQL
                 $stmt->execute();
 
                 if (!empty($permissions)) {
-                    $stmtPermissions = $this->getPDO()->prepare(
-                        "
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
-                        VALUES " . \implode(', ', $permissions)
-                    );
-                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
+					$sqlPermissions = "
+						INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
+					";
+
+					if ($this->shareTables) {
+						$sqlPermissions .= ', _tenant)';
+					} else {
+						$sqlPermissions .= ")";
+					}
+
+                    $sqlPermissions .= " VALUES " . \implode(', ', $permissions);
+
+					$stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+					if ($this->shareTables) {
+						$stmtPermissions->bindValue(':_tenant', $this->tenant);
+					}
+
                     $stmtPermissions?->execute();
                 }
             }
@@ -913,10 +957,13 @@ class MariaDB extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
+		if ($this->shareTables) {
+			$attributes['_tenant'] = $this->tenant;
+		}
 
         $name = $this->filter($collection);
         $columns = '';
@@ -1033,20 +1080,40 @@ class MariaDB extends SQL
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_tenant)";
+                    $value = "( :_uid, '{$type}', :_add_{$type}_{$i}";
+
+					if ($this->shareTables) {
+						$value .= ", :_tenant)";
+					} else {
+						$value .= ")";
+					}
+
+					$values[] = $value;
                 }
             }
 
             $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
-				VALUES " . \implode(', ', $values);
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
+			";
+
+			if ($this->shareTables) {
+				$sql .= ', _tenant)';
+			} else {
+				$sql .= ')';
+			}
+
+			$sql .= " VALUES " . \implode(', ', $values);
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+
+			if ($this->shareTables) {
+				$stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+			}
+
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
                     $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
@@ -1165,10 +1232,13 @@ class MariaDB extends SQL
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
+
+					if ($this->shareTables) {
+						$attributes['_tenant'] = $this->tenant;
+					}
 
                     $columns = \array_map(function ($attribute) {
                         return "`" . $this->filter($attribute) . "`";
@@ -1286,7 +1356,13 @@ class MariaDB extends SQL
                                 $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
                                 $addBindValues[$bindKey] = $permission;
 
-                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}, :_tenant)";
+                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}";
+
+								if ($this->shareTables) {
+									$addQuery .= ", :_tenant)";
+								} else {
+									$addQuery .= ")";
+								}
 
                                 if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
                                     $addQuery .= ', ';
@@ -1337,15 +1413,28 @@ class MariaDB extends SQL
                 }
 
                 if (!empty($addQuery)) {
-                    $stmtAddPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`, `_tenant`)
-                        VALUES {$addQuery}
-                    ");
+					$sqlAddPermissions = "
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`
+                    ";
+
+					if ($this->shareTables) {
+						$sqlAddPermissions .= ', `_tenant`)';
+					} else {
+						$sqlAddPermissions .= ')';
+					}
+
+                     $sqlAddPermissions .=  " VALUES {$addQuery}";
+
+					$stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
 
                     foreach ($addBindValues as $key => $value) {
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+
+					if ($this->shareTables) {
+						$stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+					}
+
                     $stmtAddPermissions->execute();
                 }
             }

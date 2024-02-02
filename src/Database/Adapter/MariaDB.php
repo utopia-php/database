@@ -1579,7 +1579,7 @@ class MariaDB extends SQL
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "`${attribute}` ${orderType}";
+            $orders[] = "`{$attribute}` {$orderType}";
         }
 
         // Allow after pagination without any order

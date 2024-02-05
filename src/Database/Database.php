@@ -32,6 +32,10 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
 
+    public const INT_MAX = 2147483647;
+    public const BIG_INT_MAX = PHP_INT_MAX;
+    public const DOUBLE_MAX = PHP_FLOAT_MAX;
+
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 
@@ -1188,7 +1192,9 @@ class Database
 
         $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
 
-        $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+        if ($deleted) {
+            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+        }
 
         return $deleted;
     }

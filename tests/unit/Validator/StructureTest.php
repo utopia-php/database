@@ -65,7 +65,7 @@ class StructureTest extends TestCase
                 'format' => '',
                 'size' => 5,
                 'required' => true,
-                'signed' => true,
+                'signed' => false,
                 'array' => false,
                 'filters' => [],
             ],
@@ -218,6 +218,24 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Unknown attribute: "titlex"', $validator->getDescription());
+    }
+
+    public function testIntegerAsString(): void
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => '5',
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid integer', $validator->getDescription());
     }
 
     public function testValidDocument(): void
@@ -475,4 +493,57 @@ class StructureTest extends TestCase
 
         $this->assertEquals('Invalid document structure: Attribute "feedback" has invalid format. Value must be a valid email address', $validator->getDescription());
     }
+
+    public function testIntegerMaxRange(): void
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => PHP_INT_MAX,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertEquals('Invalid document structure: Attribute "rating" has invalid type. Value must be a valid range between -2,147,483,647 and 2,147,483,647', $validator->getDescription());
+    }
+
+    public function testDoubleUnsigned(): void
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => -1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+
+        $this->assertStringContainsString('Invalid document structure: Attribute "price" has invalid type. Value must be a valid range between 0 and ', $validator->getDescription());
+    }
+
+    public function testDoubleMaxRange(): void
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 1,
+            'price' => INF,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+        ])));
+    }
+
 }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d6ee891117614d18ee2f10466bfea758",
+    "content-hash": "1fec834c5b222e402702b7bc89a5a8a8",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -266,51 +266,48 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.34.1",
+            "version": "0.33.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/http.git",
-                "reference": "f21fd86c049d5fda711e966e9cd926386c36df0d"
+                "reference": "b1423ca3e3b61c6c4c2e619d2cb80672809a19f3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/http/zipball/f21fd86c049d5fda711e966e9cd926386c36df0d",
-                "reference": "f21fd86c049d5fda711e966e9cd926386c36df0d",
+                "url": "https://api.github.com/repos/utopia-php/http/zipball/b1423ca3e3b61c6c4c2e619d2cb80672809a19f3",
+                "reference": "b1423ca3e3b61c6c4c2e619d2cb80672809a19f3",
                 "shasum": ""
             },
             "require": {
-                "ext-swoole": "*",
                 "php": ">=8.0"
             },
             "require-dev": {
                 "laravel/pint": "^1.2",
                 "phpbench/phpbench": "^1.2",
                 "phpstan/phpstan": "^1.10",
-                "phpunit/phpunit": "^9.5.25",
-                "swoole/ide-helper": "4.8.3"
+                "phpunit/phpunit": "^9.5.25"
             },
             "type": "library",
             "autoload": {
                 "psr-4": {
-                    "Utopia\\Http\\": "src/Http"
+                    "Utopia\\": "src/"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
-            "description": "A simple, light and advanced PHP HTTP framework",
+            "description": "A simple, light and advanced PHP framework",
             "keywords": [
                 "framework",
-                "http",
                 "php",
                 "upf"
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/http/issues",
-                "source": "https://github.com/utopia-php/http/tree/0.34.1"
+                "source": "https://github.com/utopia-php/http/tree/0.33.2"
             },
-            "time": "2024-01-31T08:02:30+00:00"
+            "time": "2024-01-31T10:35:59+00:00"
         },
         {
             "name": "utopia-php/mongo",

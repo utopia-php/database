@@ -1238,26 +1238,10 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        // attribute IDs are case insensitive
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<Document> $attributes */
-        foreach ($attributes as $attribute) {
-            if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists');
-            }
-        }
-
         /** Ensure required filters for the attribute are passed */
         $requiredFilters = $this->getRequiredFilters($type);
         if (!empty(array_diff($requiredFilters, $filters))) {
             throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
-        }
-
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
         }
 
         if ($format) {
@@ -1280,14 +1264,9 @@ class Database
             'filters' => $filters,
         ]);
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        $this->checkAttribute($collection, $attribute);
 
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
+        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 
         switch ($type) {
             case self::VAR_STRING:
@@ -1705,8 +1684,8 @@ class Database
      * @param Document $collection
      * @param Document $attribute
      *
-     * @throws LimitException
      * @return bool
+     * @throws \Utopia\Database\Exception
      */
     public function checkAttribute(Document $collection, Document $attribute): bool
     {
@@ -1715,6 +1694,14 @@ class Database
         }
 
         $collection = clone $collection;
+
+        $attributes = $collection->getAttribute('attributes', []);
+        /** @var array<Document> $attributes */
+        foreach ($attributes as $attr) {
+            if (\strtolower($this->adapter->filter($attr->getId())) === \strtolower($this->adapter->filter($attribute->getId()))) {
+                throw new DuplicateException('Attribute already exists');
+            }
+        }
 
         $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
 

@@ -667,9 +667,11 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $internalId = $document->getInternalId();
 
-        $document
-            ->removeAttribute('$internalId')
-            ->setAttribute('$tenant', (string)$this->getTenant());
+        $document->removeAttribute('$internalId');
+
+        if ($this->shareTables) {
+            $document->setAttribute('$tenant', (string)$this->getTenant());
+        }
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
@@ -703,9 +705,11 @@ class Mongo extends Adapter
 
         $records = [];
         foreach ($documents as $document) {
-            $document
-                ->removeAttribute('$internalId')
-                ->setAttribute('$tenant', (string)$this->getTenant());
+            $document->removeAttribute('$internalId');
+
+            if ($this->shareTables) {
+                $document->setAttribute('$tenant', (string)$this->getTenant());
+            }
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);

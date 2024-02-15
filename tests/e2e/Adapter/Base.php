@@ -1724,6 +1724,16 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    public function testEmptyTenant(): void
+    {
+        $document = static::getDatabase()->findOne('documents');
+        var_dump($document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $document->getId());
+        $this->assertArrayNotHasKey('$tenant', $document);
+    }
+
     public function testEmptySearch(): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();

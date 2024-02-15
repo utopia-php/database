@@ -116,7 +116,7 @@ class MariaDB extends SQL
         }
 
         $sql = "
-			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+			CREATE TABLE {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
@@ -147,46 +147,34 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
-        try {
-            $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+        $this->getPDO()->prepare($sql)->execute();
 
-            $sql = "
-				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					_type VARCHAR(12) NOT NULL,
-					_permission VARCHAR(255) NOT NULL,
-					_document VARCHAR(255) NOT NULL,
-					PRIMARY KEY (_id),
-			";
+        $sql = "
+            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+                _id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                _type VARCHAR(12) NOT NULL,
+                _permission VARCHAR(255) NOT NULL,
+                _document VARCHAR(255) NOT NULL,
+                PRIMARY KEY (_id),
+        ";
 
-            if ($this->shareTables) {
-                $sql .= "
-                	_tenant INT(11) UNSIGNED DEFAULT NULL,
-					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
-					INDEX _permission (_tenant, _permission, _type)
-				";
-            } else {
-                $sql .= "
-					UNIQUE INDEX _index1 (_document, _type, _permission),
-					INDEX _permission (_permission, _type)
-				";
-            }
-
-            $sql .= ")";
-
-            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
-
-            $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (\Exception $th) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                ->execute();
-            throw $th;
+        if ($this->shareTables) {
+            $sql .= "
+                _tenant INT(11) UNSIGNED DEFAULT NULL,
+                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                INDEX _permission (_tenant, _permission, _type)
+            ";
+        } else {
+            $sql .= "
+                UNIQUE INDEX _index1 (_document, _type, _permission),
+                INDEX _permission (_permission, _type)
+            ";
         }
+
+        $sql .= ")";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        $this->getPDO()->prepare($sql)->execute();
 
         return true;
     }

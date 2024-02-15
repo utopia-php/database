@@ -94,7 +94,10 @@ class Mongo extends Adapter
      */
     public function exists(string $database, string $collection = null): bool
     {
+        $database = $this->filter($database);
+
         if (!\is_null($collection)) {
+            $collection = $this->filter($collection);
             $collection = $this->getNamespace() . "_" . $collection;
             $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
             foreach ($list as $obj) {
@@ -109,7 +112,19 @@ class Mongo extends Adapter
             return false;
         }
 
-        return $this->getClient()->selectDatabase() != null;
+        $list = $this->getClient()->listDatabaseNames();
+
+        if($list->ok !== 1.0){
+            return false;
+        }
+
+        foreach ($list->databases as $db){
+            if($db->name === $database){
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

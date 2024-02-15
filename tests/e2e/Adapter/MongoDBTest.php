@@ -41,6 +41,7 @@ class MongoDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $schema = 'utopiaTests'; // same as $this->testDatabase
+
         $client = new Client(
             $schema,
             'mongo',
@@ -54,8 +55,8 @@ class MongoDBTest extends Base
         $database->setDatabase($schema);
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
-        if ($database->exists('utopiaTests')) {
-            $database->delete('utopiaTests');
+        if ($database->exists($schema)) {
+            $database->delete($schema);
         }
 
         $database->create();
@@ -63,17 +64,17 @@ class MongoDBTest extends Base
         return self::$database = $database;
     }
 
-    /**
-     * @throws Exception
-     */
-    public function testCreateExistsDelete(): void
-    {
-        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertNotNull(static::getDatabase()->create());
-        $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, static::getDatabase()->create());
-        $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
-    }
+//    /**
+//     * @throws Exception
+//     */
+//    public function testCreateExistsDelete(): void
+//    {
+//        // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
+//        $this->assertNotNull(static::getDatabase()->create());
+//        $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
+//        $this->assertEquals(true, static::getDatabase()->create());
+//        $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
+//    }
 
     public function testRenameAttribute(): void
     {

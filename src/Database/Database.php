@@ -887,7 +887,6 @@ class Database
         }
 
         $database = $database ?? $this->adapter->getDatabase();
-
         return $this->adapter->exists($database, $collection);
     }
 
@@ -961,6 +960,10 @@ class Database
             if (!$validator->isValid($permissions)) {
                 throw new DatabaseException($validator->getDescription());
             }
+        }
+
+        if($this->exists($this->getDatabase(), $id)){
+            throw new DuplicateException('Collection ' . $id . ' already exists (Using exist method)');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
@@ -1810,7 +1813,11 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
+
+        /** @var array<Document> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
 
         $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
@@ -1819,11 +1826,13 @@ class Database
             throw new DatabaseException('Attribute not found');
         }
 
-        $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
-
-        if ($attributeNew !== false) {
-            throw new DuplicateException('Attribute name already used');
+        foreach ($attributes as $attr) {
+            if (\strtolower($this->adapter->filter($attr->getId())) === \strtolower($this->adapter->filter($new))) {
+                throw new DuplicateException('Attribute name already used');
+            }
         }
+
+        $attributeNew = null;
 
         foreach ($attributes as $key => $value) {
             if (isset($value['$id']) && $value['$id'] === $old) {
@@ -3444,7 +3453,6 @@ class Database
         $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
         $document = new Document($document);
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -3456,7 +3464,6 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
             foreach ($relationships as $relationship) {
                 $relationships[$relationship->getAttribute('key')] = $relationship;
             }
@@ -3562,10 +3569,9 @@ class Database
         }
 
         $document = $this->encode($collection, $document);
-
         $validator = new Structure($collection);
-
         if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+            var_dump($document);
             throw new StructureException($validator->getDescription());
         }
 

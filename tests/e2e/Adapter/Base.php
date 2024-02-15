@@ -241,35 +241,89 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('indexes'));
     }
 
-    /**
-     * @throws AuthorizationException
-     * @throws DuplicateException
-     * @throws ConflictException
-     * @throws LimitException
-     * @throws StructureException
-     * @throws DatabaseException
-     */
-    public function testAdapterFilter(): void
+    public function testFilterCollectionsName(): void
     {
-//        $collection = static::getDatabase()->createCollection('shmue.l');
-//        $this->assertEquals('shmue.l', $collection->getId());
-//
-//        $collection = static::getDatabase()->createCollection('shmu.el');
-//        $this->assertEquals('shmu.el', $collection->getId());
+        static::getDatabase()->createCollection('snacks');
 
-        // todo: This is very bad! we got 2 rows in Metadata: "shmue.l", "shmu.el" & one collection in DB named "shmuel"!!!
-        // Meaning we can take data out of shmuel collection using different name
+        $collection = static::getDatabase()->getCollection('snacks');
+        $this->assertEquals('snacks', $collection->getId());
+
+        /**
+         * Check Duplicate with filtering
+         */
+        try {
+            static::getDatabase()->createCollection('s.n.a.c.k.s');
+            $this->fail('Failed to throw exception');
+        } catch (DuplicateException $e) {
+            $this->assertEquals('Collection s.n.a.c.k.s already exists (Using exist method)', $e->getMessage());
+        }
+
+        /**
+         * Check case-sensitive
+         */
+        try {
+            static::getDatabase()->createCollection('SNACKS');
+            $this->fail('Failed to throw exception');
+        } catch (DuplicateException $e) {
+            $this->assertEquals('Collection SNACKS already exists', $e->getMessage());
+        }
+
+        /**
+         * Check Duplicate with filtering
+         * This is passing Metadata check since it checks "Snack.s" this doc does not exist
+         * This is passing Exist check since it checks "Snacks" this row does not exist since case Sensitive
+         * So we get 2 rows in metadata (snacks, Snack.s) and 2 tables create (Snacks, snacks)
+         * show variables like "lower_case_table_names" Default is 0
+         */
+
+        static::getDatabase()->createCollection('Snack.s');
+    }
+
+    public function testFilterAttributesName(): void
+    {
         $collection = 'filters';
         static::getDatabase()->createCollection($collection);
 
-        $this->assertTrue(static::getDatabase()->createAttribute($collection, 'attr1', Database::VAR_STRING, 10, false));
+        $this->assertTrue(static::getDatabase()->createAttribute($collection, 'aTTr1', Database::VAR_STRING, 10, false));
+
         try {
             static::getDatabase()->createAttribute($collection, 'attr.1', Database::VAR_STRING, 10, false);
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
             $this->assertEquals('Attribute already exists', $e->getMessage());
         }
-       // $this->assertEquals(true, false);
+
+        $this->assertTrue(static::getDatabase()->createAttribute($collection, 'aTTr2', Database::VAR_STRING, 10, false));
+
+        /**
+         * Check case-sensitive update
+         */
+        try {
+            static::getDatabase()->renameAttribute($collection, 'attr2', 'aTTr3');
+            $this->fail('Failed to throw exception');
+        } catch (DatabaseException $e) {
+            $this->assertEquals('Attribute not found', $e->getMessage());
+        }
+
+        /**
+         * Check Duplicate
+         */
+        try {
+            static::getDatabase()->renameAttribute($collection, 'aTTr2', 'aTTr1');
+            $this->fail('Failed to throw exception');
+        } catch (DuplicateException $e) {
+            $this->assertEquals('Attribute name already used', $e->getMessage());
+        }
+
+        /**
+         * Check Duplicate with filtering
+         */
+        try {
+            static::getDatabase()->renameAttribute($collection, 'aTTr2', 'attr.1');
+            $this->fail('Failed to throw exception');
+        } catch (DuplicateException $e) {
+            $this->assertEquals('Attribute name already used', $e->getMessage());
+        }
     }
 
     public function testPreserveDatesUpdate(): void
@@ -13387,7 +13441,9 @@ abstract class Base extends TestCase
         if ($database->exists('sharedTables')) {
             $database->setDatabase('sharedTables')->delete();
         }
-
+        if ($database->exists('utopiaTests')) {
+            $database->setDatabase('utopiaTests')->delete();
+        }
         /**
          * Schema
          */

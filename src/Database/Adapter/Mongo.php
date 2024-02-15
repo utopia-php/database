@@ -114,12 +114,12 @@ class Mongo extends Adapter
 
         $list = $this->getClient()->listDatabaseNames();
 
-        if($list->ok !== 1.0){
+        if($list->ok !== 1.0) {
             return false;
         }
 
-        foreach ($list->databases as $db){
-            if($db->name === $database){
+        foreach ($list->databases as $db) {
+            if($db->name === $database) {
                 return true;
             }
         }

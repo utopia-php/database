@@ -962,7 +962,7 @@ class Database
             }
         }
 
-        if($this->exists($this->getDatabase(), $id)){
+        if($this->exists($this->getDatabase(), $id)) {
             throw new DuplicateException('Collection ' . $id . ' already exists (Using exist method)');
         }
 

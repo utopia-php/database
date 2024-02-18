@@ -95,14 +95,13 @@ class Postgres extends SQL
             $attribute = "\"{$attrId}\" {$attrType}, ";
         }
 
-        /**
-         * @var array<string> $attributes
-         */
+        $sqlTenant = $this->shareTables ? '_tenant INTEGER DEFAULT NULL,' : '';
+
         $sql = "
             CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
-                _tenant INTEGER DEFAULT NULL,
+                ". $sqlTenant ."
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
@@ -110,7 +109,6 @@ class Postgres extends SQL
                 PRIMARY KEY (_id)
             );
         ";
-
         if ($this->shareTables) {
             $sql .= "
 				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid), _tenant);
@@ -683,10 +681,13 @@ class Postgres extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+        if ($this->shareTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
@@ -746,22 +747,26 @@ class Postgres extends SQL
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                $sqlTenant = $this->shareTables ? ', :_tenant' : '';
+                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$sqlTenant})";
             }
         }
 
 
         if (!empty($permissions)) {
             $permissions = \implode(', ', $permissions);
+            $sqlTenant = $this->shareTables ? ', _tenant' : '';
 
             $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant)
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$sqlTenant})
 				VALUES {$permissions}
 			";
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            if($sqlTenant) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
         }
 
         try {
@@ -820,11 +825,14 @@ class Postgres extends SQL
 
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                    if($this->shareTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {
@@ -905,10 +913,13 @@ class Postgres extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
+        if ($this->shareTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
@@ -1027,19 +1038,24 @@ class Postgres extends SQL
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_tenant)";
+                    $sqlTenant = $this->shareTables ? ', :_tenant' : '';
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
                 }
             }
 
+            $sqlTenant = $this->shareTables ? ', _tenant' : '';
+
             $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
 				VALUES" . \implode(', ', $values);
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+            if ($this->shareTables) {
+                $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+            }
 
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
@@ -1156,10 +1172,13 @@ class Postgres extends SQL
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
+
+                    if($this->shareTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
 
                     $columns = \array_map(function ($attribute) {
                         return '"' . $this->filter($attribute) . '"';
@@ -1277,7 +1296,9 @@ class Postgres extends SQL
                                 $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
                                 $addBindValues[$bindKey] = $permission;
 
-                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}, :_tenant)";
+                                $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+
+                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey} {$tenantQuery})";
 
                                 if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
                                     $addQuery .= ', ';
@@ -1336,15 +1357,21 @@ class Postgres extends SQL
                 }
 
                 if (!empty($addQuery)) {
+                    $tenantQuery = $this->shareTables ? ', _tenant' : '';
+
                     $stmtAddPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantQuery})
                         VALUES {$addQuery}
                     ");
 
                     foreach ($addBindValues as $key => $value) {
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+
+                    if($this->shareTables) {
+                        $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+                    }
+
                     $stmtAddPermissions->execute();
                 }
             }

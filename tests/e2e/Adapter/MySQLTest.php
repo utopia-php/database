@@ -1,5 +1,6 @@
 <?php
 
+
 namespace Tests\E2E\Adapter;
 
 use PDO;

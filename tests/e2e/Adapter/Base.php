@@ -13528,7 +13528,6 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_UPDATE,
                 Database::EVENT_DOCUMENT_READ,
                 Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_FIND,
                 Database::EVENT_DOCUMENT_COUNT,
                 Database::EVENT_DOCUMENT_SUM,
                 Database::EVENT_DOCUMENT_INCREASE,

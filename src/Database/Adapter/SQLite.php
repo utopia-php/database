@@ -106,7 +106,6 @@ class SQLite extends MariaDB
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
         try {
@@ -134,11 +133,13 @@ class SQLite extends MariaDB
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
+        $tenantQuery = $this->shareTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
+
         $sql = "
 			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}` (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				`_uid` VARCHAR(36) NOT NULL,
-				`_tenant` INTEGER DEFAULT NULL,
+				{$tenantQuery}
 				`_createdAt` DATETIME(3) DEFAULT NULL,
 				`_updatedAt` DATETIME(3) DEFAULT NULL,
 				`_permissions` MEDIUMTEXT DEFAULT NULL".(!empty($attributes) ? ',' : '')."
@@ -147,6 +148,9 @@ class SQLite extends MariaDB
 		";
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        var_dump("---");
+        var_dump($sql);
+        var_dump("---");
 
         $this->getPDO()->prepare($sql)->execute();
 
@@ -155,6 +159,7 @@ class SQLite extends MariaDB
         $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
         if ($this->shareTables) {
+            // todo are we missing here _tenant attribute?
             $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
         }
 
@@ -168,10 +173,12 @@ class SQLite extends MariaDB
             $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
         }
 
+        $tenantQuery = $this->shareTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
+
         $sql = "
 			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}_perms` (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-				`_tenant` INTEGER DEFAULT NULL,
+				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
 				`_document` VARCHAR(255) NOT NULL
@@ -410,7 +417,7 @@ class SQLite extends MariaDB
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
-
+        var_dump($sql);
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
@@ -451,10 +458,13 @@ class SQLite extends MariaDB
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
+        if($this->shareTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = ['_uid'];
@@ -516,19 +526,25 @@ class SQLite extends MariaDB
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$tenantQuery})";
             }
         }
 
         if (!empty($permissions)) {
+            $tenantQuery = $this->shareTables ? ', _tenant' : '';
+
             $queryPermissions = "
-				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document, _tenant)
+				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document {$tenantQuery})
 				VALUES " . \implode(', ', $permissions);
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
 
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
+
+            if($this->shareTables) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
         }
 
         try {
@@ -571,10 +587,13 @@ class SQLite extends MariaDB
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
+        if($this->shareTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
@@ -697,12 +716,15 @@ class SQLite extends MariaDB
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i}, :_tenant)";
+                    $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
                 }
             }
 
+            $tenantQuery = $this->shareTables ? ', _tenant' : '';
+
             $sql = "
-			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission, _tenant)
+			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission {$tenantQuery})
 			   VALUES " . \implode(', ', $values);
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -710,7 +732,9 @@ class SQLite extends MariaDB
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+            if($this->shareTables) {
+                $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+            }
 
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
@@ -824,11 +848,14 @@ class SQLite extends MariaDB
 
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
+
+                    if($this->shareTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
 
                     $columns = \array_map(function ($attribute) {
                         return "`" . $this->filter($attribute) . "`";
@@ -902,7 +929,6 @@ class SQLite extends MariaDB
                             $removeBindKeys[] = ':uid_' . $index;
                             $removeBindValues[$bindKey] = $document->getId();
 
-
                             $tenantQuery = '';
                             if ($this->shareTables) {
                                 $tenantQuery = ' AND _tenant = :_tenant';
@@ -951,7 +977,9 @@ class SQLite extends MariaDB
                                 $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
                                 $addBindValues[$bindKey] = $permission;
 
-                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}, :_tenant)";
+                                $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+
+                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey} {$tenantQuery})";
 
                                 if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
                                     $addQuery .= ', ';
@@ -1003,6 +1031,7 @@ class SQLite extends MariaDB
                     foreach ($removeBindValues as $key => $value) {
                         $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
+
                     if ($this->shareTables) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                     }
@@ -1011,15 +1040,21 @@ class SQLite extends MariaDB
                 }
 
                 if (!empty($addQuery)) {
+                    $tenantQuery = $this->shareTables ? ', _tenant' : '';
+
                     $stmtAddPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantQuery})
                         VALUES {$addQuery}
                     ");
 
                     foreach ($addBindValues as $key => $value) {
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+
+                    if($this->shareTables) {
+                        $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+                    }
+
                     $stmtAddPermissions->execute();
                 }
             }
@@ -1153,8 +1188,7 @@ class SQLite extends MariaDB
         $attributes = implode(', ', $attributes);
 
         if ($this->shareTables) {
-            $key = "`{$this->getNamespace()}_{$collection}_{$id}`";
-            $attributes = "_tenant {$postfix}, {$attributes}";
+            $attributes = "`_tenant` {$postfix}, {$attributes}";
         }
 
         return "CREATE {$type} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";

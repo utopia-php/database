@@ -1727,7 +1727,6 @@ abstract class Base extends TestCase
     public function testEmptyTenant(): void
     {
         $document = static::getDatabase()->findOne('documents');
-        var_dump($document);
         $this->assertArrayNotHasKey('$tenant', $document);
 
         $document = static::getDatabase()->getDocument('documents', $document->getId());

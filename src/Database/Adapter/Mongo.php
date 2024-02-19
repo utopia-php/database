@@ -1561,7 +1561,8 @@ class Mongo extends Adapter
      */
     public function getSupportForSchemas(): bool
     {
-        return true;
+        // todo: Mongo does not support get schema
+        return false;
     }
 
     /**

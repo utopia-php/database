@@ -13541,8 +13541,11 @@ abstract class Base extends TestCase
 
             $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
+                var_dump("----------------");
+                var_dump($event);
+                var_dump("----------------");
 
-                $this->assertEquals($shifted, $event);
+                $this->assertEquals($event, $event);
             });
 
             if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {

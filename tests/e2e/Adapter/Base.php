@@ -278,8 +278,8 @@ abstract class Base extends TestCase
          */
 
         if (static::getDatabase()->getAdapter()->getSupportForSchemas()) {
-            // todo: failing in SQLite so skiping using getSupportForSchemas
-            // Becuase Index Duplication after filter
+            // todo: failing in SQLite so skipping using getSupportForSchemas false
+            // Because Index Duplication after filter
             static::getDatabase()->createCollection('Snack.s');
         }
     }
@@ -13467,18 +13467,14 @@ abstract class Base extends TestCase
             ->setNamespace('')
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('schema1'));
-        }
+        $this->assertEquals(true, $database->exists('schema1'));
 
         $database
             ->setDatabase('schema2')
             ->setNamespace('')
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('schema2'));
-        }
+        $this->assertEquals(true, $database->exists('schema2'));
 
         /**
          * Table
@@ -13494,9 +13490,7 @@ abstract class Base extends TestCase
             ->setTenant($tenant1)
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('sharedTables'));
-        }
+        $this->assertEquals(true, $database->exists('sharedTables'));
 
         $database->createCollection('people', [
             new Document([

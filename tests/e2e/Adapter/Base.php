@@ -256,7 +256,7 @@ abstract class Base extends TestCase
             static::getDatabase()->createCollection('s.n.a.c.k.s');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
-            $this->assertEquals('Collection s.n.a.c.k.s already exists (Using exist method)', $e->getMessage());
+            $this->assertEquals('Collection s.n.a.c.k.s already exists', $e->getMessage());
         }
 
         /**

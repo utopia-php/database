@@ -41,7 +41,7 @@ class SQLiteTest extends Base
         }
 
         $dsn = $db;
-        //$dsn = 'memory'; // Overwrite for fast tests
+        $dsn = 'memory'; // Overwrite for fast tests
         $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();

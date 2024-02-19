@@ -100,7 +100,7 @@ class Postgres extends SQL
         }
 
         $sql = "
-            CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+            CREATE TABLE {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
                 _tenant INTEGER DEFAULT NULL,
@@ -135,7 +135,7 @@ class Postgres extends SQL
             $stmt->execute();
 
             $sql = "
-				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
+				CREATE TABLE {$this->getSQLTable($id . '_perms')} (
 					_id SERIAL NOT NULL,
 					_tenant INTEGER DEFAULT NULL,
 					_type VARCHAR(12) NOT NULL,

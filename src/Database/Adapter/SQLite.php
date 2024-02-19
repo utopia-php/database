@@ -132,7 +132,7 @@ class SQLite extends MariaDB
         }
 
         $sql = "
-			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}` (
+			CREATE TABLE `{$this->getSQLTable($id)}` (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				`_uid` VARCHAR(36) NOT NULL,
 				`_tenant` INTEGER DEFAULT NULL,
@@ -166,7 +166,7 @@ class SQLite extends MariaDB
         }
 
         $sql = "
-			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}_perms` (
+			CREATE TABLE `{$this->getSQLTable($id)}_perms` (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				`_tenant` INTEGER DEFAULT NULL,
 				`_type` VARCHAR(12) NOT NULL,

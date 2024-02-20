@@ -13454,11 +13454,6 @@ abstract class Base extends TestCase
             $database->setDatabase('sharedTables')->delete();
         }
 
-        if ($database->exists('utopiaTests')) {
-            // todo: why delete it if we setDatabase later on with $database->setDatabase($this->testDatabase);
-            //$database->setDatabase('utopiaTests')->delete();
-        }
-
         /**
          * Schema
          */

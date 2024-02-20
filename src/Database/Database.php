@@ -3028,7 +3028,6 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
-     * @throws StructureException
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -3773,7 +3772,11 @@ class Database
                                     ]))
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                    throw new DuplicateException('Document already has a related document');
+                                    throw new DuplicateException(
+                                        'Document already has a related document',
+                                        collectionId: $relatedCollection->getId(),
+                                        documentId: $value
+                                    );
                                 }
 
                                 $this->skipRelationships(fn () => $this->updateDocument(
@@ -3793,7 +3796,11 @@ class Database
                                         ]))
                                     ) {
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                        throw new DuplicateException('Document already has a related document');
+                                        throw new DuplicateException(
+                                            'Document already has a related document',
+                                            collectionId: $relatedCollection->getId(),
+                                            documentId: $value->getId()
+                                        );
                                     }
 
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();

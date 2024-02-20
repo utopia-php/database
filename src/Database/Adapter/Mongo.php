@@ -12,7 +12,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Timeout;
-use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Query;
@@ -731,7 +731,7 @@ class Mongo extends Adapter
      * @param array<string, mixed> $document
      *
      * @return array<string, mixed>
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     private function insertDocument(string $name, array $document): array
     {
@@ -752,7 +752,11 @@ class Mongo extends Adapter
 
             return $this->client->toArray($result);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw new DuplicateException(
+                $e->getMessage(),
+                collectionId: $document['_collection'],
+                documentId: $document['_uid']
+            );
         }
     }
 
@@ -782,7 +786,11 @@ class Mongo extends Adapter
         try {
             $this->client->update($name, $filters, $record);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw new DuplicateException(
+                $e->getMessage(),
+                collectionId: $collection,
+                documentId: $document->getId()
+            );
         }
 
         return $document;
@@ -797,7 +805,7 @@ class Mongo extends Adapter
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws MongoException|DatabaseException
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize): array
     {

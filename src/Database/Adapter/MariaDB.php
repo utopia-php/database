@@ -830,7 +830,11 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException(
+                            'Duplicated document: ' . $e->getMessage(),
+                            collectionId: $collection,
+                            documentId: $document->getId()
+                        );
                 }
             }
 
@@ -961,7 +965,10 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException(
+                            'Duplicated document: ' . $e->getMessage(),
+                            collectionId: $collection,
+                        );
                 }
             }
 
@@ -1212,7 +1219,11 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException(
+                        'Duplicated document: ' . $e->getMessage(),
+                        collectionId: $collection,
+                        documentId: $document->getId(),
+                    );
                 }
             }
 
@@ -1475,7 +1486,10 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException(
+                            'Duplicated document: ' . $e->getMessage(),
+                            collectionId: $collection
+                        );
                 }
             }
 

@@ -145,9 +145,6 @@ class SQLite extends MariaDB
 		";
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
-        var_dump("---");
-        var_dump($sql);
-        var_dump("---");
 
         $this->getPDO()->prepare($sql)->execute();
 
@@ -156,7 +153,6 @@ class SQLite extends MariaDB
         $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
         if ($this->shareTables) {
-            // todo are we missing here _tenant attribute?
             $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
         }
 
@@ -416,7 +412,7 @@ class SQLite extends MariaDB
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
-        var_dump($sql);
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();

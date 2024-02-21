@@ -1724,6 +1724,18 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    public function testEmptyTenant(): void
+    {
+        $documents = static::getDatabase()->find('documents');
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $document->getId());
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+    }
+
     public function testEmptySearch(): void
     {
         $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
@@ -13347,6 +13359,11 @@ abstract class Base extends TestCase
          */
         $database = static::getDatabase();
 
+        if (!$database->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         if ($database->exists('schema1')) {
             $database->setDatabase('schema1')->delete();
         }
@@ -13365,18 +13382,14 @@ abstract class Base extends TestCase
             ->setNamespace('')
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('schema1'));
-        }
+        $this->assertEquals(true, $database->exists('schema1'));
 
         $database
             ->setDatabase('schema2')
             ->setNamespace('')
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('schema2'));
-        }
+        $this->assertEquals(true, $database->exists('schema2'));
 
         /**
          * Table
@@ -13392,9 +13405,7 @@ abstract class Base extends TestCase
             ->setTenant($tenant1)
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('sharedTables'));
-        }
+        $this->assertEquals(true, $database->exists('sharedTables'));
 
         $database->createCollection('people', [
             new Document([

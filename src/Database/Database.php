@@ -3797,6 +3797,16 @@ class Database
                                             Query::equal($twoWayKey, [$value->getId()]),
                                         ]))
                                     ) {
+
+                                        var_dump("+++++++++++++++++++");
+                                        var_dump($related);
+                                        var_dump($relatedCollection->getId());
+                                        var_dump($value instanceof Document);
+                                        var_dump(\gettype($value));
+                                        var_dump("+++++++++++++++++++");
+
+                                        exit;
+
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                         throw new DuplicateException(
                                             'Document already has a related document',

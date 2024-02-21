@@ -5791,14 +5791,10 @@ abstract class Base extends TestCase
             );
             $this->fail('Failed to throw duplicate exception');
         } catch (Throwable $e) {
-            var_dump($e->getMessage());
             $this->assertInstanceOf(DuplicateException::class, $e);
             $this->assertEquals('person', $e->getCollectionId());
             $this->assertEquals('person1', $e->getDocumentId());
         }
-
-
-        $this->assertEquals('---', '------');
 
         // Create new document
         $library4 = static::getDatabase()->createDocument('library', new Document([
@@ -6297,15 +6293,26 @@ abstract class Base extends TestCase
 
         // One to one can't relate to multiple documents, unique index throws duplicate
         try {
+            var_dump($country1);
             static::getDatabase()->updateDocument(
                 'country',
                 $country1->getId(),
                 $country1->setAttribute('city', 'city2')
             );
             $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+
+            var_dump($e->getCollectionId());
+            var_dump($e->getDocumentId());
+
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('country', $e->getCollectionId());
+            $this->assertEquals('person1', $e->getDocumentId());
         }
+
+        $this->assertEquals('---', '------');
+
+
 
         $city1 = static::getDatabase()->getDocument('city', 'city1');
 

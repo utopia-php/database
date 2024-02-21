@@ -3774,8 +3774,10 @@ class Database
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                     throw new DuplicateException(
                                         'Document already has a related document',
-                                        collectionId: $relatedCollection->getId(),
-                                        documentId: $value
+                                        collectionId: $collection->getId(),
+                                        documentId: $old->getId(),
+                                        relatedCollectionId: $relatedCollection->getId(),
+                                        relatedDocumentId: $value
                                     );
                                 }
 
@@ -3798,8 +3800,10 @@ class Database
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                         throw new DuplicateException(
                                             'Document already has a related document',
-                                            collectionId: $relatedCollection->getId(),
-                                            documentId: $value->getId()
+                                            collectionId: $collection->getId(),
+                                            documentId: $old->getId(),
+                                            relatedCollectionId: $relatedCollection->getId(),
+                                            relatedDocumentId: $value->getId()
                                         );
                                     }
 

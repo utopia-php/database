@@ -2628,7 +2628,7 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
-                foreach ($this->getInternalIds() as $internalAttribute) {
+                foreach ($this->getInternalAttributes() as $internalAttribute) {
                     if (!in_array($internalAttribute['$id'], $values)) {
                         $document->removeAttribute($internalAttribute['$id']);
                     }
@@ -4644,7 +4644,7 @@ class Database
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($results as $result) {
-                    foreach ($this->getInternalIds() as $internalAttribute) {
+                    foreach ($this->getInternalAttributes() as $internalAttribute) {
                         if (!\in_array($internalAttribute['$id'], $values)) {
                             $result->removeAttribute($internalAttribute['$id']);
                         }
@@ -4874,7 +4874,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalIds());
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -5066,7 +5066,7 @@ class Database
         // Allow querying internal attributes
         $keys = \array_map(
             fn ($attribute) => $attribute['$id'],
-            self::getInternalIds()
+            self::getInternalAttributes()
         );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
@@ -5219,7 +5219,7 @@ class Database
     /**
      * @return  array<array<string, mixed>>
      */
-    public function getInternalIds(): array
+    public function getInternalAttributes(): array
     {
         $attributes = self::INTERNAL_ATTRIBUTES;
 

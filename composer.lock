@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1fec834c5b222e402702b7bc89a5a8a8",
+    "content-hash": "fec48bd2695ef6429a8963b4ef480884",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -266,16 +266,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.33.2",
+            "version": "0.34.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/http.git",
-                "reference": "b1423ca3e3b61c6c4c2e619d2cb80672809a19f3"
+                "reference": "fd126c02b78cc80678c9638f7b335dfb4a841b78"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/http/zipball/b1423ca3e3b61c6c4c2e619d2cb80672809a19f3",
-                "reference": "b1423ca3e3b61c6c4c2e619d2cb80672809a19f3",
+                "url": "https://api.github.com/repos/utopia-php/http/zipball/fd126c02b78cc80678c9638f7b335dfb4a841b78",
+                "reference": "fd126c02b78cc80678c9638f7b335dfb4a841b78",
                 "shasum": ""
             },
             "require": {
@@ -308,9 +308,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/http/issues",
-                "source": "https://github.com/utopia-php/http/tree/0.33.2"
+                "source": "https://github.com/utopia-php/http/tree/0.34.2"
             },
-            "time": "2024-01-31T10:35:59+00:00"
+            "time": "2024-02-20T11:36:56+00:00"
         },
         {
             "name": "utopia-php/mongo",

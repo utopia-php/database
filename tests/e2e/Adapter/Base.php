@@ -1728,7 +1728,7 @@ abstract class Base extends TestCase
     {
         $documents = static::getDatabase()->find(
             'documents',
-            [Query::orderDesc()] // Bug in Mongo on $internalId 56000
+            [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID
         );
 
         $document = $documents[0];

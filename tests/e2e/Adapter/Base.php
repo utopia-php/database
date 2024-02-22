@@ -1174,9 +1174,12 @@ abstract class Base extends TestCase
         $this->getDatabase()->createCollection('documents');
 
         $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'bigint', Database::VAR_INTEGER, 8, true));
-        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'integer_signed', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'integer_unsigned', Database::VAR_INTEGER, 4, true, signed: false));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'bigint_signed', Database::VAR_INTEGER, 8, true));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'bigint_unsigned', Database::VAR_INTEGER, 9, true, signed: false));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'float_signed', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'float_unsigned', Database::VAR_FLOAT, 0, true, signed: false));
         $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, $this->getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
@@ -1198,9 +1201,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
@@ -1210,12 +1216,18 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
-        $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(5, $document->getAttribute('integer'));
-        $this->assertIsInt($document->getAttribute('bigint'));
-        $this->assertEquals(8589934592, $document->getAttribute('bigint'));
-        $this->assertIsFloat($document->getAttribute('float'));
-        $this->assertEquals(5.55, $document->getAttribute('float'));
+        $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertIsInt($document->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::INT_MAX, $document->getAttribute('integer_unsigned'));
+        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::BIG_INT_MAX, $document->getAttribute('bigint_signed'));
+        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint_unsigned'));
+        $this->assertIsFloat($document->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
+        $this->assertIsFloat($document->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
         $this->assertIsBool($document->getAttribute('boolean'));
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
@@ -1242,9 +1254,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
@@ -1255,12 +1270,18 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
-        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
-        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
-        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
-        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
-        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
-        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::INT_MAX, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float_unsigned'));
         $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
         $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
         $this->assertIsArray($manualIdDocument->getAttribute('colors'));
@@ -1274,18 +1295,62 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
-        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
-        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
-        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
-        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
-        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
-        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::INT_MAX, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float_unsigned'));
         $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
         $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
         $this->assertIsArray($manualIdDocument->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
         $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+
+        try {
+            static::getDatabase()->createDocument('documents', new Document([
+                'string' => '',
+                'integer_signed' => 0,
+                'integer_unsigned' => 0,
+                'bigint_signed' => 0,
+                'bigint_unsigned' => 0,
+                'float_signed' => 0,
+                'float_unsigned' => -5.55,
+                'boolean' => true,
+                'colors' => [],
+                'empty' => [],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('documents', new Document([
+                'string' => '',
+                'integer_signed' => 0,
+                'integer_unsigned' => 0,
+                'bigint_signed' => 0,
+                'bigint_unsigned' => -10,
+                'float_signed' => 0,
+                'float_unsigned' => 0,
+                'boolean' => true,
+                'colors' => [],
+                'empty' => [],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,808', $e->getMessage());
+        }
 
         return $document;
     }
@@ -1317,7 +1382,7 @@ abstract class Base extends TestCase
                 ],
                 'string' => 'text📝',
                 'integer' => 5,
-                'bigint' => 8589934592, // 2^33
+                'bigint' => Database::BIG_INT_MAX,
             ]);
         }
 
@@ -1332,7 +1397,7 @@ abstract class Base extends TestCase
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
+            $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
         }
 
         return $documents;
@@ -1502,10 +1567,12 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
-        $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(5, $document->getAttribute('integer'));
-        $this->assertIsFloat($document->getAttribute('float'));
-        $this->assertEquals(5.55, $document->getAttribute('float'));
+        $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertIsFloat($document->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
+        $this->assertIsFloat($document->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
         $this->assertIsBool($document->getAttribute('boolean'));
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
@@ -1523,15 +1590,15 @@ abstract class Base extends TestCase
         $documentId = $document->getId();
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer']),
+            Query::select(['string', 'integer_signed']),
         ]);
 
         $this->assertEmpty($document->getId());
         $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
-        $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
         $this->assertArrayNotHasKey('float', $document->getAttributes());
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
@@ -1544,7 +1611,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$id']),
+            Query::select(['string', 'integer_signed', '$id']),
         ]);
 
         $this->assertArrayHasKey('$id', $document);
@@ -1555,7 +1622,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$permissions']),
+            Query::select(['string', 'integer_signed', '$permissions']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1566,7 +1633,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$internalId']),
+            Query::select(['string', 'integer_signed', '$internalId']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1577,7 +1644,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$collection']),
+            Query::select(['string', 'integer_signed', '$collection']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1588,7 +1655,7 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('$collection', $document);
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$createdAt']),
+            Query::select(['string', 'integer_signed', '$createdAt']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1599,7 +1666,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = $this->getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$updatedAt']),
+            Query::select(['string', 'integer_signed', '$updatedAt']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1622,10 +1689,10 @@ abstract class Base extends TestCase
         if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
             $this->expectExceptionMessage('Fulltext index is not supported');
         } else {
-            $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index, must be of type string');
+            $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
         }
 
-        $this->getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
+        $this->getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
     }
 
     public function testListDocumentSearch(): void
@@ -1645,9 +1712,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => '*test+alias@email-provider.com',
-            'integer' => 0,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => 0,
+            'integer_unsigned' => 0,
+            'bigint_signed' => 0,
+            'bigint_unsigned' => 0,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
@@ -1661,6 +1731,18 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(1, count($documents));
+    }
+
+    public function testEmptyTenant(): void
+    {
+        $documents = static::getDatabase()->find('documents');
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $document->getId());
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
     }
 
     public function testEmptySearch(): void
@@ -1694,8 +1776,10 @@ abstract class Base extends TestCase
     {
         $document
             ->setAttribute('string', 'text📝 updated')
-            ->setAttribute('integer', 6)
-            ->setAttribute('float', 5.56)
+            ->setAttribute('integer_signed', -6)
+            ->setAttribute('integer_unsigned', 6)
+            ->setAttribute('float_signed', -5.56)
+            ->setAttribute('float_unsigned', 5.56)
             ->setAttribute('boolean', false)
             ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
             ->setAttribute('with-dash', 'Works');
@@ -1705,10 +1789,14 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $new->getId());
         $this->assertIsString($new->getAttribute('string'));
         $this->assertEquals('text📝 updated', $new->getAttribute('string'));
-        $this->assertIsInt($new->getAttribute('integer'));
-        $this->assertEquals(6, $new->getAttribute('integer'));
-        $this->assertIsFloat($new->getAttribute('float'));
-        $this->assertEquals(5.56, $new->getAttribute('float'));
+        $this->assertIsInt($new->getAttribute('integer_signed'));
+        $this->assertEquals(-6, $new->getAttribute('integer_signed'));
+        $this->assertIsInt($new->getAttribute('integer_unsigned'));
+        $this->assertEquals(6, $new->getAttribute('integer_unsigned'));
+        $this->assertIsFloat($new->getAttribute('float_signed'));
+        $this->assertEquals(-5.56, $new->getAttribute('float_signed'));
+        $this->assertIsFloat($new->getAttribute('float_unsigned'));
+        $this->assertEquals(5.56, $new->getAttribute('float_unsigned'));
         $this->assertIsBool($new->getAttribute('boolean'));
         $this->assertEquals(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
@@ -1800,18 +1888,23 @@ abstract class Base extends TestCase
      */
     public function testUpdateDocumentConflict(Document $document): void
     {
-        $document->setAttribute('integer', 7);
+        $document->setAttribute('integer_signed', 7);
         $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
-        $this->assertEquals(7, $result->getAttribute('integer'));
+        $this->assertEquals(7, $result->getAttribute('integer_signed'));
 
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
-        $document->setAttribute('integer', 8);
-        $this->expectException(ConflictException::class);
-        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
-            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
-        });
+        $document->setAttribute('integer_signed', 8);
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+                return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+            });
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertTrue($e instanceof ConflictException);
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+        }
     }
 
     /**
@@ -1905,7 +1998,6 @@ abstract class Base extends TestCase
             Database::VAR_INTEGER,
             size: 0,
             required: false,
-            signed: false,
             array: true
         ));
 
@@ -1935,6 +2027,16 @@ abstract class Base extends TestCase
             required: false,
             signed: false,
             array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'pref',
+            Database::VAR_STRING,
+            size: 16384,
+            required: false,
+            signed: false,
+            filters: ['json'],
         ));
 
         try {
@@ -1982,6 +2084,15 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
         }
 
+        try {
+            $database->createDocument($collection, new Document([
+                'age' => -100,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+        }
+
         $database->createDocument($collection, new Document([
             '$id' => 'id1',
             '$permissions' => $permissions,
@@ -1990,6 +2101,12 @@ abstract class Base extends TestCase
             'numbers' => [0, 100, 1000, -1],
             'age' => 41,
             'tv_show' => 'Everybody Loves Raymond',
+            'pref' => [
+                'fname' => 'Joe',
+                'lname' => 'Baiden',
+                'age' => 80,
+                'male' => true,
+            ],
         ]));
 
         $document = $database->getDocument($collection, 'id1');
@@ -2092,6 +2209,12 @@ abstract class Base extends TestCase
 
             $documents = $database->find($collection, [
                 Query::contains('booleans', [false, true])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // Regular like query on primitive json string data
+            $documents = $database->find($collection, [
+                Query::contains('pref', ['Joe'])
             ]);
             $this->assertCount(1, $documents);
         }
@@ -4020,9 +4143,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -4052,9 +4178,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user('1')),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -4086,9 +4215,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -4112,9 +4244,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -4130,9 +4265,10 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 6,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => 6,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'float_signed' => -Database::DOUBLE_MAX,
+            'float_unsigned' => Database::DOUBLE_MAX,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -4140,18 +4276,18 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
+    public function testNoChangeUpdateDocumentWithoutPermission(): Document
     {
         $document = $this->getDatabase()->createDocument('documents', new Document([
             '$id' => ID::unique(),
             '$permissions' => [],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -123456789.12346,
+            'float_unsigned' => 123456789.12346,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -13232,6 +13368,11 @@ abstract class Base extends TestCase
          */
         $database = $this->getDatabase();
 
+        if (!$database->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         if ($database->exists('schema1')) {
             $database->setDatabase('schema1')->delete();
         }
@@ -13250,18 +13391,14 @@ abstract class Base extends TestCase
             ->setNamespace('')
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('schema1'));
-        }
+        $this->assertEquals(true, $database->exists('schema1'));
 
         $database
             ->setDatabase('schema2')
             ->setNamespace('')
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('schema2'));
-        }
+        $this->assertEquals(true, $database->exists('schema2'));
 
         /**
          * Table
@@ -13277,9 +13414,7 @@ abstract class Base extends TestCase
             ->setTenant($tenant1)
             ->create();
 
-        if ($database->getAdapter()->getSupportForSchemas()) {
-            $this->assertEquals(true, $database->exists('sharedTables'));
-        }
+        $this->assertEquals(true, $database->exists('sharedTables'));
 
         $database->createCollection('people', [
             new Document([

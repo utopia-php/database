@@ -33,6 +33,10 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
 
+    public const INT_MAX = 2147483647;
+    public const BIG_INT_MAX = PHP_INT_MAX;
+    public const DOUBLE_MAX = PHP_FLOAT_MAX;
+
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 
@@ -1209,7 +1213,9 @@ class Database
 
         $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
 
-        $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+        if ($deleted) {
+            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+        }
 
         return $deleted;
     }
@@ -2790,7 +2796,7 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
-                foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                foreach ($this->getInternalAttributes() as $internalAttribute) {
                     if (!in_array($internalAttribute['$id'], $values)) {
                         $document->removeAttribute($internalAttribute['$id']);
                     }
@@ -4822,7 +4828,7 @@ class Database
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($results as $result) {
-                    foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                    foreach ($this->getInternalAttributes() as $internalAttribute) {
                         if (!\in_array($internalAttribute['$id'], $values)) {
                             $result->removeAttribute($internalAttribute['$id']);
                         }
@@ -5049,7 +5055,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -5245,7 +5251,7 @@ class Database
         // Allow querying internal attributes
         $keys = \array_map(
             fn ($attribute) => $attribute['$id'],
-            self::INTERNAL_ATTRIBUTES
+            self::getInternalAttributes()
         );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
@@ -5359,5 +5365,21 @@ class Database
             }
             $this->cache->purge($key);
         }
+    }
+
+    /**
+     * @return  array<array<string, mixed>>
+     */
+    public function getInternalAttributes(): array
+    {
+        $attributes = self::INTERNAL_ATTRIBUTES;
+
+        if (!$this->adapter->getShareTables()) {
+            $attributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
+                return $attribute['$id'] !== '$tenant';
+            });
+        }
+
+        return $attributes;
     }
 }

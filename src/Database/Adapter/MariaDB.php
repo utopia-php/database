@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -711,7 +712,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      * @throws DuplicateException
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -823,7 +824,7 @@ class MariaDB extends SQL
             }
 
             $this->getPDO()->commit();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->getPDO()->rollBack();
 
             if($e instanceof PDOException) {
@@ -854,7 +855,7 @@ class MariaDB extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {

@@ -805,7 +805,9 @@ class Mongo extends Adapter
      *
      * @return array<Document>
      *
-     * @throws MongoException|DatabaseException
+     * @throws DatabaseException
+     * @throws MongoException
+     * @throws Exception
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize): array
     {

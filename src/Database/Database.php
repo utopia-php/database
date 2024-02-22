@@ -3771,14 +3771,25 @@ class Database
                                         Query::equal($twoWayKey, [$value]),
                                     ]))
                                 ) {
-                                    // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                    throw new DuplicateException(
-                                        'Document already has a related document',
-                                        collectionId: $collection->getId(),
-                                        documentId: $old->getId(),
-                                        relatedCollectionId: $relatedCollection->getId(),
-                                        relatedDocumentId: $value
-                                    );
+
+                                    var_dump("---------------------");
+                                    var_dump($related);
+                                    var_dump($relatedCollection->getId());
+                                    var_dump($value instanceof Document);
+                                    var_dump(\gettype($value));
+                                    var_dump("---------------------");
+                                    exit;
+
+
+//
+//                                    // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
+//                                    throw new DuplicateException(
+//                                        'Document already has a related document',
+//                                        collectionId: $collection->getId(),
+//                                        documentId: $old->getId(),
+//                                        relatedCollectionId: $relatedCollection->getId(),
+//                                        relatedDocumentId: $value
+//                                    );
                                 }
 
                                 $this->skipRelationships(fn () => $this->updateDocument(
@@ -3804,17 +3815,17 @@ class Database
                                         var_dump($value instanceof Document);
                                         var_dump(\gettype($value));
                                         var_dump("+++++++++++++++++++");
+exit;
 
-                                        exit;
 
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                        throw new DuplicateException(
-                                            'Document already has a related document',
-                                            collectionId: $collection->getId(),
-                                            documentId: $old->getId(),
-                                            relatedCollectionId: $relatedCollection->getId(),
-                                            relatedDocumentId: $value->getId()
-                                        );
+//                                        throw new DuplicateException(
+//                                            'Document already has a related document',
+//                                            collectionId: $collection->getId(),
+//                                            documentId: $old->getId(),
+//                                            relatedCollectionId: $relatedCollection->getId(),
+//                                            relatedDocumentId: $value->getId()
+//                                        );
                                     }
 
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();

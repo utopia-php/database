@@ -4642,8 +4642,14 @@ abstract class Base extends TestCase
 
         $document->setAttribute('$id', 'CaseSensitive');
 
-        $this->expectException(DuplicateException::class);
-        static::getDatabase()->createDocument($document->getCollection(), $document);
+        try {
+            static::getDatabase()->createDocument($document->getCollection(), $document);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('documents', $e->getCollectionId());
+            $this->assertEquals('CaseSensitive', $e->getDocumentId());
+        }
 
         return $document;
     }
@@ -4726,9 +4732,6 @@ abstract class Base extends TestCase
             $this->assertEquals('movies', $e->getCollectionId());
             $this->assertNotNull($e->getDocumentId());
         }
-
-        //$this->assertEquals('111', 11111);
-
     }
 
     public function testGetAttributeLimit(): void
@@ -5181,9 +5184,15 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
 
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
-        $this->expectException(DuplicateException::class);
 
-        static::getDatabase()->createCollection('created_at');
+        try {
+            static::getDatabase()->createCollection('created_at');
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals(null, $e->getCollectionId());
+            $this->assertEquals(null, $e->getDocumentId());
+        }
     }
 
     public function testCreateDatetime(): void
@@ -6300,15 +6309,10 @@ abstract class Base extends TestCase
             );
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            //var_dump($e);
-            var_dump($e->getCollectionId());
-            var_dump($e->getDocumentId());
-           // $this->assertInstanceOf(DuplicateException::class, $e);
-           // $this->assertEquals('country', $e->getCollectionId());
-            //$this->assertEquals('person1', $e->getDocumentId());
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('city', $e->getCollectionId());
+            $this->assertEquals('city2', $e->getDocumentId());
         }
-
-        //$this->assertEquals('---', '------');
 
         $city1 = static::getDatabase()->getDocument('city', 'city1');
 

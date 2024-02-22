@@ -1726,7 +1726,11 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
-        $documents = static::getDatabase()->find('documents');
+        $documents = static::getDatabase()->find(
+            'documents',
+            [Query::orderDesc()] // Bug in Mongo on $internalId 56000
+        );
+
         $document = $documents[0];
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);

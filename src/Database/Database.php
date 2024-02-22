@@ -2772,7 +2772,7 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
-                foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                foreach ($this->getInternalAttributes() as $internalAttribute) {
                     if (!in_array($internalAttribute['$id'], $values)) {
                         $document->removeAttribute($internalAttribute['$id']);
                     }
@@ -4838,7 +4838,7 @@ exit;
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($results as $result) {
-                    foreach (Database::INTERNAL_ATTRIBUTES as $internalAttribute) {
+                    foreach ($this->getInternalAttributes() as $internalAttribute) {
                         if (!\in_array($internalAttribute['$id'], $values)) {
                             $result->removeAttribute($internalAttribute['$id']);
                         }
@@ -5068,7 +5068,7 @@ exit;
             }
         }
 
-        $attributes = array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
+        $attributes = array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -5264,7 +5264,7 @@ exit;
         // Allow querying internal attributes
         $keys = \array_map(
             fn ($attribute) => $attribute['$id'],
-            self::INTERNAL_ATTRIBUTES
+            self::getInternalAttributes()
         );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
@@ -5378,5 +5378,21 @@ exit;
             }
             $this->cache->purge($key);
         }
+    }
+
+    /**
+     * @return  array<array<string, mixed>>
+     */
+    public function getInternalAttributes(): array
+    {
+        $attributes = self::INTERNAL_ATTRIBUTES;
+
+        if (!$this->adapter->getShareTables()) {
+            $attributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
+                return $attribute['$id'] !== '$tenant';
+            });
+        }
+
+        return $attributes;
     }
 }

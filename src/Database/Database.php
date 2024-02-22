@@ -3772,12 +3772,12 @@ class Database
                                     ]))
                                 ) {
 
-                                    var_dump("---------------------");
+                                    var_dump("---------+++------------");
                                     var_dump($related);
                                     var_dump($relatedCollection->getId());
                                     var_dump($value instanceof Document);
                                     var_dump(\gettype($value));
-                                    var_dump("---------------------");
+                                    var_dump("---------+++------------");
                                     exit;
 
 
@@ -3800,35 +3800,33 @@ class Database
                                 break;
                             case 'object':
                                 if ($value instanceof Document) {
-                                    $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
-
+                                    var_dump("+++++++++++++++++++");
+                                    var_dump($oldValue?->getId());
+                                    var_dump($value->getId());
+                                    var_dump("++++         ++++");
+                                    var_dump($relatedCollection->getId());
+                                    var_dump($twoWayKey);
+                                    var_dump($value->getId());
+                                    var_dump("+++++++++++++++++++");
                                     if (
                                         $oldValue?->getId() !== $value->getId()
                                         && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                             Query::equal($twoWayKey, [$value->getId()]),
                                         ]))
                                     ) {
-
-                                        var_dump("+++++++++++++++++++");
-                                        var_dump($related);
-                                        var_dump($relatedCollection->getId());
-                                        var_dump($value instanceof Document);
-                                        var_dump(\gettype($value));
-                                        var_dump("+++++++++++++++++++");
-exit;
-
-
+                                        var_dump("VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV");
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-//                                        throw new DuplicateException(
-//                                            'Document already has a related document',
-//                                            collectionId: $collection->getId(),
-//                                            documentId: $old->getId(),
-//                                            relatedCollectionId: $relatedCollection->getId(),
-//                                            relatedDocumentId: $value->getId()
-//                                        );
+                                        throw new DuplicateException(
+                                            'Document already has a related document',
+                                            collectionId: $collection->getId(),
+                                            documentId: $old->getId(),
+                                            relatedCollectionId: $relatedCollection->getId(),
+                                            relatedDocumentId: $value->getId()
+                                        );
                                     }
 
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();
+                                    $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
                                     if ($related->isEmpty()) {
                                         if (!isset($value['$permissions'])) {
                                             $value->setAttribute('$permissions', $document->getAttribute('$permissions'));

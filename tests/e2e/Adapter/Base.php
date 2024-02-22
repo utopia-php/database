@@ -5500,16 +5500,18 @@ abstract class Base extends TestCase
             twoWayKey:'creature'
         );
 
-        $species = static::getDatabase()->createDocument('species', new Document([
+        $species1 = static::getDatabase()->createDocument('species', new Document([
             '$id' => ID::custom('1'),
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Canine',
             'creature' => [
                 '$id' => ID::custom('1'),
                 '$permissions' => [
                     Permission::read(Role::any()),
+                    Permission::update(Role::any()),
                 ],
                 'name' => 'Dog',
                 'characterstic' => [
@@ -5522,7 +5524,35 @@ abstract class Base extends TestCase
                 ]
             ]
         ]));
-        static::getDatabase()->updateDocument('species', $species->getId(), new Document([
+
+        $species2 = static::getDatabase()->createDocument('species', new Document([
+            '$id' => ID::custom('2'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Miao',
+            'creature' => [
+                '$id' => ID::custom('2'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Cat',
+                'characterstic' => [
+                    '$id' => ID::custom('2'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'active',
+                ]
+            ]
+        ]));
+
+        //$this->assertTrue(false);
+
+        static::getDatabase()->updateDocument('species', $species2->getId(), new Document([
             '$id' => ID::custom('1'),
             '$collection' => 'species',
             'creature' => [
@@ -5535,8 +5565,14 @@ abstract class Base extends TestCase
                 ]
             ]
         ]));
+
+        $this->assertTrue(false);
+
+
         $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
         $this->assertEquals($species, $updatedSpecies);
+
+
     }
 
     // Relationships

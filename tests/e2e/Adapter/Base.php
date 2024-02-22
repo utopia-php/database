@@ -1402,6 +1402,10 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('documents', $document->getId());
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
     }
 
     public function testEmptySearch(): void

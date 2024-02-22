@@ -32,7 +32,7 @@ class DataAPIMariaDBTest extends Base
 
         $database = new Database(new DataAPIMariaDB('http://data-api/v1', 'test-secret', 'default'), new Cache(new None()));
         $database->setDatabase('utopiaTests');
-        $database->setNamespace('myapp_' . uniqid());
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {
             $database->delete('utopiaTests');

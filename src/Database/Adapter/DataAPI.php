@@ -35,15 +35,17 @@ abstract class DataAPI extends Adapter
     }
 
     /**
+     * @param mixed[] $params
+     *
      * @throws FetchException
      * @throws DatabaseException
      * @throws Exception
      */
-    private function query(string $method, string $path, mixed $body = []): mixed
+    private function query(string $query, array $params = []): mixed
     {
         $roles = \implode(',', Authorization::getRoles());
         $response = Client::fetch(
-            url: $this->endpoint . $path,
+            url: $this->endpoint . '/queries',
             headers: [
                 'x-utopia-secret' => $this->secret,
                 'x-utopia-database' => $this->database,
@@ -55,8 +57,11 @@ abstract class DataAPI extends Adapter
                 // 'x-utopia-timeout' => self::$timeout ? \strval(self::$timeout) : '',
                 'content-type' => 'application/json'
             ],
-            method: $method,
-            body: $body
+            method: 'POST',
+            body: [
+                'query' => $query,
+                'params' => $params
+            ]
         );
 
         if ($response->getStatusCode() >= 400) {
@@ -79,19 +84,25 @@ abstract class DataAPI extends Adapter
             throw $exception;
         }
 
-        $body = \json_decode($response->getBody(), true);
-        return $body['output'] ?? '';
+        $body = \json_decode($response->getBody(), false);
+
+        $output = $body->output ?? '';
+
+        if(\is_object($output)) {
+            $output = new Document((array) $output);
+        }
+
+        return $output;
     }
 
     /**
      * Ping Database
      *
      * @return bool
-     * @throws DatabaseException|FetchException
      */
     public function ping(): bool
     {
-        return $this->query('GET', '/ping', []);
+        return $this->query('ping');
     }
 
     /**
@@ -100,11 +111,10 @@ abstract class DataAPI extends Adapter
      * @param string $name
      *
      * @return bool
-     * @throws DatabaseException|FetchException
      */
     public function create(string $name): bool
     {
-        return $this->query('POST', '/databases', ['database' => $name]);
+        return $this->query('create', [$name]);
     }
 
     /**
@@ -112,19 +122,23 @@ abstract class DataAPI extends Adapter
      * Optionally check if collection exists in database
      *
      * @param string $database database name
-     * @param string $collection (optional) collection name
+     * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
     public function exists(string $database, ?string $collection = null): bool
     {
-        $path = '/databases/' . $database;
+        return $this->query('exists', [$database, $collection]);
+    }
 
-        if(!empty($collection)) {
-            $path = '/collections/' . $collection . '?database=' . $database;
-        }
-
-        return $this->query('GET', $path, []);
+    /**
+     * List Databases
+     *
+     * @return array<Document>
+     */
+    public function list(): array
+    {
+        return $this->query('list');
     }
 
     /**
@@ -136,7 +150,7 @@ abstract class DataAPI extends Adapter
      */
     public function delete(string $name): bool
     {
-        return $this->query('DELETE', '/databases/' . $name, []);
+        return $this->query('delete', [$name]);
     }
 
     /**
@@ -149,11 +163,7 @@ abstract class DataAPI extends Adapter
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        return $this->query('POST', '/collections', [
-            'collection' => $name,
-            'attributes' => $attributes,
-            'indexes' => $indexes
-        ]);
+        return $this->query('createCollection', [$name, $attributes, $indexes]);
     }
 
     /**
@@ -165,7 +175,7 @@ abstract class DataAPI extends Adapter
      */
     public function deleteCollection(string $id): bool
     {
-        return $this->query('DELETE', '/collections/' . $id, []);
+        return $this->query('deleteCollection', [$id]);
     }
 
     /**
@@ -181,13 +191,7 @@ abstract class DataAPI extends Adapter
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
-        return $this->query('POST', '/collections/' . $collection . '/attributes', [
-            'attribute' => $id,
-            'type' => $type,
-            'size' => $size,
-            'signed' => $signed,
-            'array' => $array,
-        ]);
+        return $this->query('createAttribute', [$collection, $id, $type, $size, $signed, $array]);
     }
 
     /**
@@ -204,12 +208,7 @@ abstract class DataAPI extends Adapter
      */
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
-        return $this->query('PUT', '/collections/'.$collection.'/attributes/' . $id, [
-            'type' => $type,
-            'size' => $size,
-            'signed' => $signed,
-            'array' => $array,
-        ]);
+        return $this->query('updateAttribute', [$collection, $id, $type, $size, $signed, $array]);
     }
 
     /**
@@ -222,7 +221,7 @@ abstract class DataAPI extends Adapter
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->query('DELETE', '/collections/' . $collection . '/attributes/' . $id, []);
+        return $this->query('deleteAttribute', [$collection, $id]);
     }
 
     /**
@@ -235,7 +234,7 @@ abstract class DataAPI extends Adapter
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        return $this->query('PATCH', '/collections/' . $collection . '/attributes/' . $old . '/name', ['new' => $new]);
+        return $this->query('renameAttribute', [$collection, $old, $new]);
     }
 
     /**
@@ -249,13 +248,7 @@ abstract class DataAPI extends Adapter
      */
     public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
     {
-        return $this->query('POST', '/collections/' . $collection . '/relationships', [
-            'relatedCollection' => $relatedCollection,
-            'type' => $type,
-            'twoWay' => $twoWay,
-            'id' => $id,
-            'twoWayKey' => $twoWayKey
-        ]);
+        return $this->query('createRelationship', [$collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey]);
     }
 
     /**
@@ -273,14 +266,7 @@ abstract class DataAPI extends Adapter
      */
     public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        return $this->query('PUT', '/collections/'. $collection .'/relationships/' . $relatedCollection, [
-            'type' => $type,
-            'twoWay' => $twoWay,
-            'key' => $key,
-            'twoWayKey' => $twoWayKey,
-            'newKey' => $newKey,
-            'newTwoWayKey' => $newTwoWayKey
-        ]);
+        return $this->query('updateRelationship', [$collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $newKey, $newTwoWayKey]);
     }
 
     /**
@@ -297,13 +283,7 @@ abstract class DataAPI extends Adapter
      */
     public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
     {
-        return $this->query('DELETE', '/collections/'. $collection .'/relationships/' . $relatedCollection, [
-            'type' => $type,
-            'twoWay' => $twoWay,
-            'key' => $key,
-            'twoWayKey' => $twoWayKey,
-            'side' => $side,
-        ]);
+        return $this->query('deleteRelationship', [$collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $side]);
     }
 
     /**
@@ -316,9 +296,7 @@ abstract class DataAPI extends Adapter
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        return $this->query('PATCH', '/collections/'.$collection.'/indexes/'.$old.'/name', [
-            'new' => $new
-        ]);
+        return $this->query('renameIndex', [$collection, $old, $new]);
     }
 
     /**
@@ -335,13 +313,7 @@ abstract class DataAPI extends Adapter
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        return $this->query('POST', '/collections/' . $collection . '/indexes', [
-            'index' => $id,
-            'type' => $type,
-            'attributes' => $attributes,
-            'lengths' => $lengths,
-            'orders' => $orders
-        ]);
+        return $this->query('createIndex', [$collection, $id, $type, $attributes, $lengths, $orders]);
     }
 
     /**
@@ -354,7 +326,7 @@ abstract class DataAPI extends Adapter
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->query('DELETE', '/collections/'. $collection .'/indexes/' . $id, []);
+        return $this->query('deleteIndex', [$collection, $id]);
     }
 
     /**
@@ -364,20 +336,10 @@ abstract class DataAPI extends Adapter
      * @param string $id
      * @param array<Query> $queries
      * @return Document
-     * @throws DatabaseException
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        $path = '/collections/' . $collection . '/documents/' . $id;
-
-        $arr = [];
-        foreach ($queries as $query) {
-            $arr[] = json_encode($query->jsonSerialize());
-        }
-
-        $path .= '?' . http_build_query(['queries' => $arr]);
-
-        return new Document($this->query('GET', $path, []));
+        return $this->query('getDocument', [$collection, $id, $queries]);
     }
 
     /**
@@ -387,11 +349,26 @@ abstract class DataAPI extends Adapter
      * @param Document $document
      *
      * @return Document
-     * @throws DatabaseException|FetchException
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        return new Document($this->query('POST', '/collections/' . $collection . '/documents', ['document' => $document]));
+        return $this->query('createDocument', [$collection, $document]);
+    }
+
+    /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        return $this->query('createDocuments', [$collection, $documents, $batchSize]);
     }
 
     /**
@@ -401,11 +378,26 @@ abstract class DataAPI extends Adapter
      * @param Document $document
      *
      * @return Document
-     * @throws DatabaseException|FetchException
      */
     public function updateDocument(string $collection, Document $document): Document
     {
-        return new Document($this->query('PUT', '/collections/'. $collection .'/documents', ['document' => $document]));
+        return $this->query('updateDocument', [$collection, $document]);
+    }
+
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    {
+        return $this->query('updateDocuments', [$collection, $documents, $batchSize]);
     }
 
     /**
@@ -418,7 +410,7 @@ abstract class DataAPI extends Adapter
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        return $this->query('DELETE', '/collections/'. $collection .'/documents/' . $id, []);
+        return $this->query('deleteDocument', [$collection, $id]);
     }
 
     /**
@@ -434,38 +426,12 @@ abstract class DataAPI extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      *
      * @return array<Document>
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
-        $arr = [];
-        foreach ($queries as $query) {
-            $arr[] = json_encode($query->jsonSerialize());
-        }
-
-        $body = [
-            'queries' => $arr,
-            'limit' => $limit,
-            'offset' => $offset,
-            'orderAttributes' => $orderAttributes,
-            'orderTypes' => $orderTypes,
-            'cursor' => $cursor,
-            'cursorDirection' => $cursorDirection,
-            'timeout' => $timeout
-        ];
-
-        $path = '/collections/' . $collection . '/documents';
-        $path .= '?' . http_build_query($body);
-
-        $results = $this->query('GET', $path, []);
-
-        foreach ($results as $index => $document) {
-            $results[$index] = new Document($results[$index]);
-        }
-
-        return $results;
+        return $this->query('find', [$collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection]);
     }
 
     /**
@@ -474,30 +440,13 @@ abstract class DataAPI extends Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Query> $queries
-     * @param int|string|null $max
-     * @param int|string|null $timeout
+     * @param int|null $max
+     *
      * @return int|float
-     * @throws DatabaseException
-     * @throws FetchException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], int|string|null $max = null, int|string|null $timeout = null): float|int
+    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        $arr = [];
-        foreach ($queries as $query) {
-            $arr[] = json_encode($query->jsonSerialize());
-        }
-
-        $body = [
-            'attribute' => $attribute,
-            'queries' => $arr,
-            'max' => $max,
-            'timeout' => $timeout
-        ];
-
-        $path = '/collections/'. $collection .'/documents-sum';
-        $path .= '?' . http_build_query($body);
-
-        return $this->query('GET', $path, []);
+        return $this->query('sum', [$collection, $attribute, $queries, $max]);
     }
 
     /**
@@ -509,23 +458,9 @@ abstract class DataAPI extends Adapter
      *
      * @return int
      */
-    public function count(string $collection, array $queries = [], ?int $max = null, ?int $timeout = null): int
+    public function count(string $collection, array $queries = [], ?int $max = null): int
     {
-        $arr = [];
-        foreach ($queries as $query) {
-            $arr[] = json_encode($query->jsonSerialize());
-        }
-
-        $body = [
-            'queries' => $arr,
-            'max' => $max,
-            'timeout' => $timeout
-        ];
-
-        $path = '/collections/'. $collection .'/documents-count';
-        $path .= '?' . http_build_query($body);
-
-        return $this->query('GET', $path, []);
+        return $this->query('count', [$collection, $queries, $max]);
     }
 
     /**
@@ -533,11 +468,188 @@ abstract class DataAPI extends Adapter
      *
      * @param string $collection
      * @return int
-     * @throws DatabaseException|FetchException
+     * @throws DatabaseException
      */
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->query('GET', '/collections/' . $collection . '/size', []);
+        return $this->query('getSizeOfCollection', [$collection]);
+    }
+
+    /**
+     * Get max STRING limit
+     *
+     * @return int
+     */
+    public function getLimitForString(): int
+    {
+        return $this->query('getLimitForString');
+    }
+
+    /**
+     * Get max INT limit
+     *
+     * @return int
+     */
+    public function getLimitForInt(): int
+    {
+        return $this->query('getLimitForInt');
+    }
+
+    /**
+     * Get maximum attributes limit.
+     *
+     * @return int
+     */
+    public function getLimitForAttributes(): int
+    {
+        return $this->query('getLimitForAttributes');
+    }
+
+    /**
+     * Get maximum index limit.
+     *
+     * @return int
+     */
+    public function getLimitForIndexes(): int
+    {
+        return $this->query('getLimitForIndexes');
+    }
+
+    /**
+     * Is schemas supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemas(): bool
+    {
+        return $this->query('getSupportForSchemas');
+    }
+
+    /**
+     * Is index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForIndex(): bool
+    {
+        return $this->query('getSupportForIndex');
+    }
+
+    /**
+     * Is unique index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForUniqueIndex(): bool
+    {
+        return $this->query('getSupportForUniqueIndex');
+    }
+
+    /**
+     * Is fulltext index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextIndex(): bool
+    {
+        return $this->query('getSupportForFulltextIndex');
+    }
+
+    /**
+     * Is fulltext wildcard supported?
+     *
+     * @return bool
+     */
+    public function getSupportForFulltextWildcardIndex(): bool
+    {
+        return $this->query('getSupportForFulltextWildcardIndex');
+    }
+
+
+    /**
+     * Does the adapter handle casting?
+     *
+     * @return bool
+     */
+    public function getSupportForCasting(): bool
+    {
+        return $this->query('getSupportForCasting');
+    }
+
+    /**
+     * Does the adapter handle array Contains?
+     *
+     * @return bool
+     */
+    public function getSupportForQueryContains(): bool
+    {
+        return $this->query('getSupportForQueryContains');
+    }
+
+    /**
+     * Are timeouts supported?
+     *
+     * @return bool
+     */
+    public function getSupportForTimeouts(): bool
+    {
+        return $this->query('getSupportForTimeouts');
+    }
+
+    /**
+     * Are relationships supported?
+     *
+     * @return bool
+     */
+    public function getSupportForRelationships(): bool
+    {
+        return $this->query('getSupportForRelationships');
+    }
+
+    /**
+     * Get current attribute count from collection document
+     *
+     * @param Document $collection
+     * @return int
+     */
+    public function getCountOfAttributes(Document $collection): int
+    {
+        return $this->query('getCountOfAttributes', [$collection]);
+    }
+
+    /**
+     * Get current index count from collection document
+     *
+     * @param Document $collection
+     * @return int
+     */
+    public function getCountOfIndexes(Document $collection): int
+    {
+        return $this->query('getCountOfIndexes', [$collection]);
+    }
+
+    /**
+     * Estimate maximum number of bytes required to store a document in $collection.
+     * Byte requirement varies based on column type and size.
+     * Needed to satisfy MariaDB/MySQL row width limit.
+     * Return 0 when no restrictions apply to row width
+     *
+     * @param Document $collection
+     * @return int
+     */
+    public function getAttributeWidth(Document $collection): int
+    {
+        return $this->query('getAttributeWidth', [$collection]);
+    }
+
+    /**
+     * Get list of keywords that cannot be used
+     *
+     * @return array<string>
+     */
+    public function getKeywords(): array
+    {
+        return $this->query('getKeywords');
     }
 
     /**
@@ -549,8 +661,7 @@ abstract class DataAPI extends Adapter
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
-        // Not nessessary for this adapter
-        return [];
+        return $this->query('getAttributeProjection', [$selections, $prefix]);
     }
 
     /**
@@ -567,11 +678,34 @@ abstract class DataAPI extends Adapter
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
     {
-        return $this->query('PATCH', '/collections/'. $collection .'/documents/'. $id .'/increase', [
-            'attribute' => $attribute,
-            'value' => $value,
-            'min' => $min,
-            'max' => $max
-        ]);
+        return $this->query('increaseDocumentAttribute', [$collection, $id, $attribute, $value, $min, $max]);
+    }
+
+    /**
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return $this->query('getMaxIndexLength');
+    }
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
+     * @return void
+     *
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        $this->query('setTimeout', [$milliseconds, $event]);
     }
 }

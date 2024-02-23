@@ -273,13 +273,22 @@ abstract class Adapter
     abstract public function ping(): bool;
 
     /**
-     * Execute raw command
-     * @param string $command
+     * Execute raw command with no response
+     * @param mixed $query
      *
      * @return mixed
      * @throws \Throwable
      */
-    abstract public function execute(string $command): mixed;
+    abstract public function executeWrite(mixed $query): bool;
+
+    /**
+     * Execute raw command that returns a response
+     * @param mixed $query
+     *
+     * @return mixed
+     * @throws \Throwable
+     */
+    abstract public function executeRead(mixed $query): mixed;
 
     /**
      * Create Database

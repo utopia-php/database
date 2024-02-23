@@ -36,26 +36,44 @@ abstract class SQL extends Adapter
      */
     public function ping(): bool
     {
-        $query = $this->getPDO()
-            ->prepare("SELECT 1;")
-            ->queryString;
+        $stmt = $this->getPDO()->prepare("SELECT 1;");
+        $query = $stmt->queryString;
 
-        return $this->execute($query);
+        return $this->executeWrite($query);
     }
 
     /**
-     * Execute raw command
+     * Execute raw command with no response
      * @param mixed $query
      *
      * @return mixed
-     * @throws Exception
-     * @throws PDOException
+     * @throws \Throwable
      */
-    public function execute(mixed $query): mixed
+    public function executeWrite(mixed $query): bool
     {
         return $this->getPDO()
             ->prepare($query)
             ->execute();
+    }
+
+    /**
+     * Execute raw command that returns a response
+     * @param mixed $query
+     *
+     * @return mixed
+     * @throws \Throwable
+     */
+    public function executeRead(mixed $query): mixed
+    {
+        $stmt = $this->getPDO()->prepare($query);
+        $response = $stmt->fetchAll();
+
+        \var_dump($query);
+        \var_dump($response);
+
+        $stmt->closeCursor();
+
+        return $response;
     }
 
     /**
@@ -92,8 +110,7 @@ abstract class SQL extends Adapter
 
         $stmt->execute();
 
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+        $document = $this->executeRead($stmt->queryString);
 
         if (empty($document)) {
             return false;

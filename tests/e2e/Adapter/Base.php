@@ -1726,12 +1726,20 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
-        $documents = static::getDatabase()->find('documents');
+        $documents = static::getDatabase()->find(
+            'documents',
+            [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID
+        );
+
         $document = $documents[0];
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
 
         $document = static::getDatabase()->getDocument('documents', $document->getId());
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
     }

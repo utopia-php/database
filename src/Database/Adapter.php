@@ -275,20 +275,42 @@ abstract class Adapter
     /**
      * Execute raw command with no response
      * @param mixed $query
+     * @param array[string]mixed $params
      *
-     * @return mixed
+     * @return bool
      * @throws \Throwable
      */
-    abstract public function executeWrite(mixed $query): bool;
+    abstract public function executeWrite(mixed $query, array $params): bool;
+
+    /**
+     * Execute raw command and get amount of affected documents
+     * @param mixed $query
+     * @param array[string]mixed $params
+     *
+     * @return int
+     * @throws \Throwable
+     */
+    abstract public function executeWriteWithCount(mixed $query, array $params): int;
 
     /**
      * Execute raw command that returns a response
      * @param mixed $query
+     * @param array[string]mixed $params
      *
      * @return mixed
      * @throws \Throwable
      */
-    abstract public function executeRead(mixed $query): mixed;
+    abstract public function executeRead(mixed $query, array $params): mixed;
+
+    /**
+     * Execute transaction of multiple raw queries
+     * @param mixed $query
+     * @param array[string]mixed $params
+     *
+     * @return mixed
+     * @throws \Throwable
+     */
+    abstract public function executeRead(mixed $query, array $params): mixed;
 
     /**
      * Create Database

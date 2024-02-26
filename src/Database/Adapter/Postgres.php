@@ -9,7 +9,7 @@ use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -694,6 +694,8 @@ class Postgres extends SQL
      * @param Document $document
      *
      * @return Document
+     * @throws DuplicateException
+     * @throws Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -794,18 +796,22 @@ class Postgres extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
+
+            $this->getPDO()->commit();
+
         } catch (Throwable $e) {
+            $this->getPDO()->rollBack();
+
             switch ($e->getCode()) {
                 case 23505:
-                    $this->getPDO()->rollBack();
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException(
+                        'Duplicated document: ' . $e->getMessage(),
+                        collectionId: $collection,
+                        documentId: $document->getId()
+                    );
                 default:
                     throw $e;
             }
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -820,7 +826,7 @@ class Postgres extends SQL
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -828,9 +834,8 @@ class Postgres extends SQL
             return $documents;
         }
 
-        $this->getPDO()->beginTransaction();
-
         try {
+            $this->getPDO()->beginTransaction();
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -903,20 +908,25 @@ class Postgres extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
+            $this->getPDO()->commit();
 
-            return $documents;
-
-        } catch (PDOException $e) {
+        } catch (Throwable $e) {
             $this->getPDO()->rollBack();
 
-            throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            switch ($e->getCode()) {
+                //case 1062:
+                case 23000:
+                    throw new DuplicateException(
+                        'Duplicated document: ' . $e->getMessage(),
+                        collectionId: $collection,
+                    );
+
+                default:
+                    throw $e;
+            }
         }
+
+        return $documents;
     }
 
     /**
@@ -926,6 +936,7 @@ class Postgres extends SQL
      * @param Document $document
      *
      * @return Document
+     * @throws Throwable
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -977,8 +988,6 @@ class Postgres extends SQL
 
             return $carry;
         }, $initial);
-
-        $this->getPDO()->beginTransaction();
 
         /**
          * Get removed Permissions
@@ -1126,6 +1135,8 @@ class Postgres extends SQL
         }
 
         try {
+            $this->getPDO()->beginTransaction();
+
             $stmt->execute();
             if (isset($stmtRemovePermissions)) {
                 $stmtRemovePermissions->execute();
@@ -1133,20 +1144,22 @@ class Postgres extends SQL
             if (isset($stmtAddPermissions)) {
                 $stmtAddPermissions->execute();
             }
-        } catch (PDOException $e) {
+
+            $this->getPDO()->commit();
+        } catch (Throwable $e) {
             $this->getPDO()->rollBack();
+
             switch ($e->getCode()) {
-                case 1062:
                 case 23505:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException(
+                        'Duplicated document: ' . $e->getMessage(),
+                        collectionId: $collection,
+                        documentId: $document->getId(),
+                    );
 
                 default:
                     throw $e;
             }
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -1161,7 +1174,8 @@ class Postgres extends SQL
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DatabaseException
+     * @throws Throwable
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1169,9 +1183,9 @@ class Postgres extends SQL
             return $documents;
         }
 
-        $this->getPDO()->beginTransaction();
-
         try {
+            $this->getPDO()->beginTransaction();
+
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -1393,19 +1407,22 @@ class Postgres extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
-            return $documents;
-        } catch (PDOException $e) {
+            $this->getPDO()->commit();
+        } catch (Throwable $e) {
             $this->getPDO()->rollBack();
 
-            throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            switch ($e->getCode()) {
+                case 23000:
+                    throw new DuplicateException(
+                        'Duplicated document: ' . $e->getMessage(),
+                        collectionId: $collection
+                    );
+            }
+
+            throw $e;
         }
+
+        return $documents;
     }
 
     /**

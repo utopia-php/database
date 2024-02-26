@@ -5525,6 +5525,23 @@ abstract class Base extends TestCase
             ]
         ]));
 
+        static::getDatabase()->updateDocument('species', $species1->getId(), new Document([
+            '$id' => ID::custom('1'),
+            '$collection' => 'species',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$collection' => 'creatures',
+                'characterstic' => [
+                    '$id' => ID::custom('1'),
+                    'name' => 'active',
+                    '$collection' => 'characterstics',
+                ]
+            ]
+        ]));
+
+        $updatedSpecies = static::getDatabase()->getDocument('species', $species1->getId());
+        $this->assertEquals($species1, $updatedSpecies);
+
         $species2 = static::getDatabase()->createDocument('species', new Document([
             '$id' => ID::custom('2'),
             '$permissions' => [
@@ -5550,29 +5567,38 @@ abstract class Base extends TestCase
             ]
         ]));
 
-        //$this->assertTrue(false);
-
-        static::getDatabase()->updateDocument('species', $species2->getId(), new Document([
-            '$id' => ID::custom('1'),
-            '$collection' => 'species',
-            'creature' => [
-                '$id' => ID::custom('1'),
-                '$collection' => 'creatures',
-                'characterstic' => [
-                    '$id' => ID::custom('1'),
-                    'name' => 'active',
-                    '$collection' => 'characterstics',
+        try {
+            static::getDatabase()->updateDocument('species', $species2->getId(), new Document([
+                '$id' => ID::custom('2'),
+                '$collection' => 'species',
+                'creature' => [
+                    '$id' => ID::custom('1'), // Same as $species1
+                    '$collection' => 'creatures',
                 ]
-            ]
-        ]));
+            ]));
+            $this->fail('Failed to throw duplicate exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('species', $e->getCollectionId());
+            $this->assertEquals('2', $e->getDocumentId());
+            $this->assertEquals('creatures', $e->getRelatedCollectionId());
+            $this->assertEquals('1', $e->getRelatedDocumentId());
+        }
 
-        $this->assertTrue(false);
-
-
-        $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
-        $this->assertEquals($species, $updatedSpecies);
-
-
+        try {
+            static::getDatabase()->updateDocument('species', $species2->getId(), new Document([
+                '$id' => ID::custom('2'),
+                '$collection' => 'species',
+                'creature' => ID::custom('1') // Same as $species1
+            ]));
+            $this->fail('Failed to throw duplicate exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('species', $e->getCollectionId());
+            $this->assertEquals('2', $e->getDocumentId());
+            $this->assertEquals('creatures', $e->getRelatedCollectionId());
+            $this->assertEquals('1', $e->getRelatedDocumentId());
+        }
     }
 
     // Relationships

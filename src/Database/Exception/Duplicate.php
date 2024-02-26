@@ -35,4 +35,20 @@ class Duplicate extends Exception
     {
         return $this->documentId;
     }
+
+    /**
+     * @return string|null
+     */
+    public function getRelatedCollectionId(): ?string
+    {
+        return $this->relatedCollectionId;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getRelatedDocumentId(): ?string
+    {
+        return $this->relatedDocumentId;
+    }
 }

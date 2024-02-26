@@ -11,7 +11,7 @@ class Duplicate extends Exception
     protected ?string $relatedCollectionId;
     protected ?string $relatedDocumentId;
 
-    public function __construct(string $message, mixed $code = 0, \Throwable $previous = null, ?string $collectionId = null, ?string $documentId = null, ?string $relatedCollectionId = null, ?string $relatedDocumentId = null)
+    public function __construct(string $message, mixed $code = null, \Throwable $previous = null, ?string $collectionId = null, ?string $documentId = null, ?string $relatedCollectionId = null, ?string $relatedDocumentId = null)
     {
         parent::__construct($message, $code, $previous);
 

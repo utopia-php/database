@@ -3028,7 +3028,6 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
-     * @throws StructureException
      */
     public function createDocument(string $collection, Document $document): Document
     {
@@ -3775,7 +3774,13 @@ class Database
                                     ]))
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                    throw new DuplicateException('Document already has a related document');
+                                    throw new DuplicateException(
+                                        'Document already has a related document',
+                                        collectionId: $collection->getId(),
+                                        documentId: $old->getId(),
+                                        relatedCollectionId: $relatedCollection->getId(),
+                                        relatedDocumentId: $value
+                                    );
                                 }
 
                                 $this->skipRelationships(fn () => $this->updateDocument(
@@ -3786,8 +3791,6 @@ class Database
                                 break;
                             case 'object':
                                 if ($value instanceof Document) {
-                                    $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
-
                                     if (
                                         $oldValue?->getId() !== $value->getId()
                                         && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
@@ -3795,10 +3798,18 @@ class Database
                                         ]))
                                     ) {
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
-                                        throw new DuplicateException('Document already has a related document');
+                                        throw new DuplicateException(
+                                            'Document already has a related document',
+                                            collectionId: $collection->getId(),
+                                            documentId: $old->getId(),
+                                            relatedCollectionId: $relatedCollection->getId(),
+                                            relatedDocumentId: $value->getId(),
+                                            // todo: do we want the $twoWayKey here too?
+                                        );
                                     }
 
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();
+                                    $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value->getId()));
                                     if ($related->isEmpty()) {
                                         if (!isset($value['$permissions'])) {
                                             $value->setAttribute('$permissions', $document->getAttribute('$permissions'));

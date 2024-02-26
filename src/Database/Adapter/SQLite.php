@@ -7,6 +7,7 @@ use PDOException;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
@@ -465,12 +466,6 @@ class SQLite extends MariaDB
         $columns = ['_uid'];
         $values = ['_uid'];
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
         /**
          * Insert Attributes
          */
@@ -543,6 +538,7 @@ class SQLite extends MariaDB
         }
 
         try {
+            $this->getPDO()->beginTransaction();
             $stmt->execute();
 
             $statment = $this->getPDO()->prepare("SELECT last_insert_rowid() AS id");
@@ -554,16 +550,25 @@ class SQLite extends MariaDB
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-            throw match ($e->getCode()) {
-                "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
-        }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            $this->getPDO()->commit();
+
+        } catch (\Throwable $e) {
+            $this->getPDO()->rollBack();
+
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException(
+                            'Duplicated document: ' . $e->getMessage(),
+                            collectionId: $collection,
+                            documentId: $document->getId()
+                        );
+                }
+            }
+
+            throw $e;
         }
 
         return $document;
@@ -578,6 +583,7 @@ class SQLite extends MariaDB
      * @throws Exception
      * @throws PDOException
      * @throws Duplicate
+     * @throws \Throwable
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -592,7 +598,6 @@ class SQLite extends MariaDB
 
         $name = $this->filter($collection);
         $columns = '';
-
 
         $sql = "
 			SELECT _type, _permission
@@ -630,12 +635,6 @@ class SQLite extends MariaDB
 
             return $carry;
         }, $initial);
-
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
 
         /**
          * Get removed Permissions
@@ -783,6 +782,8 @@ class SQLite extends MariaDB
         }
 
         try {
+            $this->getPDO()->beginTransaction();
+
             $stmt->execute();
             if (isset($stmtRemovePermissions)) {
                 $stmtRemovePermissions->execute();
@@ -790,18 +791,25 @@ class SQLite extends MariaDB
             if (isset($stmtAddPermissions)) {
                 $stmtAddPermissions->execute();
             }
-        } catch (PDOException $e) {
+
+            $this->getPDO()->commit();
+
+        } catch (\Throwable $e) {
             $this->getPDO()->rollBack();
 
-            throw match ($e->getCode()) {
-                '1062',
-                '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
-        }
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException(
+                            'Duplicated document: ' . $e->getMessage(),
+                            collectionId: $collection,
+                            documentId: $document->getId(),
+                        );
+                }
+            }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw $e;
         }
 
         return $document;

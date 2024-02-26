@@ -4641,8 +4641,14 @@ abstract class Base extends TestCase
         $document->setAttribute('$id', 'duplicated');
         static::getDatabase()->createDocument($document->getCollection(), $document);
 
-        $this->expectException(DuplicateException::class);
-        static::getDatabase()->createDocument($document->getCollection(), $document);
+        try {
+            static::getDatabase()->createDocument($document->getCollection(), $document);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals($document->getCollection(), $e->getCollectionId());
+            $this->assertEquals($document->getId(), $e->getDocumentId());
+        }
     }
 
     /**
@@ -4656,8 +4662,14 @@ abstract class Base extends TestCase
 
         $document->setAttribute('$id', 'CaseSensitive');
 
-        $this->expectException(DuplicateException::class);
-        static::getDatabase()->createDocument($document->getCollection(), $document);
+        try {
+            static::getDatabase()->createDocument($document->getCollection(), $document);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('documents', $e->getCollectionId());
+            $this->assertEquals('CaseSensitive', $e->getDocumentId());
+        }
 
         return $document;
     }
@@ -4667,33 +4679,38 @@ abstract class Base extends TestCase
      */
     public function testUniqueIndexDuplicate(): void
     {
-        $this->expectException(DuplicateException::class);
-
         $this->assertEquals(true, static::getDatabase()->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
-        static::getDatabase()->createDocument('movies', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::read(Role::user('1')),
-                Permission::read(Role::user('2')),
-                Permission::create(Role::any()),
-                Permission::create(Role::user('1x')),
-                Permission::create(Role::user('2x')),
-                Permission::update(Role::any()),
-                Permission::update(Role::user('1x')),
-                Permission::update(Role::user('2x')),
-                Permission::delete(Role::any()),
-                Permission::delete(Role::user('1x')),
-                Permission::delete(Role::user('2x')),
-            ],
-            'name' => 'Frozen',
-            'director' => 'Chris Buck & Jennifer Lee',
-            'year' => 2013,
-            'price' => 39.50,
-            'active' => true,
-            'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works4'
-        ]));
+        try {
+            static::getDatabase()->createDocument('movies', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::read(Role::user('1')),
+                    Permission::read(Role::user('2')),
+                    Permission::create(Role::any()),
+                    Permission::create(Role::user('1x')),
+                    Permission::create(Role::user('2x')),
+                    Permission::update(Role::any()),
+                    Permission::update(Role::user('1x')),
+                    Permission::update(Role::user('2x')),
+                    Permission::delete(Role::any()),
+                    Permission::delete(Role::user('1x')),
+                    Permission::delete(Role::user('2x')),
+                ],
+                'name' => 'Frozen',
+                'director' => 'Chris Buck & Jennifer Lee',
+                'year' => 2013,
+                'price' => 39.50,
+                'active' => true,
+                'genres' => ['animation', 'kids'],
+                'with-dash' => 'Works4'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('movies', $e->getCollectionId());
+            $this->assertNotNull($e->getDocumentId());
+        }
     }
 
     /**
@@ -4727,9 +4744,14 @@ abstract class Base extends TestCase
             'with-dash' => 'Works4'
         ]));
 
-        $this->expectException(DuplicateException::class);
-
-        static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
+        try {
+            static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('movies', $e->getCollectionId());
+            $this->assertNotNull($e->getDocumentId());
+        }
     }
 
     public function testGetAttributeLimit(): void
@@ -5182,9 +5204,15 @@ abstract class Base extends TestCase
         $document = static::getDatabase()->getDocument('created_at', 'uid123');
 
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
-        $this->expectException(DuplicateException::class);
 
-        static::getDatabase()->createCollection('created_at');
+        try {
+            static::getDatabase()->createCollection('created_at');
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals(null, $e->getCollectionId());
+            $this->assertEquals(null, $e->getDocumentId());
+        }
     }
 
     public function testCreateDatetime(): void
@@ -5480,16 +5508,18 @@ abstract class Base extends TestCase
             twoWayKey:'creature'
         );
 
-        $species = static::getDatabase()->createDocument('species', new Document([
+        $species1 = static::getDatabase()->createDocument('species', new Document([
             '$id' => ID::custom('1'),
             '$permissions' => [
                 Permission::read(Role::any()),
+                Permission::update(Role::any()),
             ],
             'name' => 'Canine',
             'creature' => [
                 '$id' => ID::custom('1'),
                 '$permissions' => [
                     Permission::read(Role::any()),
+                    Permission::update(Role::any()),
                 ],
                 'name' => 'Dog',
                 'characterstic' => [
@@ -5502,7 +5532,8 @@ abstract class Base extends TestCase
                 ]
             ]
         ]));
-        static::getDatabase()->updateDocument('species', $species->getId(), new Document([
+
+        static::getDatabase()->updateDocument('species', $species1->getId(), new Document([
             '$id' => ID::custom('1'),
             '$collection' => 'species',
             'creature' => [
@@ -5515,8 +5546,67 @@ abstract class Base extends TestCase
                 ]
             ]
         ]));
-        $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
-        $this->assertEquals($species, $updatedSpecies);
+
+        $updatedSpecies = static::getDatabase()->getDocument('species', $species1->getId());
+        $this->assertEquals($species1, $updatedSpecies);
+
+        $species2 = static::getDatabase()->createDocument('species', new Document([
+            '$id' => ID::custom('2'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Miao',
+            'creature' => [
+                '$id' => ID::custom('2'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Cat',
+                'characterstic' => [
+                    '$id' => ID::custom('2'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'active',
+                ]
+            ]
+        ]));
+
+        try {
+            static::getDatabase()->updateDocument('species', $species2->getId(), new Document([
+                '$id' => ID::custom('2'),
+                '$collection' => 'species',
+                'creature' => [
+                    '$id' => ID::custom('1'), // Same as $species1
+                    '$collection' => 'creatures',
+                ]
+            ]));
+            $this->fail('Failed to throw duplicate exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('species', $e->getCollectionId());
+            $this->assertEquals('2', $e->getDocumentId());
+            $this->assertEquals('creatures', $e->getRelatedCollectionId());
+            $this->assertEquals('1', $e->getRelatedDocumentId());
+        }
+
+        try {
+            static::getDatabase()->updateDocument('species', $species2->getId(), new Document([
+                '$id' => ID::custom('2'),
+                '$collection' => 'species',
+                'creature' => ID::custom('1') // Same as $species1
+            ]));
+            $this->fail('Failed to throw duplicate exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('species', $e->getCollectionId());
+            $this->assertEquals('2', $e->getDocumentId());
+            $this->assertEquals('creatures', $e->getRelatedCollectionId());
+            $this->assertEquals('1', $e->getRelatedDocumentId());
+        }
     }
 
     // Relationships
@@ -5791,8 +5881,10 @@ abstract class Base extends TestCase
                 $person1->setAttribute('library', 'library2')
             );
             $this->fail('Failed to throw duplicate exception');
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('person', $e->getCollectionId());
+            $this->assertEquals('person1', $e->getDocumentId());
         }
 
         // Create new document
@@ -6298,8 +6390,10 @@ abstract class Base extends TestCase
                 $country1->setAttribute('city', 'city2')
             );
             $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertEquals('city', $e->getCollectionId());
+            $this->assertEquals('city2', $e->getDocumentId());
         }
 
         $city1 = static::getDatabase()->getDocument('city', 'city1');

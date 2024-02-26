@@ -697,7 +697,7 @@ class Mongo extends Adapter
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DuplicateException|DatabaseException
      */
     public function createDocuments(string $collection, array $documents, int $batchSize): array
     {

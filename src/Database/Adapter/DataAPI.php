@@ -730,4 +730,15 @@ abstract class DataAPI extends Adapter
     {
         $this->timeouts[$event] = $milliseconds;
     }
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event): void
+    {
+        unset($this->timeouts[$event]);
+    }
 }

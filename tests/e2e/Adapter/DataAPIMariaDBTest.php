@@ -30,7 +30,7 @@ class DataAPIMariaDBTest extends Base
             return self::$database;
         }
 
-        $database = new Database(new DataAPIMariaDB('https://8088-utopiaphp-dataapi-1zrdiri2xh5.ws-eu108.gitpod.io/v1', 'test-secret', 'default'), new Cache(new None()));
+        $database = new Database(new DataAPIMariaDB('http://data-api/v1', 'test-secret', 'default'), new Cache(new None()));
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

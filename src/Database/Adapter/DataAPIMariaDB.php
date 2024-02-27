@@ -2,40 +2,38 @@
 
 namespace Utopia\Database\Adapter;
 
-use PDOException;
+use Utopia\Database\Database;
 
-class DataAPIMariaDB extends MariaDB
+class DataAPIMariaDB extends DataAPI
 {
-    use DataAPI;
-
-    protected string $endpoint;
-    protected string $secret;
-    protected string $database;
-
     /**
-     * Constructor.
+     * Returns number of attributes used by default.
      *
-     * Set connection and settings
-     *
-     * @param string $endpoint
-     * @param string $secret
+     * @return int
      */
-    public function __construct(string $endpoint, string $secret, string $database)
+    public static function getCountOfDefaultAttributes(): int
     {
-        $this->endpoint = $endpoint;
-        $this->secret = $secret;
-        $this->database = $database;
+        return \count(Database::INTERNAL_ATTRIBUTES);
     }
 
     /**
-     * Execute raw command
-     * @param mixed $query
+     * Returns number of indexes used by default.
      *
-     * @return mixed
-     * @throws \Throwable
+     * @return int
      */
-    public function execute(mixed $query): mixed
+    public static function getCountOfDefaultIndexes(): int
     {
-        return $this->query($this->endpoint, $this->secret, $this->database, $query);
+        return \count(Database::INTERNAL_INDEXES);
+    }
+
+    /**
+     * Get maximum width, in bytes, allowed for a SQL row
+     * Return 0 when no restrictions apply
+     *
+     * @return int
+     */
+    public static function getDocumentSizeLimit(): int
+    {
+        return 65535;
     }
 }

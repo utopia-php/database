@@ -71,20 +71,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * Execute raw command
-     * @param mixed $query
-     *
-     * @return mixed
-     * @throws Exception
-     * @throws MongoException
-     */
-    public function execute(mixed $query): mixed
-    {
-        // Not needed until we need Mongo Data API adapter
-        throw new Exception('Not implemented');
-    }
-
-    /**
      * Create Database
      *
      * @param string $name

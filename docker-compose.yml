@@ -82,25 +82,25 @@ services:
     networks:
       - database
 
-  # data-api:
-  #   image: utopia-php/data-api:0.1.0
-  #   container_name: utopia-data-api
-  #   networks:
-  #     - database
-  #   environment:
-  #     - UTOPIA_DATA_API_SECRET=test-secret
-  #     - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/appwrite
+  data-api:
+    image: utopia-php/data-api:0.1.0
+    container_name: utopia-data-api
+    networks:
+      - database
+    environment:
+      - UTOPIA_DATA_API_SECRET=test-secret
+      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/appwrite
 
-  # data-api-mariadb:
-  #   image: mariadb:10.7
-  #   container_name: utopia-data-api-mariadb
-  #   networks:
-  #     - database
-  #   environment:
-  #     - MYSQL_ROOT_PASSWORD=password
-  #     - MARIADB_DATABASE=appwrite
-  #   ports:
-  #     - "8770:3306"
+  data-api-mariadb:
+    image: mariadb:10.7
+    container_name: utopia-data-api-mariadb
+    networks:
+      - database
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MARIADB_DATABASE=appwrite
+    ports:
+      - "8770:3306"
 
 networks:
   database:

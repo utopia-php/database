@@ -36,25 +36,8 @@ abstract class SQL extends Adapter
      */
     public function ping(): bool
     {
-        $query = $this->getPDO()
-            ->prepare("SELECT 1;")
-            ->queryString;
-
-        return $this->execute($query);
-    }
-
-    /**
-     * Execute raw command
-     * @param mixed $query
-     *
-     * @return mixed
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function execute(mixed $query): mixed
-    {
         return $this->getPDO()
-            ->prepare($query)
+            ->prepare("SELECT 1;")
             ->execute();
     }
 

@@ -77,7 +77,7 @@ jobs:
             Postgres,
             SQLite,
             MongoDB,
-            # DataAPIMariaDB
+            DataAPIMariaDB
           ]
 
     steps:

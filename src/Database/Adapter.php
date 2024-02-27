@@ -55,7 +55,9 @@ abstract class Adapter
      */
     public function clearTransformations(): self
     {
-        $this->transformations = [];
+        $this->transformations = [
+            '*' => [],
+        ];
 
         return $this;
     }

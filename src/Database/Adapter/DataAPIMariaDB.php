@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Adapter;
 
+use PDOException;
+
 class DataAPIMariaDB extends MariaDB
 {
     use DataAPI;

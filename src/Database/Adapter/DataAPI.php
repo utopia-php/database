@@ -19,6 +19,8 @@ abstract class DataAPI extends Adapter
     protected string $secret;
     protected string $database;
 
+    protected int $timeout;
+
     /**
      * Constructor.
      *
@@ -53,8 +55,7 @@ abstract class DataAPI extends Adapter
                 'x-utopia-auth-roles' => $roles,
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                // TODO: Fix timeout
-                // 'x-utopia-timeout' => self::$timeout ? \strval(self::$timeout) : '',
+                'x-utopia-timeout' => $this->timeout ? \strval($this->timeout) : '',
                 'content-type' => 'application/json'
             ],
             method: 'POST',
@@ -706,6 +707,7 @@ abstract class DataAPI extends Adapter
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        $this->query('setTimeout', [$milliseconds, $event]);
+        // TODO: Use $event?
+        $this->timeout = $milliseconds;
     }
 }

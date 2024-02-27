@@ -89,16 +89,16 @@ services:
       - database
     environment:
       - UTOPIA_DATA_API_SECRET=test-secret
-      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/appwrite
+      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/utopiaTests
 
   data-api-mariadb:
-    image: mariadb:10.7
+    image: mariadb:10.11
     container_name: utopia-data-api-mariadb
     networks:
       - database
     environment:
       - MYSQL_ROOT_PASSWORD=password
-      - MARIADB_DATABASE=appwrite
+      - MARIADB_DATABASE=utopiaTests
     ports:
       - "8770:3306"
 

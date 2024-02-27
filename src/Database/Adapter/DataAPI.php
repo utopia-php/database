@@ -58,7 +58,7 @@ abstract class DataAPI extends Adapter
                 'x-utopia-auth-roles' => $roles,
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                'x-utopia-timeouts' => $this->timeouts,
+                'x-utopia-timeouts' => \json_encode($this->timeouts),
                 'content-type' => 'application/json'
             ],
             method: 'POST',
@@ -728,7 +728,6 @@ abstract class DataAPI extends Adapter
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        // TODO: Use $event?
-        $this->timeout = $milliseconds;
+        $this->timeouts[$event] = $milliseconds;
     }
 }

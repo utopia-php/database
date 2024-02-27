@@ -51,6 +51,16 @@ abstract class Adapter
     }
 
     /**
+     * @return $this
+     */
+    public function clearTransformations(): self
+    {
+        $this->transformations = [];
+
+        return $this;
+    }
+
+    /**
      * @param string $key
      * @param mixed $value
      *

@@ -26,26 +26,13 @@ class DataAPIMariaDB extends MariaDB
     }
 
     /**
-     * Execute raw command with no response
+     * Execute raw command
      * @param mixed $query
      *
      * @return mixed
      * @throws \Throwable
      */
-    public function executeWrite(mixed $query): bool
-    {
-        $this->query($this->endpoint, $this->secret, $this->database, $query);
-        return true;
-    }
-
-    /**
-     * Execute raw command that returns a response
-     * @param mixed $query
-     *
-     * @return mixed
-     * @throws \Throwable
-     */
-    public function executeRead(mixed $query): mixed
+    public function execute(mixed $query): mixed
     {
         return $this->query($this->endpoint, $this->secret, $this->database, $query);
     }

@@ -70,27 +70,15 @@ class Mongo extends Adapter
         return $this->getClient()->query(['ping' => 1])->ok ?? false;
     }
 
-        /**
-     * Execute raw command with no response
-     * @param mixed $query
-     *
-     * @return mixed
-     * @throws \Throwable
-     */
-    public function executeWrite(mixed $query): bool
-    {
-        // Not needed until we need Mongo Data API adapter
-        throw new Exception('Not implemented');
-    }
-
     /**
-     * Execute raw command that returns a response
+     * Execute raw command
      * @param mixed $query
      *
      * @return mixed
-     * @throws \Throwable
+     * @throws Exception
+     * @throws MongoException
      */
-    public function executeRead(mixed $query): mixed
+    public function execute(mixed $query): mixed
     {
         // Not needed until we need Mongo Data API adapter
         throw new Exception('Not implemented');

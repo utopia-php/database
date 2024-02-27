@@ -10,7 +10,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Extend\PDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -36,8 +35,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -56,8 +56,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -147,8 +148,9 @@ class MariaDB extends SQL
         $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
         try {
-            $stmt = $this->getPDO()->prepare($sql);
-            $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+            $this->getPDO()
+                ->prepare($sql)
+                ->execute();
 
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
@@ -176,11 +178,13 @@ class MariaDB extends SQL
 
             $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
-            $stmt = $this->getPDO()->prepare($sql);
-            $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+            $this->getPDO()
+                ->prepare($sql)
+                ->execute();
         } catch (\Exception $th) {
-            $stmt = $this->getPDO()->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};");
-            $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+            $this->getPDO()
+                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                ->execute();
             throw $th;
         }
 
@@ -203,13 +207,13 @@ class MariaDB extends SQL
         $permissions = $database . '/' . $collection . '_perms';
 
         $collectionSize = $this->getPDO()->prepare("
-            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE) AS total
+            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
             FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
             WHERE NAME = :name
          ");
 
-         $permissionsSize = $this->getPDO()->prepare("
-            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE) AS total
+        $permissionsSize = $this->getPDO()->prepare("
+            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
             FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
             WHERE NAME = :permissions
         ");
@@ -218,9 +222,9 @@ class MariaDB extends SQL
         $permissionsSize->bindParam(':permissions', $permissions);
 
         try {
-            $resultCollection = $this->executeRead($collectionSize->getQuery(), $collectionSize->getParams());
-            $resultPermissions = $this->executeRead($permissionsSize->getQuery(), $permissionsSize->getParams());
-            $size = $resultCollection[0]["total"] + $resultPermissions[0]["total"];
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
@@ -244,8 +248,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -270,9 +275,9 @@ class MariaDB extends SQL
         $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -298,8 +303,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -321,8 +327,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -345,8 +352,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -397,8 +405,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -481,8 +490,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -566,8 +576,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -589,8 +600,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -654,8 +666,9 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -684,8 +697,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
     }
 
     /**
@@ -739,7 +753,6 @@ class MariaDB extends SQL
 		";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
-
 
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -971,8 +984,6 @@ class MariaDB extends SQL
      */
     public function updateDocument(string $collection, Document $document): Document
     {
-        // @Meldiron TODO: Use raw read&write here
-
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();

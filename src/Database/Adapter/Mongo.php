@@ -73,26 +73,11 @@ class Mongo extends Adapter
         /**
      * Execute raw command with no response
      * @param mixed $query
-     * @param array[string]mixed $params
      *
-     * @return int
+     * @return mixed
      * @throws \Throwable
      */
-    public function executeWrite(mixed $query, array $params): int
-    {
-        // Not needed until we need Mongo Data API adapter
-        throw new Exception('Not implemented');
-    }
-
-    /**
-     * Execute raw command and get amount of affected documents
-     * @param mixed $query
-     * @param array[string]mixed $params
-     *
-     * @return int
-     * @throws \Throwable
-     */
-    public function executeWriteWithCount(mixed $query, array $params): int
+    public function executeWrite(mixed $query): bool
     {
         // Not needed until we need Mongo Data API adapter
         throw new Exception('Not implemented');
@@ -101,12 +86,11 @@ class Mongo extends Adapter
     /**
      * Execute raw command that returns a response
      * @param mixed $query
-     * @param array[string]mixed $params
      *
      * @return mixed
      * @throws \Throwable
      */
-    public function executeRead(mixed $query, array $params): mixed
+    public function executeRead(mixed $query): mixed
     {
         // Not needed until we need Mongo Data API adapter
         throw new Exception('Not implemented');

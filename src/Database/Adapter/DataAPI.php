@@ -11,13 +11,11 @@ use Utopia\Fetch\FetchException;
 trait DataAPI
 {
     /**
-     * @param array[string]mixed $params
-     * 
      * @throws FetchException
      * @throws DatabaseException
      * @throws Exception
      */
-    private function query(string $endpoint, string $secret, string $database, string $command, array $params): mixed
+    private function query(string $endpoint, string $secret, string $database, string $command): mixed
     {
         $response = Client::fetch(
             url: $endpoint . '/queries',
@@ -29,7 +27,6 @@ trait DataAPI
             method: 'POST',
             body: [
                 'command' => $command,
-                'parrams' => $params
             ]
         );
 

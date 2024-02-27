@@ -9,7 +9,6 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Extend\PDOStatement;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -26,92 +25,6 @@ abstract class SQL extends Adapter
     public function __construct(mixed $pdo)
     {
         $this->pdo = $pdo;
-        $this->pdo->setAttribute(PDO::ATTR_STATEMENT_CLASS, [PDOStatement::class]);
-    }
-
-    /**
-     * Execute raw command and get amount of affected documents
-     * @param mixed $query
-     * @param array[string]mixed $params
-     *
-     * @return int
-     * @throws \Throwable
-     */
-    public function executeWriteWithCount(mixed $query, array $params): int
-    {
-        $stmt = $this->getPDO()->prepare($query);
-
-        foreach($params as $param => $value)
-        {
-            if($value['method'] === 'value') {
-                $stmt->bindValue($param, $value['value'], $value['type']);
-            } else if($value['method'] === 'param') {
-                $stmt->bindParam($param, $value['var'], $value['type'], $value['maxLength'], $value['driverOptions']);
-            }
-        }
-
-        $result = $stmt->execute();
-
-        if(!$result) {
-            throw new DatabaseException('Could not execute write query.');
-        }
-
-        $affectedRows = $stmt->rowCount();
-
-        return $affectedRows;
-    }
-
-    /**
-     * Execute raw command with no response
-     * @param mixed $query
-     * @param array[string]mixed $params
-     *
-     * @return bool
-     * @throws \Throwable
-     */
-    public function executeWrite(mixed $query, array $params): bool
-    {
-        $stmt = $this->getPDO()->prepare($query);
-
-        foreach($params as $param => $value)
-        {
-            if($value['method'] === 'value') {
-                $stmt->bindValue($param, $value['value'], $value['type']);
-            } else if($value['method'] === 'param') {
-                $stmt->bindParam($param, $value['var'], $value['type'], $value['maxLength'], $value['driverOptions']);
-            }
-        }
-
-        return $stmt->execute();
-    }
-
-    /**
-     * Execute raw command that returns a response
-     * @param mixed $query
-     * @param array[string]mixed $params
-     *
-     * @return mixed
-     * @throws \Throwable
-     */
-    public function executeRead(mixed $query, array $params): mixed
-    {
-        $stmt = $this->getPDO()->prepare($query);
-
-        foreach($params as $param => $value)
-        {
-            if($value['method'] === 'value') {
-                $stmt->bindValue($param, $value['value'], $value['type']);
-            } else if($value['method'] === 'param') {
-                $stmt->bindParam($param, $value['var'], $value['type'], $value['maxLength'], $value['driverOptions']);
-            }
-        }
-
-        $stmt->execute();
-        $response = $stmt->fetchAll();
-
-        $stmt->closeCursor();
-
-        return $response;
     }
 
     /**
@@ -124,7 +37,43 @@ abstract class SQL extends Adapter
     public function ping(): bool
     {
         $stmt = $this->getPDO()->prepare("SELECT 1;");
-        return $this->executeWrite($stmt->getQuery(), $stmt->getParams());
+        $query = $stmt->queryString;
+
+        return $this->executeWrite($query);
+    }
+
+    /**
+     * Execute raw command with no response
+     * @param mixed $query
+     *
+     * @return mixed
+     * @throws \Throwable
+     */
+    public function executeWrite(mixed $query): bool
+    {
+        return $this->getPDO()
+            ->prepare($query)
+            ->execute();
+    }
+
+    /**
+     * Execute raw command that returns a response
+     * @param mixed $query
+     *
+     * @return mixed
+     * @throws \Throwable
+     */
+    public function executeRead(mixed $query): mixed
+    {
+        $stmt = $this->getPDO()->prepare($query);
+        $response = $stmt->fetchAll();
+
+        \var_dump($query);
+        \var_dump($response);
+
+        $stmt->closeCursor();
+
+        return $response;
     }
 
     /**
@@ -159,7 +108,9 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
-        $document = $this->executeRead($stmt->getQuery(), $stmt->getParams());
+        $stmt->execute();
+
+        $document = $this->executeRead($stmt->queryString);
 
         if (empty($document)) {
             return false;
@@ -210,7 +161,10 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':_tenant', $this->getTenant());
         }
 
-        $document = $this->executeRead($stmt->getQuery(), $stmt->getParams());
+        $stmt->execute();
+
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         if (empty($document)) {
             return new Document([]);
@@ -993,7 +947,7 @@ abstract class SQL extends Adapter
     {
         return [
             PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
-            PDO::ATTR_PERSISTENT => false, // Create a persistent connection
+            PDO::ATTR_PERSISTENT => true, // Create a persistent connection
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on srrors
             PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements

@@ -28,41 +28,25 @@ class DataAPIMariaDB extends MariaDB
     /**
      * Execute raw command with no response
      * @param mixed $query
-     * @param array[string]mixed $params
      *
-     * @return bool
+     * @return mixed
      * @throws \Throwable
      */
-    public function executeWrite(mixed $query, array $params): bool
+    public function executeWrite(mixed $query): bool
     {
-        $this->query($this->endpoint, $this->secret, $this->database, $query, $params);
+        $this->query($this->endpoint, $this->secret, $this->database, $query);
         return true;
-    }
-
-    /**
-     * Execute raw command and get amount of affected documents
-     * @param mixed $query
-     * @param array[string]mixed $params
-     *
-     * @return int
-     * @throws \Throwable
-     */
-    public function executeWriteWithCount(mixed $query, array $params): int
-    {
-        $this->query($this->endpoint, $this->secret, $this->database, $query, $params);
-        return 1;
     }
 
     /**
      * Execute raw command that returns a response
      * @param mixed $query
-     * @param array[string]mixed $params
      *
      * @return mixed
      * @throws \Throwable
      */
-    public function executeRead(mixed $query, array $params): mixed
+    public function executeRead(mixed $query): mixed
     {
-        return $this->query($this->endpoint, $this->secret, $this->database, $query, $params);
+        return $this->query($this->endpoint, $this->secret, $this->database, $query);
     }
 }

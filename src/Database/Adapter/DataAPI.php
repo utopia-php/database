@@ -19,7 +19,10 @@ abstract class DataAPI extends Adapter
     protected string $secret;
     protected string $database;
 
-    protected int $timeout;
+    /**
+     * @var array<string, int> $timeouts Map of timeouts where key is event name and value is timeout in milliseconds
+     */
+    protected array $timeouts = [];
 
     /**
      * Constructor.
@@ -55,7 +58,7 @@ abstract class DataAPI extends Adapter
                 'x-utopia-auth-roles' => $roles,
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                'x-utopia-timeout' => $this->timeout ? \strval($this->timeout) : '',
+                'x-utopia-timeouts' => $this->timeouts,
                 'content-type' => 'application/json'
             ],
             method: 'POST',
@@ -89,8 +92,26 @@ abstract class DataAPI extends Adapter
 
         $output = $body->output ?? '';
 
-        if(\is_object($output)) {
-            $output = new Document((array) $output);
+        $processArray = function (mixed $self, mixed $json) {
+            $keys = [];
+
+            foreach ($json as $param) {
+                if(\is_object($param)) {
+                    $keys[] = new Document((array) $param);
+                } elseif(\is_array($param)) {
+                    $keys[] = $self($self, $param);
+                } else {
+                    $keys[] = $param;
+                }
+            }
+
+            return $keys;
+        };
+
+        if(\is_array($output)) {
+            $output = $processArray($processArray, $output);
+        } else {
+            $output = $processArray($processArray, [$output])[0];
         }
 
         return $output;

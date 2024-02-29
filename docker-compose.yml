@@ -99,8 +99,6 @@ services:
     environment:
       - MYSQL_ROOT_PASSWORD=password
       - MARIADB_DATABASE=utopiaTests
-    ports:
-      - "8770:3306"
 
 networks:
   database:

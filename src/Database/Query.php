@@ -2,11 +2,10 @@
 
 namespace Utopia\Database;
 
-use JsonSerializable;
 use JsonException;
 use Utopia\Database\Exception\Query as QueryException;
 
-class Query implements JsonSerializable
+class Query
 {
     // Filter methods
     public const TYPE_EQUAL = 'equal';
@@ -696,20 +695,5 @@ class Query implements JsonSerializable
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
-    }
-
-    /**
-     * PHP native method override
-     *
-     * @return array<mixed>
-     * @throws Exception
-     */
-    public function jsonSerialize(): array
-    {
-        return [
-            'method' => $this->method,
-            'attribute' => $this->attribute,
-            'values' => $this->values,
-        ];
     }
 }

@@ -5,9 +5,9 @@ namespace Tests\E2E\Adapter;
 use Utopia\Cache\Adapter\None;
 use Utopia\Database\Database;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter\DataAPIMariaDB;
+use Utopia\Database\Adapter\MariaDBProxy;
 
-class DataAPIMariaDBTest extends Base
+class MariaDBProxyTest extends Base
 {
     public static ?Database $database = null;
 
@@ -30,7 +30,7 @@ class DataAPIMariaDBTest extends Base
             return self::$database;
         }
 
-        $database = new Database(new DataAPIMariaDB('http://database-proxy/v1', 'test-secret', 'default'), new Cache(new None()));
+        $database = new Database(new MariaDBProxy('http://database-proxy/v1', 'test-secret', 'default'), new Cache(new None()));
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

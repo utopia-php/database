@@ -13,7 +13,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Fetch\FetchException;
 
-abstract class DataAPI extends Adapter
+abstract class Proxy extends Adapter
 {
     protected string $endpoint;
     protected string $secret;

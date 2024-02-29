@@ -4,7 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Database;
 
-class DataAPIMariaDB extends DataAPI
+class MariaDBProxy extends Proxy
 {
     /**
      * Returns number of attributes used by default.

@@ -99,3 +99,7 @@ jobs:
 
       - name: Run ${{matrix.service}} Tests
         run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php --debug
+
+      - name: Print logs
+        run: |
+          docker compose logs database-proxy

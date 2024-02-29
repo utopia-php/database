@@ -58,9 +58,9 @@ abstract class DataAPI extends Adapter
                 'x-utopia-auth-roles' => $roles,
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                'x-utopia-timeouts' => \json_encode($this->timeouts),
+                'x-utopia-timeouts' => \strval(\json_encode($this->timeouts) ?: ''),
                 'x-utopia-share-tables' => $this->shareTables ? 'true' : 'false',
-                'x-utopia-tenant' => $this->tenant,
+                'x-utopia-tenant' => \strval($this->tenant ?? ''),
                 'content-type' => 'application/json'
             ],
             method: 'POST',

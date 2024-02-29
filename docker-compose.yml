@@ -82,18 +82,18 @@ services:
     networks:
       - database
 
-  data-api:
-    image: utopia-php/data-api:0.1.0
-    container_name: utopia-data-api
+  database-proxy:
+    image: appwrite/database-proxy:0.1.0
+    container_name: utopia-database-proxy
     networks:
       - database
     environment:
       - UTOPIA_DATA_API_SECRET=test-secret
-      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@data-api-mariadb:3306/utopiaTests
+      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@database-proxy-mariadb:3306/utopiaTests
 
-  data-api-mariadb:
+  database-proxy-mariadb:
     image: mariadb:10.11
-    container_name: utopia-data-api-mariadb
+    container_name: utopia-database-proxy-mariadb
     networks:
       - database
     environment:

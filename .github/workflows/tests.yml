@@ -103,5 +103,6 @@ jobs:
       - name: Print logs
         run: |
           docker compose ls
+          docker compose ps
           docker compose logs database-proxy
 

@@ -95,7 +95,7 @@ jobs:
         run: |
           docker load --input /tmp/${{ env.IMAGE }}.tar
           docker compose up -d
-          sleep 10
+          sleep 30
 
       - name: Run ${{matrix.service}} Tests
         run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php --debug  || true

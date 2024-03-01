@@ -3820,6 +3820,7 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('year', [2019])]);
+
         $this->assertEquals(2, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('with-dash', ['Works'])]);
         $this->assertEquals(2, $count);
@@ -3858,6 +3859,7 @@ abstract class Base extends TestCase
     public function testSum(): void
     {
         Authorization::setRole('user:x');
+
         $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
@@ -4640,7 +4642,6 @@ abstract class Base extends TestCase
     {
         $document->setAttribute('$id', 'duplicated');
         static::getDatabase()->createDocument($document->getCollection(), $document);
-
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
     }
@@ -6012,7 +6013,7 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        static::getDatabase()->createDocument('country', $doc);
+        static::getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
@@ -6040,7 +6041,7 @@ abstract class Base extends TestCase
 
         $this->assertTrue(static::getDatabase()->deleteDocument('country', 'country1'));
 
-        static::getDatabase()->createDocument('country', $doc);
+        static::getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 

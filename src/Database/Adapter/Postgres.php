@@ -82,9 +82,12 @@ class Postgres extends SQL
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+
         $this->getPDO()->beginTransaction();
 
-        foreach ($attributes as &$attribute) {
+        foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
             $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
@@ -92,7 +95,7 @@ class Postgres extends SQL
                 $attrType = 'TEXT';
             }
 
-            $attribute = "\"{$attrId}\" {$attrType}, ";
+            $attributeStrings[$key] = "\"{$attrId}\" {$attrType}, ";
         }
 
         $sqlTenant = $this->shareTables ? '_tenant INTEGER DEFAULT NULL,' : '';
@@ -105,7 +108,7 @@ class Postgres extends SQL
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
-                " . \implode(' ', $attributes) . "
+                " . \implode(' ', $attributeStrings) . "
                 PRIMARY KEY (_id)
             );
         ";

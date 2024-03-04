@@ -47,7 +47,7 @@ class MySQL extends MariaDB
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
         }
 
-        return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDefaultDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
+        return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
     }
 
     /**
@@ -103,7 +103,7 @@ class MySQL extends MariaDB
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;
-        $database = $this->getDefaultDatabase();
+        $database = $this->getDatabase();
         $name = $database . '/' . $collection;
         $permissions = $database . '/' . $collection . '_perms';
 

@@ -21,14 +21,12 @@ class Document extends Queries
             'type' => Database::VAR_STRING,
             'array' => false,
         ]);
-
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$createdAt',
             'key' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);
-
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$updatedAt',
             'key' => '$updatedAt',

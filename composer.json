@@ -9,7 +9,10 @@
         "psr-4": {"Utopia\\Database\\": "src/Database"}
     },
     "autoload-dev": {
-        "psr-4": {"Utopia\\Tests\\": "tests/Database"}
+        "psr-4": {
+            "Tests\\E2E\\": "tests/e2e",
+            "Tests\\Unit\\": "tests/unit"
+        }
     },
     "scripts": {
         "build": [
@@ -33,7 +36,7 @@
         "ext-pdo": "*",
         "ext-mbstring": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "0.*.*",
+        "utopia-php/framework": "0.33.*",
         "utopia-php/cache": "0.9.*",
         "utopia-php/mongo": "0.3.*"
     },

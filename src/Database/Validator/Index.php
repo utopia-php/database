@@ -20,6 +20,7 @@ class Index extends Validator
     /**
      * @param array<Document> $attributes
      * @param int $maxLength
+     * @throws DatabaseException
      */
     public function __construct(array $attributes, int $maxLength)
     {
@@ -29,9 +30,9 @@ class Index extends Validator
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
         }
-        foreach (Database::getInternalAttributes() as $attribute) {
-            $key = \strtolower($attribute->getAttribute('$id'));
-            $this->attributes[$key] = $attribute;
+        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+            $key = \strtolower($attribute['$id']);
+            $this->attributes[$key] = new Document($attribute);
         }
     }
 

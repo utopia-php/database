@@ -12,6 +12,7 @@ services:
     volumes:
       - ./bin:/usr/src/code/bin
       - ./src:/usr/src/code/src
+      - ./vendor/utopia-php/fetch:/usr/src/code/vendor/utopia-php/fetch
       - ./tests:/usr/src/code/tests
       - ./phpunit.xml:/usr/src/code/phpunit.xml
     ports:
@@ -83,10 +84,12 @@ services:
       - database
 
   database-proxy:
-    image: appwrite/database-proxy:0.1.0
+    image: appwrite/database-proxy:0.1.4
     container_name: utopia-database-proxy
     networks:
       - database
+    ports:
+      - "8720:80"
     environment:
       - UTOPIA_DATA_API_SECRET=test-secret
       - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@database-proxy-mariadb:3306/utopiaTests

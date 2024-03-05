@@ -133,7 +133,7 @@ class SQLite extends MariaDB
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
-        $tenantQuery = $this->shareTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
+        $tenantQuery = $this->sharedTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
 
         $sql = "
 			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}` (
@@ -155,7 +155,7 @@ class SQLite extends MariaDB
         $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
         $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
         }
 
@@ -169,7 +169,7 @@ class SQLite extends MariaDB
             $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
         }
 
-        $tenantQuery = $this->shareTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
+        $tenantQuery = $this->sharedTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
 
         $sql = "
 			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}_perms` (
@@ -458,7 +458,7 @@ class SQLite extends MariaDB
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if($this->shareTables) {
+        if($this->sharedTables) {
             $attributes['_tenant'] = $this->tenant;
         }
 
@@ -522,13 +522,13 @@ class SQLite extends MariaDB
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+                $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
                 $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$tenantQuery})";
             }
         }
 
         if (!empty($permissions)) {
-            $tenantQuery = $this->shareTables ? ', _tenant' : '';
+            $tenantQuery = $this->sharedTables ? ', _tenant' : '';
 
             $queryPermissions = "
 				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document {$tenantQuery})
@@ -538,7 +538,7 @@ class SQLite extends MariaDB
 
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
 
-            if($this->shareTables) {
+            if($this->sharedTables) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
         }
@@ -587,7 +587,7 @@ class SQLite extends MariaDB
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if($this->shareTables) {
+        if($this->sharedTables) {
             $attributes['_tenant'] = $this->tenant;
         }
 
@@ -601,7 +601,7 @@ class SQLite extends MariaDB
 			WHERE _document = :_uid
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= " AND _tenant = :_tenant";
         }
 
@@ -613,7 +613,7 @@ class SQLite extends MariaDB
         $permissionsStmt = $this->getPDO()->prepare($sql);
         $permissionsStmt->bindValue(':_uid', $document->getId());
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $permissionsStmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -684,7 +684,7 @@ class SQLite extends MariaDB
                 WHERE _document = :_uid
 			";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= " AND _tenant = :_tenant";
             }
 
@@ -694,7 +694,7 @@ class SQLite extends MariaDB
             $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -712,12 +712,12 @@ class SQLite extends MariaDB
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+                    $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
                     $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
                 }
             }
 
-            $tenantQuery = $this->shareTables ? ', _tenant' : '';
+            $tenantQuery = $this->sharedTables ? ', _tenant' : '';
 
             $sql = "
 			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission {$tenantQuery})
@@ -728,7 +728,7 @@ class SQLite extends MariaDB
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            if($this->shareTables) {
+            if($this->sharedTables) {
                 $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
             }
 
@@ -756,7 +756,7 @@ class SQLite extends MariaDB
 			WHERE _uid = :_uid
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= " AND _tenant = :_tenant";
         }
 
@@ -766,7 +766,7 @@ class SQLite extends MariaDB
 
         $stmt->bindValue(':_uid', $document->getId());
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -849,7 +849,7 @@ class SQLite extends MariaDB
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                    if($this->shareTables) {
+                    if($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -879,7 +879,7 @@ class SQLite extends MariaDB
                         WHERE _document = :_uid
                     ";
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $sql .= " AND _tenant = :_tenant";
                     }
 
@@ -892,7 +892,7 @@ class SQLite extends MariaDB
 
                     $permissionsStmt->bindValue(':_uid', $document->getId());
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $permissionsStmt->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -926,7 +926,7 @@ class SQLite extends MariaDB
                             $removeBindValues[$bindKey] = $document->getId();
 
                             $tenantQuery = '';
-                            if ($this->shareTables) {
+                            if ($this->sharedTables) {
                                 $tenantQuery = ' AND _tenant = :_tenant';
                             }
 
@@ -973,7 +973,7 @@ class SQLite extends MariaDB
                                 $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
                                 $addBindValues[$bindKey] = $permission;
 
-                                $tenantQuery = $this->shareTables ? ', :_tenant' : '';
+                                $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
 
                                 $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey} {$tenantQuery})";
 
@@ -1003,7 +1003,7 @@ class SQLite extends MariaDB
 
                 ";
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $sql .= "ON CONFLICT (_tenant, _uid) DO UPDATE SET $updateClause";
                 } else {
                     $sql .= "ON CONFLICT (_uid) DO UPDATE SET $updateClause";
@@ -1028,7 +1028,7 @@ class SQLite extends MariaDB
                         $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1036,7 +1036,7 @@ class SQLite extends MariaDB
                 }
 
                 if (!empty($addQuery)) {
-                    $tenantQuery = $this->shareTables ? ', _tenant' : '';
+                    $tenantQuery = $this->sharedTables ? ', _tenant' : '';
 
                     $stmtAddPermissions = $this->getPDO()->prepare("
                         INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantQuery})
@@ -1047,7 +1047,7 @@ class SQLite extends MariaDB
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if($this->shareTables) {
+                    if($this->sharedTables) {
                         $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1183,7 +1183,7 @@ class SQLite extends MariaDB
         $key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
         $attributes = implode(', ', $attributes);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $attributes = "`_tenant` {$postfix}, {$attributes}";
         }
 

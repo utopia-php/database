@@ -12,7 +12,7 @@ services:
     volumes:
       - ./bin:/usr/src/code/bin
       - ./src:/usr/src/code/src
-      - ./vendor/utopia-php/fetch:/usr/src/code/vendor/utopia-php/fetch
+      # - ./vendor/utopia-php/fetch:/usr/src/code/vendor/utopia-php/fetch
       - ./tests:/usr/src/code/tests
       - ./phpunit.xml:/usr/src/code/phpunit.xml
     ports:

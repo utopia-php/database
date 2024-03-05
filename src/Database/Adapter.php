@@ -7,20 +7,30 @@ use Utopia\Database\Exception as DatabaseException;
 
 abstract class Adapter
 {
-    /**
-     * @var string
-     */
+    protected string $database = '';
+
     protected string $namespace = '';
 
-    /**
-     * @var string
-     */
-    protected string $defaultDatabase = '';
+    protected bool $shareTables = false;
+
+    protected ?int $tenant = null;
 
     /**
      * @var array<string, mixed>
      */
     protected array $debug = [];
+
+    /**
+     * @var array<string, array<callable>>
+     */
+    protected array $transformations = [
+        '*' => [],
+    ];
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected array $metadata = [];
 
     /**
      * @param string $key
@@ -61,15 +71,11 @@ abstract class Adapter
      * @param string $namespace
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
     public function setNamespace(string $namespace): bool
     {
-        if (empty($namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
         $this->namespace = $this->filter($namespace);
 
         return true;
@@ -81,15 +87,10 @@ abstract class Adapter
      * Get namespace of current set scope
      *
      * @return string
-     * @throws DatabaseException
      *
      */
     public function getNamespace(): string
     {
-        if (empty($this->namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
         return $this->namespace;
     }
 
@@ -99,18 +100,13 @@ abstract class Adapter
      * Set database to use for current scope
      *
      * @param string $name
-     * @param bool $reset
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    public function setDatabase(string $name): bool
     {
-        if (empty($name) && $reset === false) {
-            throw new DatabaseException('Missing database');
-        }
-
-        $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
+        $this->database = $this->filter($name);
 
         return true;
     }
@@ -121,16 +117,152 @@ abstract class Adapter
      * Get Database from current scope
      *
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
-    public function getDefaultDatabase(): string
+    public function getDatabase(): string
     {
-        if (empty($this->defaultDatabase)) {
-            throw new DatabaseException('Missing default database');
+        if (empty($this->database)) {
+            throw new DatabaseException('Missing database. Database must be set before use.');
         }
 
-        return $this->defaultDatabase;
+        return $this->database;
+    }
+
+    /**
+     * Set Share Tables.
+     *
+     * Set whether to share tables between tenants
+     *
+     * @param bool $shareTables
+     *
+     * @return bool
+     */
+    public function setShareTables(bool $shareTables): bool
+    {
+        $this->shareTables = $shareTables;
+
+        return true;
+    }
+
+    /**
+     * Get Share Tables.
+     *
+     * Get whether to share tables between tenants
+     *
+     * @return bool
+     */
+    public function getShareTables(): bool
+    {
+        return $this->shareTables;
+    }
+
+    /**
+     * Set Tenant.
+     *
+     * Set tenant to use if tables are shared
+     *
+     * @param ?int $tenant
+     *
+     * @return bool
+     */
+    public function setTenant(?int $tenant): bool
+    {
+        $this->tenant = $tenant;
+
+        return true;
+    }
+
+    /**
+     * Get Tenant.
+     *
+     * Get tenant to use for shared tables
+     *
+     * @return ?int
+     */
+    public function getTenant(): ?int
+    {
+        return $this->tenant;
+    }
+
+    /**
+     * Set metadata for query comments
+     *
+     * @param string $key
+     * @param mixed $value
+     * @return $this
+     */
+    public function setMetadata(string $key, mixed $value): self
+    {
+        $this->metadata[$key] = $value;
+
+        $output = '';
+        foreach ($this->metadata as $key => $value) {
+            $output .= "-- {$key}: {$value}\n";
+        }
+
+        $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {
+            return $output . $query;
+        });
+
+        return $this;
+    }
+
+    /**
+     * Get metadata
+     *
+     * @return array<string, mixed>
+     */
+    public function getMetadata(): array
+    {
+        return $this->metadata;
+    }
+
+    /**
+     * Clear existing metadata
+     *
+     * @return $this
+     */
+    public function resetMetadata(): self
+    {
+        $this->metadata = [];
+
+        return $this;
+    }
+
+    /**
+     * Apply a transformation to a query before an event occurs
+     *
+     * @param string $event
+     * @param string $name
+     * @param ?callable $callback
+     * @return self
+     */
+    public function before(string $event, string $name = '', ?callable $callback = null): self
+    {
+        if (!isset($this->transformations[$event])) {
+            $this->transformations[$event] = [];
+        }
+
+        if (\is_null($callback)) {
+            unset($this->transformations[$event][$name]);
+        } else {
+            $this->transformations[$event][$name] = $callback;
+        }
+
+        return $this;
+    }
+
+    protected function trigger(string $event, mixed $query): mixed
+    {
+        foreach ($this->transformations[Database::EVENT_ALL] as $callback) {
+            $query = $callback($query);
+        }
+        foreach (($this->transformations[$event] ?? []) as $callback) {
+            $query = $callback($query);
+        }
+
+        return $query;
     }
 
     /**
@@ -154,11 +286,11 @@ abstract class Adapter
      * Optionally check if collection exists in database
      *
      * @param string $database database name
-     * @param string $collection (optional) collection name
+     * @param string|null $collection (optional) collection name
      *
      * @return bool
      */
-    abstract public function exists(string $database, ?string $collection): bool;
+    abstract public function exists(string $database, ?string $collection = null): bool;
 
     /**
      * List Databases
@@ -189,11 +321,11 @@ abstract class Adapter
     /**
      * Delete Collection
      *
-     * @param string $name
+     * @param string $id
      *
      * @return bool
      */
-    abstract public function deleteCollection(string $name): bool;
+    abstract public function deleteCollection(string $id): bool;
 
     /**
      * Create Attribute
@@ -337,6 +469,19 @@ abstract class Adapter
     abstract public function createDocument(string $collection, Document $document): Document;
 
     /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
+
+    /**
      * Update Document
      *
      * @param string $collection
@@ -345,6 +490,19 @@ abstract class Adapter
      * @return Document
      */
     abstract public function updateDocument(string $collection, Document $document): Document;
+
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
 
     /**
      * Delete Document
@@ -369,11 +527,10 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     * @param int|null $timeout
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
 
     /**
      * Sum an attribute
@@ -397,6 +554,15 @@ abstract class Adapter
      * @return int
      */
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
+
+    /**
+     * Get Collection Size
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollection(string $collection): int;
 
     /**
      * Get max STRING limit
@@ -583,11 +749,11 @@ abstract class Adapter
      *
      * @param string $value
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function filter(string $value): string
     {
-        $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');
@@ -636,4 +802,39 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool;
+
+    /**
+     * @return int
+     */
+    abstract public function getMaxIndexLength(): int;
+
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
+     * @return void
+     *
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event): void
+    {
+        // Clear existing callback
+        $this->before($event, 'timeout', null);
+    }
 }

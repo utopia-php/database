@@ -4,8 +4,6 @@ namespace Utopia\Database;
 
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
 
 /**
  * @extends ArrayObject<string, mixed>
@@ -79,7 +77,7 @@ class Document extends ArrayObject
      */
     public function getPermissions(): array
     {
-        return \array_unique($this->getAttribute('$permissions', []));
+        return \array_values(\array_unique($this->getAttribute('$permissions', [])));
     }
 
     /**
@@ -168,15 +166,13 @@ class Document extends ArrayObject
     {
         $attributes = [];
 
+        $internalKeys = \array_map(
+            fn ($attr) => $attr['$id'],
+            Database::INTERNAL_ATTRIBUTES
+        );
+
         foreach ($this as $attribute => $value) {
-            if (\array_key_exists($attribute, [
-                '$id' => true,
-                '$internalId' => true,
-                '$collection' => true,
-                '$permissions' => [Permission::read(Role::any())],
-                '$createdAt' => true,
-                '$updatedAt' => true,
-            ])) {
+            if (\in_array($attribute, $internalKeys)) {
                 continue;
             }
 
@@ -216,7 +212,7 @@ class Document extends ArrayObject
      *
      * @return self
      */
-    public function setAttribute(string $key, $value, string $type = self::SET_TYPE_ASSIGN): self
+    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): self
     {
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
@@ -230,6 +226,21 @@ class Document extends ArrayObject
                 $this[$key] = (!isset($this[$key]) || !\is_array($this[$key])) ? [] : $this[$key];
                 \array_unshift($this[$key], $value);
                 break;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Set Attributes.
+     *
+     * @param array<string, mixed> $attributes
+     * @return self
+     */
+    public function setAttributes(array $attributes): self
+    {
+        foreach ($attributes as $key => $value) {
+            $this->setAttribute($key, $value);
         }
 
         return $this;
@@ -356,7 +367,7 @@ class Document extends ArrayObject
      */
     public function isEmpty(): bool
     {
-        return empty($this->getId());
+        return !\count($this);
     }
 
     /**
@@ -416,5 +427,16 @@ class Document extends ArrayObject
         }
 
         return $output;
+    }
+
+    public function __clone()
+    {
+        foreach ($this as $key => $value) {
+            if ($value instanceof self) {
+                $this[$key] = clone $value;
+            } elseif (\is_array($value)) {
+                $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
+            }
+        }
     }
 }

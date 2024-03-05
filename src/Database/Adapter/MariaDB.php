@@ -5,11 +5,11 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -27,8 +27,16 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
+        if ($this->exists($name)) {
+            return true;
+        }
+
+        $sql = "CREATE DATABASE `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;";
+
+        $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
+
         return $this->getPDO()
-            ->prepare("CREATE DATABASE IF NOT EXISTS `{$name}` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -44,8 +52,12 @@ class MariaDB extends SQL
     {
         $name = $this->filter($name);
 
+        $sql = "DROP DATABASE `{$name}`;";
+
+        $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("DROP DATABASE `{$name}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -61,8 +73,6 @@ class MariaDB extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $database = $this->getDefaultDatabase();
-        $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
         /** @var array<string> $attributeStrings */
@@ -73,11 +83,13 @@ class MariaDB extends SQL
 
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'LONGTEXT';
-            }
+            $attrType = $this->getSQLType(
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
+            );
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
@@ -103,33 +115,71 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
         }
 
+        $sql = "
+			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+				_uid VARCHAR(255) NOT NULL,
+				_createdAt DATETIME(3) DEFAULT NULL,
+				_updatedAt DATETIME(3) DEFAULT NULL,
+				_permissions MEDIUMTEXT DEFAULT NULL,
+				PRIMARY KEY (_id),
+				" . \implode(' ', $attributeStrings) . "
+				" . \implode(' ', $indexStrings) . "
+		";
+
+        if ($this->shareTables) {
+            $sql .= "
+            	_tenant INT(11) UNSIGNED DEFAULT NULL,
+				UNIQUE KEY _uid_tenant (_uid, _tenant),
+				KEY _created_at (_tenant, _createdAt),
+				KEY _updated_at (_tenant, _updatedAt),
+				KEY _tenant_id (_tenant, _id)
+			";
+        } else {
+            $sql .= "
+				UNIQUE KEY _uid (_uid),
+				KEY _created_at (_createdAt),
+				KEY _updated_at (_updatedAt)
+			";
+        }
+
+        $sql .= ")";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+
         try {
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_uid` CHAR(255) NOT NULL,
-                        `_createdAt` datetime(3) DEFAULT NULL,
-                        `_updatedAt` datetime(3) DEFAULT NULL,
-                        `_permissions` MEDIUMTEXT DEFAULT NULL,
-                        " . \implode(' ', $attributeStrings) . "
-                        PRIMARY KEY (`_id`),
-                        " . \implode(' ', $indexStrings) . "
-                        UNIQUE KEY `_uid` (`_uid`),
-                        KEY `_created_at` (`_createdAt`),
-                        KEY `_updated_at` (`_updatedAt`)
-                    )")
+                ->prepare($sql)
                 ->execute();
 
+            $sql = "
+				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
+					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+					_type VARCHAR(12) NOT NULL,
+					_permission VARCHAR(255) NOT NULL,
+					_document VARCHAR(255) NOT NULL,
+					PRIMARY KEY (_id),
+			";
+
+            if ($this->shareTables) {
+                $sql .= "
+                	_tenant INT(11) UNSIGNED DEFAULT NULL,
+					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+					INDEX _permission (_tenant, _permission, _type)
+				";
+            } else {
+                $sql .= "
+					UNIQUE INDEX _index1 (_document, _type, _permission),
+					INDEX _permission (_permission, _type)
+				";
+            }
+
+            $sql .= ")";
+
+            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+
             $this->getPDO()
-                ->prepare("CREATE TABLE IF NOT EXISTS `{$database}`.`{$namespace}_{$id}_perms` (
-                        `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-                        `_type` VARCHAR(12) NOT NULL,
-                        `_permission` VARCHAR(255) NOT NULL,
-                        `_document` VARCHAR(255) NOT NULL,
-                        PRIMARY KEY (`_id`),
-                        UNIQUE INDEX `_index1` (`_document`,`_type`,`_permission`),
-                        INDEX `_permission` (`_permission`)
-                    )")
+                ->prepare($sql)
                 ->execute();
         } catch (\Exception $th) {
             $this->getPDO()
@@ -138,12 +188,53 @@ class MariaDB extends SQL
             throw $th;
         }
 
-        // Update $this->getCountOfIndexes when adding another default index
         return true;
     }
 
     /**
-     * Delete Collection
+     * Get collection size
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $collection = $this->getNamespace() . '_' . $collection;
+        $database = $this->getDatabase();
+        $name = $database . '/' . $collection;
+        $permissions = $database . '/' . $collection . '_perms';
+
+        $collectionSize = $this->getPDO()->prepare("
+            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
+            FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
+            WHERE NAME = :name
+         ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+            SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
+            FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES
+            WHERE NAME = :permissions
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
+     * Delete collection
+     *
      * @param string $id
      * @return bool
      * @throws Exception
@@ -153,8 +244,12 @@ class MariaDB extends SQL
     {
         $id = $this->filter($id);
 
+        $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};";
+
+        $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -175,14 +270,13 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -203,14 +297,14 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -229,8 +323,12 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -250,8 +348,12 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -263,7 +365,7 @@ class MariaDB extends SQL
      * @param bool $twoWay
      * @param string $twoWayKey
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function createRelationship(
         string $collection,
@@ -300,6 +402,8 @@ class MariaDB extends SQL
             default:
                 throw new DatabaseException('Invalid relationship type');
         }
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         return $this->getPDO()
             ->prepare($sql)
@@ -384,11 +488,24 @@ class MariaDB extends SQL
             return true;
         }
 
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
     }
 
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws DatabaseException
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,
@@ -409,9 +526,16 @@ class MariaDB extends SQL
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                    }
+                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                    }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -422,9 +546,9 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                if ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
-                } else {
+                } elseif ($twoWay) {
                     $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
                 }
                 break;
@@ -450,6 +574,8 @@ class MariaDB extends SQL
             return true;
         }
 
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
@@ -470,8 +596,12 @@ class MariaDB extends SQL
         $old = $this->filter($old);
         $new = $this->filter($new);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;";
+
+        $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($collection)} RENAME INDEX `{$old}` TO `{$new}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -485,37 +615,68 @@ class MariaDB extends SQL
      * @param array<int> $lengths
      * @param array<string> $orders
      * @return bool
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
+        $collection = $this->getDocument(Database::METADATA, $collection);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
-
-        foreach ($attributes as $key => $attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
-
-            $attributes[$key] = "`{$attribute}`{$length} {$order}";
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
         }
 
+        $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
+
+        $id = $this->filter($id);
+
+        foreach ($attributes as $i => $attr) {
+            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => array_key_exists('key', $collectionAttribute) && $collectionAttribute['key'] === $attr);
+            $collectionAttribute = end($collectionAttribute);
+            $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
+            $length = empty($lengths[$i]) ? '' : '(' . (int)$lengths[$i] . ')';
+
+            $attr = match ($attr) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attr),
+            };
+
+            $attributes[$i] = "`{$attr}`{$length} {$order}";
+
+            if(!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+                $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
+            }
+        }
+
+        $sqlType = match ($type) {
+            Database::INDEX_KEY => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+        };
+
+        $attributes = \implode(', ', $attributes);
+
+        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
+
+        $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
+        $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
+
         return $this->getPDO()
-            ->prepare($this->getSQLIndex($name, $id, $type, $attributes))
+            ->prepare($sql)
             ->execute();
+    }
+
+    /**
+     * @return bool
+     */
+    public function castIndexArray(): bool
+    {
+        return false;
     }
 
     /**
@@ -532,8 +693,12 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;";
+
+        $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
+
         return $this->getPDO()
-            ->prepare("ALTER TABLE {$this->getSQLTable($name)} DROP INDEX `{$id}`;")
+            ->prepare($sql)
             ->execute();
     }
 
@@ -545,26 +710,29 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
+     * @throws \Throwable
      */
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = json_encode($document->getPermissions());
+        $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+        if ($this->shareTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
         $columnNames = '';
 
-        $this->getPDO()->beginTransaction();
-
         /**
          * Insert Attributes
          */
         $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) { // Parse statement
+        foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
             $bindKey = 'key_' . $bindIndex;
             $columns .= "`{$column}`, ";
@@ -572,20 +740,35 @@ class MariaDB extends SQL
             $bindIndex++;
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("INSERT INTO {$this->getSQLTable($name)}
-                ({$columns}_uid) VALUES ({$columnNames}:_uid)");
+        // Insert internal ID if set
+        if (!empty($document->getInternalId())) {
+            $bindKey = '_id';
+            $columns .= "_id, ";
+            $columnNames .= ':' . $bindKey . ', ';
+        }
 
-        $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
+        $sql = "
+			INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
+			VALUES ({$columnNames} :_uid)
+		";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        $stmt->bindValue(':_uid', $document->getId());
+
+        if (!empty($document->getInternalId())) {
+            $stmt->bindValue(':_id', $document->getInternalId());
+        }
 
         $attributeIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
+        foreach ($attributes as $value) {
+            if (is_array($value)) {
                 $value = json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
@@ -595,40 +778,197 @@ class MariaDB extends SQL
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}')";
+                $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
+
+                if ($this->shareTables) {
+                    $permission .= ", :_tenant)";
+                } else {
+                    $permission .= ")";
+                }
+
+                $permissions[] = $permission;
             }
         }
 
         if (!empty($permissions)) {
-            $queryPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document) VALUES " . implode(', ', $permissions);
-            $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+            $permissions = \implode(', ', $permissions);
+
+            $sqlPermissions = "
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
+			";
+
+            if ($this->shareTables) {
+                $sqlPermissions .= ', _tenant)';
+            } else {
+                $sqlPermissions .= ")";
+            }
+
+            $sqlPermissions .=	" VALUES {$permissions}";
+            $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
+            $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+            if ($this->shareTables) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
         }
 
         try {
+            $this->getPDO()->beginTransaction();
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId())->getInternalId();
+            $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (PDOException $e) {
+
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                default:
-                    throw $e;
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
             }
-        }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw $e;
         }
 
         return $document;
+    }
+
+    /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DuplicateException
+     * @throws \Throwable
+     */
+    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        try {
+            $this->getPDO()->beginTransaction();
+
+            $name = $this->filter($collection);
+            $batches = \array_chunk($documents, max(1, $batchSize));
+
+            foreach ($batches as $batch) {
+                $bindIndex = 0;
+                $batchKeys = [];
+                $bindValues = [];
+                $permissions = [];
+
+                foreach ($batch as $document) {
+                    $attributes = $document->getAttributes();
+                    $attributes['_uid'] = $document->getId();
+                    $attributes['_createdAt'] = $document->getCreatedAt();
+                    $attributes['_updatedAt'] = $document->getUpdatedAt();
+                    $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                    if ($this->shareTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
+
+                    $columns = [];
+                    foreach (\array_keys($attributes) as $key => $attribute) {
+                        $columns[$key] = "`{$this->filter($attribute)}`";
+                    }
+
+                    $columns = '(' . \implode(', ', $columns) . ')';
+
+                    $bindKeys = [];
+
+                    foreach ($attributes as $value) {
+                        if (\is_array($value)) {
+                            $value = \json_encode($value);
+                        }
+                        $value = (\is_bool($value)) ? (int)$value : $value;
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = ':' . $bindKey;
+                        $bindValues[$bindKey] = $value;
+                        $bindIndex++;
+                    }
+
+                    $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+                    foreach (Database::PERMISSIONS as $type) {
+                        foreach ($document->getPermissionsByType($type) as $permission) {
+                            $permission = \str_replace('"', '', $permission);
+                            $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
+
+                            if ($this->shareTables) {
+                                $permission .= ", :_tenant)";
+                            } else {
+                                $permission .= ")";
+                            }
+
+                            $permissions[] = $permission;
+                        }
+                    }
+                }
+
+                $stmt = $this->getPDO()->prepare(
+                    "
+                    INSERT INTO {$this->getSQLTable($name)} {$columns}
+                    VALUES " . \implode(', ', $batchKeys)
+                );
+
+                foreach ($bindValues as $key => $value) {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+
+                $stmt->execute();
+
+                if (!empty($permissions)) {
+                    $sqlPermissions = "
+						INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
+					";
+
+                    if ($this->shareTables) {
+                        $sqlPermissions .= ', _tenant)';
+                    } else {
+                        $sqlPermissions .= ")";
+                    }
+
+                    $sqlPermissions .= " VALUES " . \implode(', ', $permissions);
+
+                    $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+                    if ($this->shareTables) {
+                        $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                    }
+
+                    $stmtPermissions?->execute();
+                }
+            }
+
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
+            $this->getPDO()->rollBack();
+
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
+            }
+
+            throw $e;
+        }
+
+        return $documents;
     }
 
     /**
@@ -639,7 +979,8 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
+     * @throws \Throwable
      */
     public function updateDocument(string $collection, Document $document): Document
     {
@@ -648,20 +989,38 @@ class MariaDB extends SQL
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
+        if ($this->shareTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
+
         $name = $this->filter($collection);
         $columns = '';
+
+        $sql = "
+			SELECT _type, _permission
+			FROM {$this->getSQLTable($name . '_perms')}
+			WHERE _document = :_uid
+		";
+
+        if ($this->shareTables) {
+            $sql .= ' AND _tenant = :_tenant';
+        }
+
+        $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
         /**
          * Get current permissions from the database
          */
-        $permissionsStmt = $this->getPDO()->prepare("
-                SELECT _type, _permission
-                FROM {$this->getSQLTable($name . '_perms')} p
-                WHERE p._document = :_uid
-        ");
-        $permissionsStmt->bindValue(':_uid', $document->getId());
-        $permissionsStmt->execute();
-        $permissions = $permissionsStmt->fetchAll();
+        $sqlPermissions = $this->getPDO()->prepare($sql);
+        $sqlPermissions->bindValue(':_uid', $document->getId());
+
+        if ($this->shareTables) {
+            $sqlPermissions->bindValue(':_tenant', $this->tenant);
+        }
+
+        $sqlPermissions->execute();
+        $permissions = $sqlPermissions->fetchAll();
+        $sqlPermissions->closeCursor();
 
         $initial = [];
         foreach (Database::PERMISSIONS as $type) {
@@ -673,8 +1032,6 @@ class MariaDB extends SQL
 
             return $carry;
         }, $initial);
-
-        $this->getPDO()->beginTransaction();
 
         /**
          * Get removed Permissions
@@ -716,15 +1073,26 @@ class MariaDB extends SQL
         }
         if (!empty($removeQuery)) {
             $removeQuery .= ')';
-            $stmtRemovePermissions = $this->getPDO()
-                ->prepare("
-                DELETE
+            $sql = "
+				DELETE
                 FROM {$this->getSQLTable($name . '_perms')}
-                WHERE
-                    _document = :_uid
-                    {$removeQuery}
-            ");
+                WHERE _document = :_uid
+			";
+
+            if ($this->shareTables) {
+                $sql .= ' AND _tenant = :_tenant';
+            }
+
+            $removeQuery = $sql . $removeQuery;
+
+            $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
+
+            $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
+
+            if ($this->shareTables) {
+                $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
+            }
 
             foreach ($removals as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
@@ -740,18 +1108,40 @@ class MariaDB extends SQL
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} )";
+                    $value = "( :_uid, '{$type}', :_add_{$type}_{$i}";
+
+                    if ($this->shareTables) {
+                        $value .= ", :_tenant)";
+                    } else {
+                        $value .= ")";
+                    }
+
+                    $values[] = $value;
                 }
             }
 
-            $stmtAddPermissions = $this->getPDO()
-                ->prepare(
-                    "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')}
-                    (_document, _type, _permission) VALUES " . \implode(', ', $values)
-                );
+            $sql = "
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
+			";
+
+            if ($this->shareTables) {
+                $sql .= ', _tenant)';
+            } else {
+                $sql .= ')';
+            }
+
+            $sql .= " VALUES " . \implode(', ', $values);
+
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
+
+            $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
+
+            if ($this->shareTables) {
+                $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+            }
+
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
                     $stmtAddPermissions->bindValue(":_add_{$type}_{$i}", $permission);
@@ -762,7 +1152,6 @@ class MariaDB extends SQL
         /**
          * Update Attributes
          */
-
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
@@ -771,50 +1160,329 @@ class MariaDB extends SQL
             $bindIndex++;
         }
 
-        $stmt = $this->getPDO()
-            ->prepare("UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_uid WHERE _uid = :_uid");
+        $sql = "
+			UPDATE {$this->getSQLTable($name)}
+			SET {$columns} _uid = :_uid 
+			WHERE _uid = :_uid
+		";
+
+        if ($this->shareTables) {
+            $sql .= ' AND _tenant = :_tenant';
+        }
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $document->getId());
 
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) { // arrays & objects should be saved as strings
+            if (is_array($value)) {
                 $value = json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
 
         try {
+            $this->getPDO()->beginTransaction();
+
             $stmt->execute();
+
             if (isset($stmtRemovePermissions)) {
                 $stmtRemovePermissions->execute();
             }
             if (isset($stmtAddPermissions)) {
                 $stmtAddPermissions->execute();
             }
-        } catch (PDOException $e) {
+
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
             $this->getPDO()->rollBack();
-            switch ($e->getCode()) {
-                case 1062:
-                case 23000:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
 
-                default:
-                    throw $e;
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
             }
-        }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw $e;
         }
 
         return $document;
+    }
+
+    /**
+     * Update Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     *
+     * @return array<Document>
+     *
+     * @throws DuplicateException
+     * @throws \Throwable
+     */
+    public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        try {
+            $this->getPDO()->beginTransaction();
+
+            $name = $this->filter($collection);
+            $batches = \array_chunk($documents, max(1, $batchSize));
+
+            foreach ($batches as $batch) {
+                $bindIndex = 0;
+                $batchKeys = [];
+                $bindValues = [];
+
+                $removeQuery = '';
+                $removeBindValues = [];
+
+                $addQuery = '';
+                $addBindValues = [];
+
+                foreach ($batch as $index => $document) {
+                    $attributes = $document->getAttributes();
+                    $attributes['_uid'] = $document->getId();
+                    $attributes['_createdAt'] = $document->getCreatedAt();
+                    $attributes['_updatedAt'] = $document->getUpdatedAt();
+                    $attributes['_permissions'] = json_encode($document->getPermissions());
+
+                    if ($this->shareTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
+
+                    $columns = \array_map(function ($attribute) {
+                        return "`" . $this->filter($attribute) . "`";
+                    }, \array_keys($attributes));
+
+                    $bindKeys = [];
+
+                    foreach ($attributes as $value) {
+                        if (\is_array($value)) {
+                            $value = json_encode($value);
+                        }
+                        $value = (is_bool($value)) ? (int)$value : $value;
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = ':' . $bindKey;
+                        $bindValues[$bindKey] = $value;
+                        $bindIndex++;
+                    }
+
+                    $batchKeys[] = '(' . implode(', ', $bindKeys) . ')';
+
+                    // Permissions logic
+                    $sql = "
+                        SELECT _type, _permission
+                        FROM {$this->getSQLTable($name . '_perms')}
+                        WHERE _document = :_uid
+                    ";
+
+                    if ($this->shareTables) {
+                        $sql .= ' AND _tenant = :_tenant';
+                    }
+
+                    $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+
+                    $permissionsStmt = $this->getPDO()->prepare($sql);
+                    $permissionsStmt->bindValue(':_uid', $document->getId());
+
+                    if ($this->shareTables) {
+                        $permissionsStmt->bindValue(':_tenant', $this->tenant);
+                    }
+
+                    $permissionsStmt->execute();
+                    $permissions = $permissionsStmt->fetchAll();
+
+                    $initial = [];
+                    foreach (Database::PERMISSIONS as $type) {
+                        $initial[$type] = [];
+                    }
+
+                    $permissions = \array_reduce($permissions, function (array $carry, array $item) {
+                        $carry[$item['_type']][] = $item['_permission'];
+                        return $carry;
+                    }, $initial);
+
+                    // Get removed Permissions
+                    $removals = [];
+                    foreach (Database::PERMISSIONS as $type) {
+                        $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
+                        if (!empty($diff)) {
+                            $removals[$type] = $diff;
+                        }
+                    }
+
+                    // Build inner query to remove permissions
+                    if (!empty($removals)) {
+                        foreach ($removals as $type => $permissionsToRemove) {
+                            $bindKey = 'uid_' . $index;
+                            $removeBindKeys[] = ':uid_' . $index;
+                            $removeBindValues[$bindKey] = $document->getId();
+
+                            $tenantQuery = '';
+                            if ($this->shareTables) {
+                                $tenantQuery = ' AND _tenant = :_tenant';
+                            }
+
+                            $removeQuery .= "(
+                                _document = :uid_{$index}
+                                {$tenantQuery}
+                                AND _type = '{$type}'
+                                AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
+                                $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
+                                $removeBindKeys[] = ':' . $bindKey;
+                                $removeBindValues[$bindKey] = $permissionsToRemove[$i];
+
+                                return ':' . $bindKey;
+                            }, \array_keys($permissionsToRemove))) .
+                                ")
+                            )";
+
+                            if ($type !== \array_key_last($removals)) {
+                                $removeQuery .= ' OR ';
+                            }
+                        }
+
+                        if ($index !== \array_key_last($batch)) {
+                            $removeQuery .= ' OR ';
+                        }
+                    }
+
+                    // Get added Permissions
+                    $additions = [];
+                    foreach (Database::PERMISSIONS as $type) {
+                        $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
+                        if (!empty($diff)) {
+                            $additions[$type] = $diff;
+                        }
+                    }
+
+                    // Build inner query to add permissions
+                    if (!empty($additions)) {
+                        foreach ($additions as $type => $permissionsToAdd) {
+                            foreach ($permissionsToAdd as $i => $permission) {
+                                $bindKey = 'uid_' . $index;
+                                $addBindValues[$bindKey] = $document->getId();
+
+                                $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
+                                $addBindValues[$bindKey] = $permission;
+
+                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}";
+
+                                if ($this->shareTables) {
+                                    $addQuery .= ", :_tenant)";
+                                } else {
+                                    $addQuery .= ")";
+                                }
+
+                                if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
+                                    $addQuery .= ', ';
+                                }
+                            }
+                        }
+                        if ($index !== \array_key_last($batch)) {
+                            $addQuery .= ', ';
+                        }
+                    }
+                }
+
+                $updateClause = '';
+                for ($i = 0; $i < \count($columns); $i++) {
+                    $column = $columns[$i];
+                    if (!empty($updateClause)) {
+                        $updateClause .= ', ';
+                    }
+                    $updateClause .= "{$column} = VALUES({$column})";
+                }
+
+                $stmt = $this->getPDO()->prepare("
+                    INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
+                    VALUES " . \implode(', ', $batchKeys) . "
+                    ON DUPLICATE KEY UPDATE $updateClause
+                ");
+
+                foreach ($bindValues as $key => $value) {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+
+                $stmt->execute();
+
+                if (!empty($removeQuery)) {
+                    $stmtRemovePermissions = $this->getPDO()->prepare("
+                        DELETE
+                        FROM {$this->getSQLTable($name . '_perms')}
+                        WHERE ({$removeQuery})
+                    ");
+
+                    foreach ($removeBindValues as $key => $value) {
+                        $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
+                    }
+                    if ($this->shareTables) {
+                        $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
+                    }
+                    $stmtRemovePermissions->execute();
+                }
+
+                if (!empty($addQuery)) {
+                    $sqlAddPermissions = "
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`
+                    ";
+
+                    if ($this->shareTables) {
+                        $sqlAddPermissions .= ', `_tenant`)';
+                    } else {
+                        $sqlAddPermissions .= ')';
+                    }
+
+                    $sqlAddPermissions .=  " VALUES {$addQuery}";
+
+                    $stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
+
+                    foreach ($addBindValues as $key => $value) {
+                        $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
+                    }
+
+                    if ($this->shareTables) {
+                        $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+                    }
+
+                    $stmtAddPermissions->execute();
+                }
+            }
+
+            $this->getPDO()->commit();
+        } catch (\Throwable $e) {
+            $this->getPDO()->rollBack();
+
+            if($e instanceof PDOException) {
+                switch ($e->getCode()) {
+                    case 1062:
+                    case 23000:
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                }
+            }
+
+            throw $e;
+        }
+
+        return $documents;
     }
 
     /**
@@ -834,13 +1502,30 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? " AND `{$attribute}` <= {$max}" : "";
-        $sqlMin = $min ? " AND `{$attribute}` >= {$min}" : "";
+        $sqlMax = $max ? " AND `{$attribute}` <= {$max}" : '';
+        $sqlMin = $min ? " AND `{$attribute}` >= {$min}" : '';
 
-        $sql = "UPDATE {$this->getSQLTable($name)} SET `{$attribute}` = `{$attribute}` + :val WHERE _uid = :_uid" . $sqlMax . $sqlMin;
+        $sql = "
+			UPDATE {$this->getSQLTable($name)} 
+			SET `{$attribute}` = `{$attribute}` + :val 
+			WHERE _uid = :_uid
+		";
+
+        if ($this->shareTables) {
+            $sql .= ' AND _tenant = :_tenant';
+        }
+
+        $sql .= $sqlMax . $sqlMin;
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
+
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
 
         $stmt->execute() || throw new DatabaseException('Failed to update attribute');
         return true;
@@ -859,27 +1544,65 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
 
-        $this->getPDO()->beginTransaction();
+        $sql = "
+		    DELETE FROM {$this->getSQLTable($name)} 
+		    WHERE _uid = :_uid
+		";
 
-        $stmt = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name)} WHERE _uid = :_uid");
+        if ($this->shareTables) {
+            $sql .= ' AND _tenant = :_tenant';
+        }
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
         $stmt->bindValue(':_uid', $id);
 
-        $stmtPermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE _document = :_uid");
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+
+        $sql = "
+			DELETE FROM {$this->getSQLTable($name . '_perms')} 
+		    WHERE _document = :_uid
+		";
+
+        if ($this->shareTables) {
+            $sql .= ' AND _tenant = :_tenant';
+        }
+
+        $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+
+        $stmtPermissions = $this->getPDO()->prepare($sql);
         $stmtPermissions->bindValue(':_uid', $id);
 
+        if ($this->shareTables) {
+            $stmtPermissions->bindValue(':_tenant', $this->tenant);
+        }
+
+        $deleted = false;
+
         try {
-            $stmt->execute() || throw new DatabaseException('Failed to delete document');
-            $stmtPermissions->execute() || throw new DatabaseException('Failed to clean permissions');
+            $this->getPDO()->beginTransaction();
+
+            if (!$stmt->execute()) {
+                throw new DatabaseException('Failed to delete document');
+            }
+
+            $deleted = $stmt->rowCount();
+
+            if (!$stmtPermissions->execute()) {
+                throw new DatabaseException('Failed to delete permissions');
+            }
+
+            $this->getPDO()->commit();
         } catch (\Throwable $th) {
             $this->getPDO()->rollBack();
             throw new DatabaseException($th->getMessage());
         }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
-        }
-
-        return true;
+        return $deleted;
     }
 
     /**
@@ -893,12 +1616,11 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
-     *
      * @return array<Document>
-     * @throws Exception
-     * @throws PDOException
+     * @throws DatabaseException
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, ?int $timeout = null): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -907,6 +1629,8 @@ class MariaDB extends SQL
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
+            '$internalId' => '_id',
+            '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $orderAttribute
@@ -944,7 +1668,7 @@ class MariaDB extends SQL
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "`${attribute}` ${orderType}";
+            $orders[] = "`{$attribute}` {$orderType}";
         }
 
         // Allow after pagination without any order
@@ -978,16 +1702,17 @@ class MariaDB extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
         }
-
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
+        }
+
+        if ($this->shareTables) {
+            $where[] = "table_main._tenant = :_tenant";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1005,13 +1730,15 @@ class MariaDB extends SQL
             {$sqlLimit};
         ";
 
-        if ($timeout) {
-            $sql = $this->setTimeout($sql, $timeout);
-        }
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
+
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
+        }
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
@@ -1019,12 +1746,14 @@ class MariaDB extends SQL
 
             $attribute = match ($attribute) {
                 '_uid' => '$id',
+                '_id' => '$internalId',
+                '_tenant' => '$tenant',
                 '_createdAt' => '$createdAt',
                 '_updatedAt' => '$updatedAt',
                 default => $attribute
             };
 
-            if (is_null($cursor[$attribute] ?? null)) {
+            if (\is_null($cursor[$attribute] ?? null)) {
                 throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
             $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
@@ -1044,25 +1773,39 @@ class MariaDB extends SQL
         }
 
         $results = $stmt->fetchAll();
+        $stmt->closeCursor();
 
-        foreach ($results as $key => $value) {
-            $results[$key]['$id'] = $value['_uid'];
-            $results[$key]['$internalId'] = $value['_id'];
-            $results[$key]['$createdAt'] = $value['_createdAt'];
-            $results[$key]['$updatedAt'] = $value['_updatedAt'];
-            $results[$key]['$permissions'] = json_decode($value['_permissions'] ?? '[]', true);
+        foreach ($results as $index => $document) {
+            if (\array_key_exists('_uid', $document)) {
+                $results[$index]['$id'] = $document['_uid'];
+                unset($results[$index]['_uid']);
+            }
+            if (\array_key_exists('_id', $document)) {
+                $results[$index]['$internalId'] = $document['_id'];
+                unset($results[$index]['_id']);
+            }
+            if (\array_key_exists('_tenant', $document)) {
+                $results[$index]['$tenant'] = $document['_tenant'];
+                unset($results[$index]['_tenant']);
+            }
+            if (\array_key_exists('_createdAt', $document)) {
+                $results[$index]['$createdAt'] = $document['_createdAt'];
+                unset($results[$index]['_createdAt']);
+            }
+            if (\array_key_exists('_updatedAt', $document)) {
+                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+                unset($results[$index]['_updatedAt']);
+            }
+            if (\array_key_exists('_permissions', $document)) {
+                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+                unset($results[$index]['_permissions']);
+            }
 
-            unset($results[$key]['_uid']);
-            unset($results[$key]['_id']);
-            unset($results[$key]['_createdAt']);
-            unset($results[$key]['_updatedAt']);
-            unset($results[$key]['_permissions']);
-
-            $results[$key] = new Document($results[$key]);
+            $results[$index] = new Document($results[$index]);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results);
+            $results = \array_reverse($results);
         }
 
         return $results;
@@ -1085,27 +1828,42 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        $sql = "SELECT COUNT(1) as sum
-            FROM
-                (
-                    SELECT 1
-                    FROM {$this->getSQLTable($name)} table_main
-                    " . $sqlWhere . "
-                    {$limit}
-                ) table_count
+        if ($this->shareTables) {
+            $where[] = "table_main._tenant = :_tenant";
+        }
+
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT COUNT(1) as sum FROM (
+				SELECT 1
+				FROM {$this->getSQLTable($name)} table_main
+				{$sqlWhere}
+				{$limit}
+			) table_count
         ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
+
         $stmt = $this->getPDO()->prepare($sql);
+
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
+        }
+
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
         }
 
         if (!\is_null($max)) {
@@ -1114,7 +1872,11 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
 
         return $result['sum'] ?? 0;
     }
@@ -1145,20 +1907,33 @@ class MariaDB extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        $sqlWhere = !empty($where) ? 'where ' . implode(' AND ', $where) : '';
+        if ($this->shareTables) {
+            $where[] = "table_main._tenant = :_tenant";
+        }
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT SUM({$attribute}) as sum
-            FROM (
-                SELECT {$attribute}
-                FROM {$this->getSQLTable($name)} table_main
-                 " . $sqlWhere . "
-                {$limit}
-            ) table_count
-        ");
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT SUM({$attribute}) as sum FROM (
+				SELECT {$attribute}
+				FROM {$this->getSQLTable($name)} table_main
+				{$sqlWhere}
+				{$limit}
+			) table_count
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
+        }
+
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
         }
 
         if (!\is_null($max)) {
@@ -1167,7 +1942,11 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
 
         return $result['sum'] ?? 0;
     }
@@ -1178,6 +1957,7 @@ class MariaDB extends SQL
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed
+     * @throws Exception
      */
     protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
@@ -1188,26 +1968,39 @@ class MariaDB extends SQL
             return '*';
         }
 
+        // Remove $id, $permissions and $collection if present since it is always selected by default
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+
         $selections[] = '_uid';
-        $selections[] = '_id';
-        $selections[] = '_createdAt';
-        $selections[] = '_updatedAt';
         $selections[] = '_permissions';
+
+        if (\in_array('$internalId', $selections)) {
+            $selections[] = '_id';
+            $selections = \array_diff($selections, ['$internalId']);
+        }
+        if (\in_array('$createdAt', $selections)) {
+            $selections[] = '_createdAt';
+            $selections = \array_diff($selections, ['$createdAt']);
+        }
+        if (\in_array('$updatedAt', $selections)) {
+            $selections[] = '_updatedAt';
+            $selections = \array_diff($selections, ['$updatedAt']);
+        }
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {
-                $selection = "`{$prefix}`.`{$selection}`";
+                $selection = "`{$prefix}`.`{$this->filter($selection)}`";
             }
         } else {
             foreach ($selections as &$selection) {
-                $selection = "`{$selection}`";
+                $selection = "`{$this->filter($selection)}`";
             }
         }
 
         return \implode(', ', $selections);
     }
 
-    /*
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1218,40 +2011,50 @@ class MariaDB extends SQL
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',
+            '$internalId' => '_id',
+            '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
             default => $query->getAttribute()
         });
 
-        $attribute = "`{$query->getAttribute()}`" ;
+        $attribute = "`{$query->getAttribute()}`";
         $placeholder = $this->getSQLPlaceholder($query);
 
         switch ($query->getMethod()) {
+            case Query::TYPE_OR:
+            case Query::TYPE_AND:
+                $conditions = [];
+                /* @var $q Query */
+                foreach ($query->getValue() as $q) {
+                    $conditions[] = $this->getSQLCondition($q);
+                }
+
+                $method = strtoupper($query->getMethod());
+                return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
+
             case Query::TYPE_SEARCH:
-                /**
-                 * Replace reserved chars with space.
-                 */
-                $value = trim(str_replace(['@', '+', '-', '*'], ' ', $query->getValues()[0]));
-                /**
-                 * Prepend wildcard by default on the back.
-                 */
-                $value = $this->getSQLValue($query->getMethod(), $value);
-                return 'MATCH('.$attribute.') AGAINST ('.$this->getPDO()->quote($value).' IN BOOLEAN MODE)';
+                return "MATCH(`table_main`.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
-                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+                return "`table_main`.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+                return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
+            case Query::TYPE_CONTAINS:
+                if($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                    return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
+                }
+
+                // no break
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
+                    $conditions[] = "{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
+                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }
 
@@ -1261,11 +2064,16 @@ class MariaDB extends SQL
      * @param string $type
      * @param int $size
      * @param bool $signed
+     * @param bool $array
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
+        if($array === true) {
+            return 'JSON';
+        }
+
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
@@ -1277,7 +2085,7 @@ class MariaDB extends SQL
                     return 'MEDIUMTEXT';
                 }
 
-                if ($size > 16383) {
+                if ($size > $this->getMaxVarcharLength()) {
                     return 'TEXT';
                 }
 
@@ -1311,29 +2119,6 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get SQL Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    {
-        $type = match ($type) {
-            Database::INDEX_KEY,
-            Database::INDEX_ARRAY => 'INDEX',
-            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
-        };
-
-        return "CREATE {$type} `{$id}` ON {$this->getSQLTable($collection)} ( " . implode(', ', $attributes) . " )";
-    }
-
-    /**
      * Get PDO Type
      *
      * @param mixed $value
@@ -1361,6 +2146,16 @@ class MariaDB extends SQL
     }
 
     /**
+     * Does the adapter handle Query Array Overlaps?
+     *
+     * @return bool
+     */
+    public function getSupportForJSONOverlaps(): bool
+    {
+        return true;
+    }
+
+    /**
      * Are timeouts supported?
      *
      * @return bool
@@ -1371,35 +2166,42 @@ class MariaDB extends SQL
     }
 
     /**
-     * Returns Max Execution Time
-     * @param string $sql
+     * Set max execution time
      * @param int $milliseconds
-     * @return string
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
      */
-    protected function setTimeout(string $sql, int $milliseconds): string
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
-            return $sql;
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
         }
 
         $seconds = $milliseconds / 1000;
-        return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+
+        $this->before($event, 'timeout', function ($sql) use ($seconds) {
+            return "SET STATEMENT max_statement_time = {$seconds} FOR " . $sql;
+        });
     }
 
     /**
      * @param PDOException $e
-     * @throws Timeout
+     * @throws TimeoutException
      */
     protected function processException(PDOException $e): void
     {
         // Regular PDO
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new Timeout($e->getMessage());
+            throw new TimeoutException($e->getMessage());
         }
 
         throw $e;

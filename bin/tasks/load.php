@@ -10,6 +10,7 @@ use Faker\Generator;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
@@ -27,7 +28,7 @@ use Utopia\Validator\Text;
 
 /**
  * @Example
- * docker-compose exec tests bin/load --adapter=mariadb --limit=1000 --name=testing
+ * docker compose exec tests bin/load --adapter=mariadb --limit=1000 --name=testing
  */
 
 $cli
@@ -44,6 +45,7 @@ $cli
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
         Swoole\Runtime::enableCoroutine();
+
         switch ($adapter) {
             case 'mariadb':
                 Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
@@ -56,7 +58,7 @@ $cli
                     $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
                     $database = new Database(new MariaDB($pdo), $cache);
-                    $database->setDefaultDatabase($name);
+                    $database->setDatabase($name);
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
@@ -84,17 +86,17 @@ $cli
                     );
 
                     // A coroutine is assigned per 1000 documents
-                    for ($i=0; $i < $limit/1000; $i++) {
-                        go(function () use ($pool, $faker, $name, $cache, $namespace) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
+                        \go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MariaDB($pdo), $cache);
-                            $database->setDefaultDatabase($name);
+                            $database->setDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
-                                addArticle($database, $faker);
+                            for ($i = 0; $i < 1000; $i++) {
+                                createDocument($database, $faker);
                             }
 
                             // Reclaim resources
@@ -116,7 +118,7 @@ $cli
                     $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
 
                     $database = new Database(new MySQL($pdo), $cache);
-                    $database->setDefaultDatabase($name);
+                    $database->setDatabase($name);
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
@@ -145,17 +147,17 @@ $cli
                     );
 
                     // A coroutine is assigned per 1000 documents
-                    for ($i=0; $i < $limit/1000; $i++) {
-                        go(function () use ($pool, $faker, $name, $cache, $namespace) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
+                        \go(function () use ($pool, $faker, $name, $cache, $namespace) {
                             $pdo = $pool->get();
 
                             $database = new Database(new MySQL($pdo), $cache);
-                            $database->setDefaultDatabase($name);
+                            $database->setDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
-                                addArticle($database, $faker);
+                            for ($i = 0; $i < 1000; $i++) {
+                                createDocument($database, $faker);
                             }
 
                             // Reclaim resources
@@ -178,7 +180,7 @@ $cli
                     );
 
                     $database = new Database(new Mongo($client), $cache);
-                    $database->setDefaultDatabase($name);
+                    $database->setDatabase($name);
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
@@ -189,15 +191,15 @@ $cli
 
                     $start = microtime(true);
 
-                    for ($i=0; $i < $limit/1000; $i++) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
                         go(function () use ($client, $faker, $name, $namespace, $cache) {
                             $database = new Database(new Mongo($client), $cache);
-                            $database->setDefaultDatabase($name);
+                            $database->setDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
-                                addArticle($database, $faker);
+                            for ($i = 0; $i < 1000; $i++) {
+                                createDocument($database, $faker);
                             }
 
                             $database = null;
@@ -229,14 +231,14 @@ $cli
 
                     $start = microtime(true);
 
-                    for ($i=0; $i < $limit/1000; $i++) {
+                    for ($i = 0; $i < $limit / 1000; $i++) {
                         go(function () use ($client, $faker, $name, $namespace, $cache) {
                             $database = new Database(new Mongo($client), $cache);
                             $database->setDefaultDatabase($name);
                             $database->setNamespace($namespace);
 
                             // Each coroutine loads 1000 documents
-                            for ($i=0; $i < 1000; $i++) {
+                            for ($i = 0; $i < 1000; $i++) {
                                 addArticle($database, $faker);
                             }
 
@@ -267,45 +269,53 @@ $cli
 
 function createSchema(Database $database): void
 {
-    if ($database->exists($database->getDefaultDatabase())) {
-        $database->delete($database->getDefaultDatabase());
+    if ($database->exists($database->getDatabase())) {
+        $database->delete($database->getDatabase());
     }
     $database->create();
-    $database->createCollection('articles');
+
+    Authorization::setRole(Role::any()->toString());
+
+    $database->createCollection('articles', permissions: [
+        Permission::create(Role::any()),
+        Permission::read(Role::any()),
+    ]);
+
     $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
-    $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, null, false, false, null, [], ['datetime']);
+    $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
     $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
     $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
+    $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
     $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
 }
 
-function addArticle($database, Generator $faker): void
+function createDocument($database, Generator $faker): void
 {
     $database->createDocument('articles', new Document([
         // Five random users out of 10,000 get read access
         // Three random users out of 10,000 get mutate access
-
         '$permissions' => [
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::read(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::create(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::update(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
-            Permission::delete(Role::user($faker->randomNumber(4))),
+            Permission::read(Role::any()),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::read(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::create(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::update(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
+            Permission::delete(Role::user($faker->randomNumber(9))),
         ],
         'author' => $faker->name(),
         'created' => \Utopia\Database\DateTime::format($faker->dateTime()),
         'text' => $faker->realTextBetween(1000, 4000),
         'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
-        'views' => $faker->randomNumber(6)
+        'views' => $faker->randomNumber(6),
+        'tags' => $faker->randomElements(['short', 'quick', 'easy', 'medium', 'hard'], $faker->numberBetween(1, 5)),
     ]));
 }

@@ -9,7 +9,10 @@
         "psr-4": {"Utopia\\Database\\": "src/Database"}
     },
     "autoload-dev": {
-        "psr-4": {"Utopia\\Tests\\": "tests/Database"}
+        "psr-4": {
+            "Tests\\E2E\\": "tests/e2e",
+            "Tests\\Unit\\": "tests/unit"
+        }
     },
     "scripts": {
         "build": [
@@ -37,19 +40,20 @@
     ],
     "require": {
         "ext-pdo": "*",
+        "ext-mbstring": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "0.*.*",
-        "utopia-php/cache": "0.8.*",
-        "utopia-php/mongo": "dev-feat-authless"
+        "utopia-php/framework": "0.33.*",
+        "utopia-php/cache": "0.9.*",
+        "utopia-php/mongo": "0.3.*",
+        "utopia-php/fetch": "0.1.*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.14",
         "phpunit/phpunit": "^9.4",
         "pcov/clobber": "^2.0",
-        "mongodb/mongodb": "1.8.0",
         "swoole/ide-helper": "4.8.0",
         "utopia-php/cli": "^0.14.0",
-        "laravel/pint": "1.4.*",
+        "laravel/pint": "1.13.*",
         "phpstan/phpstan": "1.10.*",
         "rregeer/phpunit-coverage-check": "^0.3.1"
     },

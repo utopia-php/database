@@ -89,6 +89,10 @@ class Permission
         }
 
         $permission = $permissionParts[0];
+
+        if (!\in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))) {
+            throw new DatabaseException('Invalid permission type: "' . $permission . '".');
+        }
         $fullRole = \str_replace('")', '', $permissionParts[1]);
         $roleParts = \explode(':', $fullRole);
         $role = $roleParts[0];
@@ -170,7 +174,7 @@ class Permission
                 }
             }
         }
-        return $mutated;
+        return \array_values(\array_unique($mutated));
     }
 
     /**

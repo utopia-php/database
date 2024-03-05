@@ -48,43 +48,41 @@ abstract class SQL extends Adapter
      * @param string $database
      * @param string|null $collection
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function exists(string $database, ?string $collection): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
 
         if (!\is_null($collection)) {
             $collection = $this->filter($collection);
-
-            $select = 'TABLE_NAME';
-            $from = 'INFORMATION_SCHEMA.TABLES';
-            $where = 'TABLE_SCHEMA = :schema AND TABLE_NAME = :table';
-            $match = "{$this->getNamespace()}_{$collection}";
-        } else {
-            $select = 'SCHEMA_NAME';
-            $from = 'INFORMATION_SCHEMA.SCHEMATA';
-            $where = 'SCHEMA_NAME = :schema';
-            $match = $database;
-        }
-
-        $stmt = $this->getPDO()
-            ->prepare("SELECT {$select}
-                FROM {$from}
-                WHERE {$where};");
-
-        $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
-
-        if (!\is_null($collection)) {
+            $stmt = $this->getPDO()->prepare("
+                SELECT TABLE_NAME 
+                FROM INFORMATION_SCHEMA.TABLES 
+                WHERE TABLE_SCHEMA = :schema 
+                  AND TABLE_NAME = :table
+            ");
+            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
             $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+        } else {
+            $stmt = $this->getPDO()->prepare("
+                SELECT SCHEMA_NAME FROM
+                INFORMATION_SCHEMA.SCHEMATA
+                WHERE SCHEMA_NAME = :schema
+            ");
+            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
-        return (($document[$select] ?? '') === $match) || // case insensitive check
-            (($document[strtolower($select)] ?? '') === $match);
+        if (empty($document)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -109,35 +107,61 @@ abstract class SQL extends Adapter
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
         $name = $this->filter($collection);
-
         $selections = $this->getAttributeSelections($queries);
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT {$this->getAttributeProjection($selections)} 
+        $sql = "
+		    SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid;
-        ");
+            WHERE _uid = :_uid 
+		";
+
+        if ($this->shareTables) {
+            $sql .= "AND _tenant = :_tenant";
+        }
+
+        $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
+
+        if ($this->shareTables) {
+            $stmt->bindValue(':_tenant', $this->getTenant());
+        }
+
         $stmt->execute();
 
-        $document = $stmt->fetch();
+        $document = $stmt->fetchAll();
+        $stmt->closeCursor();
 
         if (empty($document)) {
             return new Document([]);
         }
 
-        $document['$id'] = $document['_uid'];
-        $document['$internalId'] = $document['_id'];
-        $document['$createdAt'] = $document['_createdAt'];
-        $document['$updatedAt'] = $document['_updatedAt'];
-        $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+        $document = $document[0];
 
-        unset($document['_id']);
-        unset($document['_uid']);
-        unset($document['_createdAt']);
-        unset($document['_updatedAt']);
-        unset($document['_permissions']);
+        if (\array_key_exists('_id', $document)) {
+            $document['$internalId'] = $document['_id'];
+            unset($document['_id']);
+        }
+        if (\array_key_exists('_uid', $document)) {
+            $document['$id'] = $document['_uid'];
+            unset($document['_uid']);
+        }
+        if (\array_key_exists('_tenant', $document)) {
+            $document['$tenant'] = $document['_tenant'];
+            unset($document['_tenant']);
+        }
+        if (\array_key_exists('_createdAt', $document)) {
+            $document['$createdAt'] = $document['_createdAt'];
+            unset($document['_createdAt']);
+        }
+        if (\array_key_exists('_updatedAt', $document)) {
+            $document['$updatedAt'] = $document['_updatedAt'];
+            unset($document['_updatedAt']);
+        }
+        if (\array_key_exists('_permissions', $document)) {
+            $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
+            unset($document['_permissions']);
+        }
 
         return new Document($document);
     }
@@ -258,7 +282,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultAttributes(): int
     {
-        return 4;
+        return \count(Database::INTERNAL_ATTRIBUTES);
     }
 
     /**
@@ -268,7 +292,7 @@ abstract class SQL extends Adapter
      */
     public static function getCountOfDefaultIndexes(): int
     {
-        return 5;
+        return \count(Database::INTERNAL_INDEXES);
     }
 
     /**
@@ -303,34 +327,20 @@ abstract class SQL extends Adapter
         foreach ($attributes as $attribute) {
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
-                    switch (true) {
-                        case ($attribute['size'] > 16777215):
-                            // 8 bytes length + 4 bytes for LONGTEXT
-                            $total += 12;
-                            break;
-
-                        case ($attribute['size'] > 65535):
-                            // 8 bytes length + 3 bytes for MEDIUMTEXT
-                            $total += 11;
-                            break;
-
-                        case ($attribute['size'] > 16383):
-                            // 8 bytes length + 2 bytes for TEXT
-                            $total += 10;
-                            break;
-
-                        case ($attribute['size'] > 255):
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 2 bytes for VARCHAR(>255)
-                            $total += ($attribute['size'] * 4) + 2;
-                            break;
-
-                        default:
-                            // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                            // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                            $total += ($attribute['size'] * 4) + 1;
-                            break;
-                    }
+                    $total += match (true) {
+                        // 8 bytes length + 4 bytes for LONGTEXT
+                        $attribute['size'] > 16777215 => 12,
+                        // 8 bytes length + 3 bytes for MEDIUMTEXT
+                        $attribute['size'] > 65535 => 11,
+                        // 8 bytes length + 2 bytes for TEXT
+                        $attribute['size'] > $this->getMaxVarcharLength() => 10,
+                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
+                        // 8 bytes length + 2 bytes for VARCHAR(>255)
+                        $attribute['size'] > 255 => ($attribute['size'] * 4) + 2,
+                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
+                        // 8 bytes length + 1 bytes for VARCHAR(<=255)
+                        default => ($attribute['size'] * 4) + 1,
+                    };
                     break;
 
                 case Database::VAR_INTEGER:
@@ -669,8 +679,15 @@ abstract class SQL extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return false;
+        return true;
     }
+
+    /**
+     * Does the adapter handle array Overlaps?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForJSONOverlaps(): bool;
 
     public function getSupportForRelationships(): bool
     {
@@ -681,18 +698,68 @@ abstract class SQL extends Adapter
      * @param mixed $stmt
      * @param Query $query
      * @return void
+     * @throws Exception
      */
     protected function bindConditionValue(mixed $stmt, Query $query): void
     {
-        if (in_array($query->getMethod(), [Query::TYPE_SEARCH, Query::TYPE_SELECT])) {
+        if ($query->getMethod() == Query::TYPE_SELECT) {
+            return;
+        }
+
+        if($query->isNested()) {
+            foreach ($query->getValues() as $value) {
+                $this->bindConditionValue($stmt, $value);
+            }
+            return;
+        }
+
+        if($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
+            $placeholder = $this->getSQLPlaceholder($query) . '_0';
+            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
             return;
         }
 
         foreach ($query->getValues() as $key => $value) {
-            $placeholder = $this->getSQLPlaceholder($query).'_'.$key;
-            $value = $this->getSQLValue($query->getMethod(), $value);
+            $value = match ($query->getMethod()) {
+                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                default => $value
+            };
+
+            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
+
             $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
         }
+    }
+
+    /**
+     * @param string $value
+     * @return string
+     */
+    protected function getFulltextValue(string $value): string
+    {
+        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
+
+        /** Replace reserved chars with space. */
+        $specialChars = '@,+,-,*,),(,<,>,~,"';
+        $value = str_replace(explode(',', $specialChars), ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        $value = trim($value);
+
+        if (empty($value)) {
+            return '';
+        }
+
+        if ($exact) {
+            $value = '"' . $value . '"';
+        } else {
+            /** Prepend wildcard by default on the back. */
+            $value .= '*';
+        }
+
+        return $value;
     }
 
     /**
@@ -723,7 +790,8 @@ abstract class SQL extends Adapter
                 return 'IS NOT NULL';
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
-                return 'LIKE';
+            case Query::TYPE_CONTAINS:
+                return $this->getLikeOperator();
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -745,21 +813,15 @@ abstract class SQL extends Adapter
         return \md5($json);
     }
 
-    protected function getSQLValue(string $method, mixed $value): mixed
+    public function escapeWildcards(string $value): string
     {
-        switch ($method) {
-            case Query::TYPE_STARTS_WITH:
-                $value = $this->escapeWildcards($value);
-                return "$value%";
-            case Query::TYPE_ENDS_WITH:
-                $value = $this->escapeWildcards($value);
-                return "%$value";
-            case Query::TYPE_SEARCH:
-                $value = $this->escapeWildcards($value);
-                return "'$value*'";
-            default:
-                return $value;
+        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
         }
+
+        return $value;
     }
 
     /**
@@ -773,7 +835,6 @@ abstract class SQL extends Adapter
     {
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 return 'INDEX';
 
             case Database::INDEX_UNIQUE:
@@ -783,7 +844,7 @@ abstract class SQL extends Adapter
                 return 'FULLTEXT INDEX';
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
@@ -798,26 +859,19 @@ abstract class SQL extends Adapter
     protected function getSQLPermissionsCondition(string $collection, array $roles): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-        return "table_main._uid IN (
-                    SELECT distinct(_document)
-                    FROM {$this->getSQLTable($collection . '_perms')}
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = 'read'
-                )";
-    }
 
-    /**
-     * Get SQL schema
-     *
-     * @return string
-     */
-    protected function getSQLSchema(): string
-    {
-        if (!$this->getSupportForSchemas()) {
-            return '';
+        $tenantQuery = '';
+        if ($this->shareTables) {
+            $tenantQuery = 'AND _tenant = :_tenant';
         }
 
-        return "`{$this->getDefaultDatabase()}`.";
+        return "table_main._uid IN (
+                    SELECT _document
+                    FROM {$this->getSQLTable($collection . '_perms')}
+                    WHERE _permission IN (" . implode(', ', $roles) . ")
+                      AND _type = 'read'
+                      {$tenantQuery}
+                )";
     }
 
     /**
@@ -825,10 +879,11 @@ abstract class SQL extends Adapter
      *
      * @param string $name
      * @return string
+     * @throws DatabaseException
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->getSQLSchema()}`{$this->getNamespace()}_{$name}`";
+        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$this->filter($name)}`";
     }
 
     /**
@@ -865,4 +920,62 @@ abstract class SQL extends Adapter
             PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
     }
+
+    /**
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+    }
+
+    /**
+     * @return int
+     */
+    public function getMaxIndexLength(): int
+    {
+        return 768;
+    }
+
+    /**
+     * @param Query $query
+     * @return string
+     * @throws Exception
+     */
+    abstract protected function getSQLCondition(Query $query): string;
+
+    /**
+     * @param array<Query> $queries
+     * @param string $separator
+     * @return string
+     * @throws Exception
+     */
+    public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
+    {
+        $conditions = [];
+        foreach ($queries as $query) {
+
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
+            if($query->isNested()) {
+                $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
+            } else {
+                $conditions[] = $this->getSQLCondition($query);
+            }
+        }
+
+        $tmp = implode(' '. $separator .' ', $conditions);
+        return empty($tmp) ? '' : '(' . $tmp . ')';
+    }
+
+    /**
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'LIKE';
+    }
+
 }

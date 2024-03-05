@@ -232,7 +232,7 @@ class Database
      *
      * @var array<string, mixed>
      */
-    public const COLLECTION = [
+    protected const COLLECTION = [
         '$id' => self::METADATA,
         '$collection' => self::METADATA,
         'name' => 'collections',
@@ -743,7 +743,7 @@ class Database
          * Create array of attribute documents
          * @var array<Document> $attributes
          */
-        $attributes = array_map(function ($attribute) {
+        $attributes = \array_map(function ($attribute) {
             return new Document($attribute);
         }, self::COLLECTION['attributes']);
 

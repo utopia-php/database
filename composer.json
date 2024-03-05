@@ -32,6 +32,12 @@
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M",
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
+    "repositories": [
+      {
+        "type": "git",
+        "url": "https://github.com/utopia-php/mongo.git"
+      }
+    ],
     "require": {
         "ext-pdo": "*",
         "ext-mbstring": "*",

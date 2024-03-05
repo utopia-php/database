@@ -181,8 +181,8 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => self::VAR_STRING,
-            'size' => 36,
+            'type' => self::VAR_INTEGER,
+            'size' => 0,
             'required' => false,
             'default' => null,
             'signed' => true,

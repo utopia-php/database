@@ -6795,9 +6795,6 @@ abstract class Base extends TestCase
             'name' => 'Artist 3',
         ]));
 
-        \var_dump("Sleeping 2");
-        sleep(5);
-
         // Update to relate to created document
         $artist3 = static::getDatabase()->updateDocument(
             'artist',
@@ -6813,10 +6810,6 @@ abstract class Base extends TestCase
                 'price' => 29.99,
             ])])
         );
-
-
-        \var_dump("Sleeping 3");
-        sleep(5);
 
         $this->assertEquals('Album 3', $artist3->getAttribute('albums')[0]->getAttribute('name'));
         $artist3 = static::getDatabase()->getDocument('artist', 'artist3');

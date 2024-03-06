@@ -87,8 +87,6 @@ services:
     container_name: utopia-database-proxy
     networks:
       - database
-    ports:
-      - "8720:80"
     environment:
       - UTOPIA_DATA_API_SECRET=test-secret
       - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@database-proxy-mariadb:3306/utopiaTests

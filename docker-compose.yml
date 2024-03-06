@@ -12,7 +12,6 @@ services:
     volumes:
       - ./bin:/usr/src/code/bin
       - ./src:/usr/src/code/src
-      # - ./vendor/utopia-php/fetch:/usr/src/code/vendor/utopia-php/fetch
       - ./tests:/usr/src/code/tests
       - ./phpunit.xml:/usr/src/code/phpunit.xml
     ports:
@@ -84,7 +83,7 @@ services:
       - database
 
   database-proxy:
-    image: appwrite/database-proxy:0.1.4
+    image: appwrite/database-proxy:0.1.5
     container_name: utopia-database-proxy
     networks:
       - database

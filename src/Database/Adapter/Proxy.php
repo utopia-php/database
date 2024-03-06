@@ -56,10 +56,10 @@ abstract class Proxy extends Adapter
                 'x-utopia-secret' => $this->secret,
                 'x-utopia-database' => $this->database,
                 'x-utopia-namespace' => $this->getNamespace(),
-                'x-utopia-auth-roles' => \strval(\json_encode($roles) ?: ''),
+                'x-utopia-auth-roles' => \json_encode($roles) ?: '',
                 'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
                 'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
-                'x-utopia-timeouts' => \strval(\json_encode($this->timeouts) ?: ''),
+                'x-utopia-timeouts' => \json_encode($this->timeouts) ?: '',
                 'x-utopia-share-tables' => $this->shareTables ? 'true' : 'false',
                 'x-utopia-tenant' => \strval($this->tenant ?? ''),
                 'content-type' => 'application/json'

@@ -6784,10 +6784,6 @@ abstract class Base extends TestCase
         //Todo: This is failing
         $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
 
-
-        \var_dump("Sleeping 1");
-        sleep(5);
-
         // Create new document with no relationship
         $artist3 = static::getDatabase()->createDocument('artist', new Document([
             '$id' => 'artist3',

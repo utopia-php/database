@@ -83,7 +83,7 @@ services:
       - database
 
   database-proxy:
-    image: appwrite/database-proxy:0.1.0
+    image: appwrite/database-proxy:0.1.5
     container_name: utopia-database-proxy
     networks:
       - database

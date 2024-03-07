@@ -10,7 +10,6 @@ use Utopia\Database\Document;
 use Utopia\Fetch\Client;
 use Utopia\Database\Query;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Fetch\FetchException;
 
 abstract class Proxy extends Adapter
@@ -48,7 +47,7 @@ abstract class Proxy extends Adapter
      */
     private function query(string $query, array $params = []): mixed
     {
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
 
         $response = Client::fetch(
             url: $this->endpoint . '/queries',
@@ -57,8 +56,8 @@ abstract class Proxy extends Adapter
                 'x-utopia-database' => $this->database,
                 'x-utopia-namespace' => $this->getNamespace(),
                 'x-utopia-auth-roles' => \json_encode($roles) ?: '',
-                'x-utopia-auth-status' => Authorization::$status ? 'true' : 'false',
-                'x-utopia-auth-status-default' => Authorization::$statusDefault ? 'true' : 'false',
+                'x-utopia-auth-status' => $this->authorization->getStatus() ? 'true' : 'false',
+                'x-utopia-auth-status-default' => $this->authorization->getStatusDefault() ? 'true' : 'false',
                 'x-utopia-timeouts' => \json_encode($this->timeouts) ?: '',
                 'x-utopia-share-tables' => $this->shareTables ? 'true' : 'false',
                 'x-utopia-tenant' => \strval($this->tenant ?? ''),

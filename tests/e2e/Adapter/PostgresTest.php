@@ -27,7 +27,7 @@ class PostgresTest extends Base
     /**
      * @reture Adapter
      */
-    public static function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -44,7 +44,8 @@ class PostgresTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new Postgres($pdo), $cache);
+        $database = new Database(new Postgres($pdo), $cache, []);
+        $database->setAuthorization(self::$authorization);
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

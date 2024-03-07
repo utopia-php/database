@@ -130,7 +130,7 @@ class MariaDB extends SQL
         if ($this->sharedTables) {
             $sql .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
-				UNIQUE KEY _uid_tenant (_uid, _tenant),
+				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
 				KEY _tenant_id (_tenant, _id)

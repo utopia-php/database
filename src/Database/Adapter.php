@@ -130,7 +130,7 @@ abstract class Adapter
     }
 
     /**
-     * Set Share Tables.
+     * Set Shared Tables.
      *
      * Set whether to share tables between tenants
      *

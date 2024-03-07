@@ -688,12 +688,12 @@ class Database
      *
      * Set whether to share tables between tenants
      *
-     * @param bool $share
+     * @param bool $sharedTables
      * @return self
      */
-    public function setShareTables(bool $share): self
+    public function setSharedTables(bool $sharedTables): self
     {
-        $this->adapter->setSharedTables($share);
+        $this->adapter->setSharedTables($sharedTables);
 
         return $this;
     }

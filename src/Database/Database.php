@@ -445,6 +445,16 @@ class Database
     }
 
     /**
+     * Get instance of authorization
+     *
+     * @return Authorization
+     */
+    public function getAuthorization(): Authorization
+    {
+        return $this->authorization;
+    }
+
+    /**
      * Add listener to events
      *
      * @param string $event

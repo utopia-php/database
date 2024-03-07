@@ -164,6 +164,16 @@ class Authorization extends Validator
     }
 
     /**
+     * Get default status
+     *
+     * @return bool
+     */
+    public function getStatusDefault(): bool
+    {
+        return $this->statusDefault;
+    }
+
+    /**
      * Skip Authorization
      *
      * Skips authorization for the code to be executed inside the callback

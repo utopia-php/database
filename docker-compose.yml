@@ -82,5 +82,23 @@ services:
     networks:
       - database
 
+  database-proxy:
+    image: appwrite/database-proxy:0.1.5
+    container_name: utopia-database-proxy
+    networks:
+      - database
+    environment:
+      - UTOPIA_DATA_API_SECRET=test-secret
+      - UTOPIA_DATA_API_SECRET_CONNECTION=mariadb://root:password@database-proxy-mariadb:3306/utopiaTests
+
+  database-proxy-mariadb:
+    image: mariadb:10.11
+    container_name: utopia-database-proxy-mariadb
+    networks:
+      - database
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MARIADB_DATABASE=utopiaTests
+
 networks:
   database:

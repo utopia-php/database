@@ -1735,12 +1735,20 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
-        $documents = static::getDatabase()->find('documents');
+        $documents = static::getDatabase()->find(
+            'documents',
+            [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID
+        );
+
         $document = $documents[0];
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
 
         $document = static::getDatabase()->getDocument('documents', $document->getId());
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
     }
@@ -6013,7 +6021,7 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        $this->getDatabase()->createDocument('country', $doc);
+        $this->getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = $this->getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
@@ -6041,7 +6049,7 @@ abstract class Base extends TestCase
 
         $this->assertTrue($this->getDatabase()->deleteDocument('country', 'country1'));
 
-        $this->getDatabase()->createDocument('country', $doc);
+        $this->getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = $this->getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 

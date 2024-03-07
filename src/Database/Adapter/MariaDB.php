@@ -112,7 +112,14 @@ class MariaDB extends SQL
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
             }
 
-            $indexStrings[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+            $indexAttributes = \implode(", ", $indexAttributes);
+
+            if ($this->sharedTables && $indexType !== Database::INDEX_FULLTEXT) {
+                // Add tenant as first index column for best performance
+                $indexAttributes = "_tenant, {$indexAttributes}";
+            }
+
+            $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
         $sql = "

@@ -970,12 +970,6 @@ class Database
 
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
-        if ($id !== self::METADATA
-            && $this->adapter->getSharedTables()
-            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            return new Document();
-        }
-
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
 
         return $collection;

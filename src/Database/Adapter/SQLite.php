@@ -155,7 +155,7 @@ class SQLite extends MariaDB
         $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
         $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $name !== Database::METADATA) {
             $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
         }
 
@@ -601,7 +601,7 @@ class SQLite extends MariaDB
 			WHERE _document = :_uid
 		";
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= " AND _tenant = :_tenant";
         }
 
@@ -613,7 +613,7 @@ class SQLite extends MariaDB
         $permissionsStmt = $this->getPDO()->prepare($sql);
         $permissionsStmt->bindValue(':_uid', $document->getId());
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $permissionsStmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -684,7 +684,7 @@ class SQLite extends MariaDB
                 WHERE _document = :_uid
 			";
 
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $sql .= " AND _tenant = :_tenant";
             }
 
@@ -694,7 +694,7 @@ class SQLite extends MariaDB
             $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -756,7 +756,7 @@ class SQLite extends MariaDB
 			WHERE _uid = :_uid
 		";
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= " AND _tenant = :_tenant";
         }
 
@@ -766,7 +766,7 @@ class SQLite extends MariaDB
 
         $stmt->bindValue(':_uid', $document->getId());
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -879,7 +879,7 @@ class SQLite extends MariaDB
                         WHERE _document = :_uid
                     ";
 
-                    if ($this->sharedTables) {
+                    if ($this->sharedTables && $collection !== Database::METADATA) {
                         $sql .= " AND _tenant = :_tenant";
                     }
 
@@ -892,7 +892,7 @@ class SQLite extends MariaDB
 
                     $permissionsStmt->bindValue(':_uid', $document->getId());
 
-                    if ($this->sharedTables) {
+                    if ($this->sharedTables && $collection !== Database::METADATA) {
                         $permissionsStmt->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -926,7 +926,7 @@ class SQLite extends MariaDB
                             $removeBindValues[$bindKey] = $document->getId();
 
                             $tenantQuery = '';
-                            if ($this->sharedTables) {
+                            if ($this->sharedTables && $collection !== Database::METADATA) {
                                 $tenantQuery = ' AND _tenant = :_tenant';
                             }
 
@@ -1003,7 +1003,7 @@ class SQLite extends MariaDB
 
                 ";
 
-                if ($this->sharedTables) {
+                if ($this->sharedTables && $collection !== Database::METADATA) {
                     $sql .= "ON CONFLICT (_tenant, _uid) DO UPDATE SET $updateClause";
                 } else {
                     $sql .= "ON CONFLICT (_uid) DO UPDATE SET $updateClause";
@@ -1028,7 +1028,7 @@ class SQLite extends MariaDB
                         $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if ($this->sharedTables) {
+                    if ($this->sharedTables && $collection !== Database::METADATA) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1183,7 +1183,7 @@ class SQLite extends MariaDB
         $key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
         $attributes = implode(', ', $attributes);
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $attributes = "`_tenant` {$postfix}, {$attributes}";
         }
 

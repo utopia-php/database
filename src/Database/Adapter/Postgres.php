@@ -112,7 +112,7 @@ class Postgres extends SQL
                 PRIMARY KEY (_id)
             );
         ";
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $name !== Database::METADATA) {
             $sql .= "
 				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid));
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
@@ -145,7 +145,7 @@ class Postgres extends SQL
 				);   
 			";
 
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $name !== Database::METADATA) {
                 $sql .= "
 					CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
 				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
@@ -688,7 +688,7 @@ class Postgres extends SQL
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $attributes['_tenant'] = $this->tenant;
         }
 
@@ -920,7 +920,7 @@ class Postgres extends SQL
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $attributes['_tenant'] = $this->tenant;
         }
 
@@ -933,7 +933,7 @@ class Postgres extends SQL
 			WHERE _document = :_uid
 		";
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -945,7 +945,7 @@ class Postgres extends SQL
         $permissionsStmt = $this->getPDO()->prepare($sql);
         $permissionsStmt->bindValue(':_uid', $document->getId());
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $permissionsStmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1013,7 +1013,7 @@ class Postgres extends SQL
                 WHERE _document = :_uid
 			";
 
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $sql .= ' AND _tenant = :_tenant';
             }
 
@@ -1023,7 +1023,7 @@ class Postgres extends SQL
             $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1056,7 +1056,7 @@ class Postgres extends SQL
 
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1085,7 +1085,7 @@ class Postgres extends SQL
 			WHERE _uid = :_uid
 		";
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1095,7 +1095,7 @@ class Postgres extends SQL
 
         $stmt->bindValue(':_uid', $document->getId());
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1209,7 +1209,7 @@ class Postgres extends SQL
                         WHERE _document = :_uid
                     ";
 
-                    if ($this->sharedTables) {
+                    if ($this->sharedTables && $collection !== Database::METADATA) {
                         $sql .= ' AND _tenant = :_tenant';
                     }
 
@@ -1218,7 +1218,7 @@ class Postgres extends SQL
                     $permissionsStmt = $this->getPDO()->prepare($sql);
                     $permissionsStmt->bindValue(':_uid', $document->getId());
 
-                    if ($this->sharedTables) {
+                    if ($this->sharedTables && $collection !== Database::METADATA) {
                         $permissionsStmt->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1252,7 +1252,7 @@ class Postgres extends SQL
                             $removeBindValues[$bindKey] = $document->getId();
 
                             $tenantQuery = '';
-                            if ($this->sharedTables) {
+                            if ($this->sharedTables && $collection !== Database::METADATA) {
                                 $tenantQuery = ' AND _tenant = :_tenant';
                             }
 
@@ -1328,7 +1328,7 @@ class Postgres extends SQL
                     VALUES " . \implode(', ', $batchKeys) . "
                 ";
 
-                if ($this->sharedTables) {
+                if ($this->sharedTables && $collection !== Database::METADATA) {
                     $sql .= "ON CONFLICT (_tenant, LOWER(_uid)) DO UPDATE SET $updateClause";
                 } else {
                     $sql .= "ON CONFLICT (LOWER(_uid)) DO UPDATE SET $updateClause";
@@ -1352,7 +1352,7 @@ class Postgres extends SQL
                     foreach ($removeBindValues as $key => $value) {
                         $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    if ($this->sharedTables) {
+                    if ($this->sharedTables && $collection !== Database::METADATA) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1420,7 +1420,7 @@ class Postgres extends SQL
 			WHERE _uid = :_uid 
 		";
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1432,7 +1432,7 @@ class Postgres extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1459,7 +1459,7 @@ class Postgres extends SQL
 			WHERE _uid = :_uid
 		";
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1467,7 +1467,7 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1477,7 +1477,7 @@ class Postgres extends SQL
 		";
 
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1486,7 +1486,7 @@ class Postgres extends SQL
         $stmtPermissions = $this->getPDO()->prepare($sql);
         $stmtPermissions->bindValue(':_uid', $id);
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmtPermissions->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1616,7 +1616,7 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1645,7 +1645,7 @@ class Postgres extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1741,7 +1741,7 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1766,7 +1766,7 @@ class Postgres extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1804,7 +1804,7 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1832,7 +1832,7 @@ class Postgres extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 

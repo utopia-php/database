@@ -629,7 +629,7 @@ class Mongo extends Adapter
 
         $filters = ['_uid' => $id];
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -669,7 +669,7 @@ class Mongo extends Adapter
 
         $document->removeAttribute('$internalId');
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $document->setAttribute('$tenant', (string)$this->getTenant());
         }
 
@@ -707,7 +707,7 @@ class Mongo extends Adapter
         foreach ($documents as $document) {
             $document->removeAttribute('$internalId');
 
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $document->setAttribute('$tenant', (string)$this->getTenant());
             }
 
@@ -744,7 +744,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $name !== Database::METADATA) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -779,7 +779,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $document->getId();
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -814,7 +814,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->sharedTables) {
+            if ($this->sharedTables && $collection !== Database::METADATA) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -843,7 +843,7 @@ class Mongo extends Adapter
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -879,7 +879,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $id;
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -928,7 +928,7 @@ class Mongo extends Adapter
 
         $filters = $this->buildFilters($queries);
 
-        if ($this->sharedTables) {
+        if ($this->sharedTables && $collection !== Database::METADATA) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 

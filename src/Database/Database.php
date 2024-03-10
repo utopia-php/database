@@ -1025,10 +1025,6 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
-        }
-
         return $this->adapter->getSizeOfCollection($collection->getId());
     }
 
@@ -1048,10 +1044,6 @@ class Database
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
-        }
-
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -1108,10 +1100,6 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
-        }
-
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new DatabaseException('Collection not found');
         }
 

@@ -790,6 +790,9 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+                    if(!empty($document->getInternalId())) {
+                        $attributes['_id'] = $document->getInternalId();
+                    }
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {

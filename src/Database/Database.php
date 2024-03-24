@@ -3186,10 +3186,6 @@ class Database
 
             $this->relationshipWriteStack[] = $collection->getId();
 
-            if($relationType === Database::RELATION_MANY_TO_MANY && \gettype($value) !== 'array' && \gettype($value) !== "NULL"){
-                throw new DatabaseException('Invalid value for '. Database::RELATION_MANY_TO_MANY .' relationship must be an array');
-            }
-
             try {
                 switch (\gettype($value)) {
                     case 'array':
@@ -3261,6 +3257,11 @@ class Database
                             $twoWayKey,
                             $side,
                         );
+
+                        if($relationType === Database::RELATION_MANY_TO_MANY){
+                            throw new DatabaseException('Invalid value for '. Database::RELATION_MANY_TO_MANY .' relationship must be an array');
+                        }
+
                         break;
                     case 'NULL':
                         // TODO: This might need to depend on the relation type, to be either set to null or removed?

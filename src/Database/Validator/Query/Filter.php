@@ -70,6 +70,15 @@ class Filter extends Base
             return false;
         }
 
+        if(!\str_contains($attribute, '.') && isset($this->schema[$attribute]) && $this->schema[$attribute]['type'] === 'relationship') {
+            if(
+                $this->schema[$attribute]['options']['relationType'] == 'manyToOne' &&
+                $this->schema[$attribute]['options']['side'] == 'child'
+            ) {
+                return false;
+            }
+        }
+
         // isset check if for special symbols "." in the attribute name
         if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
             // For relationships, just validate the top level.

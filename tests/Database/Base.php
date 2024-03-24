@@ -75,6 +75,277 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    public function testDeleteRelatedCollection(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createCollection('c2');
+
+        // ONE_TO_ONE
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        // ONE_TO_MANY
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        // RELATION_MANY_TO_ONE
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        /**
+         * Query on relation Attribute error
+         * RELATION_MANY_TO_ONE c1 is a virtual columns
+         * mostly likely we have more of the same
+         */
+        static::getDatabase()->find('c2', [
+            Query::equal('c1', ['appwrite']),
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+    }
+
+    public function testPreserveDatesUpdate(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->setPreserveDates(true);
+
+        static::getDatabase()->createCollection('preserve_update_dates');
+
+        static::getDatabase()->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $doc1 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'attr1' => 'value1',
+        ]));
+
+        $doc2 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc2',
+            '$permissions' => [],
+            'attr1' => 'value2',
+        ]));
+
+        $doc3 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc3',
+            '$permissions' => [],
+            'attr1' => 'value3',
+        ]));
+
+        $newDate = '2000-01-01T10:00:00.000+00:00';
+
+        $doc1->setAttribute('$updatedAt', $newDate);
+        static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $doc1 = static::getDatabase()->getDocument('preserve_update_dates', 'doc1');
+        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
+
+        $doc2->setAttribute('$updatedAt', $newDate);
+        $doc3->setAttribute('$updatedAt', $newDate);
+        static::getDatabase()->updateDocuments('preserve_update_dates', [$doc2, $doc3], 2);
+
+        $doc2 = static::getDatabase()->getDocument('preserve_update_dates', 'doc2');
+        $doc3 = static::getDatabase()->getDocument('preserve_update_dates', 'doc3');
+        $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
+        $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
+
+        static::getDatabase()->deleteCollection('preserve_update_dates');
+
+        static::getDatabase()->setPreserveDates(false);
+
+        Authorization::reset();
+    }
+
+    public function testPreserveDatesCreate(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->setPreserveDates(true);
+
+        static::getDatabase()->createCollection('preserve_create_dates');
+
+        static::getDatabase()->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $date = '2000-01-01T10:00:00.000+00:00';
+
+        static::getDatabase()->createDocument('preserve_create_dates', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'attr1' => 'value1',
+            '$createdAt' => $date
+        ]));
+
+        static::getDatabase()->createDocuments('preserve_create_dates', [
+            new Document([
+                '$id' => 'doc2',
+                '$permissions' => [],
+                'attr1' => 'value2',
+                '$createdAt' => $date
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => [],
+                'attr1' => 'value3',
+                '$createdAt' => $date
+            ]),
+        ], 2);
+
+        $doc1 = static::getDatabase()->getDocument('preserve_create_dates', 'doc1');
+        $doc2 = static::getDatabase()->getDocument('preserve_create_dates', 'doc2');
+        $doc3 = static::getDatabase()->getDocument('preserve_create_dates', 'doc3');
+        $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
+        $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
+        $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
+
+        static::getDatabase()->deleteCollection('preserve_create_dates');
+
+        static::getDatabase()->setPreserveDates(false);
+
+        Authorization::reset();
+    }
+
     /**
      * @throws Exception|Throwable
      */

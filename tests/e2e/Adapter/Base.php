@@ -197,6 +197,15 @@ abstract class Base extends TestCase
             type: Database::RELATION_MANY_TO_ONE,
         );
 
+        /**
+         * Query on relation Attribute error
+         * RELATION_MANY_TO_ONE c1 is a virtual columns
+         * mostly likely we have more of the same
+         */
+        static::getDatabase()->find('c2', [
+            Query::equal('c1', ['appwrite']),
+        ]);
+
         $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
         $collection = static::getDatabase()->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));

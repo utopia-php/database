@@ -2882,7 +2882,7 @@ class Database
                             $side,
                         );
 
-                        if($relationType === Database::RELATION_MANY_TO_MANY){
+                        if($relationType === Database::RELATION_MANY_TO_MANY) {
                             throw new DatabaseException('Invalid value for '. Database::RELATION_MANY_TO_MANY .' relationship must be an array');
                         }
 

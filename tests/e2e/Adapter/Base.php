@@ -8658,6 +8658,24 @@ abstract class Base extends TestCase
             ],
             'name' => 'Student 4'
         ]));
+
+        try {
+            static::getDatabase()->createDocument('classes', new Document([
+                '$id' => 'class4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Class 4',
+                'number' => 4,
+                'students' => 'student4',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid value for manyToMany relationship must be an array', $e->getMessage());
+        }
+
         static::getDatabase()->createDocument('classes', new Document([
             '$id' => 'class4',
             '$permissions' => [

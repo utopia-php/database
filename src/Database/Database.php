@@ -3186,6 +3186,10 @@ class Database
 
             $this->relationshipWriteStack[] = $collection->getId();
 
+            if($relationType === Database::RELATION_MANY_TO_MANY && \gettype($value) !== 'array' && \gettype($value) !== "NULL"){
+                throw new DatabaseException('Invalid value for '. Database::RELATION_MANY_TO_MANY .' relationship must be an array');
+            }
+
             try {
                 switch (\gettype($value)) {
                     case 'array':

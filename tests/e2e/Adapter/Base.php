@@ -200,7 +200,7 @@ abstract class Base extends TestCase
         /**
          * Query on relation Attribute error
          * RELATION_MANY_TO_ONE c1 is a virtual columns
-         * mostly likely we have more of the same
+         * Most likely we have more of the same
          */
         static::getDatabase()->find('c2', [
             Query::equal('c1', ['appwrite']),

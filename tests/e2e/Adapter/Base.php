@@ -197,6 +197,15 @@ abstract class Base extends TestCase
             type: Database::RELATION_MANY_TO_ONE,
         );
 
+        /**
+         * Query on relation Attribute error
+         * RELATION_MANY_TO_ONE c1 is a virtual columns
+         * Most likely we have more of the same
+         */
+        static::getDatabase()->find('c2', [
+            Query::equal('c1', ['virtual_attribute']),
+        ]);
+
         $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
         $collection = static::getDatabase()->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
@@ -8658,6 +8667,24 @@ abstract class Base extends TestCase
             ],
             'name' => 'Student 4'
         ]));
+
+        try {
+            static::getDatabase()->createDocument('classes', new Document([
+                '$id' => 'class4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Class 4',
+                'number' => 4,
+                'students' => 'student4',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid value for manyToMany relationship must be an array', $e->getMessage());
+        }
+
         static::getDatabase()->createDocument('classes', new Document([
             '$id' => 'class4',
             '$permissions' => [

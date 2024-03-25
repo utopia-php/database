@@ -27,6 +27,19 @@ class Filter extends Base
     public function __construct(array $attributes = [], int $maxValuesCount = 100)
     {
         foreach ($attributes as $attribute) {
+
+            /**
+             * Remove virtual attributes
+             * todo: do we want to remove virtual attributes or check like later on in code?
+             */
+            if(
+                $attribute->getAttribute('type') === 'relationship' &&
+                $attribute->getAttribute('options')['relationType'] === 'manyToOne' &&
+                $attribute->getAttribute('options')['side'] === 'child'
+            ){
+                continue;
+            }
+
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }
 

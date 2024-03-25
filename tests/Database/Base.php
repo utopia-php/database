@@ -200,7 +200,7 @@ abstract class Base extends TestCase
          * Most likely we have more of the same
          */
         static::getDatabase()->find('c2', [
-            Query::equal('c1', ['appwrite']),
+            Query::equal('c1', ['virtual_attribute']),
         ]);
 
         $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));

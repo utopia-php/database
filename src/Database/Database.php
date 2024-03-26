@@ -750,6 +750,8 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
+        \var_dump('CC2' . $id);
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];

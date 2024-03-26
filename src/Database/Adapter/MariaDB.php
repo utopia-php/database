@@ -73,6 +73,7 @@ class MariaDB extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
+        \var_dump('CC1' . $name);
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);

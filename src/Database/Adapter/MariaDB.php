@@ -103,13 +103,19 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
+
+                \var_dump($attribute);
                 $indexAttribute = match ($attribute) {
                     '$id' => '_uid',
                     '$createdAt' => '_createdAt',
                     '$updatedAt' => '_updatedAt',
                     default => $attribute
                 };
+                \var_dump($indexAttribute);
                 $indexAttribute = $this->filter($indexAttribute);
+
+                \var_dump($indexAttribute);
+                \var_dump('-------');
 
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';

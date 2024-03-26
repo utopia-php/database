@@ -750,8 +750,6 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
-        \var_dump('CC2' . $id);
-
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -761,15 +759,11 @@ class Database
             throw new InvalidArgumentException($validator->getDescription());
         }
 
-        \var_dump("Aftr permission check");
-
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
-
-        \var_dump("Aftr getting collection");
 
         $collection = new Document([
             '$id' => ID::custom($id),
@@ -779,8 +773,6 @@ class Database
             'indexes' => $indexes,
             'documentSecurity' => $documentSecurity
         ]);
-
-        \var_dump("Before validator");
 
         $validator = new IndexValidator(
             $attributes,
@@ -792,12 +784,7 @@ class Database
             }
         }
 
-        \var_dump("After validator");
-
         $this->adapter->createCollection($id, $attributes, $indexes);
-
-
-        \var_dump("Aftr adapter call");
 
         if ($id === self::METADATA) {
             return new Document($this->collection);

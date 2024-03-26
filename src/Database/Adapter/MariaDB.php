@@ -73,7 +73,6 @@ class MariaDB extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        \var_dump('CC1' . $name);
         $database = $this->getDefaultDatabase();
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
@@ -105,18 +104,13 @@ class MariaDB extends SQL
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
 
-                \var_dump($attribute);
                 $indexAttribute = match ($attribute) {
                     '$id' => '_uid',
                     '$createdAt' => '_createdAt',
                     '$updatedAt' => '_updatedAt',
                     default => $attribute
                 };
-                \var_dump($indexAttribute);
                 $indexAttribute = $this->filter($indexAttribute);
-
-                \var_dump($indexAttribute);
-                \var_dump('-------');
 
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';

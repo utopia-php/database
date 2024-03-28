@@ -715,9 +715,8 @@ class MariaDB extends SQL
      */
     public function createDocument(string $collection, Document $document): Document
     {
-
         try {
-            // beginTransaction must wrap prepare statments
+            // beginTransaction must wrap prepare statements
             $this->getPDO()->beginTransaction();
 
             $attributes = $document->getAttributes();
@@ -755,7 +754,7 @@ class MariaDB extends SQL
             $sql = "
 			INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
 			VALUES ({$columnNames} :_uid)
-		";
+			";
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
 
@@ -830,9 +829,7 @@ class MariaDB extends SQL
             $this->getPDO()->commit();
         } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
-                var_dump("---- rollBack before ---- ");
                 $this->getPDO()->rollBack();
-                var_dump("---- rollBack after ---- ");
             }
 
             if($e instanceof PDOException) {

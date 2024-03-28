@@ -715,105 +715,110 @@ class MariaDB extends SQL
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        $attributes = $document->getAttributes();
-        $attributes['_createdAt'] = $document->getCreatedAt();
-        $attributes['_updatedAt'] = $document->getUpdatedAt();
-        $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-        if ($this->shareTables) {
-            $attributes['_tenant'] = $this->tenant;
-        }
+        try {
+            // beginTransaction must wrap prepare statments
+            $this->getPDO()->beginTransaction();
 
-        $name = $this->filter($collection);
-        $columns = '';
-        $columnNames = '';
+            $attributes = $document->getAttributes();
+            $attributes['_createdAt'] = $document->getCreatedAt();
+            $attributes['_updatedAt'] = $document->getUpdatedAt();
+            $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-        /**
-         * Insert Attributes
-         */
-        $bindIndex = 0;
-        foreach ($attributes as $attribute => $value) {
-            $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`, ";
-            $columnNames .= ':' . $bindKey . ', ';
-            $bindIndex++;
-        }
+            if ($this->shareTables) {
+                $attributes['_tenant'] = $this->tenant;
+            }
 
-        // Insert internal ID if set
-        if (!empty($document->getInternalId())) {
-            $bindKey = '_id';
-            $columns .= "_id, ";
-            $columnNames .= ':' . $bindKey . ', ';
-        }
+            $name = $this->filter($collection);
+            $columns = '';
+            $columnNames = '';
 
-        $sql = "
+            /**
+             * Insert Attributes
+             */
+            $bindIndex = 0;
+            foreach ($attributes as $attribute => $value) {
+                $column = $this->filter($attribute);
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "`{$column}`, ";
+                $columnNames .= ':' . $bindKey . ', ';
+                $bindIndex++;
+            }
+
+            // Insert internal ID if set
+            if (!empty($document->getInternalId())) {
+                $bindKey = '_id';
+                $columns .= "_id, ";
+                $columnNames .= ':' . $bindKey . ', ';
+            }
+
+            $sql = "
 			INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
 			VALUES ({$columnNames} :_uid)
 		";
 
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
+            $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_uid', $document->getId());
+            $stmt = $this->getPDO()->prepare($sql);
 
-        if (!empty($document->getInternalId())) {
-            $stmt->bindValue(':_id', $document->getInternalId());
-        }
+            $stmt->bindValue(':_uid', $document->getId());
 
-        $attributeIndex = 0;
-        foreach ($attributes as $value) {
-            if (is_array($value)) {
-                $value = json_encode($value);
+            if (!empty($document->getInternalId())) {
+                $stmt->bindValue(':_id', $document->getInternalId());
             }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $value = (is_bool($value)) ? (int)$value : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
-        }
-
-        $permissions = [];
-        foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
-                $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
-
-                if ($this->shareTables) {
-                    $permission .= ", :_tenant)";
-                } else {
-                    $permission .= ")";
+            $attributeIndex = 0;
+            foreach ($attributes as $value) {
+                if (is_array($value)) {
+                    $value = json_encode($value);
                 }
 
-                $permissions[] = $permission;
+                $bindKey = 'key_' . $attributeIndex;
+                $value = (is_bool($value)) ? (int)$value : $value;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
             }
-        }
 
-        if (!empty($permissions)) {
-            $permissions = \implode(', ', $permissions);
+            $permissions = [];
+            foreach (Database::PERMISSIONS as $type) {
+                foreach ($document->getPermissionsByType($type) as $permission) {
+                    $permission = \str_replace('"', '', $permission);
+                    $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
 
-            $sqlPermissions = "
+                    if ($this->shareTables) {
+                        $permission .= ", :_tenant)";
+                    } else {
+                        $permission .= ")";
+                    }
+
+                    $permissions[] = $permission;
+                }
+            }
+
+            if (!empty($permissions)) {
+                $permissions = \implode(', ', $permissions);
+
+                $sqlPermissions = "
 				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
 			";
 
-            if ($this->shareTables) {
-                $sqlPermissions .= ', _tenant)';
-            } else {
-                $sqlPermissions .= ")";
+                if ($this->shareTables) {
+                    $sqlPermissions .= ', _tenant)';
+                } else {
+                    $sqlPermissions .= ")";
+                }
+
+                $sqlPermissions .=	" VALUES {$permissions}";
+                $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+                if ($this->shareTables) {
+                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                }
             }
 
-            $sqlPermissions .=	" VALUES {$permissions}";
-            $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
-            $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
-            if ($this->shareTables) {
-                $stmtPermissions->bindValue(':_tenant', $this->tenant);
-            }
-        }
-
-        try {
-            $this->getPDO()->beginTransaction();
             $stmt->execute();
 
             $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
@@ -824,7 +829,11 @@ class MariaDB extends SQL
 
             $this->getPDO()->commit();
         } catch (\Throwable $e) {
-            $this->getPDO()->rollBack();
+            if($this->getPDO()->inTransaction()) {
+                var_dump("---- rollBack before ---- ");
+                $this->getPDO()->rollBack();
+                var_dump("---- rollBack after ---- ");
+            }
 
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
@@ -955,7 +964,9 @@ class MariaDB extends SQL
 
             $this->getPDO()->commit();
         } catch (\Throwable $e) {
-            $this->getPDO()->rollBack();
+            if($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
 
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
@@ -1206,7 +1217,9 @@ class MariaDB extends SQL
 
             $this->getPDO()->commit();
         } catch (\Throwable $e) {
-            $this->getPDO()->rollBack();
+            if($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
 
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
@@ -1469,7 +1482,9 @@ class MariaDB extends SQL
 
             $this->getPDO()->commit();
         } catch (\Throwable $e) {
-            $this->getPDO()->rollBack();
+            if($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
 
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
@@ -1598,7 +1613,10 @@ class MariaDB extends SQL
 
             $this->getPDO()->commit();
         } catch (\Throwable $th) {
-            $this->getPDO()->rollBack();
+            if($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
+
             throw new DatabaseException($th->getMessage());
         }
 

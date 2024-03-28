@@ -1554,49 +1554,48 @@ class MariaDB extends SQL
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $name = $this->filter($collection);
+        try {
+            // beginTransaction must wrap prepare statements
+            $this->getPDO()->beginTransaction();
 
-        $sql = "
+            $name = $this->filter($collection);
+
+            $sql = "
 		    DELETE FROM {$this->getSQLTable($name)} 
 		    WHERE _uid = :_uid
-		";
+		    ";
 
-        if ($this->shareTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
+            if ($this->shareTables) {
+                $sql .= ' AND _tenant = :_tenant';
+            }
 
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+            $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
+            $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_uid', $id);
+            $stmt->bindValue(':_uid', $id);
 
-        if ($this->shareTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
+            if ($this->shareTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
+            }
 
-        $sql = "
+            $sql = "
 			DELETE FROM {$this->getSQLTable($name . '_perms')} 
 		    WHERE _document = :_uid
-		";
+		    ";
 
-        if ($this->shareTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
+            if ($this->shareTables) {
+                $sql .= ' AND _tenant = :_tenant';
+            }
 
-        $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
-        $stmtPermissions = $this->getPDO()->prepare($sql);
-        $stmtPermissions->bindValue(':_uid', $id);
+            $stmtPermissions = $this->getPDO()->prepare($sql);
+            $stmtPermissions->bindValue(':_uid', $id);
 
-        if ($this->shareTables) {
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
-        }
-
-        $deleted = false;
-
-        try {
-            $this->getPDO()->beginTransaction();
+            if ($this->shareTables) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
 
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');

@@ -354,22 +354,25 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
         }
 
-        /**
-         * RELATION_MANY_TO_MANY is a virtual columns
-         * Most likely we have more of the same
-         */
         try {
             static::getDatabase()->find('v1', [
                 Query::equal('students', ['virtual_attribute']),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Cannot query on virtual relations attributes', $e->getMessage());
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
-        $this->assertEquals(true, false);
-
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('classes', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+        }
     }
 
     public function testPreserveDatesUpdate(): void

@@ -269,8 +269,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            var_dump($e);
-            $this->assertTrue($e instanceof QueryException);
+            $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
         }
 
@@ -280,8 +279,8 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -306,6 +305,16 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -345,8 +354,6 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
         }
 
-        var_dump(static::getDatabase()->getCollection('v1'));
-
         /**
          * RELATION_MANY_TO_MANY is a virtual columns
          * Most likely we have more of the same
@@ -360,7 +367,6 @@ abstract class Base extends TestCase
             $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Cannot query on virtual relations attributes', $e->getMessage());
         }
-
 
         $this->assertEquals(true, false);
 

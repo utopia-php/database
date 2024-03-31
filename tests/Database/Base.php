@@ -194,15 +194,6 @@ abstract class Base extends TestCase
             type: Database::RELATION_MANY_TO_ONE,
         );
 
-        /**
-         * Query on relation Attribute error
-         * RELATION_MANY_TO_ONE c1 is a virtual columns
-         * Most likely we have more of the same
-         */
-        static::getDatabase()->find('c2', [
-            Query::equal('c1', ['virtual_attribute']),
-        ]);
-
         $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
         $collection = static::getDatabase()->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
@@ -245,6 +236,131 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
+    }
+
+    public function testVirtualRelationsAttributes(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('v1');
+        static::getDatabase()->createCollection('v2');
+
+        /**
+         * RELATION_ONE_TO_MANY
+         * No attribute is created in V1 collection
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$permissions' => [],
+                'v2' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            var_dump($e);
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v1', [
+                Query::equal('v2', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_MANY_TO_ONE
+         * No attribute is created in V2 collection
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$permissions' => [],
+                'v1' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_MANY_TO_MANY
+         * No attribute on V1/v2 collections only on junction table
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'students',
+            twoWayKey: 'classes'
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$permissions' => [],
+                'students' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$permissions' => [],
+                'classes' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+        }
+
+        var_dump(static::getDatabase()->getCollection('v1'));
+
+        /**
+         * RELATION_MANY_TO_MANY is a virtual columns
+         * Most likely we have more of the same
+         */
+        try {
+            static::getDatabase()->find('v1', [
+                Query::equal('students', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Cannot query on virtual relations attributes', $e->getMessage());
+        }
+
+
+        $this->assertEquals(true, false);
+
     }
 
     public function testPreserveDatesUpdate(): void
@@ -8079,23 +8195,6 @@ abstract class Base extends TestCase
             ],
             'name' => 'Student 4'
         ]));
-
-        try {
-            static::getDatabase()->createDocument('classes', new Document([
-                '$id' => 'class4',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'name' => 'Class 4',
-                'number' => 4,
-                'students' => 'student4',
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Invalid value for manyToMany relationship must be an array', $e->getMessage());
-        }
 
         static::getDatabase()->createDocument('classes', new Document([
             '$id' => 'class4',

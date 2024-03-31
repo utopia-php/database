@@ -3245,6 +3245,15 @@ class Database
                         $document->setAttribute($key, $relatedId);
                         break;
                     case 'string':
+
+//                        if($relationType === Database::RELATION_ONE_TO_MANY) {
+//                            var_dump("in in in in in in in in ");
+//                        }
+//
+//                        if($relationType === Database::RELATION_MANY_TO_MANY) {
+//                            throw new DatabaseException('Invalid value for '. Database::RELATION_MANY_TO_MANY .' relationship must be an array');
+//                        }
+
                         // Single document ID
                         $this->relateDocumentsById(
                             $collection,
@@ -3257,10 +3266,6 @@ class Database
                             $twoWayKey,
                             $side,
                         );
-
-                        if($relationType === Database::RELATION_MANY_TO_MANY) {
-                            throw new DatabaseException('Invalid value for '. Database::RELATION_MANY_TO_MANY .' relationship must be an array');
-                        }
 
                         break;
                     case 'NULL':

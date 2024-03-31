@@ -28,17 +28,17 @@ class Filter extends Base
     {
         foreach ($attributes as $attribute) {
 
-            /**
-             * Remove virtual attributes
-             * todo: do we want to remove virtual attributes or check like later on in code?
-             */
-            if(
-                $attribute->getAttribute('type') === 'relationship' &&
-                $attribute->getAttribute('options')['relationType'] === 'manyToOne' &&
-                $attribute->getAttribute('options')['side'] === 'child'
-            ){
-                continue;
-            }
+//            /**
+//             * Remove virtual attributes
+//             * todo: do we want to remove virtual attributes or check like later on in code?
+//             */
+//            if(
+//                $attribute->getAttribute('type') === 'relationship' &&
+//                $attribute->getAttribute('options')['relationType'] === 'manyToOne' &&
+//                $attribute->getAttribute('options')['side'] === 'child'
+//            ){
+//                continue;
+//            }
 
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }
@@ -86,15 +86,6 @@ class Filter extends Base
     {
         if (!$this->isValidAttribute($attribute)) {
             return false;
-        }
-
-        if(!\str_contains($attribute, '.') && isset($this->schema[$attribute]) && $this->schema[$attribute]['type'] === 'relationship'){
-            if(
-                $this->schema[$attribute]['options']['relationType'] == 'manyToOne' &&
-                $this->schema[$attribute]['options']['side'] == 'child'
-            ){
-                return false;
-            }
         }
 
         // isset check if for special symbols "." in the attribute name
@@ -169,6 +160,25 @@ class Filter extends Base
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;
+        }
+
+        if($attributeSchema['type'] === 'relationship'){
+            $options = $attributeSchema['options'];
+            var_dump(" ====== Filter validator relationship ====== ");
+            var_dump($attributeSchema);
+            var_dump($options);
+            if($options['relationType'] === Database::RELATION_MANY_TO_MANY){
+                var_dump(" ====== Filter validator relationship RELATION_MANY_TO_MANY ====== ");
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+
+            if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === 'parent'){
+                var_dump(" ====== Filter validator relationship RELATION_ONE_TO_MANY ====== ");
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+
         }
 
         return true;

@@ -4507,8 +4507,10 @@ class Database
 
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
+                        // todo? Do we need to skip relations here:
                         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
+                        // todo? What can be the issue here ? could be $related is empty?
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $related->getId(),

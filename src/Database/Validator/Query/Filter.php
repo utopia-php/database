@@ -118,6 +118,7 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_RELATIONSHIP:
+                    $validator = new Text(255, 0); // The query is always on uid
                     break;
                 default:
                     $this->message = 'Unknown Data type';

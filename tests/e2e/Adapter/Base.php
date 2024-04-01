@@ -78,6 +78,70 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+//
+//    public function testShmuelTestDeleteDocumentSetNullMtutation(): void
+//    {
+//        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+//            $this->expectNotToPerformAssertions();
+//            return;
+//        }
+//
+//        static::getDatabase()->createCollection('review');
+//        static::getDatabase()->createCollection('movie');
+//        static::getDatabase()->createCollection('likes');
+//
+//        static::getDatabase()->createRelationship(
+//            collection: 'review',
+//            relatedCollection: 'movie',
+//            type: Database::RELATION_MANY_TO_ONE,
+//            twoWayKey: 'reviews',
+//            onDelete: Database::RELATION_MUTATE_SET_NULL
+//        );
+//
+//        static::getDatabase()->createRelationship(
+//            collection: 'review',
+//            relatedCollection: 'likes',
+//            type: Database::RELATION_ONE_TO_MANY,
+//            twoWayKey: 'review',
+//            onDelete: Database::RELATION_MUTATE_SET_NULL
+//        );
+//
+//        var_dump(static::getDatabase()->getCollection('review'));
+//
+//        $review1 = static::getDatabase()->createDocument('review', new Document([
+//            '$id' => 'review1',
+//            '$permissions' => [
+//                Permission::read(Role::any()),
+//                Permission::update(Role::any()),
+//                Permission::delete(Role::any()),
+//            ],
+//            'likes' => [
+//                [
+//                    '$id' => 'like1',
+//                    '$permissions' => [
+//                        Permission::read(Role::any()),
+//                        Permission::update(Role::any()),
+//                        Permission::delete(Role::any()),
+//                    ],
+//                ]
+//            ],
+//            'movie' => [
+//                '$id' => 'movie1',
+//                '$permissions' => [
+//                    Permission::read(Role::any()),
+//                    Permission::update(Role::any()),
+//                    Permission::delete(Role::any()),
+//                ],
+//            ],
+//        ]));
+//
+//        static::getDatabase()->deleteDocument('movie', 'movie1');
+//
+//        $this->assertEquals('shmuel', 'fogel');
+//
+//        var_dump($review1);
+//    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -261,6 +325,15 @@ abstract class Base extends TestCase
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true
         );
+
+        static::getDatabase()->createDocument('v1', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'v2' => [ // This supposes to be an array of array not an object
+                '$id' => 'test',
+                '$permissions' => [],
+            ],
+        ]));
 
         try {
             static::getDatabase()->createDocument('v1', new Document([
@@ -7858,9 +7931,9 @@ abstract class Base extends TestCase
             id: 'newMovie',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
-
         // Delete child, set parent relationship to null
         static::getDatabase()->deleteDocument('movie', 'movie1');
+        $this->assertEquals(111, 222);
 
         // Check relation was set to null
         $review1 = static::getDatabase()->getDocument('review', 'review1');

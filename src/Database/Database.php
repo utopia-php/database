@@ -3073,7 +3073,6 @@ class Database
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
         }
-
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {
@@ -3186,6 +3185,10 @@ class Database
 
             $this->relationshipWriteStack[] = $collection->getId();
 
+var_dump($value);
+var_dump(gettype($value));
+var_dump('---');
+
             try {
                 switch (\gettype($value)) {
                     case 'array':
@@ -3228,6 +3231,11 @@ class Database
                         $document->removeAttribute($key);
                         break;
                     case 'object':
+
+                        var_dump($value);
+                        var_dump(gettype($value));
+                        var_dump('+++++++++++++++++++');
+
                         if (!$value instanceof Document) {
                             throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
@@ -4507,10 +4515,11 @@ class Database
 
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
-                        // todo? Do we need to skip relations here:
+                        // todo? Do we need to skip relations here, this will resolve relationships, and later on try to update the whole Document?
                         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
-                        // todo? What can be the issue here ? could be $related is empty?
+                        // todo: This is causing the error, why are we updating the whole $related Document and not only the $twoWayKey attribute
+                        // todo: Could not reproduce the error when twoWay is false and side is child
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $related->getId(),

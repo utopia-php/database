@@ -270,6 +270,20 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
         }
 
+        /**
+         * Here we get this error: Unknown PDO Type for array
+         * Added in Filter.php Text validator for relationship
+         */
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', [['doc1']]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "v1"', $e->getMessage());
+        }
+
         try {
             static::getDatabase()->find('v1', [
                 Query::equal('v2', ['virtual_attribute']),

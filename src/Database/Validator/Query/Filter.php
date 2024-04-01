@@ -95,8 +95,39 @@ class Filter extends Base
                 default => gettype($value) === $attributeType
             };
 
-            if (!$condition) {
-                $this->message = 'Query type does not match expected: ' . $attributeType;
+            $validator = null;
+
+            switch ($attributeType) {
+                case Database::VAR_STRING:
+                    $validator = new Text(0, 0);
+                    break;
+
+                case Database::VAR_INTEGER:
+                    $validator = new Integer();
+                    break;
+
+                case Database::VAR_FLOAT:
+                    $validator = new FloatValidator();
+                    break;
+
+                case Database::VAR_BOOLEAN:
+                    $validator = new Boolean();
+                    break;
+
+                case Database::VAR_DATETIME:
+                    $validator = new DatetimeValidator();
+                    break;
+
+                case Database::VAR_RELATIONSHIP:
+                    $validator = new Text(255, 0); // The query is always on uid
+                    break;
+                default:
+                    $this->message = 'Unknown Data type';
+                    return false;
+            }
+
+            if (!\is_null($validator) && !$validator->isValid($value)) {
+                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
                 return false;
             }
         }

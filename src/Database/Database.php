@@ -3185,13 +3185,6 @@ class Database
 
             $this->relationshipWriteStack[] = $collection->getId();
 
-//            var_dump('++++++++++++++++++++++++');
-//            var_dump($value);
-//            var_dump(gettype($value));
-//            var_dump($relationType);
-//            var_dump($side);
-//            var_dump('++++++++++++++++++++++++');
-
             try {
                 switch (\gettype($value)) {
                     case 'array':

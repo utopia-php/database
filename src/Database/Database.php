@@ -2813,12 +2813,10 @@ class Database
             try {
                 switch (\gettype($value)) {
                     case 'array':
-                        if($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) {
-                            throw new DatabaseException('Invalid relationship value. Must be either a string or an object. Array given.');
-                        }
-
-                        if($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) {
-                            throw new DatabaseException('Invalid relationship value. Must be either a string or an object. Array given.');
+                        if(($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE)) {
+                            throw new DatabaseException('Invalid relationship value. Must be either a document ID or a document, array given.');
                         }
 
                         // List of documents or IDs
@@ -2865,16 +2863,10 @@ class Database
                             throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
 
-                        if($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) {
-                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs. Object given.');
-                        }
-
-                        if($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) {
-                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs. Object given.');
-                        }
-
-                        if($relationType === Database::RELATION_MANY_TO_MANY) {
-                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs. Object given.');
+                        if(($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
+                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
+                        ($relationType === Database::RELATION_MANY_TO_MANY)) {
+                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document given.');
                         }
 
                         $relatedId = $this->relateDocuments(
@@ -2892,16 +2884,10 @@ class Database
                         break;
 
                     case 'string':
-                        if($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) {
-                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs. String given.');
-                        }
-
-                        if($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) {
-                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs. String given.');
-                        }
-
-                        if($relationType === Database::RELATION_MANY_TO_MANY) {
-                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs. String given.');
+                        if(($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
+                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
+                        ($relationType === Database::RELATION_MANY_TO_MANY)) {
+                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.');
                         }
 
                         // Single document ID

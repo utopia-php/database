@@ -7933,6 +7933,7 @@ abstract class Base extends TestCase
             id: 'newMovie',
             onDelete: Database::RELATION_MUTATE_SET_NULL
         );
+
         // Delete child, set parent relationship to null
         static::getDatabase()->deleteDocument('movie', 'movie1');
 

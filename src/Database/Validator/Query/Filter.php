@@ -126,7 +126,7 @@ class Filter extends Base
                     return false;
             }
 
-            if (!\is_null($validator) && !$validator->isValid($value)) {
+            if (!$validator->isValid($value)) {
                 $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
                 return false;
             }

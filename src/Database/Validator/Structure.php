@@ -245,25 +245,6 @@ class Structure extends Validator
             }
 
             if($type === Database::VAR_RELATIONSHIP) {
-                $options = $attribute['options'] ?? [];
-                $relationType = $options['relationType'];
-                $side = $options['side'];
-
-                if($relationType === Database::RELATION_MANY_TO_ONE && $side === 'child' && gettype($value) === 'string') {
-                    $this->message = 'Invalid value for Relationship must be array '.gettype($value).' given';
-                    return false;
-                }
-
-                if($relationType === Database::RELATION_ONE_TO_MANY && $side === 'parent' && gettype($value) === 'string') {
-                    $this->message = 'Invalid value for Relationship must be array '.gettype($value).' given';
-                    return false;
-                }
-
-                if($relationType === Database::RELATION_MANY_TO_MANY && gettype($value) === 'string') {
-                    $this->message = 'Invalid value for Relationship must be array '.gettype($value).' given';
-                    return false;
-                }
-
                 continue;
             }
 

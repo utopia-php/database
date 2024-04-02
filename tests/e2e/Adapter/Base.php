@@ -78,69 +78,69 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
-//
-//    public function testShmuelTestDeleteDocumentSetNullMtutation(): void
-//    {
-//        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
-//            $this->expectNotToPerformAssertions();
-//            return;
-//        }
-//
-//        static::getDatabase()->createCollection('review');
-//        static::getDatabase()->createCollection('movie');
-//        static::getDatabase()->createCollection('likes');
-//
-//        static::getDatabase()->createRelationship(
-//            collection: 'review',
-//            relatedCollection: 'movie',
-//            type: Database::RELATION_MANY_TO_ONE,
-//            twoWayKey: 'reviews',
-//            onDelete: Database::RELATION_MUTATE_SET_NULL
-//        );
-//
-//        static::getDatabase()->createRelationship(
-//            collection: 'review',
-//            relatedCollection: 'likes',
-//            type: Database::RELATION_ONE_TO_MANY,
-//            twoWayKey: 'review',
-//            onDelete: Database::RELATION_MUTATE_SET_NULL
-//        );
-//
-//        var_dump(static::getDatabase()->getCollection('review'));
-//
-//        $review1 = static::getDatabase()->createDocument('review', new Document([
-//            '$id' => 'review1',
-//            '$permissions' => [
-//                Permission::read(Role::any()),
-//                Permission::update(Role::any()),
-//                Permission::delete(Role::any()),
-//            ],
-//            'likes' => [
-//                [
-//                    '$id' => 'like1',
-//                    '$permissions' => [
-//                        Permission::read(Role::any()),
-//                        Permission::update(Role::any()),
-//                        Permission::delete(Role::any()),
-//                    ],
-//                ]
-//            ],
-//            'movie' => [
-//                '$id' => 'movie1',
-//                '$permissions' => [
-//                    Permission::read(Role::any()),
-//                    Permission::update(Role::any()),
-//                    Permission::delete(Role::any()),
-//                ],
-//            ],
-//        ]));
-//
-//        static::getDatabase()->deleteDocument('movie', 'movie1');
-//
-//        $this->assertEquals('shmuel', 'fogel');
-//
-//        var_dump($review1);
-//    }
+    //
+    //    public function testShmuelTestDeleteDocumentSetNullMtutation(): void
+    //    {
+    //        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+    //            $this->expectNotToPerformAssertions();
+    //            return;
+    //        }
+    //
+    //        static::getDatabase()->createCollection('review');
+    //        static::getDatabase()->createCollection('movie');
+    //        static::getDatabase()->createCollection('likes');
+    //
+    //        static::getDatabase()->createRelationship(
+    //            collection: 'review',
+    //            relatedCollection: 'movie',
+    //            type: Database::RELATION_MANY_TO_ONE,
+    //            twoWayKey: 'reviews',
+    //            onDelete: Database::RELATION_MUTATE_SET_NULL
+    //        );
+    //
+    //        static::getDatabase()->createRelationship(
+    //            collection: 'review',
+    //            relatedCollection: 'likes',
+    //            type: Database::RELATION_ONE_TO_MANY,
+    //            twoWayKey: 'review',
+    //            onDelete: Database::RELATION_MUTATE_SET_NULL
+    //        );
+    //
+    //        var_dump(static::getDatabase()->getCollection('review'));
+    //
+    //        $review1 = static::getDatabase()->createDocument('review', new Document([
+    //            '$id' => 'review1',
+    //            '$permissions' => [
+    //                Permission::read(Role::any()),
+    //                Permission::update(Role::any()),
+    //                Permission::delete(Role::any()),
+    //            ],
+    //            'likes' => [
+    //                [
+    //                    '$id' => 'like1',
+    //                    '$permissions' => [
+    //                        Permission::read(Role::any()),
+    //                        Permission::update(Role::any()),
+    //                        Permission::delete(Role::any()),
+    //                    ],
+    //                ]
+    //            ],
+    //            'movie' => [
+    //                '$id' => 'movie1',
+    //                '$permissions' => [
+    //                    Permission::read(Role::any()),
+    //                    Permission::update(Role::any()),
+    //                    Permission::delete(Role::any()),
+    //                ],
+    //            ],
+    //        ]));
+    //
+    //        static::getDatabase()->deleteDocument('movie', 'movie1');
+    //
+    //        $this->assertEquals('shmuel', 'fogel');
+    //
+    //        var_dump($review1);
+    //    }
 
     public function testDeleteRelatedCollection(): void
     {
@@ -326,14 +326,20 @@ abstract class Base extends TestCase
             twoWay: true
         );
 
-        static::getDatabase()->createDocument('v1', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [],
-            'v2' => [ // This supposes to be an array of array not an object
-                '$id' => 'test',
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$id' => 'doc1',
                 '$permissions' => [],
-            ],
-        ]));
+                'v2' => [ // Expecting Array of arrays or array of strings, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. Object given.', $e->getMessage());
+        }
 
         try {
             static::getDatabase()->createDocument('v1', new Document([
@@ -342,8 +348,23 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. String given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => [[  // Expecting a string or an object ,array provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either a string or an object. Array given.', $e->getMessage());
         }
 
         /**
@@ -384,14 +405,44 @@ abstract class Base extends TestCase
         );
 
         try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'v2' => [[ // Expecting an object or a string array provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either a string or an object. Array given.', $e->getMessage());
+        }
+
+        try {
             static::getDatabase()->createDocument('v2', new Document([
                 '$permissions' => [],
                 'v1' => 'invalid_value',
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. String given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'v1' => [ // Expecting an array, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. Object given.', $e->getMessage());
         }
 
         try {
@@ -426,8 +477,8 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. String given.', $e->getMessage());
         }
 
         try {
@@ -437,8 +488,23 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Invalid value for Relationship must be array string given', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. String given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'classes' => [ // Expected array, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs. Object given.', $e->getMessage());
         }
 
         try {
@@ -7933,7 +7999,7 @@ abstract class Base extends TestCase
         );
         // Delete child, set parent relationship to null
         static::getDatabase()->deleteDocument('movie', 'movie1');
-        $this->assertEquals(111, 222);
+        //        $this->assertEquals(111, 222);
 
         // Check relation was set to null
         $review1 = static::getDatabase()->getDocument('review', 'review1');

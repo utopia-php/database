@@ -306,6 +306,7 @@ abstract class Base extends TestCase
          */
         try {
             static::getDatabase()->find('v2', [
+                //@phpstan-ignore-next-line
                 Query::equal('v1', [['doc1']]),
             ]);
             $this->fail('Failed to throw exception');

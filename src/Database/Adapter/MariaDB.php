@@ -103,7 +103,14 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
-                $indexAttribute = $this->filter($attribute);
+
+                $indexAttribute = match ($attribute) {
+                    '$id' => '_uid',
+                    '$createdAt' => '_createdAt',
+                    '$updatedAt' => '_updatedAt',
+                    default => $attribute
+                };
+                $indexAttribute = $this->filter($indexAttribute);
 
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';
@@ -795,6 +802,9 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+                    if(!empty($document->getInternalId())) {
+                        $attributes['_id'] = $document->getInternalId();
+                    }
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {

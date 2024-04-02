@@ -4656,7 +4656,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $junctions = $this->skipRelationships(fn () => $this->find($junction, [
-                    Query::select(['$id']),
+                    Query::select(['$id', $key]),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX)
                 ]));

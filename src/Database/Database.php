@@ -2710,6 +2710,7 @@ class Database
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
         }
+
         $document = $this->adapter->createDocument($collection->getId(), $document);
 
         if ($this->resolveRelationships) {

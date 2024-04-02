@@ -198,7 +198,7 @@ abstract class Adapter
 
         $output = '';
         foreach ($this->metadata as $key => $value) {
-            $output .= "-- {$key}: {$value}\n";
+            $output .= "/* {$key}: {$value} */\n";
         }
 
         $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {

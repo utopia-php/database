@@ -103,7 +103,14 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
-                $indexAttribute = $this->filter($attribute);
+
+                $indexAttribute = match ($attribute) {
+                    '$id' => '_uid',
+                    '$createdAt' => '_createdAt',
+                    '$updatedAt' => '_updatedAt',
+                    default => $attribute
+                };
+                $indexAttribute = $this->filter($indexAttribute);
 
                 if ($indexType === Database::INDEX_FULLTEXT) {
                     $indexOrder = '';
@@ -752,12 +759,11 @@ class MariaDB extends SQL
             }
 
             $sql = "
-			INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
-			VALUES ({$columnNames} :_uid)
+			    INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
+			    VALUES ({$columnNames} :_uid)
 			";
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
-
 
             $stmt = $this->getPDO()->prepare($sql);
 
@@ -774,6 +780,7 @@ class MariaDB extends SQL
                 }
 
                 $bindKey = 'key_' . $attributeIndex;
+                $attribute = $this->filter($attribute);
                 $value = (is_bool($value)) ? (int)$value : $value;
                 $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
                 $attributeIndex++;
@@ -799,8 +806,8 @@ class MariaDB extends SQL
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
-			";
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
+			    ";
 
                 if ($this->shareTables) {
                     $sqlPermissions .= ', _tenant)';
@@ -865,6 +872,7 @@ class MariaDB extends SQL
         }
 
         try {
+            // beginTransaction must wrap prepare statements
             $this->getPDO()->beginTransaction();
 
             $name = $this->filter($collection);
@@ -882,6 +890,9 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+                    if(!empty($document->getInternalId())) {
+                        $attributes['_id'] = $document->getInternalId();
+                    }
 
                     if ($this->shareTables) {
                         $attributes['_tenant'] = $this->tenant;
@@ -1008,9 +1019,9 @@ class MariaDB extends SQL
             $columns = '';
 
             $sql = "
-			SELECT _type, _permission
-			FROM {$this->getSQLTable($name . '_perms')}
-			WHERE _document = :_uid
+			    SELECT _type, _permission
+			    FROM {$this->getSQLTable($name . '_perms')}
+			    WHERE _document = :_uid
 			";
 
             if ($this->shareTables) {
@@ -1085,9 +1096,9 @@ class MariaDB extends SQL
             if (!empty($removeQuery)) {
                 $removeQuery .= ')';
                 $sql = "
-				DELETE
-                FROM {$this->getSQLTable($name . '_perms')}
-                WHERE _document = :_uid
+				    DELETE
+                    FROM {$this->getSQLTable($name . '_perms')}
+                    WHERE _document = :_uid
                 ";
 
                 if ($this->shareTables) {
@@ -1132,7 +1143,7 @@ class MariaDB extends SQL
                 }
 
                 $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
 				";
 
                 if ($this->shareTables) {
@@ -1182,7 +1193,6 @@ class MariaDB extends SQL
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
-
 
             $stmt = $this->getPDO()->prepare($sql);
 
@@ -1581,8 +1591,8 @@ class MariaDB extends SQL
             }
 
             $sql = "
-			DELETE FROM {$this->getSQLTable($name . '_perms')} 
-		    WHERE _document = :_uid
+			    DELETE FROM {$this->getSQLTable($name . '_perms')} 
+		        WHERE _document = :_uid
 		    ";
 
             if ($this->shareTables) {

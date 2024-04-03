@@ -2813,6 +2813,14 @@ class Database
             try {
                 switch (\gettype($value)) {
                     case 'array':
+                        if(
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE)
+                        ) {
+                            throw new DatabaseException('Invalid relationship value. Must be either a document ID or a document, array given.');
+                        }
+
                         // List of documents or IDs
                         foreach ($value as $related) {
                             switch (\gettype($related)) {
@@ -2851,10 +2859,20 @@ class Database
                         }
                         $document->removeAttribute($key);
                         break;
+
                     case 'object':
                         if (!$value instanceof Document) {
                             throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
+
+                        if(
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_MANY)
+                        ) {
+                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document given.');
+                        }
+
                         $relatedId = $this->relateDocuments(
                             $collection,
                             $relatedCollection,
@@ -2868,7 +2886,16 @@ class Database
                         );
                         $document->setAttribute($key, $relatedId);
                         break;
+
                     case 'string':
+                        if(
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_MANY)
+                        ) {
+                            throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.');
+                        }
+
                         // Single document ID
                         $this->relateDocumentsById(
                             $collection,
@@ -2882,11 +2909,13 @@ class Database
                             $side,
                         );
                         break;
+
                     case 'NULL':
                         // TODO: This might need to depend on the relation type, to be either set to null or removed?
                         $document->removeAttribute($key);
                         // No related document
                         break;
+
                     default:
                         throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                 }
@@ -3066,12 +3095,13 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if (!$document->getId() || !$id) {
+        if (!$id) {
             throw new DatabaseException('Must define $id attribute');
         }
 
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
         $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collectionID
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -3979,6 +4009,7 @@ class Database
         ) {
             Authorization::skip(function () use ($document, $relatedCollection, $twoWayKey) {
                 $related = $this->findOne($relatedCollection->getId(), [
+                    Query::select(['$id']),
                     Query::equal($twoWayKey, [$document->getId()])
                 ]);
 
@@ -3986,11 +4017,12 @@ class Database
                     return;
                 }
 
-
                 $this->skipRelationships(fn () => $this->updateDocument(
                     $relatedCollection->getId(),
                     $related->getId(),
-                    $related->setAttribute($twoWayKey, null)
+                    new Document([
+                        $twoWayKey => null
+                    ])
                 ));
             });
         }
@@ -4000,6 +4032,7 @@ class Database
             && $side === Database::RELATION_SIDE_CHILD
         ) {
             $related = Authorization::skip(fn () => $this->findOne($relatedCollection->getId(), [
+                Query::select(['$id']),
                 Query::equal($twoWayKey, [$document->getId()])
             ]));
 
@@ -4037,10 +4070,14 @@ class Database
                 Authorization::skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
                     if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
                         $related = $this->findOne($relatedCollection->getId(), [
+                            Query::select(['$id']),
                             Query::equal($twoWayKey, [$document->getId()])
                         ]);
                     } else {
-                        $related = $this->getDocument($relatedCollection->getId(), $value->getId());
+                        if (empty($value)) {
+                            return;
+                        }
+                        $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])]);
                     }
 
                     if (!$related instanceof Document) {
@@ -4050,26 +4087,30 @@ class Database
                     $this->skipRelationships(fn () => $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
-                        $related->setAttribute($twoWayKey, null)
+                        new Document([
+                            $twoWayKey => null
+                        ])
                     ));
                 });
                 break;
+
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
-                        $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
-                            $related->getId(),
-                            $related->setAttribute($twoWayKey, null)
+                            $relation->getId(),
+                            new Document([
+                                $twoWayKey => null
+                            ]),
                         ));
                     });
                 }
                 break;
+
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     break;
@@ -4077,6 +4118,7 @@ class Database
 
                 if (!$twoWay) {
                     $value = $this->find($relatedCollection->getId(), [
+                        Query::select(['$id']),
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX)
                     ]);
@@ -4084,21 +4126,22 @@ class Database
 
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
-                        $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
-
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
-                            $related->getId(),
-                            $related->setAttribute($twoWayKey, null)
+                            $relation->getId(),
+                            new Document([
+                                $twoWayKey => null
+                            ])
                         ));
                     });
                 }
-
                 break;
+
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $junctions = $this->find($junction, [
+                    Query::select(['$id']),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX)
                 ]);
@@ -4168,8 +4211,9 @@ class Database
                 }
 
                 $value = $this->find($relatedCollection->getId(), [
+                    Query::select(['$id']),
                     Query::equal($twoWayKey, [$document->getId()]),
-                    Query::limit(PHP_INT_MAX)
+                    Query::limit(PHP_INT_MAX),
                 ]);
 
                 $this->relationshipDeleteStack[] = $relationship;
@@ -4187,10 +4231,11 @@ class Database
             case Database::RELATION_MANY_TO_MANY:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $junctions = $this->find($junction, [
+                $junctions = $this->skipRelationships(fn () => $this->find($junction, [
+                    Query::select(['$id', $key]),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX)
-                ]);
+                ]));
 
                 $this->relationshipDeleteStack[] = $relationship;
 

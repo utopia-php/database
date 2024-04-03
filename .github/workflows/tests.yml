@@ -7,34 +7,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 2
-        submodules: recursive
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+          submodules: recursive
 
-    - run: git checkout HEAD^2
+      - run: git checkout HEAD^2
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-    - name: Build image
-      uses: docker/build-push-action@v3
-      with:
-        context: .
-        push: false
-        tags: database-dev
-        load: true
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: false
+          tags: database-dev
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-    - name: Start Databases
-      run:  |
-        docker compose up -d
-        sleep 10
+      - name: Start Databases
+        run:  |
+          docker compose up -d
+          sleep 10
 
-    - name: Run Tests
-      run: docker compose exec -T tests vendor/bin/phpunit --configuration phpunit.xml
+      - name: Run Tests
+        run: docker compose exec -T tests vendor/bin/phpunit --configuration phpunit.xml
 
-    - name: Check Coverage
-      run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 90
+      - name: Check Coverage
+        run: docker compose exec -T tests vendor/bin/coverage-check tmp/clover.xml 90

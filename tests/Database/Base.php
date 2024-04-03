@@ -10,11 +10,13 @@ use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Exception\Timeout;
@@ -73,6 +75,227 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->setDefaultDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
+    }
+
+    public function testVirtualRelationsAttributes(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('v1');
+        static::getDatabase()->createCollection('v2');
+
+        /**
+         * RELATION_ONE_TO_MANY
+         * No attribute is created in V1 collection
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v2' => [ // Expecting Array of arrays or array of strings, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$permissions' => [],
+                'v2' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => [[  // Expecting a string or an object ,array provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+        }
+
+        /**
+         * Here we get this error: Unknown PDO Type for array
+         * Added in Filter.php Text validator for relationship
+         */
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', [['doc1']]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "v1"', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v1', [
+                Query::equal('v2', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_MANY_TO_ONE
+         * No attribute is created in V2 collection
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'v2' => [[ // Expecting an object or a string array provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$permissions' => [],
+                'v1' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'v1' => [ // Expecting an array, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_MANY_TO_MANY
+         * No attribute on V1/v2 collections only on junction table
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'students',
+            twoWayKey: 'classes'
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$permissions' => [],
+                'students' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$permissions' => [],
+                'classes' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'classes' => [ // Expected array, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v1', [
+                Query::equal('students', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('classes', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+        }
     }
 
     /**
@@ -12447,7 +12670,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12457,7 +12680,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12467,7 +12690,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12477,7 +12700,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12487,7 +12710,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12497,7 +12720,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
